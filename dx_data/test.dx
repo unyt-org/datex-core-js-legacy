@@ -1,0 +1,1611 @@
+<stx:state> {
+   journal: #sub_result = #1 = $$ <stx:Journal> {
+      history: $$ [],
+      dirty: false
+   },
+   useCaseManager: #sub_result = #0 = $$ <stx:UseCaseManager> {
+      installedUsecases: $$ [],
+      rootAccounts: $$ []
+   },
+   processManager: $$ <stx:ProcessManager> {
+      history: $$ <Map> [],
+      useCaseManager: #0,
+      jorunal: #1
+   },
+   reportManager: $$ <ext:ReportManager> {past_reports: $$ []},
+   useCaseStore: $$ <stx:UseCaseStore> {
+      manager: #0,
+      availableUseCases: $$ [
+         $$ <stx:UseCase> {
+            name: always (
+               {
+                  en: "Cash Based Accounting",
+                  de: "Einnahmenüberschussrechnung"
+               }
+            ) (#sub_result = #2 = $$ "en") (!!),
+            description: always (
+               {
+                  en: "Base for all business Usecases",
+                  de: "Grundlage für alle gewerblichen Anwendungsfälle"
+               }
+            ) (#2) (!!),
+            labels: $$ [#sub_result = #8 = "business"],
+            accounts: $$ <Map> [
+               [
+                  #sub_result = #3 = "income",
+                  #sub_result = #6 = $$ <stx:ParentAccount> {
+                     name: #3,
+                     localName: always (
+                        {
+                           en: "Income",
+                           de: "Einnahmen"
+                        }
+                     ) (#2) (!!),
+                     description: always (
+                        {
+                           en: "All income from different sources",
+                           de: "Gesammelte Einnahmen"
+                        }
+                     ) (#2) (!!),
+                     taxes: void,
+                     category: void,
+                     balance: 0x,
+                     signedChildren: $$ <Set> []
+                  }
+               ],
+               [
+                  #sub_result = #4 = "expenses",
+                  #sub_result = #7 = $$ <stx:ParentAccount> {
+                     name: #4,
+                     localName: always (
+                        {
+                           en: "Expenses",
+                           de: "Ausgaben"
+                        }
+                     ) (#2) (!!),
+                     description: always (
+                        {
+                           en: "All expenses form different sources",
+                           de: "Gesammelte Ausgaben"
+                        }
+                     ) (#2) (!!),
+                     taxes: void,
+                     category: void,
+                     balance: 0x,
+                     signedChildren: $$ <Set> []
+                  }
+               ],
+               [
+                  #sub_result = #5 = "ine",
+                  $$ <stx:ParentAccount> {
+                     name: #5,
+                     localName: always (
+                        {
+                           en: "I&E Business",
+                           de: "E&A Geschäft"
+                        }
+                     ) (#2) (!!),
+                     description: always (
+                        {
+                           en: "Income and Expenses - Business",
+                           de: "Einnahmen und Ausgaben - Geschäftlich"
+                        }
+                     ) (#2) (!!),
+                     taxes: void,
+                     category: void,
+                     balance: 0x,
+                     signedChildren: $$ <Set> [
+                        $$ <stx:SignedChild> {
+                           sign: 1,
+                           account: #6
+                        },
+                        $$ <stx:SignedChild> {
+                           sign: -1,
+                           account: #7
+                        }
+                     ]
+                  }
+               ]
+            ],
+            processes: $$ <Map> [],
+            uuid: #sub_result = #37 = "09d11fdc-3e51-4ab1-bfd4-a10f9b6bdfcd",
+            version: #sub_result = #36 = "1.0",
+            dependencies: $$ [],
+            install: $$ <Function> ((#sub_result = #1A = [22])) (
+               body: <Scope> scope (
+                  #100 $= (#it.0);
+               ),
+               location: #sub_result = #18 = @@065AD80100806682939AE02E
+            )
+         },
+         $$ <stx:UseCase> {
+            name: always (
+               {
+                  en: "E-Commerce",
+                  de: "Onlinehandel"
+               }
+            ) (#2) (!!),
+            description: always (
+               {
+                  en: "Manage your own E-Commerce",
+                  de: "Onlinehandel, E-Commerce"
+               }
+            ) (#2) (!!),
+            labels: $$ [#8],
+            accounts: $$ <Map> [
+               [
+                  #sub_result = #9 = "income sold goods",
+                  #sub_result = #1B = $$ <stx:TransAccount> {
+                     name: #9,
+                     localName: always (
+                        {
+                           en: "Income Merchant",
+                           de: "Einnahmen Handel"
+                        }
+                     ) (#2) (!!),
+                     description: always (
+                        {
+                           en: "Income from selling goods products",
+                           de: "Einnahmen aus dem Verkauf von Waren"
+                        }
+                     ) (#2) (!!),
+                     taxes: always (
+                        {
+                           en: #sub_result = #A = "EÜR 3.1",
+                           de: #A
+                        }
+                     ) (#2) (!!),
+                     category: void,
+                     balance: 0x
+                  }
+               ],
+               [
+                  #sub_result = #B = "expenses goods",
+                  #sub_result = #26 = $$ <stx:TransAccount> {
+                     name: #B,
+                     localName: always (
+                        {
+                           en: "Goods",
+                           de: "Waren"
+                        }
+                     ) (#2) (!!),
+                     description: always (
+                        {
+                           en: "Bought goods with additional costs",
+                           de: "Waren inkl. Nebenkosten"
+                        }
+                     ) (#2) (!!),
+                     taxes: always (
+                        {
+                           en: #sub_result = #C = "EÜR 3.2 26",
+                           de: #C
+                        }
+                     ) (#2) (!!),
+                     category: void,
+                     balance: 0x
+                  }
+               ],
+               [
+                  #sub_result = #D = "expenses lowvalue goods",
+                  #sub_result = #29 = $$ <stx:TransAccount> {
+                     name: #D,
+                     localName: always (
+                        {
+                           en: #sub_result = #3B = "Low-Value Assets",
+                           de: #sub_result = #3C = "Geringwertige Wirtschaftsgüter"
+                        }
+                     ) (#2) (!!),
+                     description: always (
+                        {
+                           en: #sub_result = #3D = "Expenses for low-value assets <800€",
+                           de: #sub_result = #3E = "Ausgaben für Geringwertige Wirtschaftsgüter (<800€)"
+                        }
+                     ) (#2) (!!),
+                     taxes: always (
+                        {
+                           en: #sub_result = #E = "EÜR 3.2 43",
+                           de: #E
+                        }
+                     ) (#2) (!!),
+                     category: void,
+                     balance: 0x
+                  }
+               ],
+               [
+                  #sub_result = #F = "expenses communication",
+                  #sub_result = #2B = $$ <stx:TransAccount> {
+                     name: #F,
+                     localName: always (
+                        {
+                           en: #sub_result = #3F = "Communication",
+                           de: #sub_result = #40 = "Telekommunikation"
+                        }
+                     ) (#2) (!!),
+                     description: always (
+                        {
+                           en: #sub_result = #41 = "Expenses for telecommunication like phone or internet",
+                           de: #sub_result = #42 = "Ausgaben für Telekommunikation wie Telefon oder Internet"
+                        }
+                     ) (#2) (!!),
+                     taxes: always (
+                        {
+                           en: #sub_result = #10 = "EÜR 3.2 49",
+                           de: #10
+                        }
+                     ) (#2) (!!),
+                     category: void,
+                     balance: 0x
+                  }
+               ],
+               [
+                  #sub_result = #11 = "expenses accounting",
+                  #sub_result = #2E = $$ <stx:TransAccount> {
+                     name: #11,
+                     localName: always (
+                        {
+                           en: #sub_result = #45 = "Accounting",
+                           de: #sub_result = #2D = "Steuerberatung"
+                        }
+                     ) (#2) (!!),
+                     description: always (
+                        {
+                           en: #sub_result = #46 = "Expenses for accounting and lawyers",
+                           de: #sub_result = #47 = "Buchhaltung, Steuerberatung, Rechtsberatung"
+                        }
+                     ) (#2) (!!),
+                     taxes: always (
+                        {
+                           en: #sub_result = #12 = "EÜR 3.2 52",
+                           de: #12
+                        }
+                     ) (#2) (!!),
+                     category: void,
+                     balance: 0x
+                  }
+               ],
+               [
+                  #sub_result = #13 = "expenses packaging transportation",
+                  #sub_result = #31 = $$ <stx:TransAccount> {
+                     name: #13,
+                     localName: always (
+                        {
+                           en: #sub_result = #30 = "Packaging & Transportation",
+                           de: "Verpackung und Transport"
+                        }
+                     ) (#2) (!!),
+                     description: always (
+                        {
+                           en: "Expenses for packaging and transportation",
+                           de: "Ausgaben für Verpackung und Transport"
+                        }
+                     ) (#2) (!!),
+                     taxes: always (
+                        {
+                           en: #sub_result = #14 = "EÜR 3.2 59",
+                           de: #14
+                        }
+                     ) (#2) (!!),
+                     category: void,
+                     balance: 0x
+                  }
+               ],
+               [
+                  #sub_result = #15 = "expenses advertisement",
+                  #sub_result = #35 = $$ <stx:TransAccount> {
+                     name: #15,
+                     localName: always (
+                        {
+                           en: #sub_result = #33 = "Advertisement",
+                           de: #sub_result = #34 = "Werbung"
+                        }
+                     ) (#2) (!!),
+                     description: always (
+                        {
+                           en: "Expenses for advertisement",
+                           de: "Ausgaben für Werbung"
+                        }
+                     ) (#2) (!!),
+                     taxes: always (
+                        {
+                           en: #sub_result = #16 = "EÜR 3.2 60",
+                           de: #16
+                        }
+                     ) (#2) (!!),
+                     category: void,
+                     balance: 0x
+                  }
+               ]
+            ],
+            processes: $$ <Map> [
+               [
+                  #sub_result = #17 = "sell good",
+                  $$ <stx:Process> {
+                     name: #17,
+                     localName: always (
+                        {
+                           en: #sub_result = #4B = "Sale",
+                           de: #sub_result = #4C = "Verkauf"
+                        }
+                     ) (#2) (!!),
+                     description: always (
+                        {
+                           en: "Sell goods to customers",
+                           de: "Verkaufe Produkte an Kunden"
+                        }
+                     ) (#2) (!!),
+                     category: $$ [#3],
+                     params: $$ [
+                        <stx:ProcessParam> {
+                           name: always (
+                              {
+                                 en: #sub_result = #1D = "Date",
+                                 de: #sub_result = #1E = "Datum"
+                              }
+                           ) (#2) (!!),
+                           type: #sub_result = #1F = <time>,
+                           defaultValueGenerator: void,
+                           options: void
+                        },
+                        <stx:ProcessParam> {
+                           name: always (
+                              {
+                                 en: #sub_result = #20 = "Amount",
+                                 de: #sub_result = #21 = "Höhe"
+                              }
+                           ) (#2) (!!),
+                           type: <quantity> (1x),
+                           defaultValueGenerator: <Function> (void) (
+                              body: <Scope> scope (
+                                 ;
+                                 0x;
+                              ),
+                              location: #18
+                           ),
+                           options: void
+                        },
+                        <stx:ProcessParam> {
+                           name: always (
+                              {
+                                 en: #sub_result = #4D = "Customer",
+                                 de: #sub_result = #4E = "Kunde"
+                              }
+                           ) (#2) (!!),
+                           type: #sub_result = #19 = <text>,
+                           defaultValueGenerator: void,
+                           options: void
+                        },
+                        <stx:ProcessParam> {
+                           name: always (
+                              {
+                                 en: #sub_result = #22 = "Note",
+                                 de: #sub_result = #23 = "Notiz"
+                              }
+                           ) (#2) (!!),
+                           type: #19,
+                           defaultValueGenerator: void,
+                           options: void
+                        },
+                        <stx:ProcessParam> {
+                           name: always (
+                              {
+                                 en: #sub_result = #24 = "Receipt (Nb.)",
+                                 de: #sub_result = #25 = "Beleg (Nr.)"
+                              }
+                           ) (#2) (!!),
+                           type: #19,
+                           defaultValueGenerator: void,
+                           options: void
+                        }
+                     ],
+                     generateTransactions: $$ <Function> ((#1A)) (
+                        body: <Scope> scope (#1B) (
+                           #100 $= (#it.0);
+                           assert #100 (
+                              #0.0 matches <time>;
+                           ) void;
+                           assert #100 (
+                              #0.1 matches <quantity> (1x);
+                           ) void;
+                           assert #100 (
+                              #0.2 matches <text>;
+                           ) void;
+                           assert #100 (
+                              #0.3 matches <text>;
+                           ) void;
+                           assert #100 (
+                              #0.4 matches <text>;
+                           ) void;
+                           #101 $= $$ <stx:Transaction> {
+                              time: (#100.0),
+                              counterpart: (#100.2),
+                              note: (#100.3),
+                              receipt: (#100.4),
+                              bookings: <Map> [
+                                 [
+                                    #0,
+                                    #100.1
+                                 ]
+                              ]
+                           };
+                           [#101];
+                        ),
+                        location: #18
+                     )
+                  }
+               ],
+               [
+                  #sub_result = #1C = "expense bought goods",
+                  $$ <stx:Process> {
+                     name: #1C,
+                     localName: always (
+                        {
+                           en: "Buy Goods",
+                           de: "Wareneinkauf"
+                        }
+                     ) (#2) (!!),
+                     description: always (
+                        {
+                           en: "Buy Goods for further selling",
+                           de: "Kaufe Güter zum Weiterverkauf"
+                        }
+                     ) (#2) (!!),
+                     category: $$ [#4],
+                     params: #sub_result = #28 = $$ [
+                        <stx:ProcessParam> {
+                           name: always (
+                              {
+                                 en: #1D,
+                                 de: #1E
+                              }
+                           ) (#2) (!!),
+                           type: #1F,
+                           defaultValueGenerator: void,
+                           options: void
+                        },
+                        <stx:ProcessParam> {
+                           name: always (
+                              {
+                                 en: #20,
+                                 de: #21
+                              }
+                           ) (#2) (!!),
+                           type: <quantity> (1x),
+                           defaultValueGenerator: <Function> (void) (
+                              body: <Scope> scope (
+                                 ;
+                                 0x;
+                              ),
+                              location: #18
+                           ),
+                           options: void
+                        },
+                        <stx:ProcessParam> {
+                           name: always (
+                              {
+                                 en: #sub_result = #52 = "Seller",
+                                 de: #sub_result = #53 = "Verkäufer"
+                              }
+                           ) (#2) (!!),
+                           type: #19,
+                           defaultValueGenerator: void,
+                           options: void
+                        },
+                        <stx:ProcessParam> {
+                           name: always (
+                              {
+                                 en: #22,
+                                 de: #23
+                              }
+                           ) (#2) (!!),
+                           type: #19,
+                           defaultValueGenerator: void,
+                           options: void
+                        },
+                        <stx:ProcessParam> {
+                           name: always (
+                              {
+                                 en: #24,
+                                 de: #25
+                              }
+                           ) (#2) (!!),
+                           type: #19,
+                           defaultValueGenerator: void,
+                           options: void
+                        }
+                     ],
+                     generateTransactions: $$ <Function> ((#1A)) (
+                        body: <Scope> scope (#26) (
+                           #100 $= (#it.0);
+                           assert #100 (
+                              #0.0 matches <time>;
+                           ) void;
+                           assert #100 (
+                              #0.1 matches <quantity> (1x);
+                           ) void;
+                           assert #100 (
+                              #0.2 matches <text>;
+                           ) void;
+                           assert #100 (
+                              #0.3 matches <text>;
+                           ) void;
+                           assert #100 (
+                              #0.4 matches <text>;
+                           ) void;
+                           #101 $= $$ <stx:Transaction> {
+                              time: (#100.0),
+                              counterpart: (#100.2),
+                              note: (#100.3),
+                              receipt: (#100.4),
+                              bookings: <Map> [
+                                 [
+                                    #0,
+                                    #100.1
+                                 ]
+                              ]
+                           };
+                           [#101];
+                        ),
+                        location: #18
+                     )
+                  }
+               ],
+               [
+                  #sub_result = #27 = "expense gwg",
+                  $$ <stx:Process> {
+                     name: #27,
+                     localName: always (
+                        {
+                           en: #sub_result = #55 = "Buy Low-Value Goods",
+                           de: #sub_result = #56 = "Kauf von Wirtschaftsgütern"
+                        }
+                     ) (#2) (!!),
+                     description: always (
+                        {
+                           en: "Buy low-value goods, like computer accessories (cheaper than 800€)",
+                           de: "Kauf von geringwertigen Wirtschaftsgütern, wie Computerzubehör (Wert unter 800€)"
+                        }
+                     ) (#2) (!!),
+                     category: $$ [#4],
+                     params: #28,
+                     generateTransactions: $$ <Function> ((#1A)) (
+                        body: <Scope> scope (#29) (
+                           #100 $= (#it.0);
+                           assert #100 (
+                              #0.0 matches <time>;
+                           ) void;
+                           assert #100 (
+                              #0.1 matches <quantity> (1x);
+                           ) void;
+                           assert #100 (
+                              #0.2 matches <text>;
+                           ) void;
+                           assert #100 (
+                              #0.3 matches <text>;
+                           ) void;
+                           assert #100 (
+                              #0.4 matches <text>;
+                           ) void;
+                           #101 $= $$ <stx:Transaction> {
+                              time: (#100.0),
+                              counterpart: (#100.2),
+                              note: (#100.3),
+                              receipt: (#100.4),
+                              bookings: <Map> [
+                                 [
+                                    #0,
+                                    #100.1
+                                 ]
+                              ]
+                           };
+                           [#101];
+                        ),
+                        location: #18
+                     )
+                  }
+               ],
+               [
+                  #sub_result = #2A = "expense communication",
+                  $$ <stx:Process> {
+                     name: #2A,
+                     localName: always (
+                        {
+                           en: #sub_result = #59 = "Pay for Communication",
+                           de: #sub_result = #5A = "Telekommunikationsausgaben"
+                        }
+                     ) (#2) (!!),
+                     description: always (
+                        {
+                           en: #sub_result = #5B = "Pay for telecommunication like internet or phone",
+                           de: #sub_result = #5C = "Bezahlung von Telekommunikationsrechnungen wie Internet oder Telefon"
+                        }
+                     ) (#2) (!!),
+                     category: $$ [#4],
+                     params: #28,
+                     generateTransactions: $$ <Function> ((#1A)) (
+                        body: <Scope> scope (#2B) (
+                           #100 $= (#it.0);
+                           assert #100 (
+                              #0.0 matches <time>;
+                           ) void;
+                           assert #100 (
+                              #0.1 matches <quantity> (1x);
+                           ) void;
+                           assert #100 (
+                              #0.2 matches <text>;
+                           ) void;
+                           assert #100 (
+                              #0.3 matches <text>;
+                           ) void;
+                           assert #100 (
+                              #0.4 matches <text>;
+                           ) void;
+                           #101 $= $$ <stx:Transaction> {
+                              time: (#100.0),
+                              counterpart: (#100.2),
+                              note: (#100.3),
+                              receipt: (#100.4),
+                              bookings: <Map> [
+                                 [
+                                    #0,
+                                    #100.1
+                                 ]
+                              ]
+                           };
+                           [#101];
+                        ),
+                        location: #18
+                     )
+                  }
+               ],
+               [
+                  #sub_result = #2C = "expense accounting",
+                  $$ <stx:Process> {
+                     name: #2C,
+                     localName: always (
+                        {
+                           en: #sub_result = #60 = "Pay for Accounting",
+                           de: #2D
+                        }
+                     ) (#2) (!!),
+                     description: always (
+                        {
+                           en: "Pay for accounting and law consultancy",
+                           de: #sub_result = #61 = "Bezahlung von Steuer- und Rechtsberatung"
+                        }
+                     ) (#2) (!!),
+                     category: $$ [#4],
+                     params: #28,
+                     generateTransactions: $$ <Function> ((#1A)) (
+                        body: <Scope> scope (#2E) (
+                           #100 $= (#it.0);
+                           assert #100 (
+                              #0.0 matches <time>;
+                           ) void;
+                           assert #100 (
+                              #0.1 matches <quantity> (1x);
+                           ) void;
+                           assert #100 (
+                              #0.2 matches <text>;
+                           ) void;
+                           assert #100 (
+                              #0.3 matches <text>;
+                           ) void;
+                           assert #100 (
+                              #0.4 matches <text>;
+                           ) void;
+                           #101 $= $$ <stx:Transaction> {
+                              time: (#100.0),
+                              counterpart: (#100.2),
+                              note: (#100.3),
+                              receipt: (#100.4),
+                              bookings: <Map> [
+                                 [
+                                    #0,
+                                    #100.1
+                                 ]
+                              ]
+                           };
+                           [#101];
+                        ),
+                        location: #18
+                     )
+                  }
+               ],
+               [
+                  #sub_result = #2F = "expense packaing",
+                  $$ <stx:Process> {
+                     name: #2F,
+                     localName: always (
+                        {
+                           en: #30,
+                           de: "Versand"
+                        }
+                     ) (#2) (!!),
+                     description: always (
+                        {
+                           en: "Pay for packaging and transport",
+                           de: "Bezahle Verpackungs- und Transportkosten"
+                        }
+                     ) (#2) (!!),
+                     category: $$ [#4],
+                     params: #28,
+                     generateTransactions: $$ <Function> ((#1A)) (
+                        body: <Scope> scope (#31) (
+                           #100 $= (#it.0);
+                           assert #100 (
+                              #0.0 matches <time>;
+                           ) void;
+                           assert #100 (
+                              #0.1 matches <quantity> (1x);
+                           ) void;
+                           assert #100 (
+                              #0.2 matches <text>;
+                           ) void;
+                           assert #100 (
+                              #0.3 matches <text>;
+                           ) void;
+                           assert #100 (
+                              #0.4 matches <text>;
+                           ) void;
+                           #101 $= $$ <stx:Transaction> {
+                              time: (#100.0),
+                              counterpart: (#100.2),
+                              note: (#100.3),
+                              receipt: (#100.4),
+                              bookings: <Map> [
+                                 [
+                                    #0,
+                                    #100.1
+                                 ]
+                              ]
+                           };
+                           [#101];
+                        ),
+                        location: #18
+                     )
+                  }
+               ],
+               [
+                  #sub_result = #32 = "expense advertisement",
+                  $$ <stx:Process> {
+                     name: #32,
+                     localName: always (
+                        {
+                           en: #33,
+                           de: #34
+                        }
+                     ) (#2) (!!),
+                     description: always (
+                        {
+                           en: "Track cost of advertisements",
+                           de: "Bezahle Werbekosten"
+                        }
+                     ) (#2) (!!),
+                     category: $$ [#4],
+                     params: #28,
+                     generateTransactions: $$ <Function> ((#1A)) (
+                        body: <Scope> scope (#35) (
+                           #100 $= (#it.0);
+                           assert #100 (
+                              #0.0 matches <time>;
+                           ) void;
+                           assert #100 (
+                              #0.1 matches <quantity> (1x);
+                           ) void;
+                           assert #100 (
+                              #0.2 matches <text>;
+                           ) void;
+                           assert #100 (
+                              #0.3 matches <text>;
+                           ) void;
+                           assert #100 (
+                              #0.4 matches <text>;
+                           ) void;
+                           #101 $= $$ <stx:Transaction> {
+                              time: (#100.0),
+                              counterpart: (#100.2),
+                              note: (#100.3),
+                              receipt: (#100.4),
+                              bookings: <Map> [
+                                 [
+                                    #0,
+                                    #100.1
+                                 ]
+                              ]
+                           };
+                           [#101];
+                        ),
+                        location: #18
+                     )
+                  }
+               ]
+            ],
+            uuid: "dd2ad94d-268c-4394-96b4-0814305c7e5c",
+            version: #36,
+            dependencies: $$ [#37],
+            install: $$ <Function> ((#1A)) (
+               body: <Scope> scope (#1B) (#26) (#29) (#2B) (#2E) (#31) (#35) (
+                  #100 $= (#it.0);
+                  #101 $= $$ #100.0;
+                  #101.accounts.income.signedChildren += <stx:SignedChild> {
+                     sign: 1,
+                     account: #0
+                  };
+                  #101.accounts.expenses.signedChildren += <stx:SignedChild> {
+                     sign: 1,
+                     account: #1
+                  };
+                  #101.accounts.expenses.signedChildren += <stx:SignedChild> {
+                     sign: 1,
+                     account: #2
+                  };
+                  #101.accounts.expenses.signedChildren += <stx:SignedChild> {
+                     sign: 1,
+                     account: #3
+                  };
+                  #101.accounts.expenses.signedChildren += <stx:SignedChild> {
+                     sign: 1,
+                     account: #4
+                  };
+                  #101.accounts.expenses.signedChildren += <stx:SignedChild> {
+                     sign: 1,
+                     account: #5
+                  };
+                  #101.accounts.expenses.signedChildren += <stx:SignedChild> {
+                     sign: 1,
+                     account: #6
+                  };
+               ),
+               location: #18
+            )
+         },
+         $$ <stx:UseCase> {
+            name: always (
+               {
+                  en: "IT Business",
+                  de: "IT Gewerbe"
+               }
+            ) (#2) (!!),
+            description: always (
+               {
+                  en: "Collect receipts for a IT Business. Programming and Selling own IT Products",
+                  de: "Gewerbe im IT Sektor. Herstellung und Verkauf eigener Softwareprodukte und Dienstleistungen"
+               }
+            ) (#2) (!!),
+            labels: $$ [#8],
+            accounts: $$ <Map> [
+               [
+                  #sub_result = #38 = "income it",
+                  #sub_result = #4F = $$ <stx:TransAccount> {
+                     name: #38,
+                     localName: always (
+                        {
+                           en: "Income IT",
+                           de: "Einnahmen IT"
+                        }
+                     ) (#2) (!!),
+                     description: always (
+                        {
+                           en: "Income from selling IT products",
+                           de: "Einnahmen aus dem Verkauf von IT Produkten oder Dienstleistungen"
+                        }
+                     ) (#2) (!!),
+                     taxes: always (
+                        {
+                           en: #A,
+                           de: #A
+                        }
+                     ) (#2) (!!),
+                     category: void,
+                     balance: 0x
+                  }
+               ],
+               [
+                  #sub_result = #39 = "expenses external services",
+                  #sub_result = #54 = $$ <stx:TransAccount> {
+                     name: #39,
+                     localName: always (
+                        {
+                           en: #sub_result = #51 = "External Services",
+                           de: "Fremdleistungen"
+                        }
+                     ) (#2) (!!),
+                     description: always (
+                        {
+                           en: "Expenses for external Servies like designers or texters etc.",
+                           de: "Ausgaben für Fremdleistungen"
+                        }
+                     ) (#2) (!!),
+                     taxes: always (
+                        {
+                           en: #sub_result = #3A = "EÜR 3.2 27",
+                           de: #3A
+                        }
+                     ) (#2) (!!),
+                     category: void,
+                     balance: 0x
+                  }
+               ],
+               [
+                  #D,
+                  #sub_result = #58 = $$ <stx:TransAccount> {
+                     name: #D,
+                     localName: always (
+                        {
+                           en: #3B,
+                           de: #3C
+                        }
+                     ) (#2) (!!),
+                     description: always (
+                        {
+                           en: #3D,
+                           de: #3E
+                        }
+                     ) (#2) (!!),
+                     taxes: always (
+                        {
+                           en: #E,
+                           de: #E
+                        }
+                     ) (#2) (!!),
+                     category: void,
+                     balance: 0x
+                  }
+               ],
+               [
+                  #F,
+                  #sub_result = #5D = $$ <stx:TransAccount> {
+                     name: #F,
+                     localName: always (
+                        {
+                           en: #3F,
+                           de: #40
+                        }
+                     ) (#2) (!!),
+                     description: always (
+                        {
+                           en: #41,
+                           de: #42
+                        }
+                     ) (#2) (!!),
+                     taxes: always (
+                        {
+                           en: #10,
+                           de: #10
+                        }
+                     ) (#2) (!!),
+                     category: void,
+                     balance: 0x
+                  }
+               ],
+               [
+                  #sub_result = #43 = "expenses education",
+                  #sub_result = #5F = $$ <stx:TransAccount> {
+                     name: #43,
+                     localName: always (
+                        {
+                           en: "Education",
+                           de: "Fortbildung"
+                        }
+                     ) (#2) (!!),
+                     description: always (
+                        {
+                           en: "Expenses for further Education",
+                           de: "Fortbildungskosten (ohne Reisekosten)"
+                        }
+                     ) (#2) (!!),
+                     taxes: always (
+                        {
+                           en: #sub_result = #44 = "EÜR 3.2 51",
+                           de: #44
+                        }
+                     ) (#2) (!!),
+                     category: void,
+                     balance: 0x
+                  }
+               ],
+               [
+                  #11,
+                  #sub_result = #62 = $$ <stx:TransAccount> {
+                     name: #11,
+                     localName: always (
+                        {
+                           en: #45,
+                           de: #2D
+                        }
+                     ) (#2) (!!),
+                     description: always (
+                        {
+                           en: #46,
+                           de: #47
+                        }
+                     ) (#2) (!!),
+                     taxes: always (
+                        {
+                           en: #12,
+                           de: #12
+                        }
+                     ) (#2) (!!),
+                     category: void,
+                     balance: 0x
+                  }
+               ],
+               [
+                  #sub_result = #48 = "expenses edv",
+                  #sub_result = #64 = $$ <stx:TransAccount> {
+                     name: #48,
+                     localName: always (
+                        {
+                           en: "EDP Costs",
+                           de: "EDV Kosten"
+                        }
+                     ) (#2) (!!),
+                     description: always (
+                        {
+                           en: "Running EDP costs",
+                           de: "Laufende EDV Kosten"
+                        }
+                     ) (#2) (!!),
+                     taxes: always (
+                        {
+                           en: #sub_result = #49 = "EÜR 3.2 53",
+                           de: #49
+                        }
+                     ) (#2) (!!),
+                     category: void,
+                     balance: 0x
+                  }
+               ]
+            ],
+            processes: $$ <Map> [
+               [
+                  #sub_result = #4A = "sell product",
+                  $$ <stx:Process> {
+                     name: #4A,
+                     localName: always (
+                        {
+                           en: #4B,
+                           de: #4C
+                        }
+                     ) (#2) (!!),
+                     description: always (
+                        {
+                           en: "Sell IT services or products",
+                           de: "Verkauf von IT Dienstleistungen oder Produkten"
+                        }
+                     ) (#2) (!!),
+                     category: $$ [#3],
+                     params: $$ [
+                        <stx:ProcessParam> {
+                           name: always (
+                              {
+                                 en: #1D,
+                                 de: #1E
+                              }
+                           ) (#2) (!!),
+                           type: #1F,
+                           defaultValueGenerator: void,
+                           options: void
+                        },
+                        <stx:ProcessParam> {
+                           name: always (
+                              {
+                                 en: #20,
+                                 de: #21
+                              }
+                           ) (#2) (!!),
+                           type: <quantity> (1x),
+                           defaultValueGenerator: <Function> (void) (
+                              body: <Scope> scope (
+                                 ;
+                                 0x;
+                              ),
+                              location: #18
+                           ),
+                           options: void
+                        },
+                        <stx:ProcessParam> {
+                           name: always (
+                              {
+                                 en: #4D,
+                                 de: #4E
+                              }
+                           ) (#2) (!!),
+                           type: #19,
+                           defaultValueGenerator: void,
+                           options: void
+                        },
+                        <stx:ProcessParam> {
+                           name: always (
+                              {
+                                 en: #22,
+                                 de: #23
+                              }
+                           ) (#2) (!!),
+                           type: #19,
+                           defaultValueGenerator: void,
+                           options: void
+                        },
+                        <stx:ProcessParam> {
+                           name: always (
+                              {
+                                 en: #24,
+                                 de: #25
+                              }
+                           ) (#2) (!!),
+                           type: #19,
+                           defaultValueGenerator: void,
+                           options: void
+                        }
+                     ],
+                     generateTransactions: $$ <Function> ((#1A)) (
+                        body: <Scope> scope (#4F) (
+                           #100 $= (#it.0);
+                           assert #100 (
+                              #0.0 matches <time>;
+                           ) void;
+                           assert #100 (
+                              #0.1 matches <quantity> (1x);
+                           ) void;
+                           assert #100 (
+                              #0.2 matches <text>;
+                           ) void;
+                           assert #100 (
+                              #0.3 matches <text>;
+                           ) void;
+                           assert #100 (
+                              #0.4 matches <text>;
+                           ) void;
+                           #101 $= $$ <stx:Transaction> {
+                              time: (#100.0),
+                              counterpart: (#100.2),
+                              note: (#100.3),
+                              receipt: (#100.4),
+                              bookings: <Map> [
+                                 [
+                                    #0,
+                                    #100.1
+                                 ]
+                              ]
+                           };
+                           [#101];
+                        ),
+                        location: #18
+                     )
+                  }
+               ],
+               [
+                  #sub_result = #50 = "expense externals",
+                  $$ <stx:Process> {
+                     name: #50,
+                     localName: always (
+                        {
+                           en: #51,
+                           de: "Fremdleistung"
+                        }
+                     ) (#2) (!!),
+                     description: always (
+                        {
+                           en: "Buy External services. No Freelancers",
+                           de: "Inanspruchnahme von externen Leistungen. Keine Freiberufler"
+                        }
+                     ) (#2) (!!),
+                     category: $$ [#4],
+                     params: #sub_result = #57 = $$ [
+                        <stx:ProcessParam> {
+                           name: always (
+                              {
+                                 en: #1D,
+                                 de: #1E
+                              }
+                           ) (#2) (!!),
+                           type: #1F,
+                           defaultValueGenerator: void,
+                           options: void
+                        },
+                        <stx:ProcessParam> {
+                           name: always (
+                              {
+                                 en: #20,
+                                 de: #21
+                              }
+                           ) (#2) (!!),
+                           type: <quantity> (1x),
+                           defaultValueGenerator: <Function> (void) (
+                              body: <Scope> scope (
+                                 ;
+                                 0x;
+                              ),
+                              location: #18
+                           ),
+                           options: void
+                        },
+                        <stx:ProcessParam> {
+                           name: always (
+                              {
+                                 en: #52,
+                                 de: #53
+                              }
+                           ) (#2) (!!),
+                           type: #19,
+                           defaultValueGenerator: void,
+                           options: void
+                        },
+                        <stx:ProcessParam> {
+                           name: always (
+                              {
+                                 en: #22,
+                                 de: #23
+                              }
+                           ) (#2) (!!),
+                           type: #19,
+                           defaultValueGenerator: void,
+                           options: void
+                        },
+                        <stx:ProcessParam> {
+                           name: always (
+                              {
+                                 en: #24,
+                                 de: #25
+                              }
+                           ) (#2) (!!),
+                           type: #19,
+                           defaultValueGenerator: void,
+                           options: void
+                        }
+                     ],
+                     generateTransactions: $$ <Function> ((#1A)) (
+                        body: <Scope> scope (#54) (
+                           #100 $= (#it.0);
+                           assert #100 (
+                              #0.0 matches <time>;
+                           ) void;
+                           assert #100 (
+                              #0.1 matches <quantity> (1x);
+                           ) void;
+                           assert #100 (
+                              #0.2 matches <text>;
+                           ) void;
+                           assert #100 (
+                              #0.3 matches <text>;
+                           ) void;
+                           assert #100 (
+                              #0.4 matches <text>;
+                           ) void;
+                           #101 $= $$ <stx:Transaction> {
+                              time: (#100.0),
+                              counterpart: (#100.2),
+                              note: (#100.3),
+                              receipt: (#100.4),
+                              bookings: <Map> [
+                                 [
+                                    #0,
+                                    #100.1
+                                 ]
+                              ]
+                           };
+                           [#101];
+                        ),
+                        location: #18
+                     )
+                  }
+               ],
+               [
+                  #27,
+                  $$ <stx:Process> {
+                     name: #27,
+                     localName: always (
+                        {
+                           en: #55,
+                           de: #56
+                        }
+                     ) (#2) (!!),
+                     description: always (
+                        {
+                           en: "Buy low-value goods (cheaper than 800€)",
+                           de: "Kauf von Geringwertigen Wirtschaftsgütern (Wert unter 800€)"
+                        }
+                     ) (#2) (!!),
+                     category: $$ [#4],
+                     params: #57,
+                     generateTransactions: $$ <Function> ((#1A)) (
+                        body: <Scope> scope (#58) (
+                           #100 $= (#it.0);
+                           assert #100 (
+                              #0.0 matches <time>;
+                           ) void;
+                           assert #100 (
+                              #0.1 matches <quantity> (1x);
+                           ) void;
+                           assert #100 (
+                              #0.2 matches <text>;
+                           ) void;
+                           assert #100 (
+                              #0.3 matches <text>;
+                           ) void;
+                           assert #100 (
+                              #0.4 matches <text>;
+                           ) void;
+                           #101 $= $$ <stx:Transaction> {
+                              time: (#100.0),
+                              counterpart: (#100.2),
+                              note: (#100.3),
+                              receipt: (#100.4),
+                              bookings: <Map> [
+                                 [
+                                    #0,
+                                    #100.1
+                                 ]
+                              ]
+                           };
+                           [#101];
+                        ),
+                        location: #18
+                     )
+                  }
+               ],
+               [
+                  #2A,
+                  $$ <stx:Process> {
+                     name: #2A,
+                     localName: always (
+                        {
+                           en: #59,
+                           de: #5A
+                        }
+                     ) (#2) (!!),
+                     description: always (
+                        {
+                           en: #5B,
+                           de: #5C
+                        }
+                     ) (#2) (!!),
+                     category: $$ [#4],
+                     params: #57,
+                     generateTransactions: $$ <Function> ((#1A)) (
+                        body: <Scope> scope (#5D) (
+                           #100 $= (#it.0);
+                           assert #100 (
+                              #0.0 matches <time>;
+                           ) void;
+                           assert #100 (
+                              #0.1 matches <quantity> (1x);
+                           ) void;
+                           assert #100 (
+                              #0.2 matches <text>;
+                           ) void;
+                           assert #100 (
+                              #0.3 matches <text>;
+                           ) void;
+                           assert #100 (
+                              #0.4 matches <text>;
+                           ) void;
+                           #101 $= $$ <stx:Transaction> {
+                              time: (#100.0),
+                              counterpart: (#100.2),
+                              note: (#100.3),
+                              receipt: (#100.4),
+                              bookings: <Map> [
+                                 [
+                                    #0,
+                                    #100.1
+                                 ]
+                              ]
+                           };
+                           [#101];
+                        ),
+                        location: #18
+                     )
+                  }
+               ],
+               [
+                  #sub_result = #5E = "expense education",
+                  $$ <stx:Process> {
+                     name: #5E,
+                     localName: always (
+                        {
+                           en: "Further Education",
+                           de: "Weiterbildung"
+                        }
+                     ) (#2) (!!),
+                     description: always (
+                        {
+                           en: "Pay for further education required by the business",
+                           de: "Bezahlung von Weiterbildungen im Zuge des Geschäfts"
+                        }
+                     ) (#2) (!!),
+                     category: $$ [#4],
+                     params: #57,
+                     generateTransactions: $$ <Function> ((#1A)) (
+                        body: <Scope> scope (#5F) (
+                           #100 $= (#it.0);
+                           assert #100 (
+                              #0.0 matches <time>;
+                           ) void;
+                           assert #100 (
+                              #0.1 matches <quantity> (1x);
+                           ) void;
+                           assert #100 (
+                              #0.2 matches <text>;
+                           ) void;
+                           assert #100 (
+                              #0.3 matches <text>;
+                           ) void;
+                           assert #100 (
+                              #0.4 matches <text>;
+                           ) void;
+                           #101 $= $$ <stx:Transaction> {
+                              time: (#100.0),
+                              counterpart: (#100.2),
+                              note: (#100.3),
+                              receipt: (#100.4),
+                              bookings: <Map> [
+                                 [
+                                    #0,
+                                    #100.1
+                                 ]
+                              ]
+                           };
+                           [#101];
+                        ),
+                        location: #18
+                     )
+                  }
+               ],
+               [
+                  #2C,
+                  $$ <stx:Process> {
+                     name: #2C,
+                     localName: always (
+                        {
+                           en: #60,
+                           de: #2D
+                        }
+                     ) (#2) (!!),
+                     description: always (
+                        {
+                           en: "Pay for accounting and law consultant",
+                           de: #61
+                        }
+                     ) (#2) (!!),
+                     category: $$ [#4],
+                     params: #57,
+                     generateTransactions: $$ <Function> ((#1A)) (
+                        body: <Scope> scope (#62) (
+                           #100 $= (#it.0);
+                           assert #100 (
+                              #0.0 matches <time>;
+                           ) void;
+                           assert #100 (
+                              #0.1 matches <quantity> (1x);
+                           ) void;
+                           assert #100 (
+                              #0.2 matches <text>;
+                           ) void;
+                           assert #100 (
+                              #0.3 matches <text>;
+                           ) void;
+                           assert #100 (
+                              #0.4 matches <text>;
+                           ) void;
+                           #101 $= $$ <stx:Transaction> {
+                              time: (#100.0),
+                              counterpart: (#100.2),
+                              note: (#100.3),
+                              receipt: (#100.4),
+                              bookings: <Map> [
+                                 [
+                                    #0,
+                                    #100.1
+                                 ]
+                              ]
+                           };
+                           [#101];
+                        ),
+                        location: #18
+                     )
+                  }
+               ],
+               [
+                  #sub_result = #63 = "expense edv",
+                  $$ <stx:Process> {
+                     name: #63,
+                     localName: always (
+                        {
+                           en: "Pay for EDP",
+                           de: "EDV Ausgaben"
+                        }
+                     ) (#2) (!!),
+                     description: always (
+                        {
+                           en: "Pay for running server and hosting costs",
+                           de: "Bezahlung von EDV Ausgaben wie Server und Hosting."
+                        }
+                     ) (#2) (!!),
+                     category: $$ [#4],
+                     params: #57,
+                     generateTransactions: $$ <Function> ((#1A)) (
+                        body: <Scope> scope (#64) (
+                           #100 $= (#it.0);
+                           assert #100 (
+                              #0.0 matches <time>;
+                           ) void;
+                           assert #100 (
+                              #0.1 matches <quantity> (1x);
+                           ) void;
+                           assert #100 (
+                              #0.2 matches <text>;
+                           ) void;
+                           assert #100 (
+                              #0.3 matches <text>;
+                           ) void;
+                           assert #100 (
+                              #0.4 matches <text>;
+                           ) void;
+                           #101 $= $$ <stx:Transaction> {
+                              time: (#100.0),
+                              counterpart: (#100.2),
+                              note: (#100.3),
+                              receipt: (#100.4),
+                              bookings: <Map> [
+                                 [
+                                    #0,
+                                    #100.1
+                                 ]
+                              ]
+                           };
+                           [#101];
+                        ),
+                        location: #18
+                     )
+                  }
+               ]
+            ],
+            uuid: "8fa77536-a707-4883-b3dc-743f4fc57d26",
+            version: #36,
+            dependencies: $$ [#37],
+            install: $$ <Function> ((#1A)) (
+               body: <Scope> scope (#4F) (#54) (#58) (#5D) (#5F) (#62) (#64) (
+                  [0] <Function> (
+                     body: void,
+                     location: #18
+                  )
+               ) (
+                  #100 $= (#it.0);
+                  #101 $= $$ #100.0;
+                  #101.accounts.income.signedChildren += <stx:SignedChild> {
+                     sign: 1,
+                     account: #0
+                  };
+                  #101.accounts.expenses.signedChildren += <stx:SignedChild> {
+                     sign: 1,
+                     account: #1
+                  };
+                  #101.accounts.expenses.signedChildren += <stx:SignedChild> {
+                     sign: 1,
+                     account: #2
+                  };
+                  #101.accounts.expenses.signedChildren += <stx:SignedChild> {
+                     sign: 1,
+                     account: #3
+                  };
+                  #101.accounts.expenses.signedChildren += <stx:SignedChild> {
+                     sign: 1,
+                     account: #4
+                  };
+                  #101.accounts.expenses.signedChildren += <stx:SignedChild> {
+                     sign: 1,
+                     account: #5
+                  };
+                  #101.accounts.expenses.signedChildren += <stx:SignedChild> {
+                     sign: 1,
+                     account: #6
+                  };
+                  #7 (#101.accounts.income.signedChildren);
+               ),
+               location: #18
+            )
+         }
+      ]
+   }
+};

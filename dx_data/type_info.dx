@@ -1,0 +1,20 @@
+<Map> [
+    [<std:String>,
+     <text/markdown> "## \\<std:String\\>\nA String is a sequence of characters. `<std:String>` is part of the datex standard library.\n\nType casts:\n  * `<std:String> 42`\n  * `<std:String> [1,2,3]`\n  * `<std:String> @alias`\n  * `<std:String> $pointer`"],
+    
+    [<std:Error>,
+     <text/markdown> "## \\<std:Error\\>\nA Error can be thrown to indicate that something went wrong. `<std:Error>` is part of the datex standard library.\n\n**Throw an error:**\n```datex\n$std:err ! <Error> \"This is an error\";\n$std:err ! <Error> {message:\"This is an error\"};\n```\n\nType casts:\n  * `<std:Error> {type:\"Syntax\", message:\"You habe a syntax error\"}`\n  * `<std:Error> \"my error message\"`"],
+    
+    [<text/markdown>,
+     <text/markdown> "## \\<text/markdown\\>\nThe Markdown class is a wrapper for a `<std:String>` which should include a valid Markdown text. Markdown can be used for the documentation of custom functions and types.\n\n`<text/markdown>` is part of the datex standard library."],
+
+    [<std:Array>,
+     <text/markdown> "## \\<std:Array\\>\nAn Array is a resizable list of values with one ore multiple different types. Arrays are Fundamental Types and part of the datex standard library.\n\nCreate a new Array:`my_array = [1, 5, 42, 'text'];`\n\nAdd values to an array:`my_array += 'new value';`\n\nSet values at a specific index:`my_array.0 = 'first index value';`"],
+
+    [<std:Void>,
+     <text/markdown> "## \\<std:Void\\>\nThe `void` value is a special value that indicates a non-existing value.\n\nIn contrast to the `null` value, `void` should not be used explicitly, it is only a convenient way to represent\nthe absence of a value. \n\nPer default, the `global` variable is set to `void`, and every sub-scope return the `void` value"
+    ],
+    [<std:Tuple>,
+     <text/markdown> "## \\<std:Tuple\\>\nA `<Tuple>` is an immutable list of values.\nTuples are created by seperating multiple values with a comma:\n```datex\n    tuple1 = 1,4,5,5;\n    tuple2 = (@user, ['v1','v2']);\n```\nParentheses are not required, but may be used in ambiguous cases to make clear which values are part of the `<Tuple>`.\n\nTuples can be used instead of Arrays in most cases.\n\n\nFurthermore, Tuples allow the invocation of a `<Function>` or `<Callback>` with more than one parameter.\nIf a `<Tuple>` is used for the invocation, its values are regarded as seperate input parameters:\n```datex\n# calling the print function with an <Array>:\nprint [1,2,3] # => output: [1,2,3]\n\n# calling the print function with a <Tuple>:\nprint (1,2,3) # => output: 1 2 3 (seperate values)\n```\n"
+    ]
+]

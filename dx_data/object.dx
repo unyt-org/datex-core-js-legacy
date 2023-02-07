@@ -1,0 +1,9 @@
+var x = {
+	current: #current,
+	time: <Time>(),
+	multiplier: 100,
+	array: [5,1,-12,42,4200,420,-4200]
+};
+
+x.x = x;
+x;

@@ -1,0 +1,63 @@
+###
+ * Press [CMD]+[S] tho execute this script
+ * More info about datex: docs.unyt.org/datex
+###
+
+current :: sender :: current :: sender :: current :: sender :: current
+current :: current :: current :: current
+
+
+# get the user's name
+getName = <Function> () => (
+    print('Hi, I am {current.name}. What\'s your name?');
+    read("> ");
+);
+
+
+# get the age and return the information
+getAge = <Function> (name) => (
+    print('Hello {name}. How old are you?');
+    {
+        is_user: true, 
+        name: name,
+        age: <Int> read "> ",          
+        alias:  '@{name}'
+    };
+);
+
+info = getAge(getName());
+print('\nUser info:');
+printf(info);
+
+###:END:###
+
+
+# log(res);
+
+# log(f1);
+###:END:###
+
+# x = 2,5,6,8;
+
+f2 = <Function> () => (
+    print("Hi world");
+    a = read("?");
+);
+
+
+f3 = <Function> name => print('Hello, (name)');
+
+f4 = <Function> x => {
+    x: x,
+    sdf: true,
+    ix: 'constsant (x) string'
+};
+
+
+f4()
+
+###
+@StartIndustry :: ()=>(
+    read('Hi, how old are u? ');
+);
+###

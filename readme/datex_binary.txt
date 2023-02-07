@@ -1,0 +1,206 @@
+## DATEX binary codes
+# all codes are 1 byte long
+
+# stand-alone commands
+COMMAND_END         = 0xa0  # ;
+SUBSCOPE_START      = 0xa1  # (
+SUBSCOPE_END        = 0xa2  # )
+COMPARE             = 0xa4  # ==
+RETURN              = 0xa5  # return
+
+# shortcuts for fundamental/std lib types
+STD_TYPE_STRING     = 0x10  # <String>  
+STD_TYPE_INT        = 0x11  # <Int>
+STD_TYPE_FLOAT      = 0x12  # <Float>
+STD_TYPE_BOOLEAN    = 0x13  # <Boolean>
+STD_TYPE_NULL       = 0x14  # <Null>
+STD_TYPE_VOID       = 0x15  # <Void>
+STD_TYPE_BUFFER     = 0x16  # <Buffer>
+STD_TYPE_CODE_BLOCK = 0x17  # <Datex>
+STD_TYPE_UNIT       = 0x18  # <Unit>
+
+STD_TYPE_FILTER     = 0x19  # <Filter
+STD_TYPE_ARRAY      = 0x1a  # <Array>
+STD_TYPE_OBJECT     = 0x1b  # <Object>
+STD_TYPE_SET        = 0x1c  # <Set>
+STD_TYPE_MAP        = 0x1d  # <Map>
+STD_TYPE_TUPLE      = 0x1e  # <Tuple>
+STD_TYPE_FUNCTION   = 0x1f  # <Function>
+
+# values
+
+TRUE                = 0xc4  # true
+FALSE               = 0xc5  # false
+NULL                = 0xc6  # null
+VOID                = 0xc7  # void
+
+STRING              = 0xc0 { # "string", max length 4,29 GB
+    LENGTH Uint32 (4B)
+    VALUE  Uint8[LENGTH] (1B*LENGTH)
+}
+
+INT_32              = 0xc1 { # -2_147_483_648 to 2_147_483_647
+    VALUE  Int32 (4B)
+}
+
+INT_64              = 0xc2 { # -9223372036854775808 to 9223372036854775807
+    VALUE  Int64 (8B)
+}
+
+FLOAT               = 0xc3 { # -1.8E308 to 1.8E308
+    VALUE  Float64 (8B)
+}
+
+BUFFER              = 0xc8 { # `16:abcf3e2343faa2346`, max length 4,29 GB
+    LENGTH Uint32
+    VALUE  Uint8[LENGTH]
+}
+
+CODE_BLOCK          = 0xc9 { # (a,b)=>(a+b)
+    PARAMS_NR   Uint16 
+    { # for each parameter
+        PARAM_NAME_LENGTH Uint8
+        PARAM_NAME        Uint8[PARAM_NAME_LENGTH]
+    } [PARAMS_NR]
+    CODE_LENGTH Uint32
+    CODE        Uint8[CODE_LENGTH]  
+}
+
+UNIT                = 0xca { # 42u
+    VALUE  Float64
+}
+
+FILTER              = 0xcb { # +app & #label1 | #label2
+
+}
+
+ALIAS               = 0xd0 { # @alias
+    NAME_LENGTH    Uint8
+    CHANNEL_LENGTH Uint8
+    NAME           Uint8[NAME_LENGTH]
+    CHANNEL        Uint8[CHANNEL_LENGTH]
+}
+
+LABEL               = 0xd1 { # #label
+    NAME_LENGTH    Uint8
+    CHANNEL_LENGTH Uint8
+    NAME           Uint8[NAME_LENGTH]
+    CHANNEL        Uint8[CHANNEL_LENGTH]
+}
+
+FLAG                = 0xd2 { # §flag
+    NAME_LENGTH    Uint8
+    CHANNEL_LENGTH Uint8
+    NAME           Uint8[NAME_LENGTH]
+    CHANNEL        Uint8[CHANNEL_LENGTH]
+}
+
+ORG                 = 0xd3 { # :org
+    NAME_LENGTH    Uint8
+    CHANNEL_LENGTH Uint8
+    NAME           Uint8[NAME_LENGTH]
+    CHANNEL        Uint8[CHANNEL_LENGTH]
+}
+
+APP                 = 0xd4 { # +app
+    NAME_LENGTH    Uint8
+    CHANNEL_LENGTH Uint8
+    NAME           Uint8[NAME_LENGTH]
+    CHANNEL        Uint8[CHANNEL_LENGTH]
+}
+
+NODE                = 0xd5 { # *node
+    NAME_LENGTH    Uint8
+    CHANNEL_LENGTH Uint8
+    NAME           Uint8[NAME_LENGTH]
+    CHANNEL        Uint8[CHANNEL_LENGTH]
+}
+
+
+PLUS_ALIAS          = 0xd6 { # @+alias
+    NAME_LENGTH    Uint8
+    CHANNEL_LENGTH Uint8
+    NAME           Uint8[NAME_LENGTH]
+    CHANNEL        Uint8[CHANNEL_LENGTH]
+}
+
+PLUS_LABEL          = 0xd7 { # #+label
+    NAME_LENGTH    Uint8
+    CHANNEL_LENGTH Uint8
+    NAME           Uint8[NAME_LENGTH]
+    CHANNEL        Uint8[CHANNEL_LENGTH]
+}
+
+PLUS_FLAG           = 0xd8 { # §+flag
+    NAME_LENGTH    Uint8
+    CHANNEL_LENGTH Uint8
+    NAME           Uint8[NAME_LENGTH]
+    CHANNEL        Uint8[CHANNEL_LENGTH]
+}
+
+PLUS_ORG            = 0xd9 { # :+org
+    NAME_LENGTH    Uint8
+    CHANNEL_LENGTH Uint8
+    NAME           Uint8[NAME_LENGTH]
+    CHANNEL        Uint8[CHANNEL_LENGTH]
+}
+
+PLUS_APP            = 0xda { # ++app
+    NAME_LENGTH    Uint8
+    CHANNEL_LENGTH Uint8
+    NAME           Uint8[NAME_LENGTH]
+    CHANNEL        Uint8[CHANNEL_LENGTH]
+}
+
+PLUS_NODE           = 0xdb { # *+node
+    NAME_LENGTH    Uint8
+    CHANNEL_LENGTH Uint8
+    NAME           Uint8[NAME_LENGTH]
+    CHANNEL        Uint8[CHANNEL_LENGTH]
+}
+
+ID_ENDPOINT         = 0xdc { # %aa-ff-ee-a3-ef
+    ID_LENGTH      Uint8
+    CHANNEL_LENGTH Uint8
+    ID             Uint8[ID_LENGTH]
+    CHANNEL        Uint8[CHANNEL_LENGTH]
+}
+
+PLUS_ID_ENDPOINT    = 0xdd { # %+aa-ff-ee-a3-ef
+    ID_LENGTH      Uint8
+    CHANNEL_LENGTH Uint8
+    ID             Uint8[ID_LENGTH]
+    CHANNEL        Uint8[CHANNEL_LENGTH]
+}
+
+LIST_SEP            = 0xe5   # ,
+AND                 = 0xe6   # &
+OR                  = 0xe7   # |
+
+ARRAY_START         = 0xe0   # array / or array
+ARRAY_END           = 0xe1  
+OBJECT_START        = 0xe2   # {}
+OBJECT_END          = 0xe3   #
+KEY                 = 0xe4   # object key
+
+
+# operations
+NOT                 = 0xb4   # ~
+ADD                 = 0xb5   # +
+REDIRECT            = 0xb6   # ::
+
+VAR                 = 0xb0   # x
+POINTER             = 0xb1   # $x
+TYPE                = 0xb2   # <type>x
+
+STATIC_SCOPE        = 0xb7   # static/...
+
+USE_STATIC          = 0xa4   # use (x,y)
+
+ASSIGN_SET          = 0xf0   # =
+GET                 = 0xf1   # x.y
+ASSIGN_ADD          = 0xf2   # +=
+ASSIGN_SUB          = 0xf3   # -=
+CALL                = 0xf4   # ()
+THROW_ERROR         = 0xf6   # !
+DELETE              = 0xf7   # -

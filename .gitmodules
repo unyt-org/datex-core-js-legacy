@@ -1,0 +1,3 @@
+[submodule "wasm/datex"]
+	path = wasm/datex
+	url = git@git.unyt.org:unyt/code/datex-core.git

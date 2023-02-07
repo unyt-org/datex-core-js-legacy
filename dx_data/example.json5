@@ -1,0 +1,9 @@
+{
+	/*
+		Multiline comment
+	*/
+	json5_value1: [1,2,3,4,5],
+	json5_value2: true,
+	hex: 0xff,
+	// asdf
+}

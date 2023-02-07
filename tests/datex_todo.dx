@@ -1,0 +1,32 @@
+# input
+x: 3;
+# expected result
+(x:3)
+
+
+# input
+{
+    x: 3;
+    export val a = 10;
+    export ref b = 10;
+}
+# expected result
+{
+    a: 10,
+	b: $$ 10
+}
+
+# input
+val y = b:3;
+y
+# expected result
+(b:3)
+
+# input
+{
+    a: 'A',
+    b: 'B';
+    x: 'X'
+}
+# expected result
+{x:'X'}

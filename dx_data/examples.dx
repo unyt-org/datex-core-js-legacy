@@ -1,0 +1,1479 @@
+#!/usr/bin/datex
+
+
+{
+    #read: @12,
+    #write: @4,
+
+    #dom: <uix:app>,
+
+    a: 234,
+
+    x: function () (
+        #dom.append("32")
+    )
+};
+
+
+
+
+# dynamic markdown:
+<text/markdown> '
+# Title
+counter: (counter)
+'
+
+# markdown example
+use localtext from #public.std;
+
+val title  = (localtext {de:"Willkommen bei DATEX", en:'Welcome to DATEX'});
+val author = @unyt;
+val year   = 2022;
+
+############################################
+## (title)
+
+More info about DATEX: docs.unyt.org/datex
+
+© (year) (author)
+############################################
+
+
+
+# 'response' from function
+
+val fn = @example :: function () (
+    #current, response #current
+);
+
+fn()
+
+
+# -------------------------------------------------
+# import
+use print from #public.std;
+
+# init
+ref x := 1000;
+val fn := (@example :: function (a) => (response(
+    print 'a = (a); x = (x)';
+    x+a
+)));
+
+# run
+x = 25;
+fn(15)
+# -------------------------------------------------
+
+
+# insert script resolution
+
+use bubbleSort from insert ../unyt_core/dx_data/bubblesort.dx; 
+use bubbleSort as b from insert ../unyt_core/dx_data/bubblesort.dx; 
+use * as x from insert ../unyt_core/dx_data/program.dx; 
+
+(x.bubbleSort === bubbleSort) and (bubbleSort === b)
+
+
+
+# no <> for some types in context?
+function (y:text/datex, b:integer):text (
+
+);
+<text/datex> "123"
+
+
+const exampletype = init (
+    @local export ref a: image/svg+xml = `9807657432413456789`;
+)
+
+use exampletype from #public.uix;
+<exampletype> ();
+<#public.uix.exampletype> ();
+
+
+# <Account> = (<LegacyAccount> | <text> | <XY> | <NativeTypeLoader>);
+
+# internal types map
+types = (
+    <Account>: (<LegacyAccount> | <text> | <XY> | <NativeTypeLoader>)
+);
+# types added to #default
+#default = (
+    <Account>: (<LegacyAccount> | <text> | <XY> | <NativeTypeLoader>)
+);
+
+use <Account> from @unyt.stonks;
+use <Account> from (
+    <Account>: (<LegacyAccount> | <text> | <XY> | <NativeTypeLoader>)
+);
+
+new @unyt.stonks.<Account>();
+new <Account>();
+
+
+# No class inheritance, it's all type unions!
+
+
+<stx:transactionview> = <uix:base> | <text> | <native_module_loader> |
+    init (
+        #this.options = {title: "Transactions"};
+        #this.transactions = [];
+        #this as <text> = #this.options.title;
+        #this as <native_module_loader> = (js:https://datex.unyt.org/playground/LegacyAccount.js)
+    )
+
+get https://www.google.com
+
+# TODO combine init/create and constructor, is redundant
+<Account> = 
+<LegacyAccount> | <text> | <XY> | <NativeTypeLoader>
+| 
+init (
+    #this as <text> = always 'x = (#this.x)';
+    #this as <NativeTypeLoader> = (js:https://datex.unyt.org/playground/LegacyAccount.js)
+
+    export val x = "100";
+    export ref y:<decimal>|<integer> = 1234
+)
+# init compiles to
+(
+    x: <string>,
+    y: <decimal>|<integer>
+)
+|
+create (
+    #this as <text> = always 'x = (#this.x)';
+
+    x: "100",
+    y: $$ 1234
+)
+|
+# constructor cannot export/return values, only access #this
+constructor (val b:<integer>) (
+    #this as <LegacyAccount> = new <LegacyAccount>();
+    #this.y += b;
+)
+
+
+@unyt ref xy: <integer>|<decimal> = 234;
+
+(§w: @jonas) {a:12}
+
+{
+    §this: $ABCD,
+    §meta: {
+        a: 23
+    },
+
+    x: (§w: @jonas) and 10
+};
+
+{
+
+    @jonas          xy: 224,
+    @admin          xy: 224,
+    (§write:@unyt)  xy: 224
+}
+
+(§this: $ABCD) | <Function>()
+(§execute:@jonas) | <Assertion> ();
+
+
+§(§read,§execute,§write,§access,§location,§this:12)
+{a:2} | {b:2} matches (a:<number>) & (b:<number>) & <Object>
+{a:2} | {b:2} matches (a:<number>) | (b:<number>) & <Object>
+{a:2}         matches (a:<number>) | (b:<number>) & <Object>
+{a:2} | {b:2} matches (a:<number>) | (b:<number>) & <Object>
+
+ref account = <Account> {name:'xy'} | {description:'lol'} | "stringified account" | <LegacyAccount> {lname:'xyz'};
+account as <text>;  
+ref plainAccount = account as <Account>;
+# all views have the same permissions (they are part of the same pointer)
+
+ref fn = <Function> | <ValueConsumer>;
+fn as <ValueConsumer>
+
+use <Account> from @unyt.stonks;
+use <Account> from (
+
+);
+new @unyt.stonks.<Account>();
+new <Account>();
+
+
+use localtext from #public.std;
+
+<myText> = 
+    <ValueConsumer> & <otherText>
+    
+    & (
+        b: <integer>,
+        a: <text>,
+        c: <quantity(1EUR)>,
+        text: <text>
+    )
+
+    & declare (
+        val b: <integer>
+        val a: <text>
+
+        ref text: <string> = localtext {
+            en: 'hello world',
+            de: 'hallo welt'
+        }
+
+        function xy () (
+
+        )
+        val xy = 1000
+    )
+
+    & constructor (named var a:<text>) (
+        #this.a = a;
+        #this.b = 10;
+    )
+    & operator (+) (#this + #it)
+    & operator (-) (#this - #it);
+
+new <myText> ('sdfdsg');
+
+ref a = {a:2};
+val b = {a:2};
+local ref c = $$ {a:2};
+a.c = c;
+a.d = c;
+
+a == {
+    a: 2,
+    c: #0 = $_ c,
+    d: #0
+}
+
+
+var time = ~(1549)-10-11 (h):(m):(s)~
+<unit(1Cyr)>1549 +
+<unit(1Cmo)>1549 +
+
+<unit(1h)>h
+
+# ?
+<A> = {a:<int>};
+<B> = {b:<int>};
+
+<A>&<B>;
+
+{a:4} | {b:423}
+
+
+
+export ref x = 10m;
+
+@+unyt.nodes.europe.central :: x = 15km;
+
+export var self1 = always 'x = (x)';
+
+x += 4m;
+
+@+unyt.nodes.europe.central :: (
+    x = 11m;
+    'x = (x)';
+);
+
+export var self2 = 'x = (x)';
+
+ref price_per_ton = 1.50 USD/t;
+price_per_ton * 50kt
+
+1 kW*h == 3_600_000 J
+1 kW*h == 3.6 MJ
+1 kW*h == 3.6e6 J
+
+ref x = (function (
+    named ref x: <String> = "default", 
+    export named val y: T = 1 
+    ...rest:<String> 
+    ) (
+
+        #0 = #it.(0) default "default";
+    
+));
+
+named val x = 10;
+
+<Function((x:<String>,y:T), void, <String>)> scope (
+        
+)
+
+
+use bubbleSort from @example;
+bubbleSort [1,2,3,5,-5,-1,-1000]
+
+
+# compile metaprogramming
+compile var x = 4;
+compile x + 10;
+
+
+use print from #public.std;
+
+compile var version = 1; # #env.compiler.version
+
+print compile (
+    if (version == 1) 'version 1 stuff'
+    else 'version 2 stuff'
+)
+
+# eternals
+var xyz := 12;
+#100 = #local.'xyz' ?? (12);
+#local.'x'= 4;
+
+# 'use' examples
+use x from @example.lib;
+use x from https://unyt.org/lib/
+use x from ./lib/main/index.dx
+use x from #public.Math;
+use x from $Math;
+use x from $01013898D668CFF3C2EBFEF0x958C73A0109;
+use x from (x:function()());
+use x from compile get ./lib/main/index.dx
+use x from compile ./lib/main/index.dx
+use x from compile copy #public.Math;
+
+use bubbleSort from compile ../unyt_core/dx_data/bubblesort.dx;
+bubbleSort[1,5,6,-15,134,-24]
+
+######
+use logger from #public.std;
+var info = logger.info;
+
+info 'step 1';
+
+var x = do (
+    info 'step 1/2';
+    maybe (
+        info 'step 3';
+        [1,2,3]
+    )
+);
+info 'step 2/2';
+
+(await x).value();
+
+######
+
+val a = x default 2; # if x is null/void
+
+try 
+    getUsers()
+accept <SyntaxError> =>
+    print 'oh no'
+
+
+# ~
+when (x) 
+    is 1 => 34
+    is 3 => 10
+    is 0..10 => 4
+    is 'x'|'z'|'123' => 4
+
+# ignore '=>'
+
+when x is 1 => 34
+       is 3 => 10
+       is 0..10 => 4
+
+if true => 'xy'
+else => 23
+
+function x => x+1
+
+
+use print from #std.io;
+use PI from #std.math;
+use print from #public.std.io;
+use PI from #public.std.math;
+
+use print from #public.std;
+use print from insert #public.std;
+use print as p from #public.std;
+use (print, printf, printn as x) from #public.std;
+use * as std from #public.std;
+
+export ref array = [1,2,2,3,4,5,5,6,7];
+export var interface = {
+    a: $$ function () ()
+}
+
+
+var call = function (val x: <Any>, ref y: <String>, ...z: <String>) to <Void> (
+    #0: <Any> $= copy #it.x ?? #it.0;
+    #1: <String> $= $$ #it.y ?? #it.1;
+    #2: <Tuple(<String>)> = #it.2..#it.(count it);
+    
+    print #0
+);
+
+
+lolify = function (ref x: <String>) x = 'lol (x)';
+
+lolify x->a; # allowed
+lolify x.a; # not allowed if x.a is not a pointer value
+
+test 'my cool test' (
+
+    params: (
+        (1,2,3), 
+        (4,5,6)
+    ),
+
+    validator: assert (
+        #it.0 == 23
+    )
+)
+
+
+# persistant references
+$01011F4CABDEFF := {}; # globally unique reference
+$labledPointer  := {}; # endpoint unique reference
+static exposed  := {}; # endpoint static value (#static)
+
+# scope variables (just syntax sugar around internal slots)
+ref pointer = {}; # always a fixed reference
+val myValue = {}; # always a value
+var somevar = {}; # reference or value
+const CONST = {}; # constant value
+
+# internal slots
+#0ff5 = {};
+# named internal slots
+#result = {};
+
+
+
+
+
+
+ref x = function (x: ref<int/u16>, y: val<string>, z) to ref<int/16> (
+    #0
+)
+<Function((ref<int/u16> x, val<string> y, z) to ref<int/16>)>
+<Function(<string> to <int/16>)>
+
+# Variables
+
+$global := [1,2,3];
+# #root is readonly, only static scopes
+
+###
+    $= operator
+        sets reference if the new value is a pointer, or
+        copies value if the new value is a value
+    = operator - only if variable exists
+        updates value, new value is collapsed if pointer
+
+###
+
+# ref: always pointer references - fixed type
+ref abx = 1; #   #0 $= $$ 1;
+ref xyz = [1,2,3,4]; # #1 $= $$ [1,2,3,4];
+ref ptr = $01011F4C0D05AD8AD30CF7D0x90E4C1F01;
+ref glb = $global;
+glb += 10;
+ptr.x = '123'
+ptr.x $= glb;
+
+xyz $= glb; # ! reference cannot be changed (Compiler error)
+
+  
+# val: always non-pointer values
+val x = [10]; #   #0 $= value [10]
+val y = x;
+assert_not_identical (x,y)
+assert_equal (x,y)
+x = 7; # #0 = 7;
+x $= $xy; # ! reference cannot be changed (Compiler error)
+x += 10;
+
+# var: pointer or value
+var y = $$ 10; # #0 $= $$ 10 - pointer
+var x = 10;    # #0 $= 10 - value
+x $= $ab # allowed
+
+# const: immutable pointer or value
+const x = 10; # $=, =, +=, ... not allowed (Compiler error)
+
+
+
+# swapping 
+a = $$ 1;
+b = $$ 'be';
+(b,a) = (a,b);
+
+
+use (testing);
+
+test (
+    'test for xy': (
+        ((1,2), (4,5), (6,6)),
+        assert (
+            assertEquals(#it.0,#it.1)
+        )
+    )
+)
+
+
+(
+    constructor () (
+
+    )
+
+    # proxy (
+        get (key:<String>|<Int>) (
+            'property value'
+        )
+
+        set (key:<String>|<Int>) (
+            'property value'
+        )
+
+        serialize () (
+            [...#it]
+        )
+
+        operator + (other:<Array>) (
+
+        )
+
+        operator & (other:<Array>) (
+
+        )
+    # )
+)
+
+
+
+xyz $= 67; # set reference for new var xyz
+xyz = 67; # update value of xyz reference
+xyz $= $$ 4; # set new reference for xyz
+
+
+### EXAMPLE SCRIPT STRUCTURE ###
+
+# global initializations (skipped if already initialized)
+# can be called in another scope/script, because everything is global
+<Struct> := (
+    a: <String>
+    b: <Int/u8>
+);
+<OtherType> := @remote::<OtherType>; # subject to change
+$xf01 := [1,2,3];
+$xf02 := "123412432134"
+
+$func := function (a:<String>) (
+    sleep 1000;
+    a + 'y134tgtb';
+)
+
+
+# code (always executed)
+$xf01 += 12;
+@dxy :: print (1,2,3,4);
+$func('12345')
+
+####################################
+
+
+
+$AABB := <Map>(); # create pointer or load existing (also with label)
+$AABB = <Map>(); # set pointer value (if type matches and pointer exists)
+
+x = new <Set>[1,2,3]; # create <Set> by calling constructor (create [1,2,3] first, then call)
+x = <Set>[1,2,3]; # create <Set> by casting value to type (create <Set>() first, than apply [1,2,3])
+
+
+<oString> = <String> & <Player> & (
+    concat: <Function>
+)
+
+default <oString> '123' & (a:56)
+
+constructor <oString> (
+
+)
+
+oString = $$('1234567') & <Player>() & (
+    concat: function (x) (#this+x)
+)
+p2 = print & (context:$232349)
+
+
+function <String> to <String> (
+    'it = (#it)'
+)
+
+# iteration
+use print from  #public.std;
+
+iterate (0..20) (
+    if ((#it > 6) & (#it < 15)) skip;
+    print #it;
+)
+
+# accumulate
+export val sum = 0;
+val max = 100;
+iterate (1..max) (sum += #it);
+
+
+(c:#current) function () # set location of function execution with call_location permission attribute
+
+# checking commands, return true or false
+matches
+implements
+extends
+has
+
+# return a runtime property of a value
+type
+origin
+count
+keys
+
+# special scopes
+do
+assert
+function
+await
+
+# returning
+return
+end
+
+# clone a value
+copy
+deepcopy
+
+# modify the runtime behaviour of a value
+seal
+freeze
+
+# create a new pointer value 
+transform
+$$
+
+# flow commands (compiler side)
+if
+else
+while
+iterate
+
+## declarations
+var x =
+val x =
+ref x = 
+use (...) from
+
+# 
+get
+
+
+
+(<Player>|<Enemy>) & <Attackable> & assert (keys #it has 'name')
+assert (#it == true) (x)
+
+assert (
+    if (#it > 10) 'number too big: (#it)'
+    else if (#it < 0) 'number too small: (#it)'
+) (-4)
+
+
+assertIsString = assert type #it == <String>;
+assertIsString 234;
+
+assertIsString = assert if (type #it ~= <String>) 'not a string';
+assertIsString 'string';
+assertIsString 234;
+
+iterate [1,2,3,4] (
+    print #it;
+)
+
+# use (std, @unyt.game, <@+unyt.game:Player>);
+# <@+unyt.game:Player> == @+unyt.game::<Player>
+<Player2> matches (<Player>|<Enemy>) & <Attackable>
+
+@jonas::player matches <Player>
+
+<Function((<String>,<String>),<String>)>
+<Function(<Int>,<String>)>
+<Function(<Tuple(<Float>)>,<String>)>
+<Function(...<Float>,<String>)>
+<Function((x:<String>, ...<Float>),<String>)>
+#args
+
+(x = @+unyt.nodes.europe.central :: do (sleep 1000; 1+20);
+await x
+
+x = fun (1+2);
+k = function () (1+2);
+y = function (x:<String>) (x+2)
+
+<Function> implements <Applyable>
+<Function> implements <StreamSink>
+<Function> implements <Observer>
+
+$yyy => function (k:<Any>,v,t) (
+
+)
+
+h = <History>();
+$AA => h;
+h++;
+
+<History> = <Observer> + {
+    @@local state: <Que>, 
+    @@local index: <Int>,
+    back: <Function(void,void)>,
+
+    (literal ++): <Function>
+    (literal --): <Function>
+}
+
+<History> = {
+    state: <Que>(), 
+    back: function () (),
+    index: 0,
+
+    (code ++): function () (#this.index++),
+    (code --): function () (#this.index--),
+
+    (code &): function (other:<History>) (),
+
+    (constructor): function () (
+
+    )
+})
+
+var x = do 1 + 2;
+await x+4
+await (x+4)
+(await x)+4
+
+
+print(x)+4; 
+print x+4;
+
+@jonas :: print
+@jonas print
+print => @jonas
+@jonas.(print)
+@jonas.print
+print @jonas
+print << @jonas
+print = @jonas
+print += @jonas
+print -= @jonas
+print, @jonas
+print; @jonas;
+print == @jonas
+print === @jonas
+print ~= @jonas
+print ~== @jonas
+print & @jonas
+print | @jonas
+
+
+x = await (
+    do @jonas::quntum.sd.cacl(1,2,2,2,324,,234234),
+    do @cxycx::quntum.sd.cacl(1,2,2,2,324,,234234),
+);
+await (x,x,x);
+
+
+x = await (@jonas|@cxycx) ::: quntum.sd.cacl(1,2,2,2,324,,234234)
+
+
+
+<Int>|<String> x := 4;
+freeze
+seal
+has
+
+$label := 1234;
+$label = 5;
+$label = "lol";
+$01000019645AAE9FB18D13 = [1,2,3];
+
+x = $page_visits := (sync #storage.main [1,2,3,4,5]);
+$page_visits 
+
+b = $$(1,2,3)
+
+# immediately executed in scope
+a = prepare (1+x);
+c = transform '(x)+y';
+x = do 1+x;
+y = do 4+5;
+await (x|y)
+
+# executed out of scope
+fun (x:<String>, y:<String>)=>(x + y)
+@jonas :: 1+2
+
+
+x = sync #storage.bc {a:2}
+
+# resolve urls
+request <Url>((request https://workbench.unyt.org/manifest.json ).icons.0.src);
+
+
+# store a DATEX Value - creates a new transaction, returns a BC pointer
+my_bc_function = store fun () => 'Hello from the blockchain, (#sender)!';
+# my_bc_function == $BC_11234567587654325
+my_bc_object = store {name: 'Moritz', address: "Neu-Ulm"};
+my_bc_object.address = "Ulm" # implicitly creates a new transaction
+
+# store a raw transaction
+store <Transaction> {
+    type: PUBLIC_KEYS,
+    signed: true,
+    encrypted: false,
+    readonly: true,
+    pointer: `BC11234567587654325555`,
+    endpoint: @jon,
+    data: [...]
+}
+
+# get Blockchain data:
+$BC0000000000000000000000000000000000000000237CF20000 # returns the evaluated value for this pointer id
+
+# get BC transactions:
+$BA0000000000000000000000000000000000000000237CF20000 # returns a <Transaction> object
+
+
+# additional BC api on relay endpoints
+blockchain.find (blockchain.types.PUBLIC_KEYS, endpoint:@jon) # returns the data
+blockchain.find (blockchain.types.PUBLIC_KEYS, endpoint:@jon, transactions:true) # returns the raw transactions
+blockchain.find (blockchain.types.ALIAS, endpoint:@jon) # returns the raw transactions
+blockchain.extract (blockchain.values.NETWORTH, endpoint:@jon) # returns the raw transactions
+
+blockchain.get_raw(10000) # get raw blockchain, last 10000 blocks
+
+
+
+# Ulm University
+@+uni-ulm # base endpoint
+@+uni-ulm::main # default entrypoint ('homepage')
+
+# Building and rooms
+@+uni-ulm:uni-west:rooms:H45
+# shut off all lights (restricted permission)
+@+uni-ulm:uni-west:rooms:*::lights.*.on=false 
+
+# Institutes
+@+uni-ulm:institutes
+@+uni-ulm:institutes:omi::staff
+@+uni-ulm:institutes:omi::theses where (author==@ben)
+
+# Mensa
+@+uni-ulm:mensa # subspace for the mensa
+@+uni-ulm:mensa:burgerbar::menu # get the menu
+@+uni-ulm:mensa:burgerbar::reserve_table() # reserve a table
+
+# Students
+@ben@+uni-ulm # same level as @ben
+@ben@+uni-ulm # uni-ulm subspace endpoint, created by @ben and associated with @+uni-ulm
+@ben@+tim:pizzaservice
+@ben:home:kitchen:toaster # subspace referencing a toaster endpoint (no necessarily public)
+
+
+# transforms
+x = $$ 1;
+z = ((x + 1));
+y = (('z = (z)'));
+
+x = $$ {a:$$[12121212,2,3]};
+y = transform x->a ()=>(<String>(--this.0));
+x.a.0 = 33;
+x,y
+
+x = $$ 42;
+y = transform x <String>;
+x += 8;
+value y # updated to "50"
+
+# chained transforms:
+x = $$ 42;
+y = transform x <String>;
+x += 8;
+z = transform y ()=>'lol = (--this)';
+x += 100;
+z,x
+
+
+# templates with OR / AND types
+
+template <P1> (
+    a1: <String>
+)
+
+template <P2> (
+    a2: <Float>
+)
+
+template <C> (
+    <P1>.template,
+    <P2>.template,
+    c1: <Float>
+)
+
+template <T> (
+    a: <P1> & <P2>,
+    b: <P1> | <String>
+)
+<T>.template;
+
+x = <T> {a:<C>(),b:<P1>()};
+
+
+# define template
+template <ext:MyPlayer> (
+    <ext:Player>.template,
+
+    @xy data: <String>,
+    #admins more: <Array(<String>)>,
+
+    constructor () => (
+
+    ),
+    destructor () => (
+
+    )
+);
+
+template <MyPlayer> (
+    x: <Int>,
+    y: <Int>
+);
+
+
+# define template #2
+template <ext:Player1> (
+   a: <Int>
+)
+
+template <ext:MyPlayer> (
+   <ext:Player1>.template,
+
+   data: <String>,
+   more: <Array>,
+   player: <Filter>
+);
+
+
+
+# anonymous type cast
+<(player)>{a:24564,b:5677,x:6456456.456}
+<(data:<String>)>(1,2)
+
+### TODO works?? ###
+x = <ExtObject>{a:4,b:5};
+y = (a:10);
+x.* = y;
+y.a = "new";
+x
+
+### redirect ###
+--current::--current::--current::--current::--current::--current::--current::--current
+@xy::sub_endpoint::xy()
+
+### uix ###
+
+use uix:uix;
+uix.* = (
+    THEME: 'dark',
+    LANG: 'xcsdsddsxc'
+);
+uix.anchor
+    <uix:simpletext>{
+        options:<uixopt:simpletext>{
+            text: 'HELLO DATEX !!',
+            height:100,
+            dynamic_size:true,
+            border_color:'#ff2245'
+        }
+    }
+
+### array splice ###
+
+start = 1;
+size = 2;
+range = (start..(start + size));
+insert = <Tuple>(1,2,3,4);# (1,2,3);
+
+x = ['a','b','c','d','e'];
+x.(range) = void;
+x.((start - size + (count insert))..((count x) + (count insert))) = x.(start..(count x));
+x.(start..(start + (count insert))) = insert;
+x;
+
+
+### array aplice without insert ###
+start = 0;
+size = 2;
+range = (start..(start + size));
+
+x = ['a','b','c','d','e'];
+--0 = count x;
+x.(range) = void;
+x.(start..--0) = x.((start + size)..--0);
+x
+
+
+
+### paths: ###
+x = <Map>[[12.3, ['dlaoraot']],[12,[1,2,@thre,@four]]];
+printf (x.12.3); # vs 
+printf (x.(12).(3));
+
+### bubbleSort ###
+bubbleSort = function (a: <Array>) (
+    n = count a;
+    lbl repeat
+        swapped = false;
+        i = 1;
+        while (i < n) (
+            x = a.(i);
+            y = a.(i - 1);
+            if (y > x) (
+                a.(i - 1) = x;
+                a.(i) = y;
+                swapped = true;
+            );
+            i += 1;
+        );
+    jtr repeat swapped;
+    a;
+);
+
+bubbleSort [4,2,-infinity,infinity,41,0,1.2,1.1,1.3,3,3,3,4,5,-1000];
+
+### if else ###
+y = true;
+x = if y y else 'default y';
+x;
+
+######
+x = 0;
+print if (x>4) 'greater' else 'not greater';
+
+### while / if / else ###
+
+use print from #public.std;
+
+val x = [-1,2,-3,4,6,0,0,0,-6,-45,0];
+val i = 0;
+
+while (i < (count x)) (
+    val value = x.(i);
+    print (
+        if (value > 0) '(value) is positive'
+        else if (value < 0) '(value) is negative'
+        else '(value) is zero'
+    );
+    i += 1;
+);
+
+iterate [-1,2,-3,4,6,0,0,0,-6,-45,0] (
+    print (
+        if (#it > 0) '(#it) is positive'
+        else if (#it < 0) '(#it) is negative'
+        else '(#it) is zero'
+    )
+);
+
+### new ###
+
+### --this ###
+ob = {
+    a: @aaaa,
+    x: fun ()=>--this.a,
+};
+ob.x();
+
+######
+
+ob = {
+    a: @aaaa,
+    b: true,
+    x: function (a:<Any>) (#this == a),
+};
+ob.x(ob);
+
+
+### audio stream ###
+
+x = <chat:AudioStream>();
+print << x; # print recorded audio to console
+x.record();
+
+### streams ###
+x = <Stream>();
+print << x;
+
+y = <Stream>();
+x << y << 'line1' 'line2' 'line3' 'line4';
+
+### streams ###
+
+x = <Stream>();
+print << x;
+
+x << "helo";
+x << "blblalb";
+x << `AAEFEF` "xxxxx"
+
+
+### --root and --this ###
+x = function () (
+    printf #root; # inner function scope ({c:...})
+    printf #this; # outer variable scope ({x:fun..., ...})
+);
+x();
+
+### assigning variable -> set --root property ###
+--root += a: 'value';
+# same as a = 'value'
+
+
+### clear all variables: ###
+--root.* = void;
+
+######
+
+
+x = 20;
+y = 204;
+
+print 'is (x) <= (y)?';
+jtr b (x<=y);
+
+lbl a
+    print 'no';
+    end;
+
+lbl b
+    print 'yes';
+
+
+
+# svg image example
+x = <image/svg+xml>`3c3f786d6c2076657273696f6e3d22312e302220656e636f64696e673d225554462d3822207374616e64616c6f6e653d226e6f223f3e0a3c21444f435459504520737667205055424c494320222d2f2f5733432f2f4454442053564720312e312f2f454e222022687474703a2f2f7777772e77332e6f72672f47726170686963732f5356472f312e312f4454442f73766731312e647464223e0a3c7376672077696474683d223130302522206865696768743d2231303025222076696577426f783d223020302037353220333330222076657273696f6e3d22312e312220786d6c6e733d22687474703a2f2f7777772e77332e6f72672f323030302f7376672220786d6c6e733a786c696e6b3d22687474703a2f2f7777772e77332e6f72672f313939392f786c696e6b2220786d6c3a73706163653d2270726573657276652220786d6c6e733a73657269663d22687474703a2f2f7777772e73657269662e636f6d2f22207374796c653d2266696c6c2d72756c653a6576656e6f64643b636c69702d72756c653a6576656e6f64643b7374726f6b652d6c696e656361703a726f756e643b7374726f6b652d6c696e656a6f696e3a726f756e643b7374726f6b652d6d697465726c696d69743a312e353b223e0a202020203c672069643d22417274626f6172643122207472616e73666f726d3d226d617472697828302e3937383338392c302c302c302e3938323938312c2d31382e383437362c2d3132382e37313629223e0a20202020202020203c7265637420783d2231392e3236342220793d223133302e393435222077696474683d223736382e34383922206865696768743d223333352e30333322207374796c653d2266696c6c3a6e6f6e653b222f3e0a20202020202020203c67207472616e73666f726d3d226d617472697828312e30323230392c302c302c312e30313733312c2d31372e313330312c2d372e313036363929223e0a2020202020202020202020203c67207472616e73666f726d3d226d617472697828302e3437303235332c302c302c302e3437303235332c2d352e38363431392c36322e3634363329223e0a202020202020202020202020202020203c636972636c652063783d223436312e343533222063793d223531322e3034322220723d223237382e30383122207374796c653d2266696c6c3a7267622834322c34322c3432293b7374726f6b653a77686974653b7374726f6b652d77696474683a392e353770783b222f3e0a2020202020202020202020203c2f673e0a0a2020202020202020202020203c67207472616e73666f726d3d226d617472697828322e36363932362c302c2d312e3835393939652d31362c322e38303431352c2d3833332e3633382c2d313435302e303529223e0a202020202020202020202020202020203c656c6c697073652063783d223338322e303239222063793d223633322e383334222072783d2231362e313437222072793d2231352e33353722207374796c653d2266696c6c3a7267622834322c3137302c323135293b222f3e0a2020202020202020202020203c2f673e0a0a2020202020202020202020203c67207472616e73666f726d3d226d617472697828322e36363932362c302c2d312e3835393939652d31362c322e38303431352c2d3737372e3738312c2d313434392e373429223e0a202020202020202020202020202020203c656c6c697073652063783d223338322e303239222063793d223633322e383334222072783d2231362e313437222072793d2231352e33353722207374796c653d2266696c6c3a726762283235352c302c3839293b222f3e0a2020202020202020202020203c2f673e0a2020202020202020202020203c67207472616e73666f726d3d226d617472697828332e33353036372c302c302c332e33353036372c2d313434312e34312c2d313738302e373929223e0a202020202020202020202020202020203c7061746820643d224d3439342e3131342c3631382e353834433439362e3835332c3632302e393432203439382e3538392c3632342e343332203439382e3538392c3632382e333234433439382e3538392c3633322e323637203439362e3830372c3633352e373938203439342e3030362c3633382e313535433439312e3236372c3633352e373938203438392e3533322c3633322e333038203438392e3533322c3632382e343136433438392e3533322c3632342e343733203439312e3331332c3632302e393432203439342e3131342c3631382e3538345a22207374796c653d2266696c6c3a726762283139352c3133322c323033293b222f3e0a2020202020202020202020203c2f673e0a0a20202020202020203c2f673e0a20202020202020203c67207472616e73666f726d3d226d617472697828322e37323832322c302c2d312e3930313037652d31362c322e383532372c2d3834332e3030322c2d313532382e363229223e0a2020202020202020202020203c656c6c697073652063783d223338322e303239222063793d223633322e383334222072783d2231362e313437222072793d2231352e33353722207374796c653d2266696c6c3a77686974653b222f3e0a20202020202020203c2f673e0a20202020202020203c67207472616e73666f726d3d226d617472697828332e34323436382c302c302c332e34303836382c2d313439302e33382c2d313831382e373329223e0a2020202020202020202020203c7061746820643d224d3438392e3630382c3632372e303136433439302e3330372c3632302e3538203439352e37372c3631352e353634203530322e3339362c3631352e353634433530332e3730342c3631352e353634203530342e3936372c3631352e3736203530362e3135372c3631362e313233433530352e3435382c3632322e353539203439392e3939352c3632372e353735203439332e3336392c3632372e353735433439322e3036312c3632372e353735203439302e3739382c3632372e333739203438392e3630382c3632372e3031365a22207374796c653d2266696c6c3a726762283233382c3133332c313730293b222f3e0a20202020202020203c2f673e0a20202020202020203c67207472616e73666f726d3d226d617472697828332e34323436382c302c302c332e34303836382c2d313439302e33382c2d313831382e373329223e0a2020202020202020202020203c7061746820643d224d3438302e3633312c3631362e353231433438322e3139342c3631352e383436203438332e3931362c3631352e343732203438352e3732352c3631352e343732433439322e3231342c3631352e343732203439372e3538372c3632302e323833203439382e3436342c3632362e353236433439362e3930312c3632372e323031203439352e3137382c3632372e353735203439332e3336392c3632372e353735433438362e38382c3632372e353735203438312e3530372c3632322e373634203438302e3633312c3631362e3532315a22207374796c653d2266696c6c3a726762283135392c3233302c323535293b222f3e0a20202020202020203c2f673e0a20202020202020203c67207472616e73666f726d3d226d617472697828332e34323436382c302c302c332e34303836382c2d313439302e33382c2d313831382e373329223e0a2020202020202020202020203c7061746820643d224d3439342e3131342c3631382e353834433439362e3432342c3632302e353732203439382e30322c3632332e333636203439382e3436342c3632362e353236433439362e3930312c3632372e323031203439352e3137382c3632372e353735203439332e3336392c3632372e353735433439322e3036312c3632372e353735203439302e3739382c3632372e333739203438392e3630382c3632372e303136433438392e3937342c3632332e363433203439312e3634392c3632302e3636203439342e3131342c3631382e3538345a22207374796c653d2266696c6c3a77686974653b222f3e0a20202020202020203c2f673e0a20202020202020203c67207472616e73666f726d3d226d617472697828312e34363130362c302c302c312e34353432342c3337372e3438312c3335332e30393629223e0a2020202020202020202020203c7465787420783d223070782220793d2230707822207374796c653d22666f6e742d66616d696c793a27417269616c526f756e6465644d54426f6c64272c2027417269616c20526f756e646564204d5420426f6c64272c2073616e732d73657269663b666f6e742d73697a653a3131342e31363770783b66696c6c3a77686974653b223e756e79743c2f746578743e0a20202020202020203c2f673e0a202020203c2f673e0a0a3c2f7376673e0a`;
+printf(x);
+
+
+# smiley
+render = function (color:<String>, render:<Function>) (
+    circle_bg = color; 
+    face = read 'type a face: '; # get face
+    printf <image/svg+xml><Buffer>'<svg version="1.1" baseProfile="full" width="60" height="60" xmlns="http://www.w3.org/2000/svg"> <circle cx="25" cy="25" r="20" fill="(circle_bg)" /> <text x="25" y="30" font-size="15" font-family="Sans-Serif" text-anchor="middle" fill="black">(face)</text></svg>';
+    render (color, render);
+);
+
+render ("#eeaa00", render);
+
+
+# generates an SVG image
+
+render = function (x1:<String>, x2:<String>, render:<Function>) (
+    bg = x1;
+    circle = x2; 
+    face = read 'type a face: '; # get face
+    printf <image/svg+xml><Buffer>'<svg version="1.1" baseProfile="full" width="100" height="100" xmlns="http://www.w3.org/2000/svg"> <rect width="100" height="100" fill="(bg)" /> <circle cx="50" cy="50" r="20" fill="(circle)" /> <text x="50" y="55" font-size="15" font-family="Sans-Serif" text-anchor="middle" fill="black">(face)</text></svg>';
+    render(x1, x2, render);
+);
+
+render("black","yellow", render);
+
+###
+    ◠‿◠ ✌
+o‿o
+◉‿◉
+◉_◉
+◉ᴥ◉
+O__O
+˘◡˘
+###
+
+
+# reads in a string as a variable #1
+readValue = function (name:<String>) read('(name) = "', '"');
+x = readValue('x');
+print ('=> the value of x is now "(x)"');
+
+
+# reads in a string as a variable #2
+readValue = function (name:<String>) read('(name) = "', '"');
+x = <Int> (readValue 'x');
+print '=> the value of x is now:';
+printf x;
+
+
+
+# get the user's name
+getName = function () (
+    print('Hi, I am (#current). What\'s your name?');
+    read("> ");
+);
+
+
+# get the age and return the information
+getAge = function (name: <String>) (
+    print('Hello (name). How old are you?');
+    {
+        is_user: true, 
+        name: name,
+        age: <Int> (read "> "),          
+        alias:  <Target> '@(name)'
+    };
+);
+
+getAge(getName());
+
+
+
+{
+    time: <Time>(),
+    plyr: <ext:Player>()   # pointer id includes timestamp
+}
+
+
+#  Throwing errors
+
+! <PointerError> "wrong answer";
+
+# Filters
+
+(@jonas & @benni) | :someapp | :someother_app & §online
+(@jonas & ~@jonas) # level-1 contradiction
+(@jonas/channel & ~@jonas & #anything) # level-2 contradiction
+(~@jonas & #label) | @jonas # simplify based on contradictions
+(~@jonas | #label) | @jonas
+
+
+
+
+
+
+
+
+
+
+
+
+### OLD ###
+
+#-dmx protocol-#
+
+# aliases
+@jonas:app # jonas in namespace app:
+@jonas:app+org # jonas in namespace org::app:
+@+jonas # = @jonas:unyt
+@+jonas/1 # selects only the first instance assigned to @+jonas
+@+jonas/* # selects all @+jonas instances (= @+jonas)
+
+*eu1 # node (ROUDINI)
+
+# callbacks:
+<fname>(12,3,4) -> <return_slot> ; # call fname, return to return_slot 
+@jonas() -> <debug> ; # get data from @jonas, return to debug slot
+
+# create a new global user alias 
+*blochain_user_data_signed*  # add to blockchain (@+new_user specifies that this block is directed to the user, not necessary)
+@+new_user = {name="TOnsd", option_x=1} # define user data - fails if user not registered in block chain
+
+# update user data (properties can be anything, not specified what is required)
+@+new_user {age=10}
+
+- @+jonas # delete user (=>deactivate; a station is allowed to delete itself, organisations/developers can also delete)
+
+# user label operations (if allowed)
+@+jonas += [#cool | #devs]; # apply labels
+@+jonas -= #cool;  # remove a label
+
+#newUsers = [@noob | @adsd] # create new label with already defined station ids
+#newUsers = #lol # 'copy' label (copies current station ids from lol to newUsers)
+#newUsers += @anotherone # add station alias to label (is equal to @anotherone += newUser)
+                         # use label+=...if you want to add many stations to one label and @alias+=... if
+                         # you want to apply many labels to one station (=> shorter command)
+                
+- #coo; # delete label and remove from all assigned stations (if allowed)
+#newUsers=; # create new label (empty)
+
+
+# label owners variable (who can update a label?) 
+label_owners = [@benni];
+#restricted = [] # label owner is now @benni (default: GAMLs in the app)
+
+# but only GAMLs / admins can create new labels!
+
+
+
+# labels
+#my_label # custom label
+#+unyt_devs # global unyt label
+#label:my_app # label for namespace my_app
+#+ROUDINI # station labels
+
+# organisation namespaces
++my_org # custom organisation
++unyt # +
+
+# app namespaces
++org:my_other_app: # app in namespace org::
+
+# high priority apps:
+@user+youtube # unique app_name
+
+
+# flags
+$worldwide # target stations globally
+$nearby # only target stations connected to the same ROUDINI
+$online # only target stations that are currently online
+
+
+# example mentos filter
+[ [@+jonas | @+benni] & #developers & +unyt:ads & !$online]
+
+
+# mentos object pointers
+</567865432> # pointer to object / method / callback without name
+
+# create a mentos object
+</567865432> = {x=1, y=345, z='hi', a={1,2,4,5,6}}
+
+# create function 'definition'
+</234354544> = (int name, string, float):int
+
+# update mentos object values
+<o/567865432> {x=2}
+
+# call a mentos function
+<f/345646455>();
+<f/345646455>(1,2,'more text');
+
+## get the callback of a function call
+<c/567865432> = <f/345646455>('whats your name?');
+<o/567865432> = <f/345646455>('whats your name?');
+
+## static methods
+<methodName/>
+
+- </234> # delete pointer
++ </235> # add empty pointer 
+
+</> # null pointer
+
+## call static methods (multiple target stations)
+[@+jonas | @eerp | @löl & $online] <methodName/>(234567, <o/567865432>)
+
+
+# simple examples #############################
+<42/> = @jonas; # returns info about @jonas in <cb:42> (if no filter, return to sender)
+<cb/43> = [@benni | #label & :unyt+some_app@jonas_admin]; # evaluates filter and returns info in <cb:43>
+
+##end
+
+# send some requests to server ###########################
+station = @+jonas/2;   # say who you are (or per default sockets/cookies login data)
+vsalt   = "random_12.12.2020:22:32";  # string that has to be signed (no duplicates)
+vsign   = "dsaf$fadasdfasdfjasdfmaSDFijfam";  # signed string - proof for private key
+session_id = 45675467456 # after logged in
+
+# filter inheritence
+[#label | org::];    # ^= filter=[#label | org::] (per default, filter = alias of request station)
+    & @jon <f/123456>('hah');
+    & @ben <f/123456>('aha');
+    & <f/555555>('TO EVERYONE');
+
+filter = [#label | org::];    # ^= filter=[#label | org::] (per default, filter = alias of request station)
+    filter & @jon <f/123456>('hah');
+    filter & @ben <f/123456>('aha');
+    filter & <f/555555>('TO EVERYONE');
+
+# class constructor
+[@jossns | @benni | #label] <MyClass/1342431234> = {abc="76ztgf"}(); # 
+
+</123456> = "sdf";   # create a new object and set the value (synced to filter=[#label | org::])
+_my_obj = </123456>; # replaces _my_obj everywhere afterwards, if _my_obj is not declared new
+<f/123456>(1,2,_my_obj) -> 234  # call function - receive callback at return slot 234
+</123456> {a=4,b=23}   # update object values
+
+
+# receive response ###########################
+
+alias  = @+jonas;
+labels = [#lol & #other_label];
+app    = :unyt+some_app:
+
+!<methsig_error>{'(number,number,number)(number,number,string)'}
+
+<21344312>(23,2,3,{a=234, b="heaalao"});
+<aafdsdf>('NO PERMISSION') ;
+
+
+# receive method call (ignore response) ###########################
+alias  = @jonas;
+labels = [#lol & #other_label];
+app    = :unyt+some_app:
+
+</123456>(1,2,3,4); # method call requested
+
+
+<debug>!<UnytError>{m="sdf"}; # callback throw error
+<x>({result="dfgsdfG"}) # callback with data
+
+# send encrypted (to multiple) ###########################
+@jonas enc_key = 'fajefoerjgreogkerlg';
+@benni enc_key = 'ngfghuidfjndsfgkmfg';
+@raspi enc_key = 'sfdgdnjsfadmsfisadj';
+
+?jrfdsf9z7q4f3heouadnsfjasg9groui4dfgsdfgsdfwagmagoidgmfg? # e.g. <f:123456>('secret')
+
+</74567> = [1,2,3,4,5,8]  # non encrypted stuff
+
+
+
+
+
+# receive encrypted ###########################
+enc_key = 'fajefoerjgreogkerlg'
+?jrfdsf9z7q4f3heouadnsfjasg9groui4dfgsdfgsdfwagmagoidgmfg? # e.g. <f:123456>('secret')
+
+
+# add entry to blockchain ###########################
+public_key='ASdfasdfmlcxvjsndafjkasdfhsdf'  # only needed if station is not yet registered?
+
+
+# transfer stuff - declare in plain text and add signed block
+~dfsadfnkjasdfzo8q_signed_urijefnmkadsfasdfbvcdsfgsfdg~ <as/234> >> @+jonas 
+~?dfsadfnkjasdfzo8q_signed_urijefnmkadsfasdfbvcdsfgsfdg~ 3¢ << @+jonas
+1¢ >> @+jonas
+
+
+
+# reserved variables
+
+station = @me;   # default is self / inferred from socket
+cb_filter = @me; # default is station
+filter = @me # default is station
+
+vsalt
+vsign
+enc
+enc_key
+bundle
+v
+e

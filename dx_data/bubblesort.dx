@@ -1,0 +1,23 @@
+export ref bubbleSort = function (var a:<Array>) (
+    var n = count a;
+    var swapped = true;
+    while (swapped) (
+        swapped = false;
+        var i = 1;
+
+        while (i < n) (
+
+            var x = a.(i);
+            var y = a.(i - 1);
+
+            if (y > x) (
+                a.(i - 1) = x;
+                a.(i) = y;
+                swapped = true;
+            );
+			
+            i += 1;
+        );
+    );
+    a;
+);

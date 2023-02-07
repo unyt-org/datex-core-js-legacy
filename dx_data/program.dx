@@ -1,0 +1,18 @@
+# use std functions
+use (print, printf, read) from #public.std;
+# compile bubblesort
+use bubbleSort from insert ./bubblesort.dx ;
+# compile object
+use * as object from insert ./object.dx ;
+
+printf object;
+
+print 'sorting some stuff...';
+val result = bubbleSort [1,3,400,5,-3,5,-65,-1000,6,2,20];
+print 'the result is: (result)';
+
+val x = <decimal>(read 'Enter a number: x=');
+print 'x*(object.multiplier) = (x*(object.multiplier))';
+
+export object;
+export bubbleSort;

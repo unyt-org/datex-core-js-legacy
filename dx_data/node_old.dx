@@ -1,0 +1,75 @@
+<Map> [
+   
+    # central european nodes
+    [
+        @+unyt.nodes.europe.central, {
+            channels: {
+                websocket: '1.central.europe.unyt.cc',
+                http: '1.central.europe.unyt.cc'
+            },
+            keys: [
+                "MHYwEAYHKoZIzj0CAQYFK4EEACIDYgAEHwdE5GA5u1EiFBmSi+5+wO/4jxaBW8m6EL9GkCdc06sEvoB7AfoPm0BrxRwD147bt6zETqOdq/O+OZOWjQhCf9NNsTzJ5w3A3MzL2GSGx7ZQ77w0Myg/lBslzsew5Smt",
+                "MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEA6D7n2auC02yK1QUzTgbZxjqpcqGtoiivbDSQhbHbe8nI4NJhHcf8bjsSpc1kD1xDHqLLj6ETouBttNnwun3U58r55qg1S1wAoCgtIu24KvMhEYN0lHOtX53iAdGvFVtETNF7z1YOYzIRSNo5pojcGAsDtWZ4fjiMy27gOQHTf3svzalqfgmb9bhaMFUG32Ko+5G4jgmTRMAnRTWa6SmxlO+vztvTrNbbb2g1GzGWyIDaALw1cGhe5RGWvBMc4qWUMYauqBVZVM+4W4hoQ+vtBRokn/FRjEge7xiswOK41ecadZ80AVW9mij4aFapKb+4r/l4I2IfsOQBb+ExdT3JjV3+OzGmUkH5OPVqN2mkqO+1BV0U5U+lq70TjfLQp6m74oKs0mN1Bm6P+dQiIgmGMmjnRcNIqxjoaqSB6NBYQMfJrCEriPznjgj4hc/MeaZcPQcL1N/aSj5YF6w4YLnqibvqFyhHrXCUuWQWqkpjYsb4XASHpqaVlTWWLFSRVzPZiqPfKES9lQnRAvH0mdgnjSCZLptpY6Njo5tzvT44meP8ZxUTm1xB4iHynpIIFl7ePH2sRxdlgrpFQ5LD7K9SjIbf0sIlseHL1QeBImdsOuCSwm9MPI/eqoZk6+PSf+jkrc5/Vb2qtrDkFqeKtFzGKm3WBbX/62ooAsExdQQ21kkCAwEAAQ=="
+            ]
+
+        }
+    ],
+
+    [
+        *europe-central-2, {
+            channels: {
+                websocket: '2.central.europe.unyt.cc',
+                http: '2.central.europe.unyt.cc'
+            },
+            keys: [
+                "MHYwEAYHKoZIzj0CAQYFK4EEACIDYgAE0gQwAxoMgSqL/qj6ae13KF+xaNskyDEGPXv69cW5DZNIXQX0oZ1bYASsR0SxyuJJE6SelOzYmBcBljydXlZMzD8qk6+Y2oGRglTwISCydb+stvquNkD8c0MU4f/9QZYo",
+                "MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAy3Fp6WmFvnVOvcqC1lRbngKYl7VN6PpNO0Sc/DPjp7/jmtxzD541ika8tHiBCbq3stf4L1IkAceqHK8eOmKdyM22zcRJ1641+9qUlqiSFak0ekX3EJl/EbeL3HTbMtOJdnX3VPsAOJ525Xn98uGIgfoSiQrWKJwHuNLtxw+xslawJazbGLBhbTpnJlA2o+FJR1yAIfuxsj/KYKQj+98GxUh9gon+lWvEl21BoP3mja4sepsZIOd1XM8SCDg3j/06jVOFVEnoeaHwcW90mzRPoGe+Hn9aQ7UBgzMbE1FkVnrDBRS5GVKeopbDSodD3yfMz4h8t9GLm7Zkn4EK3cwE+SrgwSULsmqbymUG/sMN5Zj7oju9eGsHL0UlPBn3HrfFKrMtVj6bo2Y3pq3AE3wdOElupgSh/12VtlF5ECKeo7RT2zMfxs3a3FKFMRp0RxZk0IbQ4+a6EGjLw+EvcLXNI7FAtvfl5E4DvHTY5Ox2YQY9pDFPdHSJ3uvdB4d5d21s2lUDgdUtSMfZNe+0YJDLLMjbX1pDTopPHaQe1gjbnQxjFru/LyIMu7ik5uHil2l5R8zXgaHCM3o9/qrQaOFuWJGV7qpIfnmicD1RUkcySHjPD+mPf+qNmGJ8A8QR+aUn9StvKxsoTJkdRF3xUfgBOZY3d6RJrAALVK7MGXrfmKsCAwEAAQ=="
+            ]
+           
+        }
+    ],
+    # north american nodes
+    [
+        *america-north-1, {
+            channels: {
+                websocket: '1.north.america.unyt.cc',
+                http: '1.north.america.unyt.cc'
+            },
+            keys: [
+                "MHYwEAYHKoZIzj0CAQYFK4EEACIDYgAEb4oaZvZc1tftwPhRYXsvhQWG2ajC9HN1KGmgX0Ctr8TIC9Gg3GI7ggotAZRT7RNbRAlb2mEC3OXFBfqO9MYcE+jGT8/2NMPy7xNIY6tuJggKtNMfDDr0Qkpvw1GsVBjH",
+                "MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEAsWiSMh++6W6ewJr6pyDq/IJVi6xLp69FURKNPL+jhgc0hGj7G5mwztVoi+eqGxNYpWNG1CNnXY3pCCdKnwXT3nQXaOIhg+gdHCJZJhhCBTRC6ifgsHnhxpky56/HUG9y+41Wdl8cb5/zHawuOKxmWTXVevH1KAAEQRp+hgLMrHSVqlfA1eDBnOKOua0QQu+RwiLbJAgvSIuDWch6CpvfkpgcLJFdp+2mIkcReR8bEaxYDzhmBB8SFmIZQ+TV21DGRel10lS3ZwH6u/I+BIPZS9wDJX0/Tc1YasBcckCWv8bjYO+gfmrdO2bI/QTQLSjdB+gikQdN/N7Snno4MOOFfJ3aEkF6LaO+EeDcBfrnb0qvyJcID2TusNXMeE61z7IcGEKWjI663rBPxDiwuYQ/v9izNQiWWAZfp4lPSUhTx0k6wqaehS7nRiEXMn+HdsS9rqSkVIMrE3KVcUfn+LvcKyG0puk9ilzNutgIverDgLT60/W4aAMc9GXjQRB40QBG/D6Kb9SiIofkOzpEkXv8gZ/dBUqECUkTVcr5HERlLnwx7wcvt9m3y5AdRgMxkq8/retlHEb0PDTV66Qk3Uuy5u5+eKBXNQQvBJiUZTJPxTUBG02bX9O9a6ESGHe6K3H/KdDrf1LdUZ4pHuFdeuwooX/2XCnQFGAZbM34FsMcewUCAwEAAQ=="
+            ]
+        }
+    ],
+
+    [
+        *america-north-2, {
+            channels: {
+                websocket: '2.north.america.unyt.cc',
+                http: '2.north.america.unyt.cc'
+            },
+            keys: [
+                "MHYwEAYHKoZIzj0CAQYFK4EEACIDYgAE+Dt8GlwbIZtVWc6wzhUrIF/Qhb/lTZn7PM1UAijHaUxsuviPdcKuxa+OjhkrwwmA73yxcDulCnfLHE1IYdlDFIaMEdtVj5hvuL8QwVfeA3WlhCZJy1T21ng6NhFfq93H",
+                "MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEA0eIfjgvDzp3wJkf0NJRaaPuwW3WPerlfFbgyyrR2f1RFxNJ56Epbwy+QlJvaSLBTLD9i+76Isetu8qFs+V6PjyRadArJdJu/nGeZ0qzww2lkAz2J37evLnI34i9KSJkcq7Ec8ZsIifxj8MonnPvnrm0SuqHRM6mEswqyTOwtUyNw8+qcgHGPXuOu7GwH730P/Xtiq2AsDDXNUk5YL4k+JOrAKEiWHYj3HRiBus/EaQ+uw5XVobgTqVkUdm00i79Vm7c70YF1TJp/5dg3pCmCyqml8pahj6pm+cdrQTTyyROlMopb7Ho1kQvmATEGDqEl7W/KHgvelIIBLINGL4OtJ7hCXpoLaldgiHs3YV7rNnk94s84tFfNa2or450KBK15JhX3XuqPmE/bfFpcrxaiEFGZ23Ldpfpc+Bf2dNBA2ApH47WjQcN45y5khode8X//zylpAmAcyUChHYxIZ1U1QlxCqsJ7R74sEc5a9o9wSHekjcWOXgqU3Th8VOznXpyV8C/Xcc8vZeK00CYvOl9t9gr8BhJwx6iHLRBjgSRdwDTpjW+V4P42C2FfjzaQH5bX8eA7HVBBqfD6GkH3Yflieq/zDeXU9An1mHw2Hzu2p0jFZxydoV4tOOolJCLg5CpGec6ncTH14AInpewEo5+5JUZM5zyKo8tWCKU+fwypVzcCAwEAAQ=="
+            ]
+        }
+    ],
+
+    # quetheb (temporary)
+
+    [
+        @+quetheb, {
+            channels: {
+                websocket: 'quetheb.unyt.cc',
+                http: 'quetheb.unyt.cc'
+            },
+            
+            keys: [
+                "MHYwEAYHKoZIzj0CAQYFK4EEACIDYgAEHwdE5GA5u1EiFBmSi+5+wO/4jxaBW8m6EL9GkCdc06sEvoB7AfoPm0BrxRwD147bt6zETqOdq/O+OZOWjQhCf9NNsTzJ5w3A3MzL2GSGx7ZQ77w0Myg/lBslzsew5Smt",
+                "MIICIjANBgkqhkiG9w0BAQEFAAOCAg8AMIICCgKCAgEA6D7n2auC02yK1QUzTgbZxjqpcqGtoiivbDSQhbHbe8nI4NJhHcf8bjsSpc1kD1xDHqLLj6ETouBttNnwun3U58r55qg1S1wAoCgtIu24KvMhEYN0lHOtX53iAdGvFVtETNF7z1YOYzIRSNo5pojcGAsDtWZ4fjiMy27gOQHTf3svzalqfgmb9bhaMFUG32Ko+5G4jgmTRMAnRTWa6SmxlO+vztvTrNbbb2g1GzGWyIDaALw1cGhe5RGWvBMc4qWUMYauqBVZVM+4W4hoQ+vtBRokn/FRjEge7xiswOK41ecadZ80AVW9mij4aFapKb+4r/l4I2IfsOQBb+ExdT3JjV3+OzGmUkH5OPVqN2mkqO+1BV0U5U+lq70TjfLQp6m74oKs0mN1Bm6P+dQiIgmGMmjnRcNIqxjoaqSB6NBYQMfJrCEriPznjgj4hc/MeaZcPQcL1N/aSj5YF6w4YLnqibvqFyhHrXCUuWQWqkpjYsb4XASHpqaVlTWWLFSRVzPZiqPfKES9lQnRAvH0mdgnjSCZLptpY6Njo5tzvT44meP8ZxUTm1xB4iHynpIIFl7ePH2sRxdlgrpFQ5LD7K9SjIbf0sIlseHL1QeBImdsOuCSwm9MPI/eqoZk6+PSf+jkrc5/Vb2qtrDkFqeKtFzGKm3WBbX/62ooAsExdQQ21kkCAwEAAQ=="
+            ]
+        }
+    ],
+
+
+]

@@ -1,0 +1,4 @@
+@ctrl :: (
+    if (bg_light.brightness == 0.0) (bg_light.on());
+    else (bg_light.off());
+)

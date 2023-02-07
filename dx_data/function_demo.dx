@@ -1,0 +1,47 @@
+# single argument
+function (x) ('Hello (x)');
+
+# arrow function (parentheses currently still required)
+function (x) => ('Hello (x)');
+
+# variable type: val
+function (val x) (
+    x + 1
+);
+
+# type: <integer>
+function (val x:<integer>) (
+    x + 1
+);
+
+# named arguments
+ref f1 = function (named val x:<integer>) (
+    x * 10
+);
+f1 (x:3);
+f1 (3);
+
+# multiple arguments
+function (val int:<integer>, val str:<text>) (
+    'int=(int), str=(str)'
+);
+
+# export values 
+ref calculations = function (val a:<integer>|<decimal>, val b:<integer>|<decimal>) (
+    export val sum = a + b;
+	export val dif = a - b;
+	export val pro = a * b;
+    export val quo = a / b;
+    export val xyz = sum + pro * dif;
+);
+calculations(1,2)
+
+
+# export argument values 
+ref toEuros = function (export named a, export named b) (
+    a = <quantity(1EUR)> a;
+    b = <quantity(1EUR)> b;
+);
+
+val dict = (a:10, b:20);
+val euroDict = toEuros (dict);
