@@ -10,3 +10,7 @@ Includes
 ```bash
 clear && node ../unyt_tests/run.js tests/
 ```
+
+## CD
+on commit: canary -> dev
+on tag: canary -> main
