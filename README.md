@@ -12,5 +12,5 @@ clear && node ../unyt_tests/run.js tests/
 ```
 
 ## CD
-on commit: canary -> dev
+on commit: canary -> dev; done by commit hooks `.git/hooks/post-commit`
 on tag: canary -> main
