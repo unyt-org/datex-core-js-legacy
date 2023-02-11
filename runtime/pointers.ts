@@ -1568,7 +1568,8 @@ export class Pointer<T = any> extends Value<T> {
             else {
                 this.#original_value = this.#shadow_object = <any> new WeakRef(<any>val);
 
-                // add reference to this DatexPointer to the value
+                // TODO: is this required somewhere?
+                // add reference to this DatexPointer to the original value
                 if (!this.is_anonymous) {
                     try {val[DX_PTR] = this;
                     } catch(e) {}
@@ -1583,6 +1584,12 @@ export class Pointer<T = any> extends Value<T> {
                 const value = this.addObjProxy((val instanceof UnresolvedValue) ? val[DX_VALUE] : val); 
                 // add $, $$
                 this.add$Properties(value);
+
+                // // add reference to this DatexPointer to the value
+                // if (!this.is_anonymous) {
+                //     try {value[DX_PTR] = this;
+                //     } catch(e) {}
+                // }
     
                 this.#loaded = true; // this.value exists (must be set to true before the super.value getter is called)
     
@@ -2066,7 +2073,7 @@ export class Pointer<T = any> extends Value<T> {
         }
  
         // create Proxy class around object
-        if (((obj instanceof DatexFunction) || typeof obj == "object") && obj != null) {
+        if (typeof obj == "object" && obj != null) {
 
             const is_array = Array.isArray(obj);
 
@@ -2082,7 +2089,19 @@ export class Pointer<T = any> extends Value<T> {
 
 			const proxy = new Proxy(<any>obj, {
                 get: (_target, key) => {
-                    return Value.collapseValue(this.shadow_object?.[key], true, true);
+                    const val = Value.collapseValue(this.shadow_object?.[key], true, true);
+                    /*if (typeof val == "function" && key != "$" && key != "$$") {
+                        try {
+                            const bind = Value.collapseValue(val.bind, true, true);
+                            const res = typeof bind == "function" ? bind.call(val, _target) : val;
+                            return res;
+                        }
+                        catch (e) {
+                            console.log(val, key, e)
+                        }
+                      
+                    }
+                    else*/ return val
                 },
                 set: (target, val_name: keyof any, val: any) => {
 

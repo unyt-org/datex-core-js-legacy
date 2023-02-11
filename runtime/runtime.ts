@@ -6614,14 +6614,17 @@ Type.std.time.setJSInterface({
 
 })
 
-await Runtime.init();
+if (!globalThis.NO_INIT) {
+    await Runtime.init();
 
-// @ts-ignore
-globalThis.print = Runtime.STD_STATIC_SCOPE.print
-// @ts-ignore
-globalThis.printf = Runtime.STD_STATIC_SCOPE.printf
-// @ts-ignore
-globalThis.printn = Runtime.STD_STATIC_SCOPE.printn
+    // @ts-ignore
+    globalThis.print = Runtime.STD_STATIC_SCOPE.print
+    // @ts-ignore
+    globalThis.printf = Runtime.STD_STATIC_SCOPE.printf
+    // @ts-ignore
+    globalThis.printn = Runtime.STD_STATIC_SCOPE.printn
+}
+
 
 
 displayClear();

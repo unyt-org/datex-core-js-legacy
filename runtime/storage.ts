@@ -165,16 +165,22 @@ export class Storage {
         try {
             // update items
             for (const [key, val] of Storage.cache) {
-                this.setItem(key, val, true, location);
+                try {
+                    this.setItem(key, val, true, location);
+                } catch (e) {console.error(e)}
             }
 
             // update pointers
             for (const ptr of this.#storage_active_pointers) {
-                this.setPointer(ptr, true, location);
+                try {
+                    this.setPointer(ptr, true, location);
+                } catch (e) {console.error(e)}
             }
             for (const id of this.#storage_active_pointer_ids) {
-                const ptr = Pointer.get(id);
-                if (ptr?.value_initialized) this.setPointer(ptr, true, location);
+                try {
+                    const ptr = Pointer.get(id);
+                    if (ptr?.value_initialized) this.setPointer(ptr, true, location);
+                } catch (e) {console.error(e)}
             }
 
             this.updateSaveTime(location); // last full backup to this storage location
@@ -688,7 +694,7 @@ export class Storage {
         return false;
     }
 
-    public static async removeItem(key:string, location:Storage.Location|undefined = this.#primary_location):Promise<void> {
+    public static async removeItem(key:string, location:Storage.Location|undefined):Promise<void> {
         if (Storage.cache.has(key)) Storage.cache.delete(key); // delete from cache
 
         if (location == undefined || location == Storage.Location.INDEXED_DB) { 
@@ -799,11 +805,13 @@ Pointer.registerPointerSource(new DatexStoragePointerSource());
 
 // default storage config:
 
-await Storage.addLocation(Storage.Location.INDEXED_DB, {
-    modes: [Storage.Mode.SAVE_ON_CHANGE, Storage.Mode.SAVE_PERIODICALLY],
-    primary: true
-})
-
-await Storage.addLocation(Storage.Location.FILESYSTEM_OR_LOCALSTORAGE, {
-    modes: [Storage.Mode.SAVE_ON_EXIT],
-})
+if (!globalThis.NO_INIT) {
+    await Storage.addLocation(Storage.Location.INDEXED_DB, {
+        modes: [Storage.Mode.SAVE_ON_CHANGE, Storage.Mode.SAVE_PERIODICALLY],
+        primary: true
+    })
+    
+    await Storage.addLocation(Storage.Location.FILESYSTEM_OR_LOCALSTORAGE, {
+        modes: [Storage.Mode.SAVE_ON_EXIT],
+    })
+}

@@ -58,7 +58,7 @@ Cannot restore the current state. Please delete all caches (.datex-cache) and re
 	}
 }
 
-export function displayInit() {
+export function displayInit(message?:string) {
 	// @ts-ignore
 	if (!globalThis.Deno && globalThis.window && globalThis.document) {
 		// @ts-ignore
@@ -116,6 +116,7 @@ export function displayInit() {
 
 		document.body.innerHTML = `
 <div style="align-items:center;justify-content:center;display:flex;flex-direction:column;width:100%;height:100%;background:#0f0f0f;font-family:sans-serif;text-align:center;padding:5px;box-sizing:border-box">
+	${message ? `<div style="margin:10px">${message}</div>` : ''}
 	<div class="stage filter-contrast">
 		<div class="dot-gathering"></div>
 	</div>

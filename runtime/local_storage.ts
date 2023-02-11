@@ -83,4 +83,9 @@ class LocalStorage implements Storage {
 
 }
 
+// old deno worker problems
+if (client_type !== "deno" && !globalThis.localStorage) {
+	throw "no localStorage available (are you using the latest Deno version?)"
+}
+
 export const localStorage = client_type == "deno" ? new LocalStorage() : globalThis.localStorage;

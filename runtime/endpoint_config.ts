@@ -27,11 +27,13 @@ class EndpointConfig {
 			// try to open .dx from cache
 			try {
 				Deno.openSync(config_file);
+				console.log("using endpoint config cache: " + config_file);
 			} 
 			// use normal dx file
 			catch {
 				if (!path) path = new URL('./'+this.DX_FILE_NAME, cwdURL)
 				config_file = path;
+				console.log("using endpoint config: " + config_file);
 			}
 			serialized = <string> await getLocalFileContent(config_file, false)
 		}

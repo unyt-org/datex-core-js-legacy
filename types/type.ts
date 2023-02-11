@@ -702,6 +702,8 @@ export class Type<T = any> {
             if (value instanceof Time) return <Type<T>>Type.std.time;
             if (value instanceof URL) return <Type<T>>Type.std.url;
 
+            // loose function check: normal Functions are also considered std.Functions, because they get converted anyways once they get in touch with DATEX (also required for correct pointer type recognition when setting the value)
+            if (value instanceof Function) return <Type<T>>Type.std.Function;
             if (value instanceof DatexFunction) return <Type<T>>Type.std.Function;
             if (value instanceof Stream) return <Type<T>>Type.std.Stream;
             if (value instanceof Type) return <Type<T>>Type.std.Type;

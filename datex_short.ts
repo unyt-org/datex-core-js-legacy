@@ -306,22 +306,32 @@ export function label<T>(label:string|number, value:Datex.CompatValue<T>): T {
 // create a infinitely persistant value stored in the DATEX Datex.Storage
 let PERSISTENT_INDEX = 0;
 
+type primitive = number|string|bigint|boolean;
+
+// TODO: remove these?
+// export function eternal<T>(id:string|number, type:Datex.Type<T>):Promise<Datex.MinimalJSRef<T>>
+// export function eternal<T>(id:string|number, value_class:Datex.any_class<T>):Promise<Datex.MinimalJSRef<T>>
+// export function eternal<T>(id:string|number, create:()=>Promise<T>|T):Promise<Datex.MinimalJSRef<T>>
+
+// create default values for type
 export function eternal<T>(type:Datex.Type<T>):Promise<Datex.MinimalJSRef<T>>
-export function eternal<T>(id:string|number, type:Datex.Type<T>):Promise<Datex.MinimalJSRef<T>>
 export function eternal<T>(value_class:Datex.any_class<T>):Promise<Datex.MinimalJSRef<T>>
-export function eternal<T>(id:string|number, value_class:Datex.any_class<T>):Promise<Datex.MinimalJSRef<T>>
+
+// create with *primitive* default value
+export function eternal<T>(initial_value:T&primitive):Promise<Datex.MinimalJSRef<T>>
+
+// use creator function
 export function eternal<T>(create:()=>Promise<T>|T):Promise<Datex.MinimalJSRef<T>>
-export function eternal<T>(id:string|number, create:()=>Promise<T>|T):Promise<Datex.MinimalJSRef<T>>
-export function eternal<T>(id_or_create_or_class:string|number|((()=>Promise<T>|T)|Datex.any_class<T>|Datex.Type<T>), _create_or_class?:(()=>Promise<T>|T)|Datex.any_class<T>|Datex.Type<T>) {
-    const create_or_class = (id_or_create_or_class instanceof Function || id_or_create_or_class instanceof Datex.Type) ? id_or_create_or_class : _create_or_class;
+export function eternal<T>(id_or_create_or_class:(primitive&T)|((()=>Promise<T>|T)|Datex.any_class<T>|Datex.Type<T>), _create_or_class?:(()=>Promise<T>|T)|Datex.any_class<T>|Datex.Type<T>) {
+    const create_or_class = (id_or_create_or_class instanceof Function || id_or_create_or_class instanceof Datex.Type || !_create_or_class) ? id_or_create_or_class : _create_or_class;
 
     // create unique id for eternal call (file location + type)
     const unique = ()=>{
-        const type = create_or_class instanceof Datex.Type ? create_or_class : (create_or_class?.prototype !== undefined ? Datex.Type.getClassDatexType(<any>create_or_class) : null);
+        const type = create_or_class instanceof Datex.Type ? create_or_class : Datex.Type.getClassDatexType(<any>create_or_class);
         const stackInfo = new Error().stack?.toString().split(/\r\n|\n/)[3]?.replace(/ *at/,'').trim(); // line 3: after Error header, unique() call, eternal() call
         return (stackInfo??'*') + ':' + (type ? type.toString() : '*') + ':' + (PERSISTENT_INDEX++)
     }
-    const id = (typeof id_or_create_or_class == "string" || typeof id_or_create_or_class == "number") ? id_or_create_or_class : unique();
+    const id = (_create_or_class && (typeof id_or_create_or_class == "string" || typeof id_or_create_or_class == "number")) ? id_or_create_or_class : unique();
  
     let creator:(()=>Promise<T>|T)|null = null;
     // is class
@@ -343,6 +353,10 @@ export function eternal<T>(id_or_create_or_class:string|number|((()=>Promise<T>|
     // DATEX type
     else if (create_or_class instanceof Datex.Type) {
         creator = () => create_or_class.createDefaultValue();
+    }
+    // primitive value
+    else if (typeof create_or_class == "string" || typeof create_or_class == "number" || typeof create_or_class == "boolean" || typeof create_or_class == "bigint") {
+        creator = () => create_or_class; // return primitive value
     }
 
     if (creator == null) throw new Datex.Error("Undefined creator for eternal creation")

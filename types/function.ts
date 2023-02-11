@@ -62,7 +62,7 @@ function removeMeta(key:number){
 
 
 // @ts-ignore check for safari
-const is_safari = !!globalThis.Deno && (typeof window.webkitConvertPointFromNodeToPage === 'function')
+const is_safari = !!globalThis.Deno && (typeof globalThis.webkitConvertPointFromNodeToPage === 'function')
 
 /**
  * Injects meta data to the stack trace, which can be accessed within the function.
@@ -191,7 +191,8 @@ export class Function<T extends (...args: any) => any = (...args: any) => any> e
         }
         // execute native JS code
         else if (typeof ntarget == "function") {
-            this.fn = ntarget;
+            const ctx = context instanceof Pointer ? context.val : context;
+            this.fn = ctx ? ntarget.bind(ctx) : ntarget;
         }
 
         this.allowed_callers = allowed_callers;

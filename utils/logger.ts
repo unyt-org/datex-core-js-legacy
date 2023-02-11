@@ -26,6 +26,9 @@ interface StreamSink {
 const client_type = "Deno" in globalThis ? 'deno' : 'browser';
 
 
+
+
+
 export const UNYT_COLORS = {
     RED: [234,43,81],
     GREEN: [30,218,109],
@@ -249,7 +252,7 @@ class TextFormatter implements LogFormatter {
         return text;
     }
     formatValue(value: any, params: any[], main_color: string): string {
-        return value.toString();
+        return value?.toString();
     }
 }
 
@@ -883,3 +886,29 @@ Logger.registerLogFormatter(new TextFormatter);
 globalThis.logger = new Logger("main");
 
 enableFullSupport();
+
+
+// set log level for deno (--verbose flag)
+let verbose = false;
+
+// command line args (--watch-backend)
+if (globalThis.Deno) {
+    const parse = (await import("https://deno.land/std@0.168.0/flags/mod.ts")).parse;
+    const flags = parse(Deno.args, {
+        boolean: ["verbose"],
+        alias: {
+            v: "verbose",
+        },
+        default: {verbose}
+    });
+    verbose = flags["verbose"]
+}
+
+if (verbose) {
+    Logger.development_log_level = LOG_LEVEL.VERBOSE;
+    Logger.production_log_level = LOG_LEVEL.VERBOSE;
+}
+else {
+    Logger.development_log_level = LOG_LEVEL.DEFAULT;
+    Logger.production_log_level = LOG_LEVEL.DEFAULT;
+}
