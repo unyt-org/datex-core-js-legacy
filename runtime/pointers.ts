@@ -140,19 +140,19 @@ export abstract class Value<T = any> {
    
     // call handler when value changes
     // unobserve if handler returns false
-    public static observe<K=unknown>(value: unknown, handler:observe_handler<K>, bound_object?:object, key?:K):void {
+    public static observe<K=unknown>(value: unknown, handler:observe_handler<K>, bound_object?:object, key?:K, options?:observe_options):void {
         const pointer = Pointer.pointerifyValue(value);
-        if (pointer instanceof Pointer) pointer.observe(handler, bound_object, key);
-        else if (pointer instanceof Value) pointer.observe(<observe_handler>handler, bound_object);
+        if (pointer instanceof Pointer) pointer.observe(handler, bound_object, key, options);
+        else if (pointer instanceof Value) pointer.observe(<observe_handler>handler, bound_object, options);
         else throw new ValueError("Cannot observe this value because it has no pointer")
     }
 
 
     // same as observe, but also accepts non-reference values
     // always calls the handler once directly (init)
-    public static observeAndInit<K=unknown>(value: unknown, handler:observe_handler<K>, bound_object?:object, key?:K):void {
+    public static observeAndInit<K=unknown>(value: unknown, handler:observe_handler<K>, bound_object?:object, key?:K, options?:observe_options):void {
         try {
-            this.observe(value, handler, bound_object, key);
+            this.observe(value, handler, bound_object, key, options);
         } catch {} // throws if value does not have a DATEX reference, can be ignored - in this case no observer is set, only the initial handler call is triggered
         const val = this.collapseValue(value, true, true);
         handler.call(bound_object, val, undefined, Value.UPDATE_TYPE.INIT);
@@ -2059,6 +2059,8 @@ export class Pointer<T = any> extends Value<T> {
 
                 // new getter + setter
                 Object.defineProperty(obj, name, {
+                    configurable: true,
+                    enumerable: true,
                     set: val => { 
                         this.handleSet(name, val);
                     },

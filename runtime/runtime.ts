@@ -3115,6 +3115,7 @@ export class Runtime {
                         else parent[key] = value; // actually set value
                     } catch (e) {
                         o_parent?.enableUpdatesForAll();
+                        console.log(e,parent,value);
                         throw new RuntimeError("Property '"+key.toString()+"' is readonly or does not exist", SCOPE)
                     }
                 }
