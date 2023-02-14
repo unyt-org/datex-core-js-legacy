@@ -15,7 +15,7 @@ create-version:
     paths:
       - version
   variables:
-    GITLAB_HOST: "git.unyt.org"
+    GITLAB_HOST: "https://git.unyt.org"
     GITLAB_API_TOKEN: ${API_TOKEN}
   script:
     - semver
