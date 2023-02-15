@@ -6,7 +6,7 @@ import type { any_class } from "../utils/global_types.ts";
 import { INVALID, NOT_EXISTING } from "../runtime/constants.ts";
 import { Tuple } from "./tuple.ts";
 
-
+import "../utils/auto_map.ts"
 
 // @ts-ignore accecssible to dev console
 globalThis.serializeImg = (img:HTMLImageElement)=> {
