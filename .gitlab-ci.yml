@@ -52,8 +52,8 @@ package:
   before_script:
     - '[ -f ./version ] && export VERSION=$(cat ./version)'
   script:
-    - tar -czf package.tar.gz *.ts assets/ compiler/ dx_data/ js_adapter/ lib/ network/ readme/ runtime/ types/ utils/ wasm/
-    - 'curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file package.tar.gz "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/unyt_core/${VERSION}/package.tar.gz"'
+    - tar -czf /tmp/package.tar.gz ./
+    - 'curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file /tmp/package.tar.gz "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/unyt_core/${VERSION}/package.tar.gz"'
   only:
     - /^release.*$/
 
@@ -66,4 +66,4 @@ trigger:
     - /^release.*$/
   script:
     - if [ "$CREATE_VERSION" != "true" ]; then return 1; fi
-    - "curl --request POST --form token=${TRIGGER_CDN} --form ref=main https://git.unyt.org/api/v4/projects/61/trigger/pipeline"
+    - curl https://cdn.unyt.org/update
