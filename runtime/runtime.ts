@@ -196,7 +196,7 @@ export class Runtime {
     static mime_type_classes = new Map(Object.entries(this.MIME_TYPE_MAPPING).map(x=>[('class' in x[1] && typeof x[1].class == "function") ? x[1].class : x[1], x[0]])) 
 
     public static ENV:{LANG:string, VERSION:string}
-    public static VERSION = "0.1.0";
+    public static VERSION = "0.0.0";
 
     public static PRECOMPILED_DXB: {[key:string]:PrecompiledDXB}
 
@@ -2996,7 +2996,7 @@ export class Runtime {
                     if (value === VOID) {
                         if (SCOPE.header.type==ProtocolDataType.UPDATE) o_parent?.excludeEndpointFromUpdates(SCOPE.sender);
 
-                        let res = JSInterface.handleClear(parent);
+                        let res = JSInterface.handleClear(parent, SCOPE.header.type==ProtocolDataType.UPDATE ? SCOPE.sender : null);
                         // note: keys == NOT_EXISTING is always false since hasPseudoClass == true
                         if (res == INVALID || res == NOT_EXISTING) {
                             o_parent?.enableUpdatesForAll();
@@ -3059,7 +3059,7 @@ export class Runtime {
             // }
 
             // get current value
-            let current_value = JSInterface.handleGetProperty(parent, key)
+            const current_value = JSInterface.handleGetProperty(parent, key)
             // value has not changed
             if (current_value === value) {
                 return;
@@ -3069,8 +3069,8 @@ export class Runtime {
 
             // custom types assign or delete
             let assigned;
-            if (value === VOID) assigned = JSInterface.handleDeleteProperty(parent, key);
-            else assigned = JSInterface.handleSetProperty(parent, key, value);
+            if (value === VOID) assigned = JSInterface.handleDeleteProperty(parent, key, undefined, SCOPE.header.type==ProtocolDataType.UPDATE ? SCOPE.sender : null);
+            else assigned = JSInterface.handleSetProperty(parent, key, value, undefined, SCOPE.header.type==ProtocolDataType.UPDATE ? SCOPE.sender : null);
 
             if (assigned === INVALID) {
                 o_parent?.enableUpdatesForAll();
@@ -3235,7 +3235,7 @@ export class Runtime {
                             else if (typeof current_val_prim == "string" && typeof value_prim == "string") Runtime.runtime_actions.setProperty(SCOPE, parent, key, current_val_prim+value_prim) // add
                             else {
                                 try {
-                                    Type.ofValue(current_val).handleActionAdd(current_val, value);
+                                    Type.ofValue(current_val).handleActionAdd(current_val, value, false, SCOPE.header.type==ProtocolDataType.UPDATE ? SCOPE.sender : null);
                                 } catch (e) {
                                     if (e instanceof DatexError) throw e;
                                     else throw new ValueError("Failed to perform an add operation on this value", SCOPE);
@@ -3254,7 +3254,7 @@ export class Runtime {
                             else if (typeof current_val_prim == "bigint" && typeof value_prim == "bigint") Runtime.runtime_actions.setProperty(SCOPE, parent, key, current_val_prim-value_prim) // subtract
                             else {
                                 try {
-                                    Type.ofValue(current_val).handleActionSubtract(current_val, value);
+                                    Type.ofValue(current_val).handleActionSubtract(current_val, value, false, SCOPE.header.type==ProtocolDataType.UPDATE ? SCOPE.sender : null);
                                 } catch (e) {
                                     if (e instanceof DatexError) throw e;
                                     else throw new ValueError("Failed to perform a subtract operation on this value", SCOPE)
@@ -3272,7 +3272,7 @@ export class Runtime {
                             else if (typeof current_val_prim == "bigint" && typeof value_prim == "bigint") Runtime.runtime_actions.setProperty(SCOPE, parent, key, current_val_prim*value_prim) // subtract
                             else {
                                 try {
-                                    Type.ofValue(current_val).handleActionMultiply(current_val, value);
+                                    Type.ofValue(current_val).handleActionMultiply(current_val, value, false, SCOPE.header.type==ProtocolDataType.UPDATE ? SCOPE.sender : null);
                                 } catch (e) {
                                     if (e instanceof DatexError) throw e;
                                     else throw new ValueError("Failed to perform a multiply operation on this value", SCOPE)
@@ -3290,7 +3290,7 @@ export class Runtime {
                             else if (typeof current_val_prim == "bigint" && typeof value_prim == "bigint") Runtime.runtime_actions.setProperty(SCOPE, parent, key, current_val_prim/value_prim) // subtract
                             else {
                                 try {
-                                    Type.ofValue(current_val).handleActionDivide(current_val, value);
+                                    Type.ofValue(current_val).handleActionDivide(current_val, value, false,  SCOPE.header.type==ProtocolDataType.UPDATE ? SCOPE.sender : null);
                                 } catch (e) {
                                     if (e instanceof DatexError) throw e;
                                     else throw new ValueError("Failed to perform a divide operation on this value", SCOPE)
@@ -3311,7 +3311,7 @@ export class Runtime {
                             else if (typeof current_val_prim == "bigint" && typeof value_prim == "bigint") Runtime.runtime_actions.setProperty(SCOPE, parent, key, current_val_prim**value_prim) // subtract
                             else {
                                 try {
-                                    Type.ofValue(current_val).handleActionPower(current_val, value);
+                                    Type.ofValue(current_val).handleActionPower(current_val, value, false, SCOPE.header.type==ProtocolDataType.UPDATE ? SCOPE.sender : null);
                                 } catch (e) {
                                     if (e instanceof DatexError) throw e;
                                     else throw new ValueError("Failed to perform a power operation on this value", SCOPE)
@@ -3329,7 +3329,7 @@ export class Runtime {
                             else if (typeof current_val_prim == "bigint" && typeof value_prim == "bigint") Runtime.runtime_actions.setProperty(SCOPE, parent, key, current_val_prim%value_prim) // subtract
                             else {
                                 try {
-                                    Type.ofValue(current_val).handleActionModulo(current_val, value);
+                                    Type.ofValue(current_val).handleActionModulo(current_val, value, false, SCOPE.header.type==ProtocolDataType.UPDATE ? SCOPE.sender : null);
                                 } catch (e) {
                                     if (e instanceof DatexError) throw e;
                                     else throw new ValueError("Failed to perform a modulo operation on this value", SCOPE)
@@ -3339,7 +3339,7 @@ export class Runtime {
 
                         case BinaryCode.AND:
                             try {
-                                Type.ofValue(current_val).handleActionAnd(current_val, value);
+                                Type.ofValue(current_val).handleActionAnd(current_val, value, false, SCOPE.header.type==ProtocolDataType.UPDATE ? SCOPE.sender : null);
                             } catch (e) {
                                 if (e instanceof DatexError) throw e;
                                 else throw new ValueError("Failed to perform an add operation on this value", SCOPE)
@@ -3348,7 +3348,7 @@ export class Runtime {
 
                         case BinaryCode.OR:
                             try {
-                                Type.ofValue(current_val).handleActionOr(current_val, value);
+                                Type.ofValue(current_val).handleActionOr(current_val, value, false, SCOPE.header.type==ProtocolDataType.UPDATE ? SCOPE.sender : null);
                             } catch (e) {
                                 if (e instanceof DatexError) throw e;
                                 else throw new ValueError("Failed to perform an or operation on this value", SCOPE)
@@ -6377,6 +6377,12 @@ export class Runtime {
     }
 }
 
+
+try {
+    const res = await fetch(new URL("../version", import.meta.url));
+    if (res.ok) Runtime.VERSION = await res.text()
+}
+catch {}
 
 // if (globalThis.HTMLImageElement) {
 //     Runtime.MIME_TYPE_MAPPING["image/*"] = <mime_type_definition<globalThis.HTMLImageElement>>{

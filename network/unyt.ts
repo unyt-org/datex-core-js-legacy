@@ -32,11 +32,17 @@ export class Unyt {
     static app_stage?:string
     static app_backend?:Datex.Endpoint
 
+    static uix_version?:string
+
     static setApp(name:string, version:string, stage:string, backend:Datex.Endpoint) {
         this.app_name = name;
         this.app_version = version;
         this.app_stage = stage;
         this.app_backend = backend;
+    }
+
+    static setUIXData(version:string) {
+        this.uix_version = version;
     }
 
     static async login(endpoint: Endpoint, password: string):Promise<boolean> {
@@ -165,17 +171,24 @@ export class Unyt {
     public static logStatus(data:any){
 
         const stage = data.stage||this.app_stage;
+        let uix_version = data.uix_version||this.uix_version;
+        if (uix_version == "0.0.0") uix_version = Datex.ESCAPE_SEQUENCES.UNYT_GREY+'unmarked'
+        let dx_version = Datex.Runtime.VERSION;
+        if (dx_version == "0.0.0") dx_version = Datex.ESCAPE_SEQUENCES.UNYT_GREY+'unmarked'
 
         if (this.app_backend) {
             logger.plain `
 #image(70,'unyt')${console_theme == "dark" ? this.logo_dark : this.logo_light}
 Connected to the supranet via ${data.node} (${data.type})
     
-#color(grey)[APP]       ${data.app||this.app_name||'-'}
-#color(grey)[VERSION]   ${data.version||this.app_version||'-'}
-#color(grey)[STAGE]     ${stage||'-'}
-#color(grey)[ENDPOINT]  ${data.endpoint||'-'}
-#color(grey)[BACKEND]   ${this.app_backend}${stage=="Development"?`\n\nWorbench Access for this App: https://workbench.unyt.org/\?e=${this.app_backend.toString()}`:'\n'}
+#color(grey)[APP]           ${data.app||this.app_name||'-'}
+#color(grey)[VERSION]       ${data.version||this.app_version||'-'}
+#color(grey)[STAGE]         ${stage||'-'}
+#color(grey)[ENDPOINT]      ${data.endpoint||'-'}
+#color(grey)[BACKEND]       ${this.app_backend}${stage=="Development"?`\n\nWorbench Access for this App: https://workbench.unyt.org/\?e=${this.app_backend.toString()}`:'\n'}
+#color(grey)[DATEX VERSION] ${dx_version}
+#color(grey)[UIX VERSION]   ${uix_version}
+
 #color(grey)© ${new Date().getFullYear().toString()} unyt.org
 `;
         }
@@ -185,10 +198,13 @@ Connected to the supranet via ${data.node} (${data.type})
 #image(70,'unyt')${console_theme == "dark" ? this.logo_dark : this.logo_light}
 Connected to the supranet via ${data.node} (${data.type})
     
-#color(grey)[APP]       ${data.app||this.app_name||'-'}
-#color(grey)[VERSION]   ${data.version||this.app_version||'-'}
-#color(grey)[STAGE]     ${stage||'-'}
-#color(grey)[ENDPOINT]  ${data.endpoint||'-'}${stage=="Development"?`\n\nWorbench Access for this App: https://workbench.unyt.org/\?e=${data.endpoint?.toString()}`:'\n'}
+#color(grey)[APP]           ${data.app||this.app_name||'-'}
+#color(grey)[VERSION]       ${data.version||this.app_version||'-'}
+#color(grey)[STAGE]         ${stage||'-'}
+#color(grey)[ENDPOINT]      ${data.endpoint||'-'}${stage=="Development"?`\n\nWorbench Access for this App: https://workbench.unyt.org/\?e=${data.endpoint?.toString()}`:'\n'}
+#color(grey)[DATEX VERSION] ${dx_version}
+#color(grey)[UIX VERSION]   ${uix_version}
+
 #color(grey)© ${new Date().getFullYear().toString()} unyt.org
 `;
         }

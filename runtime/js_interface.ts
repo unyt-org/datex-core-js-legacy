@@ -30,11 +30,11 @@ export type js_interface_configuration<T=any> = {
 
     type_params_match?: (params:any[], against_params:any[])=>boolean, // implement for parmetrized types -> return if parameters match
 
-    set_property?: (parent:T, key:any, value:any)=>void,
+    set_property?: (parent:T, key:any, value:any, exclude?:Endpoint)=>void,
     get_property?: (parent:T, key:any)=>any,
     has_property?: (parent:T, key:any)=>boolean,
-    delete_property?: (parent:T, key:any)=>void,
-    clear?: (parent:T)=>void,
+    delete_property?: (parent:T, key:any, exclude?:Endpoint)=>void,
+    clear?: (parent:T, exclude?:Endpoint)=>void,
     apply_value?: (parent:T, args:any[])=>Promise<any>,
 
     set_property_silently?: (parent:T, key:any, value:any, pointer:Pointer)=>void,
@@ -69,18 +69,18 @@ export type js_interface_configuration<T=any> = {
 
 
     // x += y
-    action_add?: (ref:T, value:any, silently:boolean)=>void|typeof INVALID
-    action_subtract?: (ref:T, value:any, silently:boolean)=>void|typeof INVALID
-    action_divide?: (ref:T, value:any, silently:boolean)=>void|typeof INVALID
-    action_multiply?: (ref:T, value:any, silently:boolean)=>void|typeof INVALID
-    action_power?: (ref:T, value:any, silently:boolean)=>void|typeof INVALID
-    action_modulo?: (ref:T, value:any, silently:boolean)=>void|typeof INVALID
+    action_add?: (ref:T, value:any, silently:boolean, exclude?:Endpoint)=>void|typeof INVALID
+    action_subtract?: (ref:T, value:any, silently:boolean, exclude?:Endpoint)=>void|typeof INVALID
+    action_divide?: (ref:T, value:any, silently:boolean, exclude?:Endpoint)=>void|typeof INVALID
+    action_multiply?: (ref:T, value:any, silently:boolean, exclude?:Endpoint)=>void|typeof INVALID
+    action_power?: (ref:T, value:any, silently:boolean, exclude?:Endpoint)=>void|typeof INVALID
+    action_modulo?: (ref:T, value:any, silently:boolean, exclude?:Endpoint)=>void|typeof INVALID
 
-    action_increment?: (ref:T, value:any, silently:boolean)=>void|typeof INVALID
-    action_decrement?: (ref:T, value:any, silently:boolean)=>void|typeof INVALID
+    action_increment?: (ref:T, value:any, silently:boolean, exclude?:Endpoint)=>void|typeof INVALID
+    action_decrement?: (ref:T, value:any, silently:boolean, exclude?:Endpoint)=>void|typeof INVALID
 
-    action_and?: (ref:T, value:any, silently:boolean)=>void|typeof INVALID
-    action_or?: (ref:T, value:any, silently:boolean)=>void|typeof INVALID
+    action_and?: (ref:T, value:any, silently:boolean, exclude?:Endpoint)=>void|typeof INVALID
+    action_or?: (ref:T, value:any, silently:boolean, exclude?:Endpoint)=>void|typeof INVALID
 
     compare?: (first:T, second:T)=>0|1|-1
 
@@ -165,7 +165,7 @@ export class JSInterface {
 
     // apply get_property, set_property, ... if parent matches a pseudo type
     private static applyMethod(type:Type, parent:any, method_name:string, args:any[]):any {
-        const config = this.configurations_by_type.get(type);
+        const config = this.configurations_by_type.get(type.root_type);
         if (!config) return NOT_EXISTING;
         if (config.is_normal_object && !(method_name in config)) return NOT_EXISTING; // act like this pseudo class does not exist, handle default (if method is not implemented)
         if (config.detect_class instanceof globalThis.Function && !(<globalThis.Function>config.detect_class)(parent)) return NOT_EXISTING; // detect class invalid
@@ -193,8 +193,8 @@ export class JSInterface {
     }
 
     // sets the property of a value
-    static handleSetProperty(parent:any, key:any, value:any, type:Type = Type.ofValue(parent)):void|(typeof INVALID| typeof NOT_EXISTING) {
-        return this.applyMethod(type, parent, "set_property", [parent, key, value])
+    static handleSetProperty(parent:any, key:any, value:any, type:Type = Type.ofValue(parent), exclude?:Endpoint):void|(typeof INVALID| typeof NOT_EXISTING) {
+        return this.applyMethod(type, parent, "set_property", [parent, key, value, exclude])
     }
 
     // count value content
@@ -214,8 +214,8 @@ export class JSInterface {
     }
 
     // delete a value (= void)
-    static handleDeleteProperty(parent:any, value:any, type:Type = Type.ofValue(parent)):void|(typeof INVALID| typeof NOT_EXISTING) {
-        return this.applyMethod(type, parent, "delete_property", [parent, value]);
+    static handleDeleteProperty(parent:any, value:any, type:Type = Type.ofValue(parent), exclude?:Endpoint):void|(typeof INVALID| typeof NOT_EXISTING) {
+        return this.applyMethod(type, parent, "delete_property", [parent, value, exclude]);
     }
     
     // get iterable for all values
@@ -224,8 +224,8 @@ export class JSInterface {
     }
 
     // clear value (remove all children)
-    static handleClear(parent:any, type:Type = Type.ofValue(parent)):void|(typeof INVALID| typeof NOT_EXISTING) {
-        return this.applyMethod(type, parent, "clear", [parent]);
+    static handleClear(parent:any, type:Type = Type.ofValue(parent), exclude?:Endpoint):void|(typeof INVALID| typeof NOT_EXISTING) {
+        return this.applyMethod(type, parent, "clear", [parent, exclude]);
     }
 
     // get keys for a value

@@ -1673,7 +1673,7 @@ export class Pointer<T = any> extends Value<T> {
         }
         else if (this.is_origin && this.subscribers.size) {
             logger.debug("forwarding update to subscribers ?", this.#update_endpoints);
-            console.log(this.#update_endpoints);
+            // console.log(this.#update_endpoints);
             this.handleDatexUpdate(null, '#0=?;? = #0', [this.val, this], this.#update_endpoints, true)
         }
 
@@ -2264,9 +2264,24 @@ export class Pointer<T = any> extends Value<T> {
         const res = JSInterface.handleSetPropertySilently(obj, key, value, this, this.type);
         if (res == INVALID || res == NOT_EXISTING) this.updateShadowObjectProperty(key, value); // set on original_value
 
-        // propagate updates via datex
-        if ((res == INVALID || res == NOT_EXISTING) && this.shadow_object instanceof Array) key = BigInt(key); // change to <Int> for DATEX if <Array>
+        // change to <Int> for DATEX if <Array>
+        if ((res == INVALID || res == NOT_EXISTING) && this.shadow_object instanceof Array) key = BigInt(key); 
 
+        // inform observers
+        return this.handleSetObservers(key, value, existed_before);
+    }
+
+    /**
+     * trigger local and remote observers for SET action
+     * @param key property key
+     * @param value optional value, if not set, resolved via key
+     * @param existed_before was the property already initialized on the value
+     * @returns 
+     */
+    handleSetObservers(key: any, value?: any, existed_before = false) {
+
+        // get current value
+        value = value ?? this.getProperty(key);
 
         if (this.origin && !this.is_origin) {
             if (!this.#exclude_origin_from_updates) this.handleDatexUpdate(key, Runtime.PRECOMPILED_DXB.SET_PROPERTY, [this, key, value], this.origin)
@@ -2296,6 +2311,7 @@ export class Pointer<T = any> extends Value<T> {
         // inform observers
         return this.callObservers(value, key, Value.UPDATE_TYPE.SET)
     }
+
 
     handleAdd(value:any) {
         if(!this.val) return;

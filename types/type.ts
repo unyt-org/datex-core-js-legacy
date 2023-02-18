@@ -448,63 +448,63 @@ export class Type<T = any> {
         else return NOT_EXISTING
     }
 
-    public handleActionAdd(ref:T, value:any, silently = false) {
+    public handleActionAdd(ref:T, value:any, silently = false, exclude?:Endpoint) {
         if (this.interface_config?.action_add instanceof Function) {
-            if (this.interface_config.action_add(ref, value, silently) === INVALID) throw new ValueError("Invalid value for add assign action"); 
+            if (this.interface_config.action_add(ref, value, silently, exclude) === INVALID) throw new ValueError("Invalid value for add assign action"); 
         }
         else throw new ValueError("Add assign action not implemented for type");
     }
-    public handleActionSubtract(ref:T, value:any, silently = false) {
+    public handleActionSubtract(ref:T, value:any, silently = false, exclude?:Endpoint) {
         if (this.interface_config?.action_subtract instanceof Function) {
-            if (this.interface_config.action_subtract(ref, value, silently) === INVALID) throw new ValueError("Invalid value for subtract assign action"); 
+            if (this.interface_config.action_subtract(ref, value, silently, exclude) === INVALID) throw new ValueError("Invalid value for subtract assign action"); 
         }
         else throw new ValueError("Subtract assign action not implemented for type");
     }
-    public handleActionMultiply(ref:T, value:any, silently = false) {
+    public handleActionMultiply(ref:T, value:any, silently = false, exclude?:Endpoint) {
         if (this.interface_config?.action_multiply instanceof Function) {
-            if (this.interface_config.action_multiply(ref, value, silently) === INVALID) throw new ValueError("Invalid value for multiply assign action"); 
+            if (this.interface_config.action_multiply(ref, value, silently, exclude) === INVALID) throw new ValueError("Invalid value for multiply assign action"); 
         }
         else throw new ValueError("Multiply assign action not implemented for type");
     }
-    public handleActionDivide(ref:T, value:any, silently = false) {
+    public handleActionDivide(ref:T, value:any, silently = false, exclude?:Endpoint) {
         if (this.interface_config?.action_divide instanceof Function) {
-            if (this.interface_config.action_divide(ref, value, silently) === INVALID) throw new ValueError("Invalid value for divide assign action"); 
+            if (this.interface_config.action_divide(ref, value, silently, exclude) === INVALID) throw new ValueError("Invalid value for divide assign action"); 
         }
         else throw new ValueError("Divide assign action not implemented for type");
     }
-    public handleActionPower(ref:T, value:any, silently = false) {
+    public handleActionPower(ref:T, value:any, silently = false, exclude?:Endpoint) {
         if (this.interface_config?.action_power instanceof Function) {
-            if (this.interface_config.action_power(ref, value, silently) === INVALID) throw new ValueError("Invalid value for power assign action"); 
+            if (this.interface_config.action_power(ref, value, silently, exclude) === INVALID) throw new ValueError("Invalid value for power assign action"); 
         }
         else throw new ValueError("Power assign action not implemented for type");
     }
-    public handleActionModulo(ref:T, value:any, silently = false) {
+    public handleActionModulo(ref:T, value:any, silently = false, exclude?:Endpoint) {
         if (this.interface_config?.action_modulo instanceof Function) {
-            if (this.interface_config.action_modulo(ref, value, silently) === INVALID) throw new ValueError("Invalid value for modulo assign action"); 
+            if (this.interface_config.action_modulo(ref, value, silently, exclude) === INVALID) throw new ValueError("Invalid value for modulo assign action"); 
         }
         else throw new ValueError("Modulo assign action not implemented for type");
     }
-    public handleActionAnd(ref:T, value:any, silently = false) {
+    public handleActionAnd(ref:T, value:any, silently = false, exclude?:Endpoint) {
         if (this.interface_config?.action_and instanceof Function) {
-            if (this.interface_config.action_and(ref, value, silently) === INVALID) throw new ValueError("Invalid value for and assign action"); 
+            if (this.interface_config.action_and(ref, value, silently, exclude) === INVALID) throw new ValueError("Invalid value for and assign action"); 
         }
         else throw new ValueError("And assign action not implemented for type");
     }
-    public handleActionOr(ref:T, value:any, silently = false) {
+    public handleActionOr(ref:T, value:any, silently = false, exclude?:Endpoint) {
         if (this.interface_config?.action_or instanceof Function) {
-            if (this.interface_config.action_or(ref, value, silently) === INVALID) throw new ValueError("Invalid value for or assign action"); 
+            if (this.interface_config.action_or(ref, value, silently, exclude) === INVALID) throw new ValueError("Invalid value for or assign action"); 
         }
         else throw new ValueError("Or assign action not implemented for type");
     }
-    public handleActionIncrement(ref:T, value:any, silently = false) {
+    public handleActionIncrement(ref:T, value:any, silently = false, exclude?:Endpoint) {
         if (this.interface_config?.action_increment instanceof Function) {
-            if (this.interface_config.action_increment(ref, value, silently) === INVALID) throw new ValueError("Invalid value for increment assign action"); 
+            if (this.interface_config.action_increment(ref, value, silently, exclude) === INVALID) throw new ValueError("Invalid value for increment assign action"); 
         }
         else throw new ValueError("Increment assign action not implemented for type");
     }
-    public handleActionDecrement(ref:T, value:any, silently = false) {
+    public handleActionDecrement(ref:T, value:any, silently = false, exclude?:Endpoint) {
         if (this.interface_config?.action_decrement instanceof Function) {
-            if (this.interface_config.action_decrement(ref, value, silently) === INVALID) throw new ValueError("Invalid value for decrement assign action"); 
+            if (this.interface_config.action_decrement(ref, value, silently, exclude) === INVALID) throw new ValueError("Invalid value for decrement assign action"); 
         }
         else throw new ValueError("Decrement assign action not implemented for type");
     }
