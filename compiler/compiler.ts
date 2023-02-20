@@ -1387,13 +1387,18 @@ export class Compiler {
                 throw new CompilerError("Value variables borrowed from the parent scope are readonly")
             }
 
+            // const is readonly
+            if ((action_type == ACTION_TYPE.SET_REFERENCE || action_type == ACTION_TYPE.SET) && type === "const") {
+                throw new CompilerError("A const variable is readonly")
+            }
+
             // insert at current position of scope
             await Compiler.builder.insertVariable(SCOPE, index, action_type, action_specifier, BinaryCode.INTERNAL_VAR);
         },
 
         // recursively generates right variable index for val var ref
         // resolve pseudo variable var,ref,val, recursively update parents
-        resolveValVarRef: async (SCOPE:compiler_scope, name:string): Promise<[type:'val'|'var'|'ref'|null, index:number, parent_var:boolean]> => {
+        resolveValVarRef: async (SCOPE:compiler_scope, name:string): Promise<[type:'val'|'var'|'ref'|'const'|null, index:number, parent_var:boolean]> => {
 
             // is direct scope variable, can just insert
             if (SCOPE.inner_scope.vars && name in SCOPE.inner_scope.vars) {
@@ -2059,13 +2064,13 @@ export class Compiler {
         },
 
 
-        addValVarRefDeclaration: async (name:string, type:'val'|'var'|'ref', SCOPE:compiler_scope, init = false, init_brackets = false) => {
+        addValVarRefDeclaration: async (name:string, type:'val'|'var'|'ref'|'const', SCOPE:compiler_scope, init = false, init_brackets = false) => {
             const INNER_SCOPE = SCOPE.inner_scope;
 
             if (!INNER_SCOPE.vars) INNER_SCOPE.vars = {}
 
             // TODO replace with Object.hasOwn
-            if (INNER_SCOPE.vars.hasOwnProperty(name)) throw new CompilerError("Cannot redeclare "+type+" '"+name + "'", SCOPE.stack);
+            if (Object.hasOwn(INNER_SCOPE.vars, name)) throw new CompilerError("Cannot redeclare "+type+" '"+name + "'", SCOPE.stack);
             else {
                 if (SCOPE.var_index==undefined) SCOPE.var_index = 0x0100; // 0x00 - 0xff reserved for extracted variables for function, do, ...
                 const index = SCOPE.var_index++;
@@ -4066,7 +4071,7 @@ export class Compiler {
             const name = m[1];
             if (name) console.log("TODO function name ",name);
 
-            const params:{[name:string]: [named:boolean, type:'val'|'var'|'ref', type_init:string, default_init:string, exporting:boolean]} = {}
+            const params:{[name:string]: [named:boolean, type:'val'|'var'|'ref'|'const', type_init:string, default_init:string, exporting:boolean]} = {}
 
             while (true) {
                 const param = SCOPE.datex.match(Regex.FUNCTION_PARAM);
@@ -4228,7 +4233,7 @@ export class Compiler {
         else if (m = SCOPE.datex.match(Regex.VAR_REF_VAL)) {
             SCOPE.datex = SCOPE.datex.substring(m[0].length);  // pop datex
             const exporting = !!m[1];
-            const type = <"val" | "var" | "ref"> m[2];
+            const type = <"val" | "var" | "ref" | "const"> m[2];
             const name = m[3];
             const init_eternal = !!m[4];
             const init_brackets = !!m[5];

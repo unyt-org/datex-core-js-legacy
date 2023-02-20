@@ -112,7 +112,7 @@ export class StaticScope {
         return this[name] = value;
     }
     hasVariable(name: string) {
-        return this.hasOwnProperty(name)
+        return Object.hasOwn(this,name)
     }
 
     // update/set the name of this static scope
@@ -2951,7 +2951,7 @@ export class Runtime {
                     else return parent.get(key)
                 }
                 // sealed or frozen
-                else if ((Object.isSealed(parent) || Object.isFrozen(parent)) && !parent.hasOwnProperty(key)) throw new ValueError("Property '"+key.toString()+"' does not exist", SCOPE)
+                else if ((Object.isSealed(parent) || Object.isFrozen(parent)) && !Object.hasOwn(parent, key)) throw new ValueError("Property '"+key.toString()+"' does not exist", SCOPE)
                 // not a key string in a normal object
                 else if (typeof key != "string" && !(parent instanceof Array)) throw new ValueError("Invalid key for <Object> - must be of type <text>", SCOPE);
                 // default hidden properties

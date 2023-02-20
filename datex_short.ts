@@ -5,6 +5,7 @@ import { baseURL, compiler_scope, datex_scope, DatexResponse, target_clause, Val
 
 /** make decorators global */
 import {property as _property, sync as _sync, endpoint as _endpoint, template as _template} from "./datex_all.ts";
+import { getCallerFile } from "./utils/caller_metadata.ts";
 
 declare global {
 	const property: typeof _property;
@@ -27,9 +28,9 @@ globalThis.template = _template;
 // can be used instead of import(), calls a DATEX get instruction, works for urls, endpoint, ...
 export function get<T=unknown>(dx:string|URL, context_location?:URL|string):Promise<T> {
     // auto retrieve location from stack
-    if (!context_location) {
-        context_location = new Error().stack?.trim()?.match(/((?:https?|file)\:\/\/.*?)(?::\d+)*(?:$|\nevaluate@)/)?.[1];
-    }
+    context_location ??= getCallerFile();
+    // workaround -> convert absolute path to relative (TODO: handle in DATEX?)
+    if (typeof dx == "string" && dx.startsWith("/")) dx = "." + dx;
     return <Promise<T>> _datex('get (' + dx + ' )', undefined, undefined, undefined, undefined, context_location)
 }
 
@@ -77,7 +78,7 @@ function _datex(dx:string|TemplateStringsArray|Datex.PrecompiledDXB, data?:unkno
 // add datex.meta
 Object.defineProperty(_datex, 'meta', {get:()=>Datex.getMeta(), set:()=>{}, configurable:false})
 // add datex.get
-Object.defineProperty(_datex, 'get', {value:get, configurable:false})
+Object.defineProperty(_datex, 'get', {value:(res:string)=>get(res,getCallerFile()), configurable:false})
 
 // add globalThis.meta
 // Object.defineProperty(globalThis, 'meta', {get:()=>Datex.getMeta(), set:()=>{}, configurable:false})

@@ -1,7 +1,7 @@
 export const Regex = {
     CLOSE_AND_STORE: /^(;\s*)+/, // one or multiple ;
 
-    VAR_REF_VAL: /^(export )? *(var|ref|val)\b\s*([A-Za-zÀ-ž_][A-Za-z0-9À-ž_]*)\s*(\:)?= *(\()?/, // var x, val x, ref x, export val x;
+    VAR_REF_VAL: /^(export )? *(var|ref|val|const)\b\s*([A-Za-zÀ-ž_][A-Za-z0-9À-ž_]*)\s*(\:)?= *(\()?/, // var x, val x, ref x, export val x;
     DIRECT_EXPORT: /^export\s+([A-Za-zÀ-ž_][A-Za-z0-9À-ž_]*)/, // export x;
 
     ROOT_VARIABLE: /^()([A-Za-zÀ-ž_][A-Za-z0-9À-ž_]*)(\s*[+-/*&|$]?=(?![=>/]))?/, // var_xxx or _ffefe
@@ -165,7 +165,7 @@ export const Regex = {
     AWAIT: /^await\b/,
     DO: /^do\b\s*(\()?/,
     FUNCTION: /^function\s+([A-Za-zÀ-ž_][A-Za-z0-9À-ž_]*)?\s*\(/,
-    FUNCTION_PARAM: /^(\s*(?:export\s+)?(?:named\s+)?(?:(?:ref|val|var)\s+)?)?([A-Za-zÀ-ž_][A-Za-z0-9À-ž_]*)\s*(\:|\=|,|\))?/,
+    FUNCTION_PARAM: /^(\s*(?:export\s+)?(?:named\s+)?(?:(?:ref|val|var|const)\s+)?)?([A-Za-zÀ-ž_][A-Za-z0-9À-ž_]*)\s*(\:|\=|,|\))?/,
     ASSERT: /^assert\b\s*(\()?/,
     SKIP: /^skip\b\s*(\()?/,
     LEAVE: /^leave\b\s*(\()?/,
