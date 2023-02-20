@@ -966,6 +966,7 @@ export class Pointer<T = any> extends Value<T> {
                 console.warn("perror")
                 // if (globalThis.UIX) UIX.State.resetPage(); // this should not happen
                 // else
+                displayFatalError('pointer-not-found');
                 throw new PointerError("Pointer $"+id_string+" has no assigned value", SCOPE);
             }
         }

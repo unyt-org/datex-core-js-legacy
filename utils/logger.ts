@@ -888,11 +888,12 @@ globalThis.logger = new Logger("main");
 enableFullSupport();
 
 
-// set log level for deno (--verbose flag)
-let verbose = false;
+// set log level (browser default true, deno default false)
+let verbose = true;
 
 // command line args (--watch-backend)
 if (globalThis.Deno) {
+    verbose = false
     const parse = (await import("https://deno.land/std@0.168.0/flags/mod.ts")).parse;
     const flags = parse(Deno.args, {
         boolean: ["verbose"],
