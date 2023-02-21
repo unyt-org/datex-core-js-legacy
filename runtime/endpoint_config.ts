@@ -42,7 +42,7 @@ class EndpointConfig {
 			serialized = globalThis.localStorage?.getItem("endpoint_config::"+(globalThis.location?.href ?? ''));
 			// try to get from .dx url
 			if (!serialized) {
-				if (!path) path = new URL('./'+this.DX_FILE_NAME, window.location.href)
+				if (!path) path = new URL('/'+this.DX_FILE_NAME, window.location.href)
 				try {
 					const res = await fetch(path.toString());
 					if (res.ok) serialized = await res.text();

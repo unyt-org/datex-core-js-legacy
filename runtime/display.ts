@@ -58,7 +58,18 @@ Cannot restore the current state. Please delete all caches (.datex-cache) and re
 	}
 }
 
+let show_init_screen = false;
+
+export function enableInitScreen(){
+	show_init_screen = true;
+}
+
+export function disableInitScreen(){
+	show_init_screen = false;
+}
+
 export function displayInit(message?:string) {
+	if (!show_init_screen) return;
 	// @ts-ignore
 	if (!globalThis.Deno && globalThis.window && globalThis.document) {
 		// @ts-ignore
@@ -125,9 +136,10 @@ export function displayInit(message?:string) {
 }
 
 export function displayClear() {
+	if (!show_init_screen) return;
 	// @ts-ignore
 	if (!globalThis.Deno && globalThis.window && globalThis.document) {
 		// @ts-ignore
-		globalThis.document.body.innerHTML = "";;
+		globalThis.document.body.innerHTML = "";
 	}
 }

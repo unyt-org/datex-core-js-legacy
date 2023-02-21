@@ -29,6 +29,9 @@ globalThis.template = _template;
 export function get<T=unknown>(dx:string|URL, context_location?:URL|string):Promise<T> {
     // auto retrieve location from stack
     context_location ??= getCallerFile();
+    // TODO:just a workaournd, how to do this better
+    //  if context location is index.html (no 'x.y' file extension) -> set to root url
+    if (!context_location.toString().match(/\/[^\/]*\.[^\/]*$/) && (context_location.toString().startsWith("http://") || context_location.toString().startsWith("https://"))) context_location = new URL(context_location).origin + "/"
     // workaround -> convert absolute path to relative (TODO: handle in DATEX?)
     if (typeof dx == "string" && dx.startsWith("/")) dx = "." + dx;
     return <Promise<T>> _datex('get (' + dx + ' )', undefined, undefined, undefined, undefined, context_location)

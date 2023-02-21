@@ -573,7 +573,7 @@ export class Runtime {
                 if (raw) result = [content, "application/json5"];
                 else result = await Runtime.datexOut([content, [], {sign:false, encrypt:false, type:ProtocolDataType.DATA}]);
             }
-            else if (filePath.endsWith('.js') || filePath.endsWith('.ts')) {
+            else if (filePath.endsWith('.js') || filePath.endsWith('.ts')  || filePath.endsWith('.tsx') || filePath.endsWith('.jsx') || filePath.endsWith('.mts') || filePath.endsWith('.mjs')) {
                 const content = <string> await getFileContent(url);
                 if (raw) result = [content, "application/json5"];
                 else result = await import(url_string)
@@ -582,9 +582,9 @@ export class Runtime {
                 if (!mime) throw Error("Cannot infer type from URL content - missing mime module");
                 const content = <Uint8Array>(await getFileContent(url, true, true));
                 const ext = url.toString().match(/\.[^./]*$/)?.[0].replace(".","");
-                if (!ext) throw Error("Cannot infer type from URL content");
+                if (!ext) throw Error("Cannot infer type from URL content (no extension)");
                 const mime_type = mime.getType(ext);
-                if (!mime_type) throw Error("Cannot infer type from URL content");
+                if (!mime_type) throw Error("Cannot infer type from URL content - could not resolve mime type (extension: "+ext+")");
 
                 if (raw) result = [content, mime_type];
                 else {
