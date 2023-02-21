@@ -1374,22 +1374,22 @@ export class Compiler {
 
             // cannot set reference ($=) of ref variable
             if (action_type == ACTION_TYPE.SET_REFERENCE && type === "ref") {
-                throw new CompilerError("Cannot override the reference of a reference variable")
+                throw new CompilerError("Cannot override the reference of the reference variable '"+name+"'")
             }
 
             // cannot set reference ($=) of val variable
             if (action_type == ACTION_TYPE.SET_REFERENCE && type === "val") {
-                throw new CompilerError("Cannot override the reference of a value variable")
+                throw new CompilerError("Cannot override the reference of the value variable '"+name+"'")
             }
 
             // val variables from parent scope are readonly
             if (action_type != ACTION_TYPE.GET && parent_var && type === "val"){
-                throw new CompilerError("Value variables borrowed from the parent scope are readonly")
+                throw new CompilerError("The value variables '"+name+"' borrowed from the parent scope is readonly")
             }
 
             // const is readonly
             if ((action_type == ACTION_TYPE.SET_REFERENCE || action_type == ACTION_TYPE.SET) && type === "const") {
-                throw new CompilerError("A const variable is readonly")
+                throw new CompilerError("The const variable '"+name+"' is readonly")
             }
 
             // insert at current position of scope

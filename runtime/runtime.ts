@@ -483,6 +483,13 @@ export class Runtime {
     static #url_content_cache = new Map<string,any>();
     static #url_raw_content_cache = new Map<string,any>();
 
+    // converts exports from DATEX tuple to normal JS object
+    private static normalizeDatexExports(module:any){
+        // TODO: fix tuple madness
+		if (module instanceof Tuple && !Pointer.getByValue(module)) module = Object.fromEntries(module.named);
+        return module;
+    }
+
     // get content of https://, file://, ...
     public static async getURLContent<T=unknown>(url_string:string, raw?:boolean, cached?:boolean):Promise<T extends any ? T : [data:unknown, type?:string]>
     public static async getURLContent<T=unknown>(url:URL, raw?:boolean, cached?:boolean):Promise<T extends any ? T : [data:unknown, type?:string]>
@@ -508,12 +515,12 @@ export class Runtime {
             if (type == "application/datex" || type == "text/dxb" || url_string.endsWith(".dxb")) {
                 const content = await response.arrayBuffer();
                 if (raw) result = [content, type];
-                else result = await this.executeDXBLocally(content, url);
+                else result = this.normalizeDatexExports(await this.executeDXBLocally(content, url));
             }
             else if (type?.startsWith("text/datex") || url_string.endsWith(".dx")) {
                 const content = await response.text()
                 if (raw) result = [content, type];
-                else result = await this.executeDatexLocally(content, undefined, undefined, url);
+                else result = this.normalizeDatexExports(await this.executeDatexLocally(content, undefined, undefined, url));
             }
             else if (type?.startsWith("application/json5") || url_string.endsWith(".json5")) {
                 const content = await response.text();
@@ -549,12 +556,12 @@ export class Runtime {
             if (filePath.endsWith('.dxb')) {
                 const content = (<Uint8Array>(await getFileContent(url, true, true))).buffer;
                 if (raw) result = [content, "application/datex"];
-                else result = await this.executeDXBLocally(content, url);
+                else result = this.normalizeDatexExports(await this.executeDXBLocally(content, url));
             }
             else if (filePath.endsWith('.dx')) {
                 const content = <string> await getFileContent(url);
                 if (raw) result = [content, "text/datex"];
-                else result = await this.executeDatexLocally(content, undefined, undefined, url);
+                else result = this.normalizeDatexExports(await this.executeDatexLocally(content, undefined, undefined, url));
             }
             else if (filePath.endsWith('.json')) {
                 const content = <string> await getFileContent(url);

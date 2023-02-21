@@ -694,7 +694,7 @@ export class Storage {
         return false;
     }
 
-    public static async removeItem(key:string, location:Storage.Location|undefined):Promise<void> {
+    public static async removeItem(key:string, location?:Storage.Location):Promise<void> {
         if (Storage.cache.has(key)) Storage.cache.delete(key); // delete from cache
 
         if (location == undefined || location == Storage.Location.INDEXED_DB) { 
