@@ -2,6 +2,10 @@
 export * from "./runtime/runtime.ts";
 
 
+// js_adapter
+export * from "./js_adapter/js_class_adapter.ts";
+export * from "./js_adapter/legacy_decorators.ts";
+
 // utils
 export * from "./utils/global_types.ts";
 export * from "./utils/global_values.ts";
@@ -16,12 +20,8 @@ export * from "./compiler/compiler.ts";
 export * from "./compiler/protocol_types.ts";
 export * from "./compiler/unit_codes.ts";
 
-// js_adapter
-export * from "./js_adapter/js_class_adapter.ts";
-export * from "./js_adapter/legacy_decorators.ts";
 
 // network
-export * from "./network/blockchain_adapter.ts";
 export * from "./network/client.ts";
 export * from "./network/supranet.ts";
 export * from "./network/network_utils.ts";
@@ -43,7 +43,6 @@ export * from "./runtime/decompiler.ts";
 export * from "./types/abstract_types.ts";
 export * from "./types/addressing.ts";
 export * from "./types/assertion.ts";
-export * from "./types/blockchain.ts";
 export * from "./types/logic.ts";
 export * from "./types/error_codes.ts";
 export * from "./types/errors.ts";

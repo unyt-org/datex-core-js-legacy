@@ -10,7 +10,8 @@ import { NOT_EXISTING } from "../datex_all.ts"
 
 
 // return type for remote function calls
-export type Return<T=void> = Promise<T|void|DatexResponse<T>>|T|void|DatexResponse<T>;
+export type Return<T=void> = Promise<T|void>|T|void;
+// export type Return<T=void> = Promise<T|void|DatexResponse<T>>|T|void|DatexResponse<T>;
 
 export interface PointerSource {
     getPointer(pointer_id:string, pointerify?:boolean): Promise<any|typeof NOT_EXISTING>|any|typeof NOT_EXISTING

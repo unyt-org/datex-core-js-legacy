@@ -83,7 +83,11 @@ export class Error extends globalThis.Error {
         if (Runtime.OPTIONS.NATIVE_ERROR_STACK_TRACES) {
             let ignore = false;
             const js_stack = <[Endpoint, string][]> e.stack?.split("\n").slice(1).map(e=>{
-                if (e.includes("__DX_meta__")) ignore = true; // stop stack before __DX_meta__, just internal stuff
+                // stop stack before __DX_meta__, just internal stuff
+                if (!Runtime.OPTIONS.NATIVE_ERROR_DEBUG_STACK_TRACES) {
+                    if (e.includes("__DX_meta__")) ignore = true; 
+                    if (e.includes("at async callWithMeta")) ignore = true; 
+                }
                 return ignore ? undefined : [Runtime.endpoint,`JavaScript Error ${e.trim()}`]
             }).filter(v=>!!v).reverse() ?? [];
             return new Error(e.name + " - " + e.message, js_stack)

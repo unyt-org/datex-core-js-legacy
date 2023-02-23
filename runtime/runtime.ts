@@ -185,6 +185,7 @@ export class Runtime {
                             // recommended: true, otherwise all integers are implicitly casted to the type <decimal> in DATEX
         ERROR_STACK_TRACES: true, // create detailed stack traces with all DATEX Errors
         NATIVE_ERROR_STACK_TRACES: true, // create detailed stack traces of JS Errors (NATIVE_ERROR_MESSAGES must be true)
+        NATIVE_ERROR_DEBUG_STACK_TRACES: false, // also display internal DATEX library stack traces (hidden per default)
         NATIVE_ERROR_MESSAGES: true // expose native error messages
     }
 
