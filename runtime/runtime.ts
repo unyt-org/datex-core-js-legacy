@@ -2766,7 +2766,7 @@ export class Runtime {
             }
             // all other actions (+=, -=, ...)
             else {
-                Runtime.runtime_actions.assignAction(SCOPE, action_type, parent, key, value, current_val);
+                await Runtime.runtime_actions.assignAction(SCOPE, action_type, parent, key, value, current_val);
             }
         },
 
@@ -2875,7 +2875,7 @@ export class Runtime {
             else throw new RuntimeError("Could not get a child reference");
         },
         
-        // get parent[key]
+        // get parent[key]; !! Returns promise because of Endpoint.getProperty()
         getProperty(SCOPE:datex_scope, parent:any, key:any){
 
             if (parent instanceof UnresolvedValue) parent = parent[DX_VALUE];
@@ -2950,7 +2950,7 @@ export class Runtime {
             // was not handled by custom pseudo classes
             else if (new_obj == NOT_EXISTING) {
                 // get endpoint subspace
-                if (parent instanceof Endpoint) return parent.getSubspace(key?.toString());
+                if (parent instanceof Endpoint) return parent.getProperty(key?.toString());
                 // invalid key type
                 if (parent instanceof Array && typeof key != "bigint") throw new ValueError("Invalid key for <Array> - must be of type <integer>", SCOPE);
                 // sealed tuple
@@ -3131,7 +3131,9 @@ export class Runtime {
             o_parent?.enableUpdatesForAll();
         },
 
-        assignAction(SCOPE:datex_scope, action_type:BinaryCode, parent:any, key:any, value:any, current_val = Runtime.runtime_actions.getProperty(SCOPE, parent, key)) {
+        async assignAction(SCOPE:datex_scope, action_type:BinaryCode, parent:any, key:any, value:any, current_val?:any) {
+
+            current_val ??= await Runtime.runtime_actions.getProperty(SCOPE, parent, key)
 
             if (parent instanceof UnresolvedValue) parent = parent[DX_VALUE];
 
@@ -3167,7 +3169,7 @@ export class Runtime {
                     else keys = Object.keys(parent);
                     if (!(Symbol.iterator in keys)) throw new RuntimeError("Value keys are not iterable", SCOPE);
                 }
-                Runtime.runtime_actions.assignAction(SCOPE, action_type, Pointer.pointerifyValue(parent), new Tuple(keys), value);
+                await Runtime.runtime_actions.assignAction(SCOPE, action_type, Pointer.pointerifyValue(parent), new Tuple(keys), value);
                 return;
             }
 
@@ -3178,12 +3180,12 @@ export class Runtime {
                 // distribute values over keys
                 if (value instanceof Tuple) {
                     for (let i=0; i<array.length; i++) {
-                        Runtime.runtime_actions.assignAction(SCOPE, action_type, parent, array[i], value[i])
+                        await Runtime.runtime_actions.assignAction(SCOPE, action_type, parent, array[i], value[i])
                     }
                 }
                 // use same value for all keys
                 else {
-                    for (let k of array) Runtime.runtime_actions.assignAction(SCOPE, action_type, parent, k, value)
+                    for (let k of array) await Runtime.runtime_actions.assignAction(SCOPE, action_type, parent, k, value)
                 }
                 return;
             }
@@ -3194,7 +3196,7 @@ export class Runtime {
                 if (value instanceof Tuple) {
                     if (current_val instanceof Array) {
                         for (let v of value.indexed) {
-                            Runtime.runtime_actions.assignAction(SCOPE, action_type, null, null, v, current_val);
+                            await Runtime.runtime_actions.assignAction(SCOPE, action_type, null, null, v, current_val);
                         }
                     }
                     else DatexObject.extend(current_val, value) // link value, don't copy
@@ -3712,7 +3714,7 @@ export class Runtime {
 
             // handle child get
             if (INNER_SCOPE.waiting_for_child == 1) {
-                el = Runtime.runtime_actions.getProperty(SCOPE, INNER_SCOPE.active_value, el);
+                el = await Runtime.runtime_actions.getProperty(SCOPE, INNER_SCOPE.active_value, el);
                 delete INNER_SCOPE.active_value; // no longer exists
                 INNER_SCOPE.waiting_for_child = 0;
                 // ... continue (insert new el)
@@ -4600,7 +4602,11 @@ export class Runtime {
                     if (!SCOPE.impersonation_permission && (!(el instanceof Endpoint) || !SCOPE.sender.equals(el)|| !SCOPE.header.signed)) {
                         throw new PermissionError("No permission to execute scopes on external endpoints", SCOPE)
                     }
-                    INNER_SCOPE.active_value = await datex("#default", [], el);
+                    if (el instanceof Endpoint) INNER_SCOPE.active_value = await el.getDefault();
+                    else {
+                        logger.warn("TODO: default from non-endpoint target?")
+                        INNER_SCOPE.active_value = await datex("#default", [], el);
+                    }
                 }
                 else if (el instanceof URL) {
                     INNER_SCOPE.active_value = await Runtime.getURLContent(el, false, true);

@@ -369,28 +369,6 @@ export function eternal<T>(id_or_create_or_class:(primitive&T)|((()=>Promise<T>|
 
 
 
-// export function not(value:[Datex.endpoint_name]|Datex.endpoint_name) {
-//     let target:Datex.Target;
-//     if (typeof value == "string") target = f(value);
-//     else if (value instanceof Array && typeof value[0] == "string") target = f(value[0]);
-//     return new target_clause(Datex.Not.get(target));
-// }
-// export function person(name:[target_clause_target_name_person]|target_clause_target_name_person) {
-//     return Datex.Person.get(typeof name == "string" ? name : name[0]);
-// }
-// export function institution(name:[target_clause_target_name_institution]|target_clause_target_name_institution) {
-//     return Datex.Institution.get(typeof name == "string" ? name : name[0]);
-// }
-// export function bot(name:[target_clause_target_name_bot]|target_clause_target_name_bot) {
-//     return Datex.Bot.get(typeof name == "string" ? name : name[0]);
-// }
-
-// // create any filter Datex.Target from a string
-// export function ef(filter:Datex.Target) {
-//     if (filter instanceof Datex.Target) return filter.toString()
-//     return new target_clause(filter).toString();
-// }
-
 // create any filter Datex.Target from a string
 export function f<T extends Datex.endpoint_name>(name:[T]|T):Datex.endpoint_by_endpoint_name<T> {
     return <any>Datex.Target.get((typeof name == "string" ? name : name[0]));

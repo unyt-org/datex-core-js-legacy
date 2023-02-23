@@ -14,7 +14,7 @@ import { Logger } from "../utils/logger.ts";
 const logger = new Logger("datex compiler");
 
 import { ReadableStream, Runtime} from "../runtime/runtime.ts";
-import { Endpoint, IdEndpoint, Target, WildcardTarget, Institution, Person, Bot, BROADCAST, target_clause, endpoints } from "../types/addressing.ts";
+import { Endpoint, IdEndpoint, Target, WildcardTarget, Institution, Person, BROADCAST, target_clause, endpoints } from "../types/addressing.ts";
 import { Pointer, PointerProperty, Value } from "../runtime/pointers.ts";
 import { CompilerError, RuntimeError, Error as DatexError, ValueError } from "../types/errors.ts";
 import { Function as DatexFunction } from "../types/function.ts";
@@ -1910,11 +1910,7 @@ export class Compiler {
             Compiler.builder.addFilterTargetFromParts(BinaryCode.PERSON_ALIAS, name, subspaces, instance, appspace, SCOPE);
         },
       
-        addBotByNameAndChannel: (name:string, subspaces:string[]|null, instance:string, appspace:Endpoint, SCOPE:compiler_scope) => {
-            Compiler.builder.addFilterTargetFromParts(BinaryCode.BOT, name, subspaces, instance, appspace, SCOPE);
-        },
-
-    
+     
         addInstitutionByNameAndChannel: (name:string, subspaces:string[]|null, instance:string, appspace:Endpoint, SCOPE:compiler_scope) => {
             Compiler.builder.addFilterTargetFromParts(BinaryCode.INSTITUTION_ALIAS, name, subspaces, instance, appspace, SCOPE);
         },
@@ -1940,7 +1936,6 @@ export class Compiler {
         addTarget: (el:Target, SCOPE:compiler_scope) => {
             if (el instanceof Institution) Compiler.builder.addInstitutionByNameAndChannel(el.name, el.subspaces, el.instance, el.appspace, SCOPE);
             else if (el instanceof Person) Compiler.builder.addPersonByNameAndChannel(el.name, el.subspaces, el.instance, el.appspace, SCOPE);
-            else if (el instanceof Bot) Compiler.builder.addBotByNameAndChannel(el.name, el.subspaces, el.instance, el.appspace, SCOPE);
             else if (el instanceof IdEndpoint) Compiler.builder.addIdEndpointByIdAndChannel(el.binary, el.subspaces, el.instance, el.appspace, SCOPE);
         },
 
@@ -3753,45 +3748,36 @@ export class Compiler {
         // PERSON
         else if (m = SCOPE.datex.match(Regex.PERSON_ALIAS)) {
             SCOPE.datex = SCOPE.datex.substring(m[0].length);  // pop datex
-            const subspace_string = m[2].substring(1);
-            const subspaces = subspace_string ? subspace_string.split(":") : null;
-            Compiler.builder.addPersonByNameAndChannel(m[1], subspaces, m[6], null, SCOPE);
-            isEffectiveValue = true;
-        }
-
-        // BOT   
-        else if (m = SCOPE.datex.match(Regex.BOT)) {
-            SCOPE.datex = SCOPE.datex.substring(m[0].length);  // pop datex
-            const all = m[0].substring(1);
-            const name_channel = all.split("/");
-            Compiler.builder.addBotByNameAndChannel(name_channel[0], null, name_channel[1], null, SCOPE);
+            // const subspace_string = m[2].substring(1);
+            // const subspaces = subspace_string ? subspace_string.split(":") : null;
+            Compiler.builder.addPersonByNameAndChannel(m[1], [], m[3], null, SCOPE);
             isEffectiveValue = true;
         }
 
         // INSTITUTION
         else if (m = SCOPE.datex.match(Regex.INSTITUTION_ALIAS)) {
             SCOPE.datex = SCOPE.datex.substring(m[0].length);  // pop datex
-            const subspace_string = m[2].substring(1);
-            const subspaces = subspace_string ? subspace_string.split(":") : null;
-            Compiler.builder.addInstitutionByNameAndChannel(m[1], subspaces, m[6], null, SCOPE);
+            // const subspace_string = m[2].substring(1);
+            // const subspaces = subspace_string ? subspace_string.split(":") : null;
+            Compiler.builder.addInstitutionByNameAndChannel(m[1], [], m[3], null, SCOPE);
             isEffectiveValue = true;
         }
 
         // ID_ENDPOINT
         else if (m = SCOPE.datex.match(Regex.ENDPOINT)) {
             SCOPE.datex = SCOPE.datex.substring(m[0].length);  // pop datex
-            const subspace_string = m[2].substring(1);
-            const subspaces = subspace_string ? subspace_string.split(":") : null;
-            Compiler.builder.addIdEndpointByIdAndChannel( hex2buffer(m[1].replace(/[_-]/g, "")), subspaces, m[6], null, SCOPE);
+            // const subspace_string = m[2].substring(1);
+            // const subspaces = subspace_string ? subspace_string.split(":") : null;
+            Compiler.builder.addIdEndpointByIdAndChannel( hex2buffer(m[1].replace(/[_-]/g, "")), [], m[3], null, SCOPE);
             isEffectiveValue = true;
         }
 
-        // ID_ENDPOINT
+        // BROADCAST_ENDPOINT TODO: how to use this with new subspaces?
         else if (m = SCOPE.datex.match(Regex.BROADCAST_ENDPOINT)) {
             SCOPE.datex = SCOPE.datex.substring(m[0].length);  // pop datex
             const subspace_string = m[2].substring(1);
             const subspaces = subspace_string ? subspace_string.split(":") : null;
-            Compiler.builder.addIdEndpointByIdAndChannel(BROADCAST.binary, subspaces, m[6], null, SCOPE);
+            Compiler.builder.addIdEndpointByIdAndChannel(BROADCAST.binary, [], m[6], null, SCOPE);
             isEffectiveValue = true;
         }
 

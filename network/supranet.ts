@@ -15,7 +15,7 @@ import { Runtime } from "../runtime/runtime.ts";
 import { Crypto } from "../runtime/crypto.ts";
 import { f } from "../datex_short.ts";
 
-import { Bot, Endpoint, filter_target_name_id, IdEndpoint, Target } from "../types/addressing.ts";
+import { Endpoint, filter_target_name_id, IdEndpoint, Target } from "../types/addressing.ts";
 
 
 import { Logger } from "../utils/logger.ts";
@@ -37,7 +37,7 @@ export class Supranet {
     static get connected(){return this.#connected}
 
     // list of available nodes with public keys
-    private static node_channels_by_type = new Map<string, [Bot, any][]>();
+    private static node_channels_by_type = new Map<string, [Endpoint, any][]>();
 
     // add listeners for interface changes
     private static listeners_set = false;
@@ -69,7 +69,7 @@ export class Supranet {
     // connect to cloud, say hello with public key
     // if local_cache=false, a new endpoint is created and not saved in the cache, even if an endpoint is stored in the cache
     // TODO problem: using same keys as stored endpoint!
-    public static async connect(endpoint?:Endpoint, id_endpoint?:IdEndpoint, local_cache = true, sign_keys?:[ArrayBuffer|CryptoKey,ArrayBuffer|CryptoKey], enc_keys?:[ArrayBuffer|CryptoKey,ArrayBuffer|CryptoKey], via_node?:Bot) {
+    public static async connect(endpoint?:Endpoint, id_endpoint?:IdEndpoint, local_cache = true, sign_keys?:[ArrayBuffer|CryptoKey,ArrayBuffer|CryptoKey], enc_keys?:[ArrayBuffer|CryptoKey,ArrayBuffer|CryptoKey], via_node?:Endpoint) {
 
         if (this.#connected) {
             logger.info("already connected");
@@ -84,7 +84,7 @@ export class Supranet {
         this.available_channel_types.push("websocket");
 
         // find node for available channel
-        let [node, channel_type] = <[Bot,string]> this.getNodeWithChannelType(this.available_channel_types, via_node);
+        let [node, channel_type] = <[Endpoint,string]> this.getNodeWithChannelType(this.available_channel_types, via_node);
         if (!node) throw ("Cannot find a node that support any channel type of: " + this.available_channel_types + (via_node ? " via " + via_node : ''));
         if (!channel_type) throw("No channel type for node: " + node);
 
@@ -240,7 +240,7 @@ export class Supranet {
 
         // try to get from cdn.unyt.org
         try {
-            nodes = await Runtime.getURLContent('https://cdn.unyt.org/unyt_core@dev/dx_data/nodes.dx');
+            nodes = await Runtime.getURLContent('https://dev.cdn.unyt.org/unyt_core/dx_data/nodes.dx');
         }
         // otherwise try to get local file (only backend)
         catch {

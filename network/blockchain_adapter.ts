@@ -82,7 +82,7 @@ export type BCData<T extends BCEntryType> =
  * Blockchain interface
  */
 
-@endpoint('@unyt.helix.relay1') export class Blockchain {
+@endpoint('@unyt.helix1') export class Blockchain {
 
 	/**
 	 * Methods that must be implemented on an endpoint that has access to the blockchain:#
@@ -99,6 +99,8 @@ export type BCData<T extends BCEntryType> =
 	@property static getEndpointEntry(endpoint: Endpoint): Datex.Return<BCEntry<BCEntryType.ENDPOINT_REGISTRATION>> {}
 	// gets an endpoint property like @endpoint.name
 	@property static getEndpointProperty(endpoint: Endpoint, key: string): any {}
+	// gets an endpoint default value
+	@property static getEndpointDefault(endpoint: Endpoint): any {}
 	// get latest entry for an endpoint property
 	@property static getEndpointPropertyEntry(endpoint: Endpoint, key: string): Datex.Return<BCEntry<BCEntryType.ENDPOINT_PROPERTY>> {}
 	// get a pointer value

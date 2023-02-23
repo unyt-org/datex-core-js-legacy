@@ -30,412 +30,6 @@ export type endpoint_by_endpoint_name<name extends endpoint_name> =
 
 
 
-
-
-// /** a complex filter consisting of filter targets and negations, CNF */
-// export class Filter {
-
-// 	filter:AndSet<filter> = new AndSet();
-// 	normal_filter: CNF;
-
-// 	set(...ors:filter[]):void {
-// 		// convert all strings to filters
-// 		for (let o=0; o<ors.length;o++) {
-// 			const or = ors[o];
-// 			if (typeof or == "string") ors[o] = Filter.fromString(or);
-// 		}
-// 		this.filter = new AndSet(ors);
-// 		this.calculateNormalForm();
-// 	}
-
-// 	constructor(...ors:filter[]) {
-// 		this.set(...<any>ors)
-// 	}
-
-// 	// append a filter (AND) to the current filter
-// 	appendFilter(filter:filter) {
-// 		if (typeof filter == "string") filter = Filter.fromString(filter);
-// 		this.filter.add(filter)
-// 		this.calculateNormalForm();
-// 	}
-
-
-// 	static createMergedFilter(f1:filter, f2:filter) {
-// 		return new Filter(f1, f2);
-// 	}
-
-// 	/** helper functions */
-// 	// merge cnf with other cnf
-// 	static concatAndCNFs(cnf1:CNF, cnf2:CNF):boolean {
-
-// 		or2: for (let or2 of cnf2||[]) {
-// 			// iterate over all literals of new cnf2
-// 			for (let literal2 of (or2 instanceof Set ? or2 : [or2])) {
-				
-// 				// iterate over all literals of cnf1
-// 				for (const or1 of cnf1||[]) {
-
-// 					let or1_it = (or1 instanceof Set ? or1 : [or1]); // iterator for or1
-
-// 					// check if all literals endpoints
-// 					let all_1_endpoints = true;
-// 					for (let literal1 of or1_it) {
-// 						if (!(literal1 instanceof Endpoint)) {all_1_endpoints = false; break;}
-// 					}
-
-// 					// all literals are endpoints in or1 (@x | @y | +app)
-// 					if (all_1_endpoints) {
-
-// 						for (let literal1 of or1_it) {
-
-// 							// literal1 in first or, negated literal2 in second or -> delete both
-// 							if (literal1 == Not.get(literal2)) {
-// 								// delete literal1
-// 								if (or1 instanceof Set) or1.delete(literal1); 
-// 								else cnf1.delete(literal1)
-// 								// delete literal2
-// 								if (or2 instanceof Set) or2.delete(literal2); 
-// 								else continue or2; // literal2 only a single value, don't add or2
-// 							}
-	
-							
-	
-// 							// (main part of literal2) == literal1 -> literal1 is redundant
-// 							if (literal2 instanceof Endpoint && literal1 == literal2.main) {
-// 								// delete literal1
-// 								if (or1 instanceof Set) or1.delete(literal1); 
-// 								else cnf1.delete(literal1)
-// 							}
-// 							// (main part of literal1) == literal2 -> literal2 is redundant
-// 							if (literal1 instanceof Endpoint && literal2 == literal1.main) {
-// 								// delete literal2
-// 								if (or2 instanceof Set) or2.delete(literal2); 
-// 								else continue or2; // literal2 only a single value, don't add or2
-// 							}
-	
-// 							// ~literal1, literal2/xy -> invalid
-// 							if (literal1 instanceof Not && literal2 instanceof Endpoint && literal1.value == literal2.main) return false
-// 							if (literal2 instanceof Not && literal1 instanceof Endpoint && literal2.value == literal1.main) return false
-	
-// 							if (literal1 instanceof Endpoint && literal2 instanceof Endpoint) {
-// 								// literal1 = a/xy already exists, literal2 == a, can be removed
-// 								if (literal1.main == literal2.main && literal1.instance!=undefined && literal2.instance==undefined) {
-// 									// delete literal2
-// 									if (or2 instanceof Set) or2.delete(literal2); 
-// 									else continue or2; // literal2 only a single value, don't add or2
-// 								}
-// 							}
-// 						}
-// 					}
-					
-// 				}
-// 			}
-
-// 			if (or2 instanceof Set && or2.size == 0) continue; // is empty now, ignore
-// 			if (or2 instanceof Set && or2.size==1) or2 = [...or2][0] // if or-Set with single value, collapse Set
-
-// 			// now add or2 to cnf1 AndSet 
-// 			cnf1.add(or2);
-// 		}
-	
-// 		return true;
-// 	}
-
-// 	// all possible (valid) combinations of n sets
-// 	static* cartesian(...tail:any[]):Generator<Set<Target|Not<Target>>,void,any> {
-// 		let head = tail.shift();
-// 		let remainder = tail.length ? Filter.cartesian(...tail) : [[]];
-// 		for (const r of remainder||[]) for (const h of head||[]) {
-// 			let ors = new Set([...(h instanceof Set ? h : [h]), ...r]);
-// 			for (const o of ors) {
-// 				// check if contradicting values (!x | x) can be deleted
-// 				let not_o = Not.get(o);
-// 				if (ors.has(not_o)) {ors.delete(not_o);ors.delete(o)} 
-
-// 				// main part already exists
-// 				if (o instanceof Endpoint && ors.has(o.main)) {ors.delete(o)} 
-// 			}
-// 			yield ors;
-// 		}
-// 	}
-
-// 	// create new a or b or c filter
-// 	public static OR(...ors:(Filter|Target|Not|string)[]):Filter {
-// 		let ors_set:Set<filter> = new Set();
-// 		for (let or of ors) {
-// 			if (typeof or == "string") ors_set.add(Filter.fromString(or));
-// 			else ors_set.add(or);
-// 		}
-// 		return new Filter(ors_set);
-// 	}
-// 	// create new a and b and c filter
-// 	public static AND(...ands:(Filter|Target|Not|string)[]):Filter {
-// 		let and_set:Set<filter> = new Set();
-// 		for (let and of ands) {
-// 			if (typeof and == "string") and_set.add(Filter.fromString(and));
-// 			else and_set.add(and);
-// 		}
-// 		return new Filter(...and_set);
-// 	}
-
-
-// 	/**
-// 	 * returns a datex_filter from a single target string (e.g. '@xy') or label ('#xy')
-// 	 * @param target_string a single filter target or a label
-// 	 * @returns a <Filter>, <Target>, <Array>, <Set> or <Tuple> that the given string describes
-// 	 */
-// 	public static fromString(target_string: string):filter {
-// 		// is label
-// 		if (target_string.match(LABELED_POINTER)) {
-// 			let filter = Pointer.getByLabel(target_string.slice(1)).value;
-// 			if(!(filter instanceof Filter || filter instanceof Target || filter instanceof Array || filter instanceof Set)) {
-// 				throw new ValueError("Invalid type: <Filter>, <Target>, <Tuple>, <Set> or <Array> expected")
-// 			}
-// 			return filter;
-// 		}
-// 		// is target
-// 		return Target.get(target_string);
-// 	}
-
-// 	/**
-// 	 * returns a datex_filter evaluated from a valid DATEX Script string that evaluates to a filter (e.g '@x & #yz | +app')
-// 	 * @param filter_string a DATEX Script string that returns a valid <Filter>, <Target>, <Array>, <Set> or <Tuple>
-// 	 */
-// 	public static async fromFilterString(filter_string:string): Promise<filter> {
-// 		const filter = await Runtime.executeDatexLocally(filter_string, {type:ProtocolDataType.DATA});
-// 		if(!(filter instanceof Filter || filter instanceof Target || filter instanceof Array || filter instanceof Set)) {
-// 			console.warn(filter);
-// 			throw new ValueError("Invalid type: <Filter>, <Target>, <Tuple>, <Set>, or <Array> expected")
-// 		}
-// 		else return filter;
-// 	}
-
-// 	public toString(formatted=false){
-// 		let string = '';//'(';
-// 		let cnf = this.calculateNormalForm();
-		
-// 		let i = cnf.size;
-// 		for (let and of cnf) {
-// 			string += "("
-// 			let j = (and instanceof Set ? and.size : 1);
-// 			for (let or of (and instanceof Set ? and : [and])) {
-// 				if (or instanceof Not) string += "~" + or.value.toString()
-// 				else string += or.toString()
-// 				j--;
-// 				if (j > 0) string += " | ";
-// 			}
-// 			string += ")";
-// 			i--;
-// 			if (i > 0) string += " & ";
-// 		}
-
-// 		if (cnf.size == 0) string = "()";
-
-// 		//string += ')';
-
-// 		return string;
-// 	}
-
-// 	// returns all endpoints of the filter that could possible be valid (does not evaluate labels etc...!)
-// 	public getPositiveEndpoints(){
-// 		let cnf = this.calculateNormalForm();
-// 		let endpoints = new Set<Endpoint>();
-
-// 		for (let and of cnf) {
-// 			for (let or of (and instanceof Set ? and : [and])) {
-// 				if (or instanceof Endpoint) endpoints.add(or);
-// 			}
-// 		}
-// 		return endpoints;
-// 	}
-
-// 	public calculateNormalForm(resolve_pointers = true) {
-// 		//if (this.normal_filter) return this.normal_filter;
-// 		const cnf = Filter.toNormalForm(this, resolve_pointers);
-// 		if (resolve_pointers) this.normal_filter = cnf;
-// 		return cnf;    }
-
-// 	// check if a set of properties are valid properties for this <Filter>
-// 	public test(...properties:Target[]){
-// 		let props = new Set(properties)
-// 		let main_parts = new Set<Target>();
-// 		for (let prop of props) {
-// 			if (prop instanceof Endpoint && prop.main) main_parts.add(prop.main);
-// 		}
-
-// 		let cnf = this.calculateNormalForm();
-// 		for (let and of cnf) {
-// 			let valid = false;
-// 			for (let or of (and instanceof Set ? and : [and])) {
-// 				if (or instanceof Not && !props.has((<Not<Target>> or).value) && !main_parts.has((<Not<Target>> or).value)) {valid=true;break} // or is okay
-// 				if (or instanceof Target && props.has(or)) {valid=true;break}; // or is okay 
-// 				if (or instanceof Target && main_parts.has(or)) {valid=true;break}; // or is okay 
-// 			}
-// 			if (!valid) return false;
-// 		}
-// 		return true;
-// 	}
-
-// 	// check if filter is exactly equal to a given target
-// 	public equals(target:Endpoint) {
-// 		if (this.filter.size == 1) {
-// 			let first = [...this.filter][0];
-// 			if (first instanceof Set && first.size == 1) first = [...first][0];
-// 			// is same as target endpoint?
-// 			if (first instanceof Endpoint && target.equals(first)) return true;
-// 		}
-// 		return false;
-// 	}
-
-
-// 	// creates NF from any filter, always returns a DatexAnd value
-// 	private static toNormalForm(filter:filter, resolve_pointers = true) {
-// 		return this._toNormalForm(filter, resolve_pointers) || new AndSet();
-// 	}
-
-// 	// creates CNF from any filter, false if invalid
-// 	private static _toNormalForm(filter:filter, resolve_pointers = true):CNF|false {
-		
-// 		// return pointer value as is
-// 		if (!resolve_pointers) {
-// 			const pointer = Pointer.getByValue(<any>filter);
-// 			if (pointer) return <any> pointer; // return the pointer directly
-// 		}
-	
-
-// 		// collapse <Filter>
-// 		if (filter instanceof Filter) filter = filter.filter;
-
-// 		let cnf:CNF
-
-
-// 		// filter is a literal
-// 		if (filter instanceof Target) {
-// 			cnf = new AndSet();
-// 			cnf.add(filter)
-// 			return cnf;
-// 		}
-		
-
-// 		// and
-// 		if (filter instanceof AndSet) {
-// 			let first = true;
-// 			for (let f of filter) {
-// 				// cnf ist first element of and set
-// 				if (first) {
-// 					let _cnf = Filter._toNormalForm(f);
-// 					if (_cnf==false) return false;
-// 					else cnf = _cnf;
-// 					first = false;
-// 					continue;
-// 				}
-
-// 				// concat other and elements
-// 				let cnf2 = Filter._toNormalForm(f);
-// 				if (cnf2==false) return false;
-// 				if (!Filter.concatAndCNFs(cnf,cnf2)) return false;
-// 			}
-// 			return cnf ?? new AndSet();
-// 		}
-
-// 		// or
-// 		if (filter instanceof Set) {
-// 			cnf = new AndSet();
-// 			let literals = [];
-// 			for (let f of filter) {
-// 				let lit = Filter._toNormalForm(f);
-// 				if (lit!==false) literals.push(lit);
-// 			}
-// 			// get all (valid) combinations
-// 			for (let c of Filter.cartesian(...literals)) {
-// 				cnf.add(c.size == 1 ? [...c][0] : c);
-// 			}
-
-// 			return cnf;
-// 		}
-
-// 		// not 
-// 		if (filter instanceof Not) {
-// 			cnf = new AndSet();
-
-// 			// collapse <Filter>
-// 			let not_value = filter.value;
-// 			if (not_value instanceof Filter) not_value = not_value.filter;
-
-// 			// not variable
-// 			if (not_value instanceof Target) {
-// 				cnf.add(<Not<Target>>filter);
-// 				return cnf;
-// 			}
-
-// 			// double not
-// 			if (not_value instanceof Not) return Filter._toNormalForm(not_value.value);
-
-// 			// not and
-// 			if (not_value instanceof AndSet) {
-// 				let ors = new Set<any>();
-// 				for (let f of not_value) ors.add(Not.get(f));
-// 				return Filter._toNormalForm(new AndSet([ors]))
-// 			}
-// 			// not or
-// 			if (not_value instanceof Set) {
-// 				let ors = new AndSet<any>();
-// 				for (let f of not_value) ors.add(Not.get(f));
-// 				return Filter._toNormalForm(ors)
-// 			}
-
-// 		}
-// 	}
-
-
-// 	serialize() {
-// 		return Runtime.serializeValue(Filter.toNormalForm(this));
-// 	}
-
-// 	// get copy (normalized)
-// 	clone(){
-// 		this.calculateNormalForm();
-// 		return new Filter(this.normal_filter);
-// 	}
-
-// 	// get set of filter endpoints
-// 	evaluate(): Set<Target> {
-// 		this.calculateNormalForm();
-// 		let all = new Set<Target>();
-// 		for (let ands of this.normal_filter) {
-// 			// check each and
-// 			if (ands instanceof Target) all.add(ands)
-// 			else if (ands instanceof Set) {
-// 				for (let and of ands) {
-// 					if (and instanceof Target) all.add(and);
-// 				}
-// 			}
-// 		}
-// 		return all;
-// 	}
-// }
-
-
-
-// /* negatet Datex filters / targets */
-// export class Not<T=filter> {
-// 	static negation_map = new WeakMap<any,any>()
-
-// 	value:T;
-
-// 	public static get(value:filter):filter {
-// 		if (value instanceof Not) return value.value // double not - return original filter
-// 		if (this.negation_map.has(value)) return this.negation_map.get(value);
-// 		else return new Not(value);
-// 	}
-
-// 	private constructor(value:T) {
-// 		this.value = value
-// 		Not.negation_map.set(value, this);
-// 	}
-// }
-
-
 export enum ElType {
 	PERSON, LABEL, INSTITUTION, BOT, FLAG
 }
@@ -463,16 +57,14 @@ export class Target implements ValueConsumer {
 		// else return this;
 	}
 	
-	public static getClassFromBinaryCode(binary_code?:BinaryCode): typeof Person | typeof Institution | typeof Bot | typeof IdEndpoint {
+	public static getClassFromBinaryCode(binary_code?:BinaryCode): typeof Person | typeof Institution | typeof IdEndpoint {
 		switch (binary_code) {
 			case BinaryCode.PERSON_ALIAS: return Person;
 			case BinaryCode.INSTITUTION_ALIAS: return Institution;
-			case BinaryCode.BOT:return Bot;
 			case BinaryCode.ENDPOINT: return IdEndpoint;
 
 			case BinaryCode.PERSON_ALIAS_WILDCARD: return Person;
 			case BinaryCode.INSTITUTION_ALIAS_WILDCARD: return Institution;
-			case BinaryCode.BOT_WILDCARD:return Bot;
 			case BinaryCode.ENDPOINT_WILDCARD: return IdEndpoint;
 		}
 	}
@@ -516,12 +108,6 @@ export class Target implements ValueConsumer {
 				classType = Person;
 			}
 
-			// bot (TODO remove)
-			else if (name.startsWith("*")) {
-				name = name.substring(1);
-				classType = Bot;
-			}
-
 			// split instance and subspaces
 			let split = name.split("/");
 			name = split[0];
@@ -554,6 +140,9 @@ export class Endpoint extends Target {
 	#base: Target // without subspaces or appspace
 	#main: Target // without instance
 
+	#properties = new Map<string,unknown>()
+	#default?: unknown
+
 	#n: string
 	n: string // show for debugging
 
@@ -567,6 +156,13 @@ export class Endpoint extends Target {
 	get binary() {return this.#binary}
 	get subspaces() {return this.#subspaces}
 	get appspace() {return this.#appspace}
+
+	get properties() {
+		return this.#properties;
+	}
+	get default() {
+		return this.#default;
+	}
 
 	protected static readonly DEFAULT_INSTANCE = new Uint8Array(8);
 
@@ -660,8 +256,31 @@ export class Endpoint extends Target {
 	}
 	// return string for JSON
 	toJSON() {
-	return 'dx::' + this.toString() 
+		return 'dx::' + this.toString() 
 	}
+
+	public async getProperty(key:string) {
+		try {
+			const res = await datex("#public.(?)", [key], this);
+			if (res!==undefined) return res;
+		} 
+		// probably network error, endpoint not reachable
+		catch {}
+		// fallback: Blockchain
+		return (await import("../network/blockchain_adapter.ts")).Blockchain.getEndpointProperty(this, key);
+	}
+
+	public async getDefault(){
+		try {
+			const res = await datex("#default", [], this);
+			if (res!==undefined) return res;
+		} 
+		// probably network error, endpoint not reachable
+		catch {}
+		// fallback: Blockchain
+		return (await import("../network/blockchain_adapter.ts")).Blockchain.getEndpointDefault(this);
+	}
+
 
 
 	protected _toString(with_instance=true): endpoint_name {
@@ -804,11 +423,6 @@ export class Person extends Endpoint {
 	static override prefix:target_prefix = "@"
 	static override type = BinaryCode.PERSON_ALIAS
 	static override get(name:string, subspaces?:string[], instance?:string, appspace?:Endpoint){return <Person>super.get(name, subspaces, instance, appspace, Person)}
-}
-export class Bot extends Endpoint {
-	static override prefix:target_prefix = "*"
-	static override type = BinaryCode.BOT
-	static override get(name:string, subspaces?:string[], instance?:string, appspace?:Endpoint){return  <Bot>super.get(name, subspaces, instance, appspace, Bot)}
 }
 export class Institution extends Endpoint {
 	static override prefix:target_prefix = "@+"
