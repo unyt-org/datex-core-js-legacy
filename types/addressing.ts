@@ -9,8 +9,6 @@ import { clause, Disjunction } from "./logic.ts";
 import { Runtime } from "../runtime/runtime.ts";
 import { logger } from "../utils/global_values.ts";
 
-const LABELED_POINTER = /^(\\)?(\$)([A-Za-z0-9À-ž_]{1,25})(\s*[:+-/*&|]?=(?![=>/]))?/ // #label
-
 
 type target_prefix_person = "@";
 type target_prefix_id = "@@";
@@ -57,7 +55,7 @@ export class Target implements ValueConsumer {
 		// else return this;
 	}
 	
-	public static getClassFromBinaryCode(binary_code?:BinaryCode): typeof Person | typeof Institution | typeof IdEndpoint {
+	public static getClassFromBinaryCode(binary_code?:BinaryCode): typeof Person | typeof Institution | typeof IdEndpoint | undefined {
 		switch (binary_code) {
 			case BinaryCode.PERSON_ALIAS: return Person;
 			case BinaryCode.INSTITUTION_ALIAS: return Institution;
@@ -85,10 +83,13 @@ export class Target implements ValueConsumer {
 	 * @param name: 'user' or '@user' or '@user/3'
 	 * @param instance: instance as extra parameter (optional)
 	*/
-	public static get<T extends endpoint_name>(name:T, subspaces?:string[], instance?:string|number, appspace?:Endpoint):endpoint_by_endpoint_name<T>|WildcardTarget
-	public static get<T extends typeof Endpoint=typeof Endpoint>(name:string|Uint8Array, subspaces?:string[], instance?:string|number|Uint8Array, appspace?:Endpoint, type?:BinaryCode|T):InstanceType<T>|WildcardTarget
-	public static get<T extends typeof Endpoint=typeof Endpoint>(name:string|Uint8Array, subspaces?:string[], instance?:string|number|Uint8Array, appspace?:Endpoint, filter_class_or_type?:BinaryCode|T):InstanceType<T>|WildcardTarget {
+	public static get<T extends endpoint_name>(name:T, instance?:string|number):endpoint_by_endpoint_name<T>|WildcardTarget
+	public static get<T extends typeof Endpoint=typeof Endpoint>(name:string|Uint8Array, instance?:string|number|Uint8Array, type?:BinaryCode|T):InstanceType<T>|WildcardTarget
+	public static get<T extends typeof Endpoint=typeof Endpoint>(name:string|Uint8Array, instance?:string|number|Uint8Array, filter_class_or_type?:BinaryCode|T):InstanceType<T>|WildcardTarget {
 		
+		// @ts-ignore
+		if (name?.includes(".")) throw "invalid target: includes '.'"
+
 		let classType = this.getClassFromBinaryCode(<BinaryCode>filter_class_or_type) ?? <any>filter_class_or_type;
 		// handle string
 		if (typeof name == "string") {
@@ -114,14 +115,13 @@ export class Target implements ValueConsumer {
 			if (split[1]) instance = split[1];
 			split = name.split(":");
 			name = split[0];
-			if (split[1]) subspaces = split.slice(1).filter(s=>s);
 
 		}
 
 		if (typeof classType != "function") throw new SyntaxError("Invalid Target: " + name);
 
 		// target or wildcard target?
-		const target = new classType(name, subspaces, instance, appspace);
+		const target = new classType(name, instance);
 		if (typeof filter_class_or_type == "number" && this.isWildcardBinaryCode(filter_class_or_type)) return WildcardTarget.getWildcardTarget(target);
 		else return <InstanceType<T>>target;
 	}
@@ -129,19 +129,18 @@ export class Target implements ValueConsumer {
 
 /** parent class for all filters (@user, ...) */
 export class Endpoint extends Target {
-	#name:string
-	#subspaces:string[] = []
-	#appspace:Endpoint
-	#binary:Uint8Array
-	#instance:string
-	#instance_binary:Uint8Array
-	#prefix: target_prefix
-	#type: BinaryCode
-	#base: Target // without subspaces or appspace
-	#main: Target // without instance
+	protected static readonly DEFAULT_INSTANCE = new Uint8Array(2);
 
-	#properties = new Map<string,unknown>()
-	#default?: unknown
+	#name:string
+	#binary:Uint8Array // 18 bytes
+	#instance?:string
+	#instance_binary:Uint8Array // 2 bytes
+	#main?: Target // without instance
+	#alias?: string
+	#certifier?: Endpoint
+
+	#properties = new Map<unknown,unknown>()
+	#entrypoint?: unknown
 
 	#n: string
 	n: string // show for debugging
@@ -149,105 +148,78 @@ export class Endpoint extends Target {
 	get name() {return this.#name}
 	get instance() {return this.#instance}
 	get instance_binary() {return this.#instance_binary}
-	get prefix() {return this.#prefix}
-	get type() {return this.#type}
+	get prefix() {return (<typeof Endpoint>this.constructor).prefix}
+	get type() {return (<typeof Endpoint>this.constructor).type}
 	get main() {return this.#main}
-	get base() {return this.#base}
 	get binary() {return this.#binary}
-	get subspaces() {return this.#subspaces}
-	get appspace() {return this.#appspace}
+	get alias() {return this.#alias}
+	get certifier() {return this.#certifier}
 
 	get properties() {
 		return this.#properties;
 	}
-	get default() {
-		return this.#default;
+	get entrypoint() {
+		return this.#entrypoint;
 	}
 
-	protected static readonly DEFAULT_INSTANCE = new Uint8Array(8);
 
-	// must declare, # does not work
-	declare private __id_endpoint: IdEndpoint; // id endpoint corresponding to the person, institution or bot
-
-	get id_endpoint () {
-		return this.__id_endpoint;
-	}
-
+	protected nameToBinary(name:string){return new TextEncoder().encode(name)}
+	protected nameFromBinary(name:Uint8Array){return new TextDecoder().decode(name)}
 
 	// important!! do not call constructor directly (constructor only public for typescript types to work properly)
-	constructor(name:string|Uint8Array, subspaces?:string[], instance?:string|number|Uint8Array, appspace?:Endpoint) {
+	constructor(name:string|Uint8Array, instance?:string|number|Uint8Array) {
 		super();
 
 		// Buffer to string
 		if (name instanceof Uint8Array) {
 			this.#binary = name;
-			name = buffer2hex(name);
+			this.#name = this.nameFromBinary(name);
 		}
-		else if (typeof name != "string") throw new ValueError("<Target> name must be a <text> or a <Buffer>");
+		else if (typeof name === "string") {
+			this.#name = name;
+			this.#binary = this.nameToBinary(name);
+		}
+		else {
+			throw new ValueError("<Target> name must be a <text> or a <Buffer>");
+		}
 		
 		if (!name) throw new ValueError("Cannot create an empty filter target");
 
 		// Instance buffer/string/int
 		if (instance instanceof Uint8Array) {
 			this.#instance_binary = instance;
-			instance = new TextDecoder().decode(instance).replaceAll("\u0000","");
+			this.#instance = buffer2hex(instance);
 		}
 		else if (typeof instance == "number") {
 			this.#instance_binary = new Uint8Array(new BigUint64Array([BigInt(instance??0)]).buffer);
-			instance = buffer2hex(this.#instance_binary);
+			this.#instance = buffer2hex(this.#instance_binary);
 		}
-		else if (instance == undefined) {
-			this.#instance_binary = Endpoint.DEFAULT_INSTANCE;
-		}
-		else if (typeof instance == "string") {
-			this.#instance_binary = new TextEncoder().encode(instance);
+		else if (typeof instance == "string" && instance) {
+			this.#instance_binary = hex2buffer(instance);
+			this.#instance = instance;
 		}
 		else {
-			console.log("inst",instance)
-			throw new ValueError("<Target> instance must be a <text>, <int> or a <Buffer>");
+			this.#instance_binary = Endpoint.DEFAULT_INSTANCE;
+			this.#instance = buffer2hex(this.#instance_binary);
 		}
 
-	
-		// add binary if IdEndpoint
-		if (typeof name == "string" && !this.#binary && (<typeof Endpoint>this.constructor).prefix == "@@") {
-			try {
-				this.#binary = hex2buffer(name);
-			}
-			catch (e) {
-				console.log(e)
-				throw new ValueError("Invalid binary id for <Target>");
-			}
-		}
-
-		if ((this.#binary?.byteLength??0 + this.#instance_binary?.byteLength??0) > 20) throw new ValueError("ID Endpoint size must be <=20 bytes")
-
-		if (subspaces?.length) {
-			this.#subspaces = subspaces;
-			this.#base = Target.get(name, null, null, null, <typeof Endpoint>this.constructor);
-		}
-		if (instance) {
-			this.#instance = instance;
-			this.#main = Target.get(name, subspaces, null, appspace, <typeof Endpoint>this.constructor)
-		}
-
-		this.#prefix = (<typeof Endpoint>this.constructor).prefix;
-		this.#type = (<typeof Endpoint>this.constructor).type;
-		this.#name = name;
-		this.#appspace = appspace;
+		if ((this.#binary?.byteLength??0) > 18) throw new ValueError("Endpoint id must be <=18 bytes")
+		if ((this.#instance_binary.byteLength??0) > 2) throw new ValueError("Endpoint instance must be <=2 bytes")
 
 		// get toString() value
 		this.#n = this.toString()
 		this.n = this.#n; // just for debugging/display purposes
-		
-		// check if name is valid
-		//if (!(this._toString().match(Regex._ANY_FILTER_TARGET) || (this.#prefix == "+" && this.#name == "+"))) throw new DatexValueError("Invalid filter target name: '"+this._toString()+"'");
 
 		// target already exists? return existing filtertarget
 		if (Target.targets.has(this.#n)) {
-			return Target.targets.get(this.#n)
+			return Target.targets.get(this.#n)!
 		}
 		// add to filter target list
 		else Target.targets.set(this.#n, this);
+	}
+
+	get [Symbol.toStringTag]() {
+		return this.#n;
 	}
 
 	// create string representation of filter (-> '@user')
@@ -259,60 +231,57 @@ export class Endpoint extends Target {
 		return 'dx::' + this.toString() 
 	}
 
-	public async getProperty(key:string) {
+	public async getProperty(key:unknown) {
 		try {
 			const res = await datex("#public.(?)", [key], this);
-			if (res!==undefined) return res;
+			if (res!==undefined) {
+				this.#properties.set(key, res)
+				return res;
+			}
 		} 
 		// probably network error, endpoint not reachable
 		catch {}
 		// fallback: Blockchain
-		return (await import("../network/blockchain_adapter.ts")).Blockchain.getEndpointProperty(this, key);
+		const res = (await import("../network/blockchain_adapter.ts")).Blockchain.getEndpointProperty(this, key);
+		this.#properties.set(key, res)
+		return res;
 	}
 
-	public async getDefault(){
+	public async getEntrypoint(){
 		try {
-			const res = await datex("#default", [], this);
-			if (res!==undefined) return res;
+			const res = await datex("#entrypoint", [], this);
+			if (res!==undefined) return this.#entrypoint = res;
 		} 
 		// probably network error, endpoint not reachable
 		catch {}
 		// fallback: Blockchain
-		return (await import("../network/blockchain_adapter.ts")).Blockchain.getEndpointDefault(this);
+		return this.#entrypoint = (await import("../network/blockchain_adapter.ts")).Blockchain.getEndpointDefault(this);
 	}
 
+	public async getAlias(){
+		// resolve alias from Blockchain
+		return this.#alias = <string | undefined> (await import("../network/blockchain_adapter.ts")).Blockchain.resolveAlias(this);
+	}
+
+	public async getCertifier(){
+		// resolve alias from Blockchain
+		return this.#certifier = <Endpoint | undefined> (await import("../network/blockchain_adapter.ts")).Blockchain.getEndpointCertifier(this);
+	}
 
 
 	protected _toString(with_instance=true): endpoint_name {
-		return `${this.prefix}${this.name}${this.subspaces.length ? "." + this.subspaces.join(".") : ""}${with_instance&&this.instance? "/"+this.instance : ""}${this.appspace ? this.appspace.toString() : ""}`
+		return `${this.prefix}${this.name}${with_instance&&(this.instance&&this.instance!="0000")? "/"+this.instance : ""}`
 	}
 
 	
 	/** returns a certain instance of an existing filter */
 	public getInstance(instance:string){
-		return Target.get(this.name, this.subspaces, instance, this.appspace, <any> this.constructor);
-	}
-
-	/** returns a certain subspace of an existing filter */
-	public getSubspace(subspace:string){
-		return Target.get(this.name, [...this.subspaces, subspace], this.instance, this.appspace, <any> this.constructor);
+		return Target.get(this.name, instance, <any> this.constructor);
 	}
 	
 	// returns if two endpoints point to the same endpoint (id or user/...)
 	public equals(other: Endpoint) {
-		return !! ((other == this) ||
-			 (
-				(other?.instance == this.instance) && // same instance and
-				(  // same id endpoint
-					(other?.id_endpoint == <IdEndpoint><any>this) ||
-					(this.id_endpoint && (this.id_endpoint == other || this.id_endpoint == other?.id_endpoint))
-				)
-			));
-	}
-
-	public setIdEndpoint(id_endpoint:IdEndpoint) {
-		if (this.__id_endpoint != undefined) throw new SecurityError("Id Endpoint for this Target is already set");
-		else this.__id_endpoint = id_endpoint;
+		return other === this;
 	}
 
 	declare private interface_channel_info:{[channel_name:string]:any}
@@ -393,6 +362,21 @@ export class Endpoint extends Target {
 		return IdEndpoint.get(Endpoint.createNewID())
 	}
 
+	// get prefix for pointer (with address type) (same as dxb representation of endpoint)
+	public getPointerPrefix(){
+		return new Uint8Array([
+			this.type,
+			...this.binary, 
+			...this.instance_binary
+		])
+	}
+
+	public getStaticPointerPrefix(){
+		return new Uint8Array([
+			Pointer.POINTER_TYPE.STATIC,
+			...this.binary
+		])
+	}
 
 }
 
@@ -403,7 +387,7 @@ export class WildcardTarget extends Target {
 	private static wildcard_targets = new WeakMap<Endpoint, WildcardTarget>()
 
 	public static getWildcardTarget(target: Endpoint){
-		if (this.wildcard_targets.has(target)) return this.wildcard_targets.get(target);
+		if (this.wildcard_targets.has(target)) return this.wildcard_targets.get(target)!;
 		else {
 			const wildcard_target = new WildcardTarget(target);
 			this.wildcard_targets.get(target);
@@ -422,38 +406,19 @@ export class WildcardTarget extends Target {
 export class Person extends Endpoint {
 	static override prefix:target_prefix = "@"
 	static override type = BinaryCode.PERSON_ALIAS
-	static override get(name:string, subspaces?:string[], instance?:string, appspace?:Endpoint){return <Person>super.get(name, subspaces, instance, appspace, Person)}
+	static override get(name:string, instance?:string){return <Person>super.get(name, instance, Person)}
 }
 export class Institution extends Endpoint {
 	static override prefix:target_prefix = "@+"
 	static override type = BinaryCode.INSTITUTION_ALIAS
-	static override get(name:string, subspaces?:string[], instance?:string, appspace?:Endpoint){return  <Institution>super.get(name, subspaces, instance, appspace, Institution)}
+	static override get(name:string, instance?:string){return <Institution>super.get(name, instance, Institution)}
 }
 export class IdEndpoint extends Endpoint {
 	static override prefix:target_prefix = "@@"
 	static override type = BinaryCode.ENDPOINT
-	static override get(name:string|Uint8Array, subspaces?:string[], instance?:string, appspace?:Endpoint){return  <IdEndpoint>super.get(name, subspaces, instance, appspace, IdEndpoint)}
-
-	constructor(name: string | Uint8Array, subspaces?:string[], instance?: string | number | Uint8Array, appspace?:Endpoint) {
-		super(name, subspaces, instance, appspace);
-		if (this.id_endpoint == undefined) this.setIdEndpoint(this); // is own id endpoint
-	}
-
-	// get prefix for pointer (with address type)
-	public getPointerPrefix(){
-		return new Uint8Array([
-			this.binary.byteLength == 16 ? Pointer.POINTER_TYPE.IPV6_ID : Pointer.POINTER_TYPE.DEFAULT,
-			...this.binary, 
-			...this.instance_binary
-		])
-	}
-
-	public getStaticPointerPrefix(){
-		return new Uint8Array([
-			Pointer.POINTER_TYPE.STATIC,
-			...this.binary
-		])
-	}
+	static override get(name:string|Uint8Array, instance?:string){return <IdEndpoint>super.get(name, instance, IdEndpoint)}
+	override nameToBinary(name:string){return hex2buffer(name)}
+	override nameFromBinary(name:Uint8Array){return buffer2hex(name)}
 }
 
 // default local endpoint

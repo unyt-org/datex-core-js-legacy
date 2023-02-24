@@ -156,7 +156,7 @@ export class Decompiler {
 				let app_index:number
 				if (target_list) app_index = uint8[current_index++];
 	
-				return Target.get(name, subspaces, instance, app_index ? target_list[app_index-1] : null, type);
+				return Target.get(name, instance, type);
 			}
 	
 			// loop through instructions
@@ -468,8 +468,8 @@ export class Decompiler {
 						current_scope.push({type:TOKEN_TYPE.VALUE, string: "#env"});
 						break;
 					}
-					case BinaryCode.VAR_DEFAULT: { 
-						current_scope.push({type:TOKEN_TYPE.VALUE, string: "#default"});
+					case BinaryCode.VAR_ENTRYPOINT: { 
+						current_scope.push({type:TOKEN_TYPE.VALUE, string: "#entrypoint"});
 						break;
 					}
 					// case BinaryCode.VAR_TIMESTAMP: { 

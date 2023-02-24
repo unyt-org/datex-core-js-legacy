@@ -201,7 +201,7 @@ export abstract class CommonInterface implements ComInterface {
     }
 
     public disconnect(){
-        this.logger.error("Disconnect interface: " + this.type)
+        this.logger.info("Disconnecting interface: " + this.type)
     }
 
     protected async onConnected(){

@@ -1,7 +1,7 @@
 // store and read endpoint config (name, keys, ...)
 
 import { client_type, cwdURL, Deno, logger } from "../utils/global_values.ts";
-import { Endpoint, IdEndpoint } from "../types/addressing.ts";
+import { Endpoint } from "../types/addressing.ts";
 import { Crypto } from "./crypto.ts";
 import { getLocalFileContent } from "../utils/utils.ts";
 import { Runtime } from "./runtime.ts";
@@ -15,8 +15,8 @@ class EndpointConfig {
 
 	/* CONFIG VALUES */
 	public endpoint?:Endpoint
-	public id_endpoint?:IdEndpoint
 	public keys?: Crypto.ExportedKeySet
+	public connect?:boolean
 	/*****************/
 
 	async load(path?:URL) {
@@ -58,14 +58,14 @@ class EndpointConfig {
 		if (serialized!=null) {
 			const data = await Runtime.parseDatexData(serialized);
 			this.endpoint = DatexObject.get(data, 'endpoint')
-			this.id_endpoint = DatexObject.get(data, 'id_endpoint')
 			this.keys = DatexObject.get(data, 'keys')
+			this.connect = DatexObject.get(data, 'connect')
 		}
 	}
    
 
 	save() {
-		const serialized = Runtime.valueToDatexString(new Tuple({endpoint:this.endpoint, id_endpoint:this.id_endpoint, keys:this.keys}));
+		const serialized = Runtime.valueToDatexString(new Tuple({endpoint:this.endpoint, connect:this.connect, keys:this.keys}));
 
 		if (client_type=="deno") {
 			try {
@@ -82,7 +82,7 @@ class EndpointConfig {
 
 	clear() {
 		this.endpoint = undefined;
-		this.id_endpoint = undefined;
+		this.connect = undefined;
 		this.keys = undefined;
 
 		if (client_type=="deno") {

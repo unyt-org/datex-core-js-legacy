@@ -81,7 +81,8 @@ export enum BinaryCode {
     VAR_THIS            = 0x4d,
     VAR_LOCATION        = 0x4e,
     VAR_ENV             = 0x4f,
-    VAR_DEFAULT         = 0x48,
+    VAR_ENTRYPOINT      = 0x48,
+    VAR_STD             = 0x49,
 
     // runtime commands 0x50 - 0x7f
 

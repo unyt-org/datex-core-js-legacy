@@ -29,12 +29,14 @@ export type TRACABLE_DATA = {
 	trace?: property_entry_index
 }
 
+
+
 export type ENDPOINT_REGISTRATION_DATA = TRACABLE_DATA & {
 	endpoint: Endpoint, 
 	keys: [ArrayBuffer, ArrayBuffer],
 } 
 export type ENDPOINT_PROPERTY_DATA = {
-	key: string,
+	key: unknown,
 	value: unknown,
 	readonly?: boolean,
 }
@@ -82,7 +84,7 @@ export type BCData<T extends BCEntryType> =
  * Blockchain interface
  */
 
-@endpoint('@unyt.helix1') export class Blockchain {
+@endpoint('@+unyt') export class Blockchain {
 
 	/**
 	 * Methods that must be implemented on an endpoint that has access to the blockchain:#
@@ -98,15 +100,15 @@ export type BCData<T extends BCEntryType> =
 	// get entry for endpoint registration
 	@property static getEndpointEntry(endpoint: Endpoint): Datex.Return<BCEntry<BCEntryType.ENDPOINT_REGISTRATION>> {}
 	// gets an endpoint property like @endpoint.name
-	@property static getEndpointProperty(endpoint: Endpoint, key: string): any {}
+	@property static getEndpointProperty(endpoint: Endpoint, key: unknown): any {}
 	// gets an endpoint default value
 	@property static getEndpointDefault(endpoint: Endpoint): any {}
 	// get latest entry for an endpoint property
-	@property static getEndpointPropertyEntry(endpoint: Endpoint, key: string): Datex.Return<BCEntry<BCEntryType.ENDPOINT_PROPERTY>> {}
+	@property static getEndpointPropertyEntry(endpoint: Endpoint, key: unknown): Datex.Return<BCEntry<BCEntryType.ENDPOINT_PROPERTY>> {}
 	// get a pointer value
 	@property static getPointer(id: number) : any {}
 	@property static getPointerEntry(id: number): Datex.Return<BCEntry<BCEntryType.POINTER>> {}
-	// traces backe the alias name of an endpoint or object (e.g. @@3456677564 -> @unyt.auth.handler1)
+	// traces backe the alias name of an endpoint or object (e.g. @@3456677564 -> get @unyt )
 	@property static resolveAlias(target: Endpoint|BCEntry<BCEntryType.POINTER|BCEntryType.ENDPOINT_REGISTRATION>): Datex.Return<string|undefined> {}
 
 	/**
@@ -183,7 +185,7 @@ export class BlockchainActions {
 	 * @param readonly set to true if the property should not be modified ever
 	 * @returns 
 	 */
-	public static async storeEndpointProperty(key: string, value: unknown, readonly = false) {
+	public static async storeEndpointProperty(key: unknown, value: unknown, readonly = false) {
 		const entry = instance(BCEntry<BCEntryType.ENDPOINT_PROPERTY>, {
 			type: BCEntryType.ENDPOINT_PROPERTY,
 			data: {
@@ -261,7 +263,7 @@ export class BlockchainActions {
 	 * Create a new sub endpoint for the current endpoint
 	 * @param name name of the endpoint property (@example.*name*)
 	 * @param sub_endpoint the actual endpoint to which the sub endpoint resolves
-	 * @param keys public keys for the sub endpoint (encrypt + verify signature) 
+	 * @param keys public keys for the sub endpoint (encrypt + verify signature)
 	 */
 	public static async registerSubEndpoint(name:string, sub_endpoint: Endpoint, keys: [ArrayBuffer, ArrayBuffer]) {
 		// store as property of current endpoint

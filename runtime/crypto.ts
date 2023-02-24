@@ -81,10 +81,10 @@ export class Crypto {
     }
 
     /** Encypt + Decrypt (RSA) */
-    static async encrypt(buffer:ArrayBuffer, endpoint:Endpoint): Promise<ArrayBuffer|null> {
+    static async encrypt(buffer:ArrayBuffer, endpoint:Endpoint): Promise<ArrayBuffer> {
         if (!this.available) throw new SecurityError("Cannot encrypt DATEX requests, missing private keys");
         const keys = await this.getKeysForEndpoint(endpoint);
-        if (!keys || keys[1]==null) return null;
+        if (!keys || keys[1]==null) throw new SecurityError("Cannot encrypt DATEX requests, could not get keys for endpoint");
         return await crypto.subtle.encrypt("RSA-OAEP", keys[1], buffer);
     }
     static async decrypt(data:ArrayBuffer): Promise<ArrayBuffer> {
@@ -181,7 +181,7 @@ export class Crypto {
         let keyPromise:Promise<[CryptoKey, CryptoKey]>;
         this.#waiting_key_requests.set(endpoint, keyPromise = new Promise(async (resolve, reject)=>{
 
-            let exported_keys:[ArrayBuffer, ArrayBuffer];
+            let exported_keys:[ArrayBuffer, ArrayBuffer]|void;
 
             // first check cache:
             if (exported_keys=await Storage.getItem("keys_"+endpoint)) {
@@ -189,8 +189,8 @@ export class Crypto {
             }
             if (!exported_keys) {
                 logger.debug("requesting keys for " + endpoint);
-                exported_keys = await NetworkUtils.get_keys(endpoint); // fetch keys from network; TODO blockchain                   
-
+                exported_keys = await (await import("../network/blockchain_adapter.ts")).Blockchain.getEndpointPublicKeys(endpoint);
+                if (!exported_keys) exported_keys =  await NetworkUtils.get_keys(endpoint);
                 if (exported_keys) await Storage.setItem("keys_"+endpoint, exported_keys);
                 else {
                     reject(new Error("could not get keys from network"));

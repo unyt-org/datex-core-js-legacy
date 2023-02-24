@@ -93,7 +93,6 @@ globalThis.datex = datex;
 type d = typeof datex;
 declare global {
     const datex: d;
-    const meta: Datex.datex_meta
 }
 
 export const 〱 = _datex;

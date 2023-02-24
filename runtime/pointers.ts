@@ -681,17 +681,21 @@ export class Pointer<T = any> extends Value<T> {
 
     public static POINTER_TYPE:
     {
-        DEFAULT:pointer_type,
+        ENDPOINT:pointer_type,
+        ENDPOINT_PERSONAL:pointer_type,
+        ENDPOINT_INSTITUTION:pointer_type,
         IPV6_ID:pointer_type,
         STATIC:pointer_type,
         BLOCKCHAIN_PTR:pointer_type,
         PUBLIC:pointer_type
     } = {
-        DEFAULT: 1,
-        IPV6_ID: 2,
-        STATIC:  3,
+        ENDPOINT: BinaryCode.ENDPOINT,
+        ENDPOINT_PERSONAL: BinaryCode.PERSON_ALIAS,
+        ENDPOINT_INSTITUTION: BinaryCode.INSTITUTION_ALIAS,
+        IPV6_ID: 4,
+        STATIC:  5,
         BLOCKCHAIN_PTR:  0xBC, // blockchain ptr $BC, ...
-        PUBLIC:  5, // static public address
+        PUBLIC:  6, // static public address
     }
 
     public static pointer_prefix = new Uint8Array(21); // gets overwritten in DatexRuntime when endpoint id exists
@@ -710,16 +714,16 @@ export class Pointer<T = any> extends Value<T> {
     }
     public static get is_local() {return this.#is_local}
 
-    /** 21 bytes address: 1 byte address type () 12/16 byte origin id - 8/4 byte origin instance - 4 bytes timestamp - 1 byte counter*/
+    /** 21 bytes address: 1 byte address type () 18/16 byte origin id - 2/4 byte origin instance - 4 bytes timestamp - 1 byte counter*/
     /**
      * Endpoint id types:
-     *  + Full Endpoint ID:   EEEE EEEE EEEE / IIII IIII
+     *  + Full Endpoint ID:   EEEE EEEE EEEE EEEE EE / II
      *  + IPv6 compatible ID: IIII IIII IIII IIII / PPPP 
      * Pointer id types:
      * Associaated with an endpoint id:
-     *  + Full Endpoint ID pointer: A EEEE EEEE EEEE IIII IIII TTTT C    (A = Address type, E = endpoint id, I = instance id, T = timestamp, C = counter )
+     *  + Full Endpoint ID pointer: A EEEE EEEE EEEE EEEE EEII TTTT C    (A = Address type, E = endpoint id, I = instance id, T = timestamp, C = counter )
      *  + IPv6 compatible Address:  A IIII IIII IIII IIII PPPP TTTT C    (I = IPv6 address, P = port) 
-     *  + Endpoint static pointer:  A EEEE EEEE EEEE UUUU U              (E = endpoint id, U = unique id (agreed among all instances))
+     *  + Endpoint static pointer:  A EEEE EEEE EEEE EEEE EEUU UUUU U    (E = endpoint id, U = unique id (agreed among all instances))
      * Global / public:
      *  + Blockchain address:       A BBBB BBBB BBBB                     (B = unique block address)
      *  + Global static pointer:    A UUUU UUUU UUUU                     (U = unique id, stored in blockchain / decentralized) 
@@ -731,7 +735,7 @@ export class Pointer<T = any> extends Value<T> {
         const id = new Uint8Array(this.MAX_POINTER_ID_SIZE);
         const id_view = new DataView(id.buffer)
         // add custom origin id
-        if (!forPointer.is_origin) id.set(forPointer.origin.id_endpoint.getPointerPrefix());
+        if (!forPointer.is_origin) id.set(forPointer.origin.getPointerPrefix());
         // add current endpoint origin id
         else id.set(this.pointer_prefix)
 
@@ -1189,8 +1193,8 @@ export class Pointer<T = any> extends Value<T> {
 
         // get origin based on pointer id if no origin provided
         // TODO different pointer address formats / types
-        if (!this.origin && id && !anonymous && this.#id_buffer && this.pointer_type == Pointer.POINTER_TYPE.DEFAULT) {
-            this.origin = <IdEndpoint> Target.get(this.#id_buffer.slice(1,13), null, this.#id_buffer.slice(13,21), null, BinaryCode.ENDPOINT);
+        if (!this.origin && id && !anonymous && this.#id_buffer && (this.pointer_type == Pointer.POINTER_TYPE.ENDPOINT || this.pointer_type == Pointer.POINTER_TYPE.ENDPOINT_PERSONAL || this.pointer_type == Pointer.POINTER_TYPE.ENDPOINT_INSTITUTION)) {
+            this.origin = <Endpoint>Target.get(this.#id_buffer.slice(1,19), this.#id_buffer.slice(19,21), this.pointer_type);
             //console.log("pointer origin based on id: " + this.toString() + " -> " + this.origin)
         }
         else if (!this.origin) this.origin = Runtime.endpoint; // default origin is local endpoint
@@ -1252,7 +1256,7 @@ export class Pointer<T = any> extends Value<T> {
 
     //readonly:boolean = false; // can the value ever be changed?
     sealed:boolean = false; // can the value be changed from the client side? (otherwise, it can only be changed via DATEX calls)
-    #scheduleder: UpdateScheduler = null  // has fixed update_interval
+    #scheduleder: UpdateScheduler|null = null  // has fixed update_interval
 
     #allowed_access: target_clause // who has access to this pointer?, undefined = all
 
@@ -1301,22 +1305,17 @@ export class Pointer<T = any> extends Value<T> {
      */
     public transferOwnership(new_owner:Endpoint|endpoint_name, recursive = false) {
         const endpoint = new_owner instanceof Endpoint ? new_owner : (<Person>Endpoint.get(new_owner));
-        if (!endpoint.id_endpoint) throw new PointerError("Cannot transfer ownership to endpoint with unknown id (TODO)");
-        else {
-            const id_endpoint = endpoint;
+        const old_id = this.idString();
+        this.origin = endpoint;
+        this.id = Pointer.getUniquePointerID(this);
+    
+        logger.info(`pointer transfer to origin ${this.origin}: ${old_id} -> ${this.idString()}`);
 
-            const old_id = this.idString();
-            this.origin = id_endpoint;
-            this.id = Pointer.getUniquePointerID(this);
-        
-            logger.info(`pointer transfer to origin ${this.origin}: ${old_id} -> ${this.idString()}`);
-
-            if (recursive && !this.type.is_primitive) {
-                for (const key of this.getKeys()) {
-                    const prop = this.getProperty(key);
-                    const pointer = Pointer.getByValue(prop);
-                    if (pointer) pointer.transferOwnership(new_owner, recursive);
-                }
+        if (recursive && !this.type.is_primitive) {
+            for (const key of this.getKeys()) {
+                const prop = this.getProperty(key);
+                const pointer = Pointer.getByValue(prop);
+                if (pointer) pointer.transferOwnership(new_owner, recursive);
             }
         }
     }
@@ -1491,7 +1490,7 @@ export class Pointer<T = any> extends Value<T> {
         //placeholder replacement
         if (Pointer.pointer_value_map.has(v)) {
             if (this.#loaded) {throw new PointerError("Cannot assign a new value to an already initialized pointer")}
-            let existing_pointer = Pointer.pointer_value_map.get(v);
+            const existing_pointer = Pointer.pointer_value_map.get(v)!;
             existing_pointer.unPlaceholder(this.id) // no longer placeholder, this pointer gets 'overriden' by existing_pointer
             return existing_pointer;
         }

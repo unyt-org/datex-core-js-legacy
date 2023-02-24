@@ -215,7 +215,7 @@ export class Runtime {
                 else (
                     val text = local_map.'en';
                     val language = lang;
-                    @example :: #default.translate (text, language);
+                    @example.translate (text, language);
                 )
             )
             ` // used for persistent DATEX storage
@@ -245,7 +245,7 @@ export class Runtime {
                         else (
                             val text = local_map.'en'.(key);
                             val language = lang;
-                            @example :: #default.translate (text, language);
+                            @example.translate (text, language);
                         )
                     )` : '' // used for persistent DATEX storage
             );
@@ -284,7 +284,7 @@ export class Runtime {
                     else (
                         val text = local_map.'en'.(key);
                         val language = lang;
-                        @example :: #default.translate (text, language);
+                        @example.translate (text, language);
                     )
                 )`) // used for persistent DATEX storage
                 this.#not_loaded_local_strings.get(local_map)!.delete(key); // is now loaded
@@ -298,7 +298,7 @@ export class Runtime {
     }
 
     private static getTranslatedLocalString(text_en:string, lang:string) {
-        return <Promise<string>> datex `@example :: #default.translate (${text_en},${lang})`
+        return <Promise<string>> datex `@example.translate (${text_en},${lang})`
     }
 
     // @ts-ignore
@@ -321,13 +321,10 @@ export class Runtime {
     }
 
     static set endpoint(endpoint: Endpoint){
-        if (!endpoint.id_endpoint) {
-            throw new RuntimeError("Endpoint has no associated Endpoint Id, cannot set local runtime endpoint");
-        }
         if (endpoint != LOCAL_ENDPOINT) logger.success("Changing local endpoint to " + endpoint);
         this.#endpoint = endpoint;
 
-        Pointer.pointer_prefix = this.endpoint.id_endpoint.getPointerPrefix();
+        Pointer.pointer_prefix = this.endpoint.getPointerPrefix();
         // has only local endpoint id (%0000) or global id?
         if (endpoint != LOCAL_ENDPOINT) Pointer.is_local = false;
         else Pointer.is_local = true;
@@ -342,7 +339,7 @@ export class Runtime {
 
     public static main_node:Endpoint; // TODO remove?
 
-    static endpoint_default:any = "no default set" // #default TODO
+    static endpoint_entrypoint:any
 
     private static utf8_decoder = new TextDecoder("utf-8");
     private static utf8_encoder = new TextEncoder();
@@ -415,7 +412,7 @@ export class Runtime {
 
 
     // default static scope: std
-    static STD_STATIC_SCOPE:StaticScope;
+    static STD_STATIC_SCOPE:Record<string,any>;
 
     private static STD_TYPES_ABOUT:Map<Type,Markdown>;
 
@@ -492,9 +489,9 @@ export class Runtime {
     }
 
     // get content of https://, file://, ...
-    public static async getURLContent<T=unknown>(url_string:string, raw?:boolean, cached?:boolean):Promise<T extends any ? T : [data:unknown, type?:string]>
-    public static async getURLContent<T=unknown>(url:URL, raw?:boolean, cached?:boolean):Promise<T extends any ? T : [data:unknown, type?:string]>
-    public static async getURLContent<T=unknown>(url_string:string|URL, raw=false, cached = false):Promise<T extends any ? T : [data:unknown, type?:string]> {
+    public static async getURLContent<RAW extends boolean, T=unknown>(url_string:string, raw?:RAW, cached?:boolean):Promise<RAW extends false ? T : [data:unknown, type?:string]>
+    public static async getURLContent<RAW extends boolean, T=unknown>(url:URL, raw?:RAW, cached?:boolean):Promise<RAW extends false ? T : [data:unknown, type?:string]>
+    public static async getURLContent<RAW extends boolean, T=unknown>(url_string:string|URL, raw:RAW=false, cached = false):Promise<RAW extends false ? T : [data:unknown, type?:string]> {
         const url = url_string instanceof URL ? url_string : new URL(url_string, baseURL);
         url_string = url.toString();
 
@@ -963,7 +960,7 @@ export class Runtime {
         }, "TYPE");
 
         // create std static scope
-        this.STD_STATIC_SCOPE = StaticScope.get("std");
+        this.STD_STATIC_SCOPE = {};
 
         // std.print
         const print = DatexFunction.createFromJSFunction((meta, ...params:any[])=>{
@@ -1017,13 +1014,13 @@ export class Runtime {
         });
 
 
-        this.STD_STATIC_SCOPE.setVariable('print',      static_pointer(print, f('@@000000000000000000000000'), 0xaa00, "$std_print"));
-        this.STD_STATIC_SCOPE.setVariable('printf',     static_pointer(printf, f('@@000000000000000000000000'), 0xaa01, "$std_printf"));
-        this.STD_STATIC_SCOPE.setVariable('printn',     static_pointer(printn, f('@@000000000000000000000000'), 0xaa02, "$std_printn"));
-        this.STD_STATIC_SCOPE.setVariable('read',       static_pointer(read, f('@@000000000000000000000000'), 0xaa03, "$std_read"));
-        this.STD_STATIC_SCOPE.setVariable('sleep',      static_pointer(sleep, f('@@000000000000000000000000'), 0xaa04, "$std_sleep"));
-        this.STD_STATIC_SCOPE.setVariable('logger',     static_pointer(dx_logger, f('@@000000000000000000000000'), 0xaa05, "$std_dx_logger"));
-        this.STD_STATIC_SCOPE.setVariable('localtext',  static_pointer(localtext, f('@@000000000000000000000000'), 0xaa06, "$std_localtext"));
+        this.STD_STATIC_SCOPE['print']      = static_pointer(print, f('@@000000000000000000000000'), 0xaa00, "$std_print");
+        this.STD_STATIC_SCOPE['printf']     = static_pointer(printf, f('@@000000000000000000000000'), 0xaa01, "$std_printf");
+        this.STD_STATIC_SCOPE['printn']     = static_pointer(printn, f('@@000000000000000000000000'), 0xaa02, "$std_printn");
+        this.STD_STATIC_SCOPE['read']       = static_pointer(read, f('@@000000000000000000000000'), 0xaa03, "$std_read");
+        this.STD_STATIC_SCOPE['sleep']      = static_pointer(sleep, f('@@000000000000000000000000'), 0xaa04, "$std_sleep");
+        this.STD_STATIC_SCOPE['logger']     = static_pointer(dx_logger, f('@@000000000000000000000000'), 0xaa05, "$std_dx_logger");
+        this.STD_STATIC_SCOPE['localtext']  = static_pointer(localtext, f('@@000000000000000000000000'), 0xaa06, "$std_localtext");
     
         // std.types 
         // try to get from cdn.unyt.org
@@ -1171,7 +1168,7 @@ export class Runtime {
         
                     let instance = Runtime.utf8_decoder.decode(header_uint8.subarray(i, i+=instance_length))  // get instance
     
-                    const target = <Endpoint> Target.get(name, subspaces, instance, null, type);
+                    const target = <Endpoint> Target.get(name, instance, type);
 
                     targets.add(target)
     
@@ -2501,7 +2498,7 @@ export class Runtime {
             let app_index:number
             if (target_list) app_index = SCOPE.buffer_views.uint8[SCOPE.current_index++];
 
-            return <InstanceType<T>> Target.get(name, subspaces, instance, app_index ? target_list[app_index-1] : null, type);
+            return <InstanceType<T>> Target.get(name, instance, type);
         },
         
         // removes trailing undefined/empty values from array (trim length)
@@ -4602,10 +4599,10 @@ export class Runtime {
                     if (!SCOPE.impersonation_permission && (!(el instanceof Endpoint) || !SCOPE.sender.equals(el)|| !SCOPE.header.signed)) {
                         throw new PermissionError("No permission to execute scopes on external endpoints", SCOPE)
                     }
-                    if (el instanceof Endpoint) INNER_SCOPE.active_value = await el.getDefault();
+                    if (el instanceof Endpoint) INNER_SCOPE.active_value = await el.getEntrypoint();
                     else {
-                        logger.warn("TODO: default from non-endpoint target?")
-                        INNER_SCOPE.active_value = await datex("#default", [], el);
+                        logger.warn("TODO: entrypoint from non-endpoint target?")
+                        INNER_SCOPE.active_value = await datex("#entrypoint", [], el);
                     }
                 }
                 else if (el instanceof URL) {
@@ -5074,8 +5071,8 @@ export class Runtime {
                 //     await this.runtime_actions.insertToScope(SCOPE, SCOPE.meta.signed);
                 //     break;
                 // }
-                case BinaryCode.VAR_DEFAULT: { 
-                    await this.runtime_actions.insertToScope(SCOPE, Runtime.endpoint_default);
+                case BinaryCode.VAR_ENTRYPOINT: { 
+                    await this.runtime_actions.insertToScope(SCOPE, Runtime.endpoint_entrypoint);
                     break;
                 }
                 case BinaryCode.VAR_SENDER: { 
@@ -5109,6 +5106,10 @@ export class Runtime {
                 }
                 case BinaryCode.VAR_PUBLIC: {
                     await this.runtime_actions.insertToScope(SCOPE, StaticScope.scopes);
+                    break;
+                }
+                case BinaryCode.VAR_STD: {
+                    await this.runtime_actions.insertToScope(SCOPE, Runtime.STD_STATIC_SCOPE);
                     break;
                 }
                 case BinaryCode.VAR_VOID: {
