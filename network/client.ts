@@ -13,37 +13,35 @@ import { Logger } from "../utils/logger.ts";
 import { Runtime } from "../runtime/runtime.ts";
 
 import { Compiler } from "../compiler/compiler.ts";
-import { Endpoint, Target, target_clause } from "../types/addressing.ts";
+import { Endpoint, Target } from "../types/addressing.ts";
 import { NetworkError } from "../types/errors.ts";
-import { pointer } from "../datex_short.ts";
-import type { datex_meta, dxb_header } from "../utils/global_types.ts";
-import { Datex, scope, meta, expose, remote} from "../datex.ts";
-import { Disjunction, Logical } from "../datex_all.ts";
+import type { dxb_header } from "../utils/global_types.ts";
 import { client_type } from "../utils/global_values.ts";
+import { Disjunction } from "../types/logic.ts";
+import { Pointer } from "../runtime/pointers.ts";
 
-let WebSocket = globalThis.WebSocket;
-let WebSocketStream = globalThis.WebSocketStream;
 
 
 // signaling for WebRTC connections (used by WebRTCClientInterface)
-@scope("webrtc") class _WebRTCSignaling {
+// TODO import withouts datex.ts"
+// @scope("webrtc") class _WebRTCSignaling {
 
-    @meta(1)
-    @remote @expose static offer(data:any, meta?:datex_meta) {
-        InterfaceManager.connect("webrtc", meta.sender, [data]);
-    }    
+//     @meta(1)
+//     @remote @expose static offer(data:any, meta?:datex_meta) {
+//         InterfaceManager.connect("webrtc", meta.sender, [data]);
+//     }
 
-    @meta(1)
-    @remote @expose static accept(data:any, meta?:datex_meta) {
-        WebRTCClientInterface.waiting_interfaces_by_endpoint.get(meta.sender)?.setRemoteDescription(data);
-    }  
+//     @meta(1)
+//     @remote @expose static accept(data:any, meta?:datex_meta) {
+//         WebRTCClientInterface.waiting_interfaces_by_endpoint.get(meta.sender)?.setRemoteDescription(data);
+//     }  
 
-    @meta(1)
-    @remote @expose static candidate(data:any, meta?:datex_meta) {
-        WebRTCClientInterface.waiting_interfaces_by_endpoint.get(meta.sender)?.addICECandidate(data);
-    }  
-}
-const WebRTCSignaling = Datex.datex_advanced(_WebRTCSignaling);
+//     @meta(1)
+//     @remote @expose static candidate(data:any, meta?:datex_meta) {
+//         WebRTCClientInterface.waiting_interfaces_by_endpoint.get(meta.sender)?.addICECandidate(data);
+//     }  
+// }
+// const WebRTCSignaling = datex_advanced(_WebRTCSignaling);
 
 
 
@@ -586,11 +584,21 @@ class WebsocketClientInterface extends CommonInterface {
     override out = true
     override type = "websocket"
 
+    private protocol:'ws'|'wss' = 'wss'; // use wss or ws
+    private is_first_try = true
+
+
     closed = false;
 
     override async init() {
 
-        this.host = this.endpoint.getInterfaceChannelInfo("websocket");
+        const host = this.endpoint.getInterfaceChannelInfo("websocket");
+        if (host instanceof URL) {
+            if (host.protocol == "http:") this.protocol = "ws"; // assume ws as websocket protocol, if host is http
+            this.host = host.hostname; // convert https://xy -> xy
+        }
+        else this.host = host;
+
         if (!this.host) return false;
 
         return super.init();
@@ -609,29 +617,36 @@ class WebsocketClientInterface extends CommonInterface {
         this.connecting = true;
 
         try {
-            this.socket = new WebSocket("wss://"+this.host);    
+            this.socket = new WebSocket(`${this.protocol}://${this.host}`);    
             this.socket.binaryType = 'arraybuffer';
 
             return new Promise(resolve=>{
                 // Connection opened
-                this.socket.addEventListener('open', () => {
+                this.socket!.addEventListener('open', () => {
                     this.connecting = false;
+                    if (this.protocol == 'ws') this.logger.warn(`unsecure websocket connection to ${this.host}`)
                     resolve(true);
                 });
+
 
                 // this.socket.addEventListener('close', (event) => {
                 //     this.connecting = false;
                 //     this.logger.error("connection closed");
                 //     this.reconnect();
                 // });
-                this.socket.addEventListener('error', async (event) => {
+                this.socket!.addEventListener('error', async (event) => {
                     this.connecting = false;
-                    this.logger.error("connection error:" +"wss://"+this.host);
+                    if (this.is_first_try && !window.location?.href.startsWith("https://")) this.protocol = 'ws'
+                    else {
+                        this.protocol = 'wss'
+                        this.logger.error("connection error:" + `${this.protocol}://${this.host}`);
+                    }
 
+                    this.is_first_try = false;
                     resolve(await this.reconnect());
                 });
 
-                this.socket.addEventListener('message', (event:any) => {
+                this.socket!.addEventListener('message', (event:any) => {
                     InterfaceManager.handleReceiveBlock(event.data, this.endpoint);
                 });
 
@@ -717,7 +732,7 @@ export class InterfaceManager {
             for (let p of this.receive_listeners) p(scope);
         });
 
-        if (!this.active_interfaces) this.active_interfaces = pointer(new Set<ComInterface>());
+        if (!this.active_interfaces) this.active_interfaces = Pointer.createOrGet(new Set<ComInterface>()).js_value;
     }
 
 
@@ -761,7 +776,7 @@ export class InterfaceManager {
 
     // create a new connection with a interface type (e.g. websocket, relayed...)
     static async connect(channel_type:string, endpoint?:Endpoint, init_args?:any[], set_as_default_interface = true):Promise<boolean> {
-        this.logger.info("Connecting via interface: " + channel_type);
+        this.logger.info("connecting via interface: " + channel_type);
 
         await this.init();
 
@@ -784,13 +799,13 @@ export class InterfaceManager {
 
     // add an existing interface to the interface list
     static addInterface(i: ComInterface) {
-        if (!this.active_interfaces) this.active_interfaces = pointer(new Set<ComInterface>());
+        if (!this.active_interfaces) this.active_interfaces = Pointer.createOrGet(new Set<ComInterface>()).js_value;
         for (let l of this.new_interface_listeners) l(i)
         this.active_interfaces.add(i)
     }
     // remove an interface from the list
     static removeInterface(i: ComInterface) {
-        if (!this.active_interfaces) this.active_interfaces = pointer(new Set<ComInterface>());
+        if (!this.active_interfaces) this.active_interfaces = Pointer.createOrGet(new Set<ComInterface>()).js_value;
         this.active_interfaces.delete(i)
     }
 

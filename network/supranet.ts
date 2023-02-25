@@ -13,16 +13,15 @@ import InterfaceManager, { CommonInterface } from "./client.ts"
 import { Compiler } from "../compiler/compiler.ts";
 import { Runtime } from "../runtime/runtime.ts";
 import { Crypto } from "../runtime/crypto.ts";
-import { f } from "../datex_short.ts";
 
-import { Endpoint, filter_target_name_id, IdEndpoint, Target } from "../types/addressing.ts";
+import {client_type} from "../utils/global_values.ts";
+import { Endpoint, filter_target_name_id, Target } from "../types/addressing.ts";
 
 
 import { Logger } from "../utils/logger.ts";
 import { ProtocolDataType } from "../compiler/protocol_types.ts";
 import { buffer2hex } from "../utils/utils.ts";
 import { endpoint_config } from "../runtime/endpoint_config.ts";
-import { client_type } from "../datex_all.ts";
 const logger = new Logger("DATEX Supranet");
 
 // entry point to connect to the datex network
@@ -35,9 +34,6 @@ export class Supranet {
     static #connected = false;
 
     static get connected(){return this.#connected}
-
-    // list of available nodes with public keys
-    private static node_channels_by_type = new Map<string, [Endpoint, any][]>();
 
     // add listeners for interface changes
     private static listeners_set = false;
@@ -79,8 +75,8 @@ export class Supranet {
         // load runtime, own endpoint, nodes
         endpoint = await this.init(endpoint, local_cache, sign_keys, enc_keys)
 
-              // find node for available channel
-        const [node, channel_type] = this.getNode(via_node)
+        // find node for available channel
+        const [node, channel_type] = await this.getNode(via_node)
 
         await InterfaceManager.disconnect() // first disconnect completely
         const connected = await InterfaceManager.connect(channel_type, node)
@@ -96,14 +92,14 @@ export class Supranet {
     }
 
 
-    static getNode(use_node?:Endpoint) {
+    static async getNode(use_node?:Endpoint) {
         // channel types?
         // @ts-ignore
         if (globalThis.WebSocketStream || client_type!="browser") this.available_channel_types.push("websocketstream")
         this.available_channel_types.push("websocket");
 
         // find node for available channel
-        const [node, channel_type] = <[Endpoint,string]> this.getNodeWithChannelType(this.available_channel_types, use_node);
+        const [node, channel_type] = endpoint_config.getNodeWithChannelType(this.available_channel_types, use_node);
         if (!node) throw ("Cannot find a node that support any channel type of: " + this.available_channel_types + (use_node ? " via " + use_node : ''));
         if (!channel_type) throw("No channel type for node: " + node);
         return <[Endpoint,string]> [node, channel_type]
@@ -163,8 +159,6 @@ export class Supranet {
      
         // setup interface manager
         await InterfaceManager.init()
-        // load nodes
-        await this.loadNodesList();
 
         this.setListeners();
 
@@ -174,12 +168,12 @@ export class Supranet {
 
     // load stuff ...
 
-    // 4 bytes timestamp + 8 bytes random number
+    // 8 bytes timestamp + 8 bytes random number
     private static createEndpointId():filter_target_name_id{
-        const id = new DataView(new ArrayBuffer(12));
-        const timestamp = Math.round((new Date().getTime() - Compiler.BIG_BANG_TIME)/1000);
-        id.setUint32(0,timestamp, true); // timestamp
-        id.setBigUint64(4, BigInt(Math.floor(Math.random() * (2**64))), true); // random number
+        const id = new DataView(new ArrayBuffer(16));
+        const timestamp = Math.round((new Date().getTime() - Compiler.BIG_BANG_TIME));
+        id.setBigUint64(0, BigInt(timestamp), true); // timestamp
+        id.setBigUint64(8, BigInt(Math.floor(Math.random() * (2**64))), true); // random number
         return `@@${buffer2hex(new Uint8Array(id.buffer))}`;
     }
 
@@ -207,7 +201,7 @@ export class Supranet {
     }
 
     private static createAndSaveNewEndpoint(){
-        const endpoint = f(this.createEndpointId());
+        const endpoint = <Endpoint> Endpoint.get(this.createEndpointId());
         endpoint_config.endpoint = endpoint;
         endpoint_config.save();
         return endpoint;
@@ -224,52 +218,6 @@ export class Supranet {
 
         return keys;
     }
-
-    // handle nodes
-    private static nodes_loaded = false;
-    private static async loadNodesList(){
-        if (this.nodes_loaded) return;
-        this.nodes_loaded = true;
-        let nodes: Map<Endpoint, any>
-
-        // try to get from cdn.unyt.org
-        try {
-            nodes = await Runtime.getURLContent('https://dev.cdn.unyt.org/unyt_core/dx_data/nodes.dx');
-        }
-        // otherwise try to get local file (only backend)
-        catch {
-            nodes = await Runtime.getURLContent(new URL('../dx_data/nodes.dx', import.meta.url));
-        }
-
-        for (const [node, {channels, keys:[verify_key, enc_key]}] of nodes.entries()) {
-            // save keys
-            Crypto.bindKeys(node, verify_key, enc_key);
-
-            // save interface info in node
-            node.setInterfaceChannels(channels);
-            // save in list
-            for (const [channel_name, channel_data] of Object.entries(channels||{})) {
-                if (!this.node_channels_by_type.has(channel_name)) this.node_channels_by_type.set(channel_name, []);
-                this.node_channels_by_type.get(channel_name)!.push([node, channel_data]);
-            }
-        }
-    }
-    // select a node that provides a channel of the requested type
-    private static getNodeWithChannelType(types:string[], force_use_node?:Endpoint):[Endpoint|null, string|null] {
-        for (const type of types) {
-            const list = this.node_channels_by_type.get(type);
-            if (list?.length) {
-                if (!force_use_node) return [list[0][0], type]; // select first node
-                else { // check if the force_use_node is in the list
-                    for (const [node, _data] of list) {
-                        if (node == force_use_node) return [node, type];
-                    }
-                }
-            }
-        }
-        return [null, null];       
-    }
-
 
     // important network methods
 

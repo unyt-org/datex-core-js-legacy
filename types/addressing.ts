@@ -1,12 +1,12 @@
 import { BinaryCode } from "../compiler/binary_codes.ts";
 import { Pointer } from "../runtime/pointers.ts";
 import { ValueConsumer } from "./abstract_types.ts";
-import { SecurityError, ValueError } from "./errors.ts";
+import { ValueError } from "./errors.ts";
 import { Compiler } from "../compiler/compiler.ts";
 import type { datex_scope } from "../utils/global_types.ts";
 import { buffer2hex, hex2buffer } from "../utils/utils.ts";
 import { clause, Disjunction } from "./logic.ts";
-import { Runtime } from "../runtime/runtime.ts";
+import { Runtime, StaticScope } from "../runtime/runtime.ts";
 import { logger } from "../utils/global_values.ts";
 
 
@@ -132,7 +132,7 @@ export class Endpoint extends Target {
 	protected static readonly DEFAULT_INSTANCE = new Uint8Array(2);
 
 	#name:string
-	#binary:Uint8Array // 18 bytes
+	#binary = new Uint8Array(18) // 18 bytes
 	#instance?:string
 	#instance_binary:Uint8Array // 2 bytes
 	#main?: Target // without instance
@@ -164,7 +164,7 @@ export class Endpoint extends Target {
 
 
 	protected nameToBinary(name:string){return new TextEncoder().encode(name)}
-	protected nameFromBinary(name:Uint8Array){return new TextDecoder().decode(name)}
+	protected nameFromBinary(name:Uint8Array){return new TextDecoder().decode(name).split("\u0000")?.[0]}
 
 	// important!! do not call constructor directly (constructor only public for typescript types to work properly)
 	constructor(name:string|Uint8Array, instance?:string|number|Uint8Array) {
@@ -172,18 +172,19 @@ export class Endpoint extends Target {
 
 		// Buffer to string
 		if (name instanceof Uint8Array) {
-			this.#binary = name;
-			this.#name = this.nameFromBinary(name);
+			if (name.byteLength > 18) throw new ValueError("Endpoint id/name must be <=18 bytes")
+			this.#binary.set(name);
 		}
 		else if (typeof name === "string") {
-			this.#name = name;
-			this.#binary = this.nameToBinary(name);
+			const name_bin = this.nameToBinary(name);
+			if (name_bin.byteLength > 18) throw new ValueError("Endpoint id/name must be <=18 bytes")
+			this.#binary.set(name_bin);
 		}
 		else {
 			throw new ValueError("<Target> name must be a <text> or a <Buffer>");
 		}
 		
-		if (!name) throw new ValueError("Cannot create an empty filter target");
+		this.#name = this.nameFromBinary(this.#binary);
 
 		// Instance buffer/string/int
 		if (instance instanceof Uint8Array) {
@@ -203,13 +204,12 @@ export class Endpoint extends Target {
 			this.#instance = buffer2hex(this.#instance_binary);
 		}
 
-		if ((this.#binary?.byteLength??0) > 18) throw new ValueError("Endpoint id must be <=18 bytes")
 		if ((this.#instance_binary.byteLength??0) > 2) throw new ValueError("Endpoint instance must be <=2 bytes")
 
 		// get toString() value
 		this.#n = this.toString()
 		this.n = this.#n; // just for debugging/display purposes
-
+		
 		// target already exists? return existing filtertarget
 		if (Target.targets.has(this.#n)) {
 			return Target.targets.get(this.#n)!
@@ -245,6 +245,12 @@ export class Endpoint extends Target {
 		const res = (await import("../network/blockchain_adapter.ts")).Blockchain.getEndpointProperty(this, key);
 		this.#properties.set(key, res)
 		return res;
+	}
+
+	public setProperty(key:unknown, value:unknown) {
+		if (this !== Runtime.endpoint) throw new ValueError("cannot set endpoint property of remote endpoint")
+		StaticScope.scopes.set(key, <any>value)
+		// this.#properties.set(key, value);
 	}
 
 	public async getEntrypoint(){
@@ -351,11 +357,11 @@ export class Endpoint extends Target {
 
 
 	public static createNewID():filter_target_name_id{
-		const id = new DataView(new ArrayBuffer(12));
-		const timestamp = Math.round((new Date().getTime() - Compiler.BIG_BANG_TIME)/1000);
-		id.setUint32(0,timestamp, true); // timestamp
-		id.setBigUint64(4, BigInt(Math.floor(Math.random() * (2**64))), true); // random number
-		return `@@${buffer2hex(new Uint8Array(id.buffer))}`;
+		const id = new DataView(new ArrayBuffer(16));
+        const timestamp = Math.round((new Date().getTime() - Compiler.BIG_BANG_TIME));
+        id.setBigUint64(0, BigInt(timestamp), true); // timestamp
+        id.setBigUint64(8, BigInt(Math.floor(Math.random() * (2**64))), true); // random number
+        return `@@${buffer2hex(new Uint8Array(id.buffer))}`;
 	}
 
 	public static getNewEndpoint():IdEndpoint{
@@ -417,10 +423,19 @@ export class IdEndpoint extends Endpoint {
 	static override prefix:target_prefix = "@@"
 	static override type = BinaryCode.ENDPOINT
 	static override get(name:string|Uint8Array, instance?:string){return <IdEndpoint>super.get(name, instance, IdEndpoint)}
-	override nameToBinary(name:string){return hex2buffer(name)}
-	override nameFromBinary(name:Uint8Array){return buffer2hex(name)}
+	override nameToBinary(name:string){
+		if (name == "local") return new Uint8Array(18);
+		else if (name == "any") return Uint8Array.from(Array(18).fill(0xff));
+		return hex2buffer(name)
+	}
+	override nameFromBinary(name:Uint8Array){
+		const string = buffer2hex(name).replace(/(00)*$/, ''); 
+		if (string == "") return "local"
+		else if (string == "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF") return "any"
+		else return string;
+	}
 }
 
 // default local endpoint
-export const LOCAL_ENDPOINT = IdEndpoint.get("@@000000000000000000000000");
-export const BROADCAST      = IdEndpoint.get("@@FFFFFFFFFFFFFFFFFFFFFFFF");
+export const LOCAL_ENDPOINT = IdEndpoint.get("@@local");
+export const BROADCAST      = IdEndpoint.get("@@any");

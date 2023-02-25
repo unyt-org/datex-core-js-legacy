@@ -8,7 +8,7 @@
  */
 
 
-import { base64ToArrayBuffer, BinaryCode, Endpoint, Logger, Pointer, Runtime, Target, Type, Quantity, Disjunction, Connective } from "../datex_all.ts";
+import { base64ToArrayBuffer, BinaryCode, Endpoint, Logger, Pointer, Runtime, Target, Type, Quantity} from "../datex_all.ts";
 import { Time } from "../types/time.ts";
 
 

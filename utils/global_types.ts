@@ -6,7 +6,7 @@ import { ProtocolDataType } from "../compiler/protocol_types.ts"
 import { Endpoint, Target, target_clause } from "../types/addressing.ts"
 import { compiler_options, PrecompiledDXB, DatexResponse } from "../compiler/compiler.ts"
 import { cnf, Connective, Disjunction } from "../types/logic.ts"
-import { NOT_EXISTING } from "../datex_all.ts"
+import { NOT_EXISTING } from "../runtime/constants.ts";
 
 
 // return type for remote function calls

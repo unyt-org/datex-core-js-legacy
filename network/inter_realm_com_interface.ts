@@ -2,7 +2,6 @@ import { LOCAL_ENDPOINT, Endpoint } from "../types/addressing.ts";
 import { Runtime } from "../runtime/runtime.ts";
 import { Logger } from "../utils/logger.ts";
 import InterfaceManager, { CommonInterface } from "./client.ts";
-import { f } from "../datex_short.ts";
 
 
 const logger = new Logger("Inter Realm Com")
@@ -83,12 +82,6 @@ export class InterRealmCommunicationInterface extends CommonInterface {
     static addDataChannelListeners(){
         // DATEX block received on main channel
         if (this.rxChannel1) this.rxChannel1.addEventListener("message", event => {
-            //logger.info("inter-process data", event);
-            InterfaceManager.handleReceiveBlock(event.data);
-        })
-
-        // DATEX block received on second channel (id endpoint)
-        if (this.rxChannel2) this.rxChannel1.addEventListener("message", event => {
             //logger.info("inter-process data", event);
             InterfaceManager.handleReceiveBlock(event.data);
         })

@@ -36,7 +36,7 @@ export * from "./runtime/js_interface.ts";
 export * from "./runtime/performance_measure.ts";
 export * from "./runtime/pointers.ts";
 export * from "./runtime/storage.ts";
-export * from "./runtime/decompiler.ts";
+export * from "./runtime/cli.ts";
 
 
 // types

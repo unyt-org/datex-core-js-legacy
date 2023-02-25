@@ -16,18 +16,14 @@ export function compile(datex_script: string): string;
 * @returns {string}
 */
 export function decompile(dxb: Uint8Array, formatted: boolean, colorized: boolean, resolve_slots: boolean): string;
-/**
-*/
-export function cli(): void;
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
 export interface InitOutput {
   readonly memory: WebAssembly.Memory;
-  readonly init_runtime: () => void;
   readonly compile: (a: number, b: number, c: number) => void;
   readonly decompile: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
-  readonly cli: () => void;
+  readonly init_runtime: () => void;
   readonly __wbindgen_add_to_stack_pointer: (a: number) => number;
   readonly __wbindgen_malloc: (a: number) => number;
   readonly __wbindgen_realloc: (a: number, b: number, c: number) => number;

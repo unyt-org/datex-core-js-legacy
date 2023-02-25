@@ -36,7 +36,6 @@ import { baseURL, client_type, TypedArray } from "../utils/global_values.ts";
 import { type datex_scope } from "../utils/global_types.ts";
 import { unit_symbol } from "./unit_codes.ts";
 import { Time } from "../types/time.ts";
-import { f } from "../datex_short.ts";
 
 // WASM
 import wasm_init, {init_runtime as wasm_init_runtime, compile as wasm_compile, decompile as wasm_decompile} from "../wasm/adapter/pkg/datex_wasm.js";
@@ -3764,7 +3763,8 @@ export class Compiler {
             SCOPE.datex = SCOPE.datex.substring(m[0].length);  // pop datex
             // const subspace_string = m[2].substring(1);
             // const subspaces = subspace_string ? subspace_string.split(":") : null;
-            Compiler.builder.addIdEndpointByIdAndChannel( hex2buffer(m[1].replace(/[_-]/g, "")), m[3], SCOPE);
+            const endpoint = IdEndpoint.get('@@'+m[1])
+            Compiler.builder.addIdEndpointByIdAndChannel(endpoint.binary, m[3], SCOPE);
             isEffectiveValue = true;
         }
 

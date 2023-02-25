@@ -672,7 +672,7 @@ export class Pointer<T = any> extends Value<T> {
      * returns a unique pointer hash: HASH + UNIQUE TIME
      */
     public static readonly MAX_POINTER_ID_SIZE = 26;
-    public static readonly STATIC_POINTER_SIZE = 18;
+    public static readonly STATIC_POINTER_SIZE = 26;
 
     private static last_c = 0;
     private static last_t = 0;
@@ -918,6 +918,7 @@ export class Pointer<T = any> extends Value<T> {
                         pointer.delete();
                         if (e instanceof NetworkError) {
                             displayFatalError('pointer-unresolvable');
+                            console.log(pointer)
                             throw new PointerError("Could not get the pointer from the current, the owner, or the requesting endpoint: $"+id_string)
                         }
                         else throw e;

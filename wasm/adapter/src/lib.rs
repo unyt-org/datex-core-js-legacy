@@ -5,7 +5,7 @@ use std::io;
 use std::io::Write;
 use std::io::Read;
 
-use datex_cli_core::CLI;
+// use datex_cli_core::CLI;
 use datex_core::compiler;
 use datex_core::datex_values::Value;
 use datex_core::datex_values::ValueResult;
@@ -56,8 +56,8 @@ extern "C" {
 // export compiler/runtime functions to JavaScript
 #[wasm_bindgen]
 pub fn init_runtime() {
-    let logger = Logger::new_for_development(&LOGGER, "DATEX");
-    logger.success("initialized!");
+    // let logger = Logger::new_for_development(&LOGGER, "DATEX");
+    // logger.success("initialized");
     return 
 }
 
@@ -104,9 +104,9 @@ impl Read for IORead {
     }
 }
 
-#[wasm_bindgen]
-pub fn cli() {
-    let cli = CLI::new(Runtime::new_with_crypto_and_logger(&RustCrypto{}, LoggerContext {
-        log_redirect: Some(|s:&str| -> () {console::log_1(&s.into())})
-    }), IOWrite{}, IORead{});
-}
+// #[wasm_bindgen]
+// pub fn cli() {
+//     let cli = CLI::new(Runtime::new_with_crypto_and_logger(&RustCrypto{}, LoggerContext {
+//         log_redirect: Some(|s:&str| -> () {console::log_1(&s.into())})
+//     }), IOWrite{}, IORead{});
+// }

@@ -28,7 +28,6 @@ Symbol.prototype.toJSON = function(){return globalThis.String(this)}
 
 /***** imports */
 import { Compiler, compiler_options, PrecompiledDXB, ProtocolDataTypesMap, DatexResponse} from "../compiler/compiler.ts"; // Compiler functions
-import type { BlockchainAdapter } from "../network/blockchain_adapter.ts";
 import { DecimalRef, IntegerRef, Pointer, PointerProperty, CompatValue, Value, TextRef, BooleanRef} from "./pointers.ts";
 import { Endpoint, endpoints, LOCAL_ENDPOINT, Target, target_clause, WildcardTarget } from "../types/addressing.ts";
 import { RuntimePerformance } from "./performance_measure.ts";
@@ -56,13 +55,11 @@ import { Scope } from "../types/scope.ts";
 import { fundamental } from "../types/abstract_types.ts";
 import { IterationFunction as IteratorFunction, Iterator, RangeIterator } from "../types/iterator.ts";
 import { Assertion } from "../types/assertion.ts";
-import { $$, datex, eternal, f, pointer, static_pointer } from "../datex_short.ts";
 import { Maybe } from "../types/maybe.ts";
 import { Task } from "../types/task.ts";
 import { DATEX_ERROR } from "../types/error_codes.ts";
 import { cnf, Conjunction, Disjunction, Logical, Negation } from "../types/logic.ts";
 import { Logger } from "../utils/logger.ts";
-import { Decompiler } from "./decompiler.ts";
 import { Debugger } from "./debugger.ts";
 import {decompile as wasm_decompile} from "../wasm/adapter/pkg/datex_wasm.js";
 
@@ -71,6 +68,21 @@ import { Time } from "../types/time.ts";
 import { initPublicStaticClasses } from "../js_adapter/js_class_adapter.ts";
 
 const mime = globalThis.Deno ? (await import("https://deno.land/x/mimetypes@v1.0.0/mod.ts")).mime : null;
+
+// from datex_short.ts --------------------------------------------
+function $$<T>(value:CompatValue<T>): MinimalJSRef<T> {
+    return <any> Pointer.createOrGet(value).js_value;
+}
+function static_pointer<T>(value:CompatValue<T>, endpoint:IdEndpoint, unique_id:number, label?:string|number) {
+    const static_id = Pointer.getStaticPointerId(endpoint, unique_id);
+    const pointer = Pointer.create(static_id, value)
+    if (label) pointer.addLabel(typeof label == "string" ? label.replace(/^\$/, '') : label);
+    return Value.collapseValue(pointer);
+}
+function eternal(name: string, creator:Function) {
+    return creator(); // TODO
+}
+// --------------------------------------------------------------
 
 
 // @ts-ignore
@@ -87,14 +99,14 @@ const ReadableStreamDefaultReader = globalThis.ReadableStreamDefaultReader ?? cl
 export class StaticScope {
 
     public static STD: StaticScope;
-    public static scopes: {[name:string]:StaticScope} = {};
+    public static scopes = new Map<any, StaticScope>()
 
     public static readonly NAME: unique symbol = Symbol("name");
     public static readonly DOCS: unique symbol = Symbol("docs");
 
     // return a scope with a given name, if it already exists
     public static get(name?:string):StaticScope {
-        return this.scopes[name] || new StaticScope(name);
+        return this.scopes.get(name) || new StaticScope(name);
     }
 
     private constructor(name?:string){
@@ -117,9 +129,9 @@ export class StaticScope {
 
     // update/set the name of this static scope
     set name(name:string){
-        if (this[StaticScope.NAME]) delete StaticScope.scopes[this[StaticScope.NAME]];
+        if (this[StaticScope.NAME]) StaticScope.scopes.delete(this[StaticScope.NAME]);
         this[StaticScope.NAME] = name;
-        StaticScope.scopes[this[StaticScope.NAME]] = this;
+        StaticScope.scopes.set(this[StaticScope.NAME], this);
         if (this[StaticScope.NAME] == "std") StaticScope.STD = this;
     }
 
@@ -136,7 +148,7 @@ export class StaticScope {
     }
 }
 
-DatexObject.setWritePermission(<Record<string|symbol,unknown>>StaticScope.scopes, undefined); // make readonly
+// DatexObject.setWritePermission(StaticScope.scopes, undefined); // make readonly
 
 
 // typed object
@@ -298,21 +310,11 @@ export class Runtime {
     }
 
     private static getTranslatedLocalString(text_en:string, lang:string) {
-        return <Promise<string>> datex `@example.translate (${text_en},${lang})`
+        return "TODO";// <Promise<string>> datex `@example.translate (${text_en},${lang})`
     }
 
     // @ts-ignore
     public static HOST_ENV = '';
-
-    static #blockchain_interface:BlockchainAdapter;
-
-    static get blockchain_interface(){
-            return this.#blockchain_interface
-    }
-
-    static set blockchain_interface(blockchain_interface: BlockchainAdapter){
-         this.#blockchain_interface = blockchain_interface
-    }
 
     static #endpoint: Endpoint;  // this endpoint (default is special local endpoint %000000000000000000000000)
 
@@ -321,7 +323,7 @@ export class Runtime {
     }
 
     static set endpoint(endpoint: Endpoint){
-        if (endpoint != LOCAL_ENDPOINT) logger.success("Changing local endpoint to " + endpoint);
+        if (endpoint != LOCAL_ENDPOINT) logger.success("using endpoint: " + endpoint);
         this.#endpoint = endpoint;
 
         Pointer.pointer_prefix = this.endpoint.getPointerPrefix();
@@ -489,9 +491,9 @@ export class Runtime {
     }
 
     // get content of https://, file://, ...
-    public static async getURLContent<RAW extends boolean, T=unknown>(url_string:string, raw?:RAW, cached?:boolean):Promise<RAW extends false ? T : [data:unknown, type?:string]>
-    public static async getURLContent<RAW extends boolean, T=unknown>(url:URL, raw?:RAW, cached?:boolean):Promise<RAW extends false ? T : [data:unknown, type?:string]>
-    public static async getURLContent<RAW extends boolean, T=unknown>(url_string:string|URL, raw:RAW=false, cached = false):Promise<RAW extends false ? T : [data:unknown, type?:string]> {
+    public static async getURLContent<T=unknown, RAW extends boolean = false>(url_string:string, raw?:RAW, cached?:boolean):Promise<RAW extends false ? T : [data:unknown, type?:string]>
+    public static async getURLContent<T=unknown, RAW extends boolean = false>(url:URL, raw?:RAW, cached?:boolean):Promise<RAW extends false ? T : [data:unknown, type?:string]>
+    public static async getURLContent<T=unknown, RAW extends boolean = false>(url_string:string|URL, raw:RAW=false, cached = false):Promise<RAW extends false ? T : [data:unknown, type?:string]> {
         const url = url_string instanceof URL ? url_string : new URL(url_string, baseURL);
         url_string = url.toString();
 
@@ -1014,13 +1016,13 @@ export class Runtime {
         });
 
 
-        this.STD_STATIC_SCOPE['print']      = static_pointer(print, f('@@000000000000000000000000'), 0xaa00, "$std_print");
-        this.STD_STATIC_SCOPE['printf']     = static_pointer(printf, f('@@000000000000000000000000'), 0xaa01, "$std_printf");
-        this.STD_STATIC_SCOPE['printn']     = static_pointer(printn, f('@@000000000000000000000000'), 0xaa02, "$std_printn");
-        this.STD_STATIC_SCOPE['read']       = static_pointer(read, f('@@000000000000000000000000'), 0xaa03, "$std_read");
-        this.STD_STATIC_SCOPE['sleep']      = static_pointer(sleep, f('@@000000000000000000000000'), 0xaa04, "$std_sleep");
-        this.STD_STATIC_SCOPE['logger']     = static_pointer(dx_logger, f('@@000000000000000000000000'), 0xaa05, "$std_dx_logger");
-        this.STD_STATIC_SCOPE['localtext']  = static_pointer(localtext, f('@@000000000000000000000000'), 0xaa06, "$std_localtext");
+        this.STD_STATIC_SCOPE['print']      = static_pointer(print, LOCAL_ENDPOINT, 0xaa00, "$std_print");
+        this.STD_STATIC_SCOPE['printf']     = static_pointer(printf, LOCAL_ENDPOINT, 0xaa01, "$std_printf");
+        this.STD_STATIC_SCOPE['printn']     = static_pointer(printn, LOCAL_ENDPOINT, 0xaa02, "$std_printn");
+        this.STD_STATIC_SCOPE['read']       = static_pointer(read, LOCAL_ENDPOINT, 0xaa03, "$std_read");
+        this.STD_STATIC_SCOPE['sleep']      = static_pointer(sleep, LOCAL_ENDPOINT, 0xaa04, "$std_sleep");
+        this.STD_STATIC_SCOPE['logger']     = static_pointer(dx_logger, LOCAL_ENDPOINT, 0xaa05, "$std_dx_logger");
+        this.STD_STATIC_SCOPE['localtext']  = static_pointer(localtext, LOCAL_ENDPOINT, 0xaa06, "$std_localtext");
     
         // std.types 
         // try to get from cdn.unyt.org
@@ -3097,6 +3099,15 @@ export class Runtime {
                     o_parent?.enableUpdatesForAll();
                     throw new ValueError("Property '"+key.toString()+"' can not be " + (value === VOID ? "deleted" : "set"), SCOPE);
                 }
+                // handle endpoint properties
+                else if (parent instanceof Endpoint) {
+                    try {
+                        parent.setProperty(key, value);
+                    } catch (e) {
+                        o_parent?.enableUpdatesForAll();
+                        throw e;
+                    }
+                }
                 // set value
                 else {
                     if (parent instanceof Array && typeof key == "bigint" && key < 0n)  key = parent.length+Number(key)  // negative array indices
@@ -4602,7 +4613,6 @@ export class Runtime {
                     if (el instanceof Endpoint) INNER_SCOPE.active_value = await el.getEntrypoint();
                     else {
                         logger.warn("TODO: entrypoint from non-endpoint target?")
-                        INNER_SCOPE.active_value = await datex("#entrypoint", [], el);
                     }
                 }
                 else if (el instanceof URL) {

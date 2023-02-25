@@ -10,19 +10,19 @@
  */
 
 
-import { Logger, console_theme } from "../utils/logger.ts";
+import { Logger, console_theme, ESCAPE_SEQUENCES } from "../utils/logger.ts";
 import { ComInterface, CommonInterface } from "./client.ts";
 import { Runtime } from "../runtime/runtime.ts";
-
-import { Datex } from "../datex.ts";
+import { Supranet } from "./supranet.ts";
+import { Endpoint } from "../types/addressing.ts";
 
 const logger = new Logger("unyt");
 
-Datex.Supranet.onConnect = ()=>{
+Supranet.onConnect = ()=>{
     Unyt.endpoint_info.endpoint = Runtime.endpoint,
     Unyt.endpoint_info.node = Runtime.main_node,
     Unyt.endpoint_info.interface = CommonInterface.default_interface;
-    Unyt.endpoint_info.datex_version = Datex.Runtime.VERSION;
+    Unyt.endpoint_info.datex_version = Runtime.VERSION;
 
     Unyt.logEndpointInfo(); 
 }
@@ -31,13 +31,13 @@ export interface AppInfo {
     name?: string
     version?: string
     stage?: string
-    backend?: Datex.Endpoint
+    backend?: Endpoint
 }
 
 export interface EndpointInfo {
     app?: AppInfo
-    endpoint?: Datex.Endpoint
-    node?: Datex.Endpoint
+    endpoint?: Endpoint
+    node?: Endpoint
     interface?: ComInterface
     uix_version?: string
     datex_version?: string
@@ -59,7 +59,7 @@ export class Unyt {
     private static setUIXData(version:string) {
         this.setUIXVersion(version)
     }
-    private static setApp(name:string, version:string, stage:string, backend:Datex.Endpoint) {
+    private static setApp(name:string, version:string, stage:string, backend:Endpoint) {
         this.setAppInfo({name, version, stage, backend})
     }
 
@@ -73,28 +73,29 @@ export class Unyt {
         let content = "";
 
 
-        if (info.app?.name) content += `${Datex.ESCAPE_SEQUENCES.UNYT_GREY}APP${Datex.ESCAPE_SEQUENCES.UNYT_CYAN}           ${info.app.name}${Datex.ESCAPE_SEQUENCES.RESET}\n`
-        if (info.endpoint) content += `${Datex.ESCAPE_SEQUENCES.UNYT_GREY}ENDPOINT${Datex.ESCAPE_SEQUENCES.COLOR_DEFAULT}      ${Datex.Runtime.valueToDatexStringExperimental(info.endpoint,false,true)}${Datex.ESCAPE_SEQUENCES.RESET}\n`
-        if (info.app?.backend) content += `${Datex.ESCAPE_SEQUENCES.UNYT_GREY}BACKEND${Datex.ESCAPE_SEQUENCES.COLOR_DEFAULT}       ${Datex.Runtime.valueToDatexStringExperimental(info.app.backend,false,true)}\n`
-        if (info.app?.version) content += `${Datex.ESCAPE_SEQUENCES.UNYT_GREY}VERSION${Datex.ESCAPE_SEQUENCES.COLOR_DEFAULT}       ${info.app.version}\n`
-        if (info.app?.stage) content += `${Datex.ESCAPE_SEQUENCES.UNYT_GREY}STAGE${Datex.ESCAPE_SEQUENCES.COLOR_DEFAULT}         ${info.app.stage}\n`
+        if (info.app?.name) content += `${ESCAPE_SEQUENCES.UNYT_GREY}APP${ESCAPE_SEQUENCES.UNYT_CYAN}           ${info.app.name}${ESCAPE_SEQUENCES.RESET}\n`
+        if (info.endpoint) content += `${ESCAPE_SEQUENCES.UNYT_GREY}ENDPOINT${ESCAPE_SEQUENCES.COLOR_DEFAULT}      ${Runtime.valueToDatexStringExperimental(info.endpoint,false,true)}${ESCAPE_SEQUENCES.RESET}\n`
+        if (info.app?.backend) content += `${ESCAPE_SEQUENCES.UNYT_GREY}BACKEND${ESCAPE_SEQUENCES.COLOR_DEFAULT}       ${Runtime.valueToDatexStringExperimental(info.app.backend,false,true)}\n`
+        if (info.app?.version) content += `${ESCAPE_SEQUENCES.UNYT_GREY}VERSION${ESCAPE_SEQUENCES.COLOR_DEFAULT}       ${info.app.version}\n`
+        if (info.app?.stage) content += `${ESCAPE_SEQUENCES.UNYT_GREY}STAGE${ESCAPE_SEQUENCES.COLOR_DEFAULT}         ${info.app.stage}\n`
         content += `\n`
 
-        if (info.uix_version == "0.0.0") content += `${Datex.ESCAPE_SEQUENCES.UNYT_GREY}UIX VERSION${Datex.ESCAPE_SEQUENCES.COLOR_DEFAULT}${Datex.ESCAPE_SEQUENCES.ITALIC}   unmarked${Datex.ESCAPE_SEQUENCES.RESET}\n`
-        else if (info.uix_version) content += `${Datex.ESCAPE_SEQUENCES.UNYT_GREY}UIX VERSION${Datex.ESCAPE_SEQUENCES.COLOR_DEFAULT}   ${info.uix_version.replaceAll('\n','')}\n`
+        if (info.uix_version == "0.0.0") content += `${ESCAPE_SEQUENCES.UNYT_GREY}UIX VERSION${ESCAPE_SEQUENCES.COLOR_DEFAULT}${ESCAPE_SEQUENCES.ITALIC}   unmarked${ESCAPE_SEQUENCES.RESET}\n`
+        else if (info.uix_version) content += `${ESCAPE_SEQUENCES.UNYT_GREY}UIX VERSION${ESCAPE_SEQUENCES.COLOR_DEFAULT}   ${info.uix_version.replaceAll('\n','')}\n`
 
-        if (info.datex_version == "0.0.0") content += `${Datex.ESCAPE_SEQUENCES.UNYT_GREY}DATEX VERSION${Datex.ESCAPE_SEQUENCES.COLOR_DEFAULT}${Datex.ESCAPE_SEQUENCES.ITALIC} unmarked${Datex.ESCAPE_SEQUENCES.RESET}\n`
-        else if (info.datex_version) content += `${Datex.ESCAPE_SEQUENCES.UNYT_GREY}DATEX VERSION${Datex.ESCAPE_SEQUENCES.COLOR_DEFAULT} ${info.datex_version.replaceAll('\n','')}\n`
+        if (info.datex_version == "0.0.0") content += `${ESCAPE_SEQUENCES.UNYT_GREY}DATEX VERSION${ESCAPE_SEQUENCES.COLOR_DEFAULT}${ESCAPE_SEQUENCES.ITALIC} unmarked${ESCAPE_SEQUENCES.RESET}\n`
+        else if (info.datex_version) content += `${ESCAPE_SEQUENCES.UNYT_GREY}DATEX VERSION${ESCAPE_SEQUENCES.COLOR_DEFAULT} ${info.datex_version.replaceAll('\n','')}\n`
         content += `\n`
 
         if (info.app?.stage == "Development" && info.app.backend) content += `Worbench Access for this App: https://workbench.unyt.org/\?e=${info.app.backend.toString()}\n`
 
-        content += `${Datex.ESCAPE_SEQUENCES.UNYT_GREY}© ${new Date().getFullYear().toString()} unyt.org`
+        content += `${ESCAPE_SEQUENCES.UNYT_GREY}© ${new Date().getFullYear().toString()} unyt.org`
 
         logger.plain `#image(70,'unyt')${console_theme == "dark" ? this.logo_dark : this.logo_light}
-Connected to the supranet via ${info.node} ${info.interface ? `(${info.interface.type}${info.interface.host?` to ${info.interface.host}`:''})` : ''} 
+Connected to the supranet via ${info.node} ${info.interface ? `(${info.interface.type}${info.interface.host?` to ${ESCAPE_SEQUENCES.UNYT_GREY}${info.interface.host}`:''}${ESCAPE_SEQUENCES.WHITE})` : ''} 
 
-${content}`
+${content}
+`
 
 
     }
