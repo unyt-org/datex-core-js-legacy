@@ -457,7 +457,7 @@ export class Storage {
     private static async getPointerLocalStorage(pointer_id:string, pointerify?:boolean, bind?:any) {
 
         let pointer:Pointer|undefined;
-        if (pointerify && (pointer = Pointer.get(pointer_id))) {
+        if (pointerify && (pointer = Pointer.get(pointer_id))?.value_initialized) {
             return pointer.val; // pointer still exists in runtime
         }
 

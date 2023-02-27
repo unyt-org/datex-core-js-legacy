@@ -435,6 +435,12 @@ export type JSValueWith$<T> = T & {
     $$:PropertyProxy$<T> // always returns a pointer property reference
 };
 
+// TODO: does this make sense? (probably requires proxy for all pointer objects)
+// export type JSValueWith$<T> = T & 
+//     {[P in keyof T & string as `$${P}`]: Value<T[P]>} & 
+//     {[P in keyof T & string as `$prop_${P}`]: PointerProperty<T[P]>}
+
+
 // convert from any JS/DATEX value to minimal representation with reference
 export type MinimalJSRefGeneralTypes<T, _C = CollapsedValue<T>> = 
     JSPrimitiveToDatexRef<_C> extends never ? JSValueWith$<_C> : JSPrimitiveToDatexRef<_C>
@@ -855,7 +861,12 @@ export class Pointer<T = any> extends Value<T> {
             let source:PointerSource|null = null;
             let priority:number;
             for ([source,priority] of this.#pointer_sources) {
-                stored = await source.getPointer(pointer.id, !SCOPE);
+                try {
+                    stored = await source.getPointer(pointer.id, !SCOPE);
+                }
+                catch (e) {
+                    console.log("ptresr",e)
+                }
                 if (stored != NOT_EXISTING) break;
             }
 
@@ -1364,7 +1375,7 @@ export class Pointer<T = any> extends Value<T> {
 
         if (get_value) {
             // try {
-            const pointer_value = await Runtime.datexOut(['#sender <== ?', [this]], endpoint) 
+            const pointer_value = await Runtime.datexOut(['#origin <== ?', [this]], endpoint) 
             if (pointer_value === VOID) { // TODO: could be allowed, but is currently considered a bug
                 throw new RuntimeError("pointer value "+this.idString()+" was resolved to void");
             }
@@ -1426,7 +1437,7 @@ export class Pointer<T = any> extends Value<T> {
         let datex = '';
         const pointers = [];
         for (const ptr of pool) {
-            datex += '#sender <==: ?;'
+            datex += '#origin <==: ?;'
             pointers.push(ptr)
         }
         logger.debug("subscription pool for " + endpoint + ", " + pointers.length + " pointers");
@@ -1438,7 +1449,7 @@ export class Pointer<T = any> extends Value<T> {
         if (!this.#subscribed) return; // already unsubscribed
         const endpoint = this.origin;
         logger.info("unsubscribing from " + this + " ("+endpoint+")");
-        Runtime.datexOut(['#sender </= ?', [this]], endpoint);
+        Runtime.datexOut(['#origin </= ?', [this]], endpoint);
         this.#subscribed = false;
     }
 

@@ -69,7 +69,7 @@ export class Supranet {
 
         if (this.#connected && endpoint === Runtime.endpoint) {
             logger.info("already connected as", endpoint);
-            return;
+            return true;
         }
 
         // load runtime, own endpoint, nodes

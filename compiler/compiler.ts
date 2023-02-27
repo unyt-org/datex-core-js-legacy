@@ -3107,8 +3107,8 @@ export class Compiler {
             SCOPE.last_command_end = last_command_end; // last command still valid
 
             const doc_comment = m[3]??m[2];
-            // replace with markdown insertion
-            SCOPE.datex = `<text/markdown> '${doc_comment.replace(/\'/g, "\\'")}'\n` + SCOPE.datex;
+            // TODO: reenable? replace with markdown insertion
+            // SCOPE.datex = `<text/markdown> '${doc_comment.replace(/\'/g, "\\'")}';\n` + SCOPE.datex;
         }
 
         // COMMENT - before ASSIGN, ...
@@ -4154,8 +4154,8 @@ export class Compiler {
             await Compiler.builder.addScopeBlock(BinaryCode.RESPONSE, !!m[1], false, SCOPE)  
         }
 
-        // MAYBE
-        else if (m = SCOPE.datex.match(Regex.MAYBE)) {
+        // DEFER
+        else if (m = SCOPE.datex.match(Regex.DEFER)) {
             SCOPE.datex = SCOPE.datex.substring(m[0].length);  // pop datex
             await Compiler.builder.addScopeBlock(BinaryCode.MAYBE, !!m[1], false, SCOPE)     
         }
@@ -4278,12 +4278,12 @@ export class Compiler {
             if (is_internal) {
                 if (v_name == "result") {base_type = BinaryCode.VAR_RESULT; v_name = undefined}
                 else if (v_name == "sub_result") {base_type = BinaryCode.VAR_SUB_RESULT; v_name = undefined}
-                else if (v_name == "origin") {base_type = BinaryCode.VAR_ORIGIN; v_name = undefined}
+                else if (v_name == "_origin") {base_type = BinaryCode._VAR_ORIGIN; v_name = undefined}
                 else if (v_name == "it") {base_type =  BinaryCode.VAR_IT; v_name = undefined}
                 else if (v_name == "void") {base_type =  BinaryCode.VAR_VOID; v_name = undefined}
 
-                else if (v_name == "sender") {if (action_type != ACTION_TYPE.GET) throw new CompilerError("Invalid action on internal variable #sender", SCOPE.stack); base_type = BinaryCode.VAR_SENDER; v_name = undefined}
-                else if (v_name == "current") {if (action_type != ACTION_TYPE.GET) throw new CompilerError("Invalid action on internal variable #current", SCOPE.stack); base_type = BinaryCode.VAR_CURRENT; v_name = undefined}
+                else if (v_name == "origin") {if (action_type != ACTION_TYPE.GET) throw new CompilerError("Invalid action on internal variable #origin", SCOPE.stack); base_type = BinaryCode.VAR_ORIGIN; v_name = undefined}
+                else if (v_name == "endpoint") {if (action_type != ACTION_TYPE.GET) throw new CompilerError("Invalid action on internal variable #endpoint", SCOPE.stack); base_type = BinaryCode.VAR_ENDPOINT; v_name = undefined}
                 else if (v_name == "location") {if (action_type != ACTION_TYPE.GET) throw new CompilerError("Invalid action on internal variable #location", SCOPE.stack); base_type = BinaryCode.VAR_LOCATION; v_name = undefined}
                 else if (v_name == "env") {if (action_type != ACTION_TYPE.GET) throw new CompilerError("Invalid action on internal variable #env", SCOPE.stack); base_type = BinaryCode.VAR_ENV; v_name = undefined}
                 // else if (v_name == "timestamp") {if (action_type != ACTION_TYPE.GET) throw new CompilerError("Invalid action on internal variable #timestamp", SCOPE.stack); base_type = BinaryCode.VAR_TIMESTAMP; v_name = undefined}
@@ -4995,8 +4995,15 @@ export class Compiler {
             let name:string
             // use filename if url provided
             if (output_name_or_path instanceof URL) name = output_name_or_path.pathname.split('/').pop()!;
+            else if (output_name_or_path) {
+                name = output_name_or_path;
+            }
             // default filename
-            else name = output_name_or_path ?? "out";
+            else {
+                const date = new Date();
+                const timestamp = `${date.getFullYear()}_${date.getMonth()+1}_${date.getDate()}_${date.getHours().toString().padStart(2,'0')}${date.getMinutes().toString().padStart(2,'0')}${date.getSeconds().toString().padStart(2,'0')}`
+                name = `datex_script_${timestamp}`;
+            }
 
             // normalize file name
             name = this.normalizeFileName(name, file_type);

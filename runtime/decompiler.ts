@@ -451,12 +451,12 @@ export class Decompiler {
 					// 	current_scope.push({type:TOKEN_TYPE.VALUE, string: "#signed"});
 					// 	break;
 					// }
-					case BinaryCode.VAR_SENDER: { 
-						current_scope.push({type:TOKEN_TYPE.VALUE, string: "#sender"});
+					case BinaryCode.VAR_ORIGIN: { 
+						current_scope.push({type:TOKEN_TYPE.VALUE, string: "#origin"});
 						break;
 					}
-					case BinaryCode.VAR_CURRENT: { 
-						current_scope.push({type:TOKEN_TYPE.VALUE, string: "#current"});
+					case BinaryCode.VAR_ENDPOINT: { 
+						current_scope.push({type:TOKEN_TYPE.VALUE, string: "#endpoint"});
 						break;
 					}
 					case BinaryCode.VAR_LOCATION: { 

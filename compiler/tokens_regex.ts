@@ -11,8 +11,8 @@ export const Regex = {
 
     HEX_VARIABLE: /^[A-Fa-f0-9_]*$/, // variable with hexadecimal name
 
-    JUMP: /^(jmp|jtr|jfa) +([A-Za-z_]\w*)?/, // jmp x, jeq x, ...
-    JUMP_LBL: /^lbl *([A-Za-z_]\w*)?/, // lbl x
+    JUMP: /^(jmp|jtr|jfa) +([A-Za-z_0-9]\w*)?/, // jmp x, jeq x, ...
+    JUMP_LBL: /^lbl *([A-Za-z_0-9]\w*)?/, // lbl x
 
     ERROR: /^\!(\w|\.)+/,
 
@@ -169,7 +169,7 @@ export const Regex = {
     SKIP: /^skip\b\s*(\()?/,
     LEAVE: /^leave\b\s*(\()?/,
     NEW: /^new\b\s*(\()?/,
-    MAYBE: /^maybe\b\s*(\()?/,
+    DEFER: /^defer\b\s*(\()?/,
     RESPONSE: /^response\b\s*(\()?/,
 
     TRY: /^try\b\s*(\()?/,

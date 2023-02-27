@@ -188,7 +188,6 @@ export function pointer<T>(value:CompatValue<T>): MinimalJSRef<T> {
         if (!info) throw new Error("eternal values are not supported in this runtime environment");
         const unique = `${info.file}:${info.row}`;
         if (waiting_eternals.has(unique)) {
-            console.log("matching $$",waiting_eternals.get(unique))
             eternals.set(waiting_eternals.get(unique)!, pointer);
             waiting_eternals.delete(unique);
         }
@@ -198,7 +197,6 @@ export function pointer<T>(value:CompatValue<T>): MinimalJSRef<T> {
         if (!info) throw new Error("eternal values are not supported in this runtime environment");
         const unique = `${info.file}:${info.row}`;
         if (waiting_lazy_eternals.has(unique)) {
-            console.log("matching lazy $$",waiting_lazy_eternals.get(unique))
             Storage.setItem(waiting_lazy_eternals.get(unique)!, pointer);
             waiting_lazy_eternals.delete(unique);
         }
@@ -427,8 +425,22 @@ Object.defineProperty(globalThis, 'lazy_eternal', {get:getLazyEternal, configura
 
 declare global {
     const eternal: undefined
-    const lazy_eternal: Promise<unknown>|undefined
+    const lazy_eternal: undefined
 }
+
+// TODO: '123456'.$$, [1,2,3].$$ ?
+// declare global {
+//     const $$: typeof pointer
+
+//     interface Object {
+// 		$$<T>(this:T): MinimalJSRef<T>
+// 	}
+
+//     interface String {
+// 		$$: MinimalJSRef<string>
+// 	}
+// }
+
 
 // load all eternal values from storage
 await loadEternalValues();

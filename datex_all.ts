@@ -13,6 +13,7 @@ export * from "./utils/logger.ts";
 export * from "./utils/observers.ts";
 export * from "./utils/utils.ts";
 export * from "./utils/message_logger.ts";
+export * from "./utils/local_files.ts";
 
 // compiler
 export * from "./compiler/binary_codes.ts";
@@ -59,3 +60,6 @@ export * from "./types/tuple.ts";
 export * from "./types/type.ts";
 export * from "./types/quantity.ts";
 export * from "./types/time.ts";
+
+// polyfills
+import "./utils/polyfills.ts"

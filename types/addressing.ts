@@ -311,7 +311,7 @@ export class Endpoint extends Target {
 		
 		if (this.#online != undefined) return this.#online;
 		
-		const timeout = 700; // 500ms
+		const timeout = 1000; // 500ms
 		const cache_life_offline = 3_000; // reload cache faster if offline
 		const cache_life_online = 15_000;
 
