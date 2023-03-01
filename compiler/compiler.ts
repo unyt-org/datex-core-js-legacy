@@ -27,7 +27,7 @@ import { BinaryCode } from "./binary_codes.ts";
 import { Scope } from "../types/scope.ts";
 import { ProtocolDataType } from "./protocol_types.ts";
 import { Quantity } from "../types/quantity.ts";
-import { EXTENDED_OBJECTS, INHERITED_PROPERTIES, VOID, DX_SLOTS, SLOT_WRITE, SLOT_READ, SLOT_EXEC, NOT_EXISTING} from "../runtime/constants.ts";
+import { EXTENDED_OBJECTS, INHERITED_PROPERTIES, VOID, SLOT_WRITE, SLOT_READ, SLOT_EXEC, NOT_EXISTING, SLOT_GET, SLOT_SET } from "../runtime/constants.ts";
 import { arrayBufferToBase64, base64ToArrayBuffer, buffer2hex, hex2buffer } from "../utils/utils.ts";
 import { RuntimePerformance } from "../runtime/performance_measure.ts";
 import { Conjunction, Disjunction, Logical, Negation } from "../types/logic.ts";
@@ -1834,6 +1834,8 @@ export class Compiler {
             if (k == "write") slot = SLOT_WRITE;
             else if (k == "read")  slot = SLOT_READ;
             else if (k == "exec")  slot = SLOT_EXEC;
+            else if (k == "get")  slot = SLOT_GET;
+            else if (k == "set")  slot = SLOT_SET;
             else slot = SCOPE.inner_scope.object_slot_index++;
 
             SCOPE.inner_scope.object_slots.set(k, slot);
@@ -4050,8 +4052,20 @@ export class Compiler {
         // FUNCTION
         else if (m = SCOPE.datex.match(Regex.FUNCTION)) {
             SCOPE.datex = SCOPE.datex.substring(m[0].length);  // pop datex
-            const name = m[1];
-            if (name) console.log("TODO function name ",name);
+            const exporting = !!m[1]
+            const name = m[2];
+            if (name) {
+                if (exporting) {
+                    if (!SCOPE.inner_scope.exports) SCOPE.inner_scope.exports = {};
+                    // remember internal variable for exports
+                    SCOPE.inner_scope.exports[name] = await Compiler.builder.addValVarRefDeclaration(name, 'ref', SCOPE);
+                }
+    
+                else await Compiler.builder.addValVarRefDeclaration(name, 'ref', SCOPE);
+            }
+            else if (exporting) {
+                throw new CompilerError("Invalid function declaration: cannot export a function without a name (use 'export function NAME()')")
+            }
 
             const params:{[name:string]: [named:boolean, type:'val'|'var'|'ref'|'const', type_init:string, default_init:string, exporting:boolean]} = {}
 
@@ -4129,7 +4143,6 @@ export class Compiler {
             SCOPE.datex = type_signature + init + SCOPE.datex;
         }
 
-
         // RUN
         else if (m = SCOPE.datex.match(Regex.RUN)) {
             SCOPE.datex = SCOPE.datex.substring(m[0].length);  // pop datex
@@ -4157,7 +4170,7 @@ export class Compiler {
         // DEFER
         else if (m = SCOPE.datex.match(Regex.DEFER)) {
             SCOPE.datex = SCOPE.datex.substring(m[0].length);  // pop datex
-            await Compiler.builder.addScopeBlock(BinaryCode.MAYBE, !!m[1], false, SCOPE)     
+            await Compiler.builder.addScopeBlock(BinaryCode.DEFER, !!m[1], false, SCOPE)     
         }
 
         // AWAIT
@@ -4232,6 +4245,7 @@ export class Compiler {
             else await Compiler.builder.addValVarRefDeclaration(name, type, SCOPE, init_eternal, init_brackets);
         }
 
+
         // export x
         else if (m = SCOPE.datex.match(Regex.DIRECT_EXPORT)) {
             SCOPE.datex = SCOPE.datex.substring(m[0].length);  // pop datex
@@ -4245,6 +4259,7 @@ export class Compiler {
 
         }
         
+
         // INTERNAL_VAR or ROOT_VARIABLE or LABELED_POINTER
         else if ((m = SCOPE.datex.match(Regex.INTERNAL_VAR)) || (m = SCOPE.datex.match(Regex.ROOT_VARIABLE)) || (m = SCOPE.datex.match(Regex.LABELED_POINTER))) {
             let v_name:string|number = m[2]; // get var name

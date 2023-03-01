@@ -67,15 +67,17 @@ export class Unyt {
     private static logo_light = 'PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiIHN0YW5kYWxvbmU9Im5vIj8+CjwhRE9DVFlQRSBzdmcgUFVCTElDICItLy9XM0MvL0RURCBTVkcgMS4xLy9FTiIgImh0dHA6Ly93d3cudzMub3JnL0dyYXBoaWNzL1NWRy8xLjEvRFREL3N2ZzExLmR0ZCI+Cjxzdmcgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgdmlld0JveD0iMCAwIDE3NSA1OSIgdmVyc2lvbj0iMS4xIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbG5zOnhsaW5rPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5L3hsaW5rIiB4bWw6c3BhY2U9InByZXNlcnZlIiB4bWxuczpzZXJpZj0iaHR0cDovL3d3dy5zZXJpZi5jb20vIiBzdHlsZT0iZmlsbC1ydWxlOmV2ZW5vZGQ7Y2xpcC1ydWxlOmV2ZW5vZGQ7c3Ryb2tlLWxpbmVqb2luOnJvdW5kO3N0cm9rZS1taXRlcmxpbWl0OjI7Ij4KICAgIDxnIHRyYW5zZm9ybT0ibWF0cml4KDEsMCwwLDEsLTc2Ny40MzQsLTIwNS40ODIpIj4KICAgICAgICA8ZyBpZD0idGV4dF9kYXJrIiB0cmFuc2Zvcm09Im1hdHJpeCgxLjAwMzA0LDAsMCwwLjk1NzYyOSw3NjguMjQxLDEzMS44MDQpIj4KICAgICAgICAgICAgPHJlY3QgeD0iLTAuODA0IiB5PSI3Ni45MzgiIHdpZHRoPSIxNzMuODMxIiBoZWlnaHQ9IjYwLjgzMyIgc3R5bGU9ImZpbGw6bm9uZTsiLz4KICAgICAgICAgICAgPGcgdHJhbnNmb3JtPSJtYXRyaXgoMC45OTY5NjgsMCwwLDEuMDQ0MjUsLTM1NC4xNjUsLTI2OC4xNTgpIj4KICAgICAgICAgICAgICAgIDxnIHRyYW5zZm9ybT0ibWF0cml4KDAuNTA5NTQ5LDAsMCwwLjUwOTU0OSwyNTIuMjIzLDIwMC4zMDgpIj4KICAgICAgICAgICAgICAgICAgICA8dGV4dCB4PSIyOTUuODc2cHgiIHk9IjM0MS41MzVweCIgc3R5bGU9ImZvbnQtZmFtaWx5OidBcmlhbFJvdW5kZWRNVEJvbGQnLCAnQXJpYWwgUm91bmRlZCBNVCBCb2xkJywgc2Fucy1zZXJpZjtmb250LXNpemU6MTE0LjE2N3B4OyI+dW55dDwvdGV4dD4KICAgICAgICAgICAgICAgIDwvZz4KICAgICAgICAgICAgICAgIDxnIHRyYW5zZm9ybT0ibWF0cml4KDAuNzQ3NTQsMCwwLDAuNzQ3NTQsMzE0Ljk1MiwxNjAuNzM2KSI+CiAgICAgICAgICAgICAgICAgICAgPGcgdHJhbnNmb3JtPSJtYXRyaXgoMSwwLDAsMSwtMTY2LjA1NCwtNjkuMTcwMikiPgogICAgICAgICAgICAgICAgICAgICAgICA8cGF0aCBkPSJNMjU4LjQ3NiwzMjIuNzE1QzI2Ni44MzgsMzMxLjU3NCAyNzEuOTY1LDM0My41MjEgMjcxLjk2NSwzNTYuNjY1TDI1OC40NzYsMzU2LjY2NUwyNTguNDc2LDMyMi43MTVaIiBzdHlsZT0iZmlsbDpyZ2IoMjU1LDAsODkpOyIvPgogICAgICAgICAgICAgICAgICAgIDwvZz4KICAgICAgICAgICAgICAgICAgICA8ZyB0cmFuc2Zvcm09Im1hdHJpeCgxLDAsMCwxLC0xNjYuMDU0LC02OS4xNzAyKSI+CiAgICAgICAgICAgICAgICAgICAgICAgIDxwYXRoIGQ9Ik0yNTYuNDc2LDMyNC4xTDI1Ni40NzYsMzU2LjY2NUwyMjMuOTExLDM1Ni42NjVMMjU2LjQ3NiwzMjQuMVoiIHN0eWxlPSJmaWxsOnJnYig0MiwxNzAsMjE1KTsiLz4KICAgICAgICAgICAgICAgICAgICA8L2c+CiAgICAgICAgICAgICAgICAgICAgPGcgdHJhbnNmb3JtPSJtYXRyaXgoMSwwLDAsMSwtMTY2LjA1NCwtNjkuMTcwMikiPgogICAgICAgICAgICAgICAgICAgICAgICA8cGF0aCBkPSJNMjIyLjQ5NiwzNTUuMjUxTDI1Ni43NjEsMzIwLjk4NkMyNDcuODcsMzEyLjQ0NSAyMzUuNzk2LDMwNy4xOTcgMjIyLjQ5NiwzMDcuMTk3TDIyMi40OTYsMzU1LjI1MVoiLz4KICAgICAgICAgICAgICAgICAgICA8L2c+CiAgICAgICAgICAgICAgICA8L2c+CiAgICAgICAgICAgIDwvZz4KICAgICAgICA8L2c+CiAgICA8L2c+Cjwvc3ZnPgo=';
 
     // TODO add colored logo dark - light mode
-    public static logEndpointInfo(){
+    public static async logEndpointInfo(){
         const info = this.endpoint_info;
         
         let content = "";
 
+        const endpoint = info.endpoint ? await this.formatEndpoint(info.endpoint) : undefined;
+        const backend = info.app?.backend ? await this.formatEndpoint(info.app?.backend) : undefined;
 
         if (info.app?.name) content += `${ESCAPE_SEQUENCES.UNYT_GREY}APP${ESCAPE_SEQUENCES.UNYT_CYAN}           ${info.app.name}${ESCAPE_SEQUENCES.RESET}\n`
-        if (info.endpoint) content += `${ESCAPE_SEQUENCES.UNYT_GREY}ENDPOINT${ESCAPE_SEQUENCES.COLOR_DEFAULT}      ${Runtime.valueToDatexStringExperimental(info.endpoint,false,true)}${ESCAPE_SEQUENCES.RESET}\n`
-        if (info.app?.backend) content += `${ESCAPE_SEQUENCES.UNYT_GREY}BACKEND${ESCAPE_SEQUENCES.COLOR_DEFAULT}       ${Runtime.valueToDatexStringExperimental(info.app.backend,false,true)}\n`
+        if (endpoint) content += `${ESCAPE_SEQUENCES.UNYT_GREY}ENDPOINT${ESCAPE_SEQUENCES.COLOR_DEFAULT}      ${endpoint}${ESCAPE_SEQUENCES.RESET}\n`
+        if (backend) content += `${ESCAPE_SEQUENCES.UNYT_GREY}BACKEND${ESCAPE_SEQUENCES.COLOR_DEFAULT}       ${backend}\n`
         if (info.app?.version) content += `${ESCAPE_SEQUENCES.UNYT_GREY}VERSION${ESCAPE_SEQUENCES.COLOR_DEFAULT}       ${info.app.version}\n`
         if (info.app?.stage) content += `${ESCAPE_SEQUENCES.UNYT_GREY}STAGE${ESCAPE_SEQUENCES.COLOR_DEFAULT}         ${info.app.stage}\n`
         content += `\n`
@@ -98,6 +100,19 @@ ${content}
 `
 
 
+    }
+
+    private static async formatEndpoint(endpoint:Endpoint) {        
+        // @alias.x.y (@@2435)
+        try {
+            const alias = await endpoint?.getAlias();
+            if (alias) {
+                return `${alias} (${Runtime.valueToDatexStringExperimental(endpoint,false,true)}${ESCAPE_SEQUENCES.COLOR_DEFAULT})`
+            }
+        }
+        catch (e){}
+        // @@2134565, @endpoint
+        return Runtime.valueToDatexStringExperimental(endpoint,false,true);
     }
 
 }

@@ -256,6 +256,7 @@ export class Storage {
 
     static setItem(key:string, value:any, listen_for_pointer_changes = true, location:Storage.Location|undefined = this.#primary_location):Promise<boolean>|boolean {
         Storage.cache.set(key, value); // save in cache
+        setTimeout(()=>Storage.cache.delete(key), 10000);
         const pointer = value instanceof Pointer ? value : Pointer.getByValue(value);
 
         if (location==undefined || location == Storage.Location.INDEXED_DB) return this.setItemDB(key, value, pointer, listen_for_pointer_changes);
@@ -641,7 +642,7 @@ export class Storage {
         await Promise.all(promises);
     }
 
-    public static async getItem(key:string, location?:Storage.Location):Promise<any> {
+    public static async getItem(key:string, location?:Storage.Location|undefined/* = this.#primary_location*/):Promise<any> {
 
         if (this.#dirty) {
             displayFatalError('storage-unrecoverable');

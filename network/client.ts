@@ -784,7 +784,7 @@ export class InterfaceManager {
         const interface_class = (<any>InterfaceManager.interfaces.get(channel_type));
         if (!interface_class) throw "Channel type not found: " + channel_type;
         let c_interface:CommonInterface = new interface_class(endpoint);
-        this.logger.success("new interface: " + channel_type)
+        // this.logger.success("new interface: " + channel_type)
         // init requested interface
         let res = await c_interface.init(...(init_args||[]));
         if (res) this.addInterface(c_interface);

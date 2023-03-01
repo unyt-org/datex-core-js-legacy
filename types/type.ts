@@ -17,7 +17,7 @@ import { clause, Conjunction, Disjunction, Logical, Negation } from "./logic.ts"
 import { Debugger } from "../runtime/debugger.ts";
 import { Time } from "./time.ts";
 import type { Task } from "./task.ts";
-import type { Assertion } from "./assertion.ts";
+import { Assertion } from "./assertion.ts";
 import type { Iterator } from "./iterator.ts";
 
 
@@ -910,3 +910,11 @@ Type.std.Assertion.addImplementedType(Type.std.StreamConsumer);
 
 Type.std.Function.addImplementedType(Type.std.StreamConsumer);
 Type.std.Stream.addImplementedType(Type.std.StreamConsumer);
+
+
+Type.get("std:Assertion").setJSInterface({
+    class: Assertion,
+    is_normal_object: true,
+    proxify_children: true,
+    visible_children: new Set(),
+})

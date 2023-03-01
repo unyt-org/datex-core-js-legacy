@@ -163,7 +163,7 @@ export const Regex = {
     RUN: /^run\b\s*(\()?/,
     AWAIT: /^await\b/,
     DO: /^do\b\s*(\()?/,
-    FUNCTION: /^function\s+([A-Za-zÀ-ž_][A-Za-z0-9À-ž_]*)?\s*\(/,
+    FUNCTION: /^(export\s+)?function(?:\s+([A-Za-zÀ-ž_][A-Za-z0-9À-ž_]*))?\s*\(/,
     FUNCTION_PARAM: /^(\s*(?:export\s+)?(?:named\s+)?(?:(?:ref|val|var|const)\s+)?)?([A-Za-zÀ-ž_][A-Za-z0-9À-ž_]*)\s*(\:|\=|,|\))?/,
     ASSERT: /^assert\b\s*(\()?/,
     SKIP: /^skip\b\s*(\()?/,

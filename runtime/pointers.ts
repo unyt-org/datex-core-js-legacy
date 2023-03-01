@@ -829,7 +829,7 @@ export class Pointer<T = any> extends Value<T> {
     private static loading_pointers:WeakMap<datex_scope, Set<string>> = new WeakMap();
 
     // load from storage or request from remote endpoint if pointer not yet loaded
-    static async load(id:string|Uint8Array, SCOPE?:datex_scope, only_load_local = false, sender_knows_pointer = true): Promise<Pointer>{
+    static async load(id:string|Uint8Array, SCOPE?:datex_scope, only_load_local = false, sender_knows_pointer = true, allow_failure = false): Promise<Pointer>{
 
         const id_string = Pointer.normalizePointerId(id);
 
@@ -928,7 +928,7 @@ export class Pointer<T = any> extends Value<T> {
                         loading_pointers?.delete(id_string);
                         pointer.delete();
                         if (e instanceof NetworkError) {
-                            displayFatalError('pointer-unresolvable');
+                            if (!allow_failure) displayFatalError('pointer-unresolvable');
                             console.log(pointer)
                             throw new PointerError("Could not get the pointer from the current, the owner, or the requesting endpoint: $"+id_string)
                         }
@@ -965,7 +965,7 @@ export class Pointer<T = any> extends Value<T> {
                     loading_pointers?.delete(id_string);
                     // could not subscribe, remove pointer again
                     pointer.delete();
-                    displayFatalError('owned-pointer-unresolvable');
+                    if (!allow_failure) displayFatalError('owned-pointer-unresolvable');
                     throw new PointerError("Owned pointer could not be loaded locally or from sender")
                 }
             }
@@ -982,7 +982,7 @@ export class Pointer<T = any> extends Value<T> {
                 console.warn("perror")
                 // if (globalThis.UIX) UIX.State.resetPage(); // this should not happen
                 // else
-                displayFatalError('pointer-not-found');
+                if (!allow_failure) displayFatalError('pointer-not-found');
                 throw new PointerError("Pointer $"+id_string+" has no assigned value", SCOPE);
             }
         }
@@ -2005,6 +2005,19 @@ export class Pointer<T = any> extends Value<T> {
         return;
     }
 
+
+    #custom_prop_getter?:(key:unknown)=>unknown
+    #custom_prop_setter?:(key:unknown, value:unknown)=>unknown
+
+    public setPropertyGetter(getter:(key:unknown)=>unknown) {
+        this.#custom_prop_getter = getter; 
+    }
+
+    public setPropertySetter(setter: (key:unknown, value:unknown)=>unknown) {
+        this.#custom_prop_setter = setter; 
+    }
+
+
     /** create proxy for object and adds listeners */
     private addObjProxy(obj:T):T {
 
@@ -2103,6 +2116,8 @@ export class Pointer<T = any> extends Value<T> {
 
 			const proxy = new Proxy(<any>obj, {
                 get: (_target, key) => {
+                    if (this.#custom_prop_getter && (!this.shadow_object || !(key in this.shadow_object)) && !(typeof key == "symbol")) return this.#custom_prop_getter(key);
+
                     const val = Value.collapseValue(this.shadow_object?.[key], true, true);
                     /*if (typeof val == "function" && key != "$" && key != "$$") {
                         try {
@@ -2118,6 +2133,9 @@ export class Pointer<T = any> extends Value<T> {
                     else*/ return val
                 },
                 set: (target, val_name: keyof any, val: any) => {
+                    if (this.#custom_prop_setter) {
+                        return this.#custom_prop_setter(val_name, val);
+                    }
 
                     // length changed
                     if (is_array && val_name == "length") {

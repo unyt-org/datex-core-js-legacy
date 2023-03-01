@@ -49,7 +49,7 @@ export * from "./types/error_codes.ts";
 export * from "./types/errors.ts";
 export * from "./types/function.ts";
 export * from "./types/iterator.ts";
-export * from "./types/maybe.ts";
+export * from "./types/deferred.ts";
 export * from "./types/markdown.ts";
 export * from "./types/native_types.ts";
 export * from "./types/object.ts";

@@ -45,7 +45,7 @@ import { Crypto } from "../runtime/crypto.ts";
 import { ProtocolDataType } from "../compiler/protocol_types.ts";
 import { base64ToArrayBuffer, buffer2hex, getFileContent } from "../utils/utils.ts";
 import { IOHandler } from "./io_handler.ts";
-import { DX_PERMISSIONS, DX_SLOTS, DX_TYPE, DX_SERIALIZED, DX_VALUE, INVALID, MAX_UINT_16, NOT_EXISTING, UNKNOWN_TYPE, VOID, WILDCARD, SLOT_WRITE, SLOT_READ } from "./constants.ts";
+import { DX_PERMISSIONS, DX_SLOTS, DX_TYPE, DX_SERIALIZED, DX_VALUE, INVALID, MAX_UINT_16, NOT_EXISTING, UNKNOWN_TYPE, VOID, WILDCARD, SLOT_WRITE, SLOT_READ, DX_GET_PROPERTY, SLOT_GET, SLOT_SET } from "./constants.ts";
 import { baseURL, client_type, DEFAULT_HIDDEN_OBJECT_PROPERTIES, logger, TypedArray } from "../utils/global_values.ts";
 import { MessageLogger } from "../utils/message_logger.ts";
 import { JSInterface } from "./js_interface.ts";
@@ -55,7 +55,7 @@ import { Scope } from "../types/scope.ts";
 import { fundamental } from "../types/abstract_types.ts";
 import { IterationFunction as IteratorFunction, Iterator, RangeIterator } from "../types/iterator.ts";
 import { Assertion } from "../types/assertion.ts";
-import { Maybe } from "../types/maybe.ts";
+import { Deferred } from "../types/deferred.ts";
 import { Task } from "../types/task.ts";
 import { DATEX_ERROR } from "../types/error_codes.ts";
 import { cnf, Conjunction, Disjunction, Logical, Negation } from "../types/logic.ts";
@@ -1792,7 +1792,7 @@ export class Runtime {
                     break;
                 }
                 case Type.std.endpoint: {
-                    if (typeof old_value=="string") new_value = Endpoint.fromString(old_value)
+                    if (typeof old_value=="string") new_value = await Endpoint.fromStringAsync(old_value)
                     else new_value = INVALID;
                     break;
                 }
@@ -2946,6 +2946,7 @@ export class Runtime {
 
             // was not handled by custom pseudo classes
             else if (new_obj == NOT_EXISTING) {
+
                 // get endpoint subspace
                 if (parent instanceof Endpoint) return parent.getProperty(key?.toString());
                 // invalid key type
@@ -2960,13 +2961,17 @@ export class Runtime {
                 // not a key string in a normal object
                 else if (typeof key != "string" && !(parent instanceof Array)) throw new ValueError("Invalid key for <Object> - must be of type <text>", SCOPE);
                 // default hidden properties
-                else if (DEFAULT_HIDDEN_OBJECT_PROPERTIES.has(key) || (parent && !(key in parent))) return VOID;
+                else if (DEFAULT_HIDDEN_OBJECT_PROPERTIES.has(key)) return VOID;
                 // get value
                 else {
                     if (parent instanceof Array && typeof key == "bigint" && key < 0n)  key = parent.length+Number(key)  // negative array indices
                    
                     // get single value
-                    else return parent[key];
+                    else {
+                        if (key in parent) return parent[key];
+                        else if (DX_SLOTS in parent && parent[DX_SLOTS]?.has(SLOT_GET)) return parent[DX_SLOTS].get(SLOT_GET)(key);
+                        else return undefined;
+                    }
                 }
             }
 
@@ -3126,10 +3131,12 @@ export class Runtime {
                             if (parent instanceof Array && Number(key)+1==parent.length) Runtime.runtime_actions.trimArray(parent) // trim end
                         }
                         // set single value
-                        else parent[key] = value; // actually set value
+                        else {
+                            if (DX_SLOTS in parent && parent[DX_SLOTS]?.has(SLOT_SET) && !(key in parent)) return parent[DX_SLOTS].get(SLOT_SET)(key, value);
+                            else parent[key] = value;
+                        }
                     } catch (e) {
                         o_parent?.enableUpdatesForAll();
-                        console.log(e,parent,value);
                         throw new RuntimeError("Property '"+key.toString()+"' is readonly or does not exist", SCOPE)
                     }
                 }
@@ -4343,14 +4350,14 @@ export class Runtime {
             else if (INNER_SCOPE.operator === BinaryCode.AND) {
 
                 // collapse primitive values
-                let val = Value.collapseValue(INNER_SCOPE.active_value, true, true);
+                const val = Value.collapseValue(INNER_SCOPE.active_value, true, true);
                 el = Value.collapseValue(el, true, true); 
 
                 // logical
                 if (val instanceof Logical) {
                     INNER_SCOPE.active_value = val.and(el);
                 }
-                else if (val instanceof Target || el instanceof Target || val instanceof Type || el instanceof Type) {
+                else if (val instanceof Target || el instanceof Target || val instanceof Type || el instanceof Type || val instanceof Assertion || el instanceof Assertion) {
                     INNER_SCOPE.active_value = new Conjunction(val, el)           
                 }
                 
@@ -5328,11 +5335,11 @@ export class Runtime {
                         await this.runtime_actions.insertToScope(SCOPE, result);
                     }
 
-                    // MAYBE
-                    else if (INNER_SCOPE.scope_block_for == BinaryCode.MAYBE) {
+                    // DEFERRED
+                    else if (INNER_SCOPE.scope_block_for == BinaryCode.DEFER) {
                         INNER_SCOPE.scope_block_for = null;
-                        const maybe = new Maybe(code_block, SCOPE.sender);
-                        await this.runtime_actions.insertToScope(SCOPE, maybe);
+                        const deferred = new Deferred(code_block, SCOPE.sender);
+                        await this.runtime_actions.insertToScope(SCOPE, deferred);
                     }
 
                     // SCOPE
@@ -5556,8 +5563,8 @@ export class Runtime {
                 }
 
                 // MAYBE
-                case BinaryCode.MAYBE: {
-                    SCOPE.inner_scope.scope_block_for = BinaryCode.MAYBE;
+                case BinaryCode.DEFER: {
+                    SCOPE.inner_scope.scope_block_for = BinaryCode.DEFER;
                     SCOPE.inner_scope.scope_block_vars = [];
                     break;
                 }

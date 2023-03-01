@@ -109,7 +109,7 @@ export enum BinaryCode {
     OBSERVE             = 0x66, // observe x ()=>()
     RUN                 = 0x67, // run xy;
     AWAIT               = 0x68, // await xy;
-    MAYBE               = 0x69, // maybe xy;
+    DEFER               = 0x69, // defer xy;
     FUNCTION            = 0x6a, // function ()
     ASSERT              = 0x6b, // assert
     ITERATOR            = 0x6c, // iterator ()

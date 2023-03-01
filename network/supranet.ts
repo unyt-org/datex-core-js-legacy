@@ -22,6 +22,7 @@ import { Logger } from "../utils/logger.ts";
 import { ProtocolDataType } from "../compiler/protocol_types.ts";
 import { buffer2hex } from "../utils/utils.ts";
 import { endpoint_config } from "../runtime/endpoint_config.ts";
+import { UnresolvedEndpointProperty } from "../datex_all.ts";
 const logger = new Logger("DATEX Supranet");
 
 // entry point to connect to the datex network
@@ -65,7 +66,7 @@ export class Supranet {
     // connect to cloud, say hello with public key
     // if local_cache=false, a new endpoint is created and not saved in the cache, even if an endpoint is stored in the cache
     // TODO problem: using same keys as stored endpoint!
-    public static async connect(endpoint?:Endpoint, local_cache = true, sign_keys?:[ArrayBuffer|CryptoKey,ArrayBuffer|CryptoKey], enc_keys?:[ArrayBuffer|CryptoKey,ArrayBuffer|CryptoKey], via_node?:Endpoint) {
+    public static async connect(endpoint?:Endpoint|UnresolvedEndpointProperty, local_cache = true, sign_keys?:[ArrayBuffer|CryptoKey,ArrayBuffer|CryptoKey], enc_keys?:[ArrayBuffer|CryptoKey,ArrayBuffer|CryptoKey], via_node?:Endpoint) {
 
         if (this.#connected && endpoint === Runtime.endpoint) {
             logger.info("already connected as", endpoint);
@@ -74,7 +75,12 @@ export class Supranet {
 
         // load runtime, own endpoint, nodes
         endpoint = await this.init(endpoint, local_cache, sign_keys, enc_keys)
+        if (this.#connected && endpoint === Runtime.endpoint) {return true} // already connected to endpoint during init
 
+        return this._connect(via_node);
+    }
+
+    private static async _connect(via_node?:Endpoint) {
         // find node for available channel
         const [node, channel_type] = await this.getNode(via_node)
 
@@ -92,7 +98,7 @@ export class Supranet {
     }
 
 
-    static async getNode(use_node?:Endpoint) {
+    static getNode(use_node?:Endpoint) {
         // channel types?
         // @ts-ignore
         if (globalThis.WebSocketStream || client_type!="browser") this.available_channel_types.push("websocketstream")
@@ -111,7 +117,7 @@ export class Supranet {
     }
 
     // only init, don't (re)connect
-    public static async init(endpoint?:Endpoint, local_cache = true, sign_keys?:[ArrayBuffer|CryptoKey,ArrayBuffer|CryptoKey], enc_keys?:[ArrayBuffer|CryptoKey,ArrayBuffer|CryptoKey]):Promise<Endpoint>  {
+    public static async init(endpoint?:Endpoint|UnresolvedEndpointProperty, local_cache = true, sign_keys?:[ArrayBuffer|CryptoKey,ArrayBuffer|CryptoKey], enc_keys?:[ArrayBuffer|CryptoKey,ArrayBuffer|CryptoKey]):Promise<Endpoint>  {
 
         await endpoint_config.load(); // load config from storage/file
 
@@ -125,7 +131,39 @@ export class Supranet {
                 enc_keys = keys.encrypt;
             }
             else endpoint = <Endpoint>Target.get(this.createEndpointId());
-        } 
+        }
+        // first resolve endpoint, connect anonymous
+        if (endpoint instanceof UnresolvedEndpointProperty) {
+            const tmp_endpoint = <Endpoint> Endpoint.get(Endpoint.createNewID());
+            await this._init(tmp_endpoint, true, sign_keys, enc_keys, keys);
+            await this._connect();
+            const res = await endpoint.resolve(); 
+            // use fallback tmp_endpoint if endpoint property is void
+            if (res === undefined) {
+                logger.success `
+    Created a new endpoint (${tmp_endpoint}) intended to be used as ${endpoint.parent}.${endpoint.property}.
+    If you have write access to ${endpoint.parent}, you can set ${endpoint.parent}.${endpoint.property} = ${tmp_endpoint}.
+    If you are the owner of ${endpoint.parent}, you can create a certificate for ${tmp_endpoint} with the public keys:
+    
+    🔑 VERIFY: ${Crypto.getOwnPublicKeysExported()[0]}
+    🔑 ENCRYPT: ${Crypto.getOwnPublicKeysExported()[1]}
+    `
+                return tmp_endpoint; // already connected to tmp_endpoint
+            }
+            else if (!(res instanceof Endpoint)) {
+                throw new Error(`could not resolve ${endpoint} to an <endpoint> value`);
+            }
+            logger.info(`resolved ${endpoint} to ${res}`);
+            endpoint = res;
+        }
+
+        return this._init(endpoint, local_cache, sign_keys, enc_keys, keys);
+    }
+
+    static #interfaces_initialized = false
+
+    private static async _init(endpoint:Endpoint, local_cache = true, sign_keys?:[ArrayBuffer|CryptoKey,ArrayBuffer|CryptoKey], enc_keys?:[ArrayBuffer|CryptoKey,ArrayBuffer|CryptoKey], keys?:Crypto.ExportedKeySet) {
+       
         // load/create keys, even if endpoint was provided?
         if (!sign_keys || !enc_keys) {
             keys = await this.getKeysOrGenerateNew();
@@ -158,9 +196,11 @@ export class Supranet {
         await Crypto.loadOwnKeys(...sign_keys, ...enc_keys);
      
         // setup interface manager
-        await InterfaceManager.init()
-
-        this.setListeners();
+        if (!this.#interfaces_initialized) {
+            this.#interfaces_initialized = true;
+            await InterfaceManager.init()
+            this.setListeners();    
+        }
 
         return endpoint;
     }
@@ -177,8 +217,8 @@ export class Supranet {
         return `@@${buffer2hex(new Uint8Array(id.buffer))}`;
     }
 
-    public static async getLocalEndpointAndKeys():Promise<[Endpoint, Crypto.ExportedKeySet]> {
-        let endpoint:Endpoint;
+    public static async getLocalEndpointAndKeys():Promise<[Endpoint|UnresolvedEndpointProperty, Crypto.ExportedKeySet]> {
+        let endpoint: Endpoint|UnresolvedEndpointProperty;
 
         // create new endpoint
         if (!endpoint_config.endpoint) endpoint = await this.createAndSaveNewEndpoint();
@@ -191,7 +231,7 @@ export class Supranet {
             }
         }
 
-        if (!(endpoint instanceof Endpoint)) {
+        if (!(endpoint instanceof Endpoint || endpoint instanceof UnresolvedEndpointProperty)) {
             logger.error("Config Value 'endpoint' is not of type <Endpoint>");
             endpoint = await this.createAndSaveNewEndpoint();
         } 
@@ -212,7 +252,7 @@ export class Supranet {
         let keys = endpoint_config.keys;
         // invalid, create new
         if (!keys || !keys.sign?.[0] || !keys.sign?.[1] || !keys.encrypt?.[0] || !keys.encrypt?.[1]) {
-            logger.info("creating new keys");
+            // logger.info("creating new keys");
             keys = await Crypto.createOwnKeys();
         }
 

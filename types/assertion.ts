@@ -5,9 +5,8 @@ import { AssertionError, RuntimeError, ValueError } from "./errors.ts";
 import { Callable, ExtensibleFunction } from "./function.ts";
 import { Scope } from "./scope.ts";
 import { Tuple } from "./tuple.ts";
-import { Type } from "./type.ts";
 
-export class Assertion extends ExtensibleFunction implements ValueConsumer {
+export class Assertion<T=any> extends ExtensibleFunction implements ValueConsumer {
 
     // datex scope
     scope:Scope
@@ -35,26 +34,28 @@ export class Assertion extends ExtensibleFunction implements ValueConsumer {
     }
 
     
-    assert(value:any, SCOPE?:datex_scope){
+    assert<B extends boolean = false>(value:T|Tuple<T>, SCOPE?:datex_scope, return_boolean:B = false): B extends true ? boolean|Promise<boolean> : void|Promise<void> {
 
         // ntarget
         if (this.ntarget) {
-            if (this.ntarget_async) return this.checkResultPromise(<Promise<string | boolean>>this.ntarget(...(value instanceof Tuple ? value.toArray() : value)))
-            else return this.checkResult(<string | boolean>this.ntarget(...(value instanceof Tuple ? value.toArray() : value)))
+            if (this.ntarget_async) return this.checkResultPromise(<Promise<string | boolean>>this.ntarget(...(value instanceof Tuple ? value.toArray() : value)), return_boolean)
+            else return this.checkResult(<string | boolean>this.ntarget(...(value instanceof Tuple ? value.toArray() : value)), return_boolean)
         }
 
         // datex
-        else if (this.scope) return this.checkResultPromise(this.scope.execute(SCOPE?.sender, SCOPE?.context, value));
+        else if (this.scope) return this.checkResultPromise(this.scope.execute(SCOPE?.sender, SCOPE?.context, value), return_boolean);
 
         // invalid
         else throw new RuntimeError("Cannot execute <Assertion>");
     }
 
-    private async checkResultPromise(valid_promise:Promise<string|boolean|undefined>) {
-        return this.checkResult(await valid_promise);
+    private async checkResultPromise(valid_promise:Promise<string|boolean|undefined>, return_boolean = false) {
+        return this.checkResult(await valid_promise, return_boolean);
     }
 
-    private checkResult(valid:string|boolean|undefined) {
+    private checkResult(valid:string|boolean|undefined, return_boolean = false) {
+        if (return_boolean) return valid === true || valid === VOID
+
         if (valid !== true && valid !== VOID) {
             if (valid == false) throw new AssertionError(this.scope?.decompiled ? `${this.scope.decompiled.replace(/;$/,'')} is false` : 'Invalid');
             else if (typeof valid == "string") throw new AssertionError(valid);
@@ -62,15 +63,7 @@ export class Assertion extends ExtensibleFunction implements ValueConsumer {
         }
     }
 
-    handleApply(value: any, SCOPE?: datex_scope) {
+    handleApply(value: T|Tuple<T>, SCOPE?: datex_scope) {
         return this.assert(value, SCOPE);
     }
 }
-
-
-Type.get("std:Assertion").setJSInterface({
-    class: Assertion,
-    is_normal_object: true,
-    proxify_children: true,
-    visible_children: new Set(),
-})

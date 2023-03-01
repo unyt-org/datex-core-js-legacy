@@ -55,13 +55,18 @@ class EndpointConfig implements EndpointConfigData {
 			catch {
 				if (!path) path = new URL('./'+this.DX_FILE_NAME, cwdURL)
 				config_file = path;
-				// console.log("using endpoint config: " + config_file);
+				console.log("using endpoint config: " + config_file);
 			}
 			try {
 				config = await datex.get(config_file);
 			}
-			catch {
+			catch (e){
 				// ignore if no .dx file found
+				if (e instanceof Deno.errors.NotFound) {}
+				else {
+					logger.error `Could not read config file ${config_file}: ${e.toString()}`;
+					throw "invalid config file"
+				}
 			}
 		}
 		else {
@@ -77,8 +82,13 @@ class EndpointConfig implements EndpointConfigData {
 					config = await datex.get(path);
 					logger.info("loaded endpoint config from " + path);
 				}
-				catch {
+				catch (e) {
 					// ignore if no .dx file found
+					if (!(await fetch(path)).ok) {}
+					else {
+						logger.error `Could not read config file ${path}: ${e.toString()}`;
+						throw "invalid config file"
+					}
 				}
 			}
 		}

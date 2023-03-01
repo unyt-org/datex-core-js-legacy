@@ -5,6 +5,7 @@ import { baseURL, Runtime, PrecompiledDXB, Type, Pointer, Value, PointerProperty
 
 /** make decorators global */
 import {property as _property, sync as _sync, endpoint as _endpoint, template as _template} from "./datex_all.ts";
+import { DX_SLOTS, SLOT_GET, SLOT_SET } from "./runtime/constants.ts";
 import { getCallerFile, getCallerInfo } from "./utils/caller_metadata.ts";
 
 declare global {
@@ -491,6 +492,53 @@ export function props<T extends object = object>(parent:CompatValue<T>, strong_p
         }
     })
 }
+
+export function translocate<V extends unknown, T extends Record<string,V>>(value:T): {[K in keyof T]:Promise<T[K]>}
+export function translocate<T extends Map<unknown,unknown>|Set<unknown>|Array<unknown>|Record<string,unknown>>(value:T):T {
+    value = $$(value);
+    const ptr = Pointer.getByValue(value)!;
+    const id = ptr.idString();
+
+    if (!value) throw new Error("cannot translocate empty value");
+    if (!(DX_SLOTS in value)) value[DX_SLOTS] = new Map();
+
+
+    const getter = (key:unknown)=>{
+        const storage_key = id + "." + key;
+        console.log("#get",key, storage_key)
+        return Storage.getItem(storage_key)
+    }
+    const setter = async (key:unknown, value:unknown)=>{
+        const storage_key = id + "." + key;
+        console.log("#set",key, value, storage_key)
+        await Storage.setItem(storage_key, value)
+        return true;
+    }
+
+    value[DX_SLOTS]!.set(SLOT_GET, getter)
+    value[DX_SLOTS]!.set(SLOT_SET, setter)
+
+    // link custom getters/setters to proxy
+    ptr.setPropertyGetter(getter)
+    ptr.setPropertySetter(setter)
+
+    // if (value instanceof Map) return translocateMapJS(value);
+    console.log(value);
+    return value;
+}
+
+// add js binding to read/write translocated properties
+// export function translocateObjectJS(value:Record<string,unknown>){
+
+// }
+
+// export function translocateMapJS(value:Map<unknown,unknown>){
+//     console.log("trans",value);
+//     value.
+// }
+
+
+
 
 // @ts-ignore
 globalThis.get = get

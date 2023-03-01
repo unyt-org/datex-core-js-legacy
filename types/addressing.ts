@@ -8,6 +8,7 @@ import { buffer2hex, hex2buffer } from "../utils/utils.ts";
 import { clause, Disjunction } from "./logic.ts";
 import { Runtime, StaticScope } from "../runtime/runtime.ts";
 import { logger } from "../utils/global_values.ts";
+import { Datex } from "../datex.ts";
 
 
 type target_prefix_person = "@";
@@ -232,6 +233,10 @@ export class Endpoint extends Target {
 	}
 
 	public async getProperty(key:unknown) {
+		if (!Datex.Supranet.connected && this !== Datex.Runtime.endpoint) {
+			// logger.error("cannot get endpoint property");
+			return new UnresolvedEndpointProperty(this, key)
+		}
 		try {
 			const res = await datex("#public.(?)", [key], this);
 			if (res!==undefined) {
@@ -351,10 +356,16 @@ export class Endpoint extends Target {
 		}
 		// TODO Id Endpoint from ipv6 address, ...
 		catch {
-			return Target.get("@TODO_IPV6")
+			throw "cannot resolve endpoint name"
 		}
 	}
 
+	public static fromStringAsync(string:string) {
+		// TODO: regex
+		// normal DATEX endpoint
+		return datex(string);
+	}
+	
 
 	public static createNewID():filter_target_name_id{
 		const id = new DataView(new ArrayBuffer(16));
@@ -384,6 +395,19 @@ export class Endpoint extends Target {
 		])
 	}
 
+}
+
+
+export class UnresolvedEndpointProperty {
+	constructor(public parent:Endpoint, public property:any) {}
+
+	resolve() {
+		return datex `${this.parent}.${this.property}`;
+	}
+
+	toString() {
+		return `${this.parent}.${this.property}`;
+	}
 }
 
 

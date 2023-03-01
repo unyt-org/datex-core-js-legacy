@@ -4,7 +4,7 @@ import { Endpoint } from "../types/addressing.ts";
 import { Scope } from "./scope.ts";
 
 
-export class Maybe<T>  {
+export class Deferred<T>  {
 
     #datex: Scope<T>
     #sender: Endpoint
@@ -34,8 +34,8 @@ export class Maybe<T>  {
 }
 
 // only temporary, remove
-Type.get("std:__Maybe").setJSInterface({
-    class: Maybe,
+Type.get("std:def").setJSInterface({
+    class: Deferred,
 
     is_normal_object: true,
     proxify_children: true,
