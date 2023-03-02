@@ -207,7 +207,7 @@ export class Runtime {
 
     static mime_type_classes = new Map(Object.entries(this.MIME_TYPE_MAPPING).map(x=>[('class' in x[1] && typeof x[1].class == "function") ? x[1].class : x[1], x[0]])) 
 
-    public static ENV:{LANG:string, VERSION:string}
+    public static ENV:{LANG:string, DATEX_VERSION:string}
     public static VERSION = "0.0.0";
 
     public static PRECOMPILED_DXB: {[key:string]:PrecompiledDXB}
@@ -6446,12 +6446,12 @@ Runtime.ENV = await Storage.loadOrCreate("Datex.Runtime.ENV", ()=>{
     }
 });
 if (Runtime.ENV) {
-    Runtime.ENV.VERSION = Runtime.VERSION;
+    Runtime.ENV.DATEX_VERSION = Runtime.VERSION;
 }
 // workaround, should never happen
 else {
     logger.error("Runtime ENV is undefined");
-    Runtime.ENV = {LANG: globalThis.localStorage?.lang ?? globalThis?.navigator?.language?.split("-")[0] ?? 'en', VERSION: null}
+    Runtime.ENV = {LANG: globalThis.localStorage?.lang ?? globalThis?.navigator?.language?.split("-")[0] ?? 'en', DATEX_VERSION: null}
 }
 
 if (globalThis.Deno) {
