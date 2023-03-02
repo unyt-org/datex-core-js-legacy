@@ -9,6 +9,7 @@ import { Value } from "../runtime/pointers.ts";
 import { RuntimeError } from "./errors.ts";
 import { Assertion } from "./assertion.ts";
 import { Type } from "./type.ts";
+import { Datex } from "../datex.ts";
 
 export type literal<T> = T|Negation<T>|Assertion<T>; // x, ~x
 type cnf_disjunction<T> = Disjunction<literal<T>>|literal<T>; // x, x|y, x|~y, ...
@@ -65,6 +66,9 @@ export class Logical<T> extends Set<T> {
 		// TODO: empty - does not match?
 		if (against === undefined) return false;
 
+		value = <clause<T>> Datex.Value.collapseValue(value, true, true);
+		against = <clause<T>> Datex.Value.collapseValue(against, true, true);
+
 		// auto infer atomic class
 		if (atomic_class === undefined) {
 			const atomic_value = (value instanceof Logical ? (<Logical<clause<T>>>value).sampleValue() : value) ?? (against instanceof Logical ? (<Logical<clause<T>>>against).sampleValue() : against);
@@ -113,6 +117,9 @@ export class Logical<T> extends Set<T> {
 
     private static matchesSingle<T>(atomic_value:T, against: clause<T>, atomic_class:Class<T>&LogicalComparator<T>): boolean {
 
+		atomic_value = <T> Datex.Value.collapseValue(atomic_value, true, true);
+		against = <clause<T>> Datex.Value.collapseValue(against, true, true);
+
 		// wrong atomic type for atomic_value at runtime
 		if (atomic_class && !(atomic_value instanceof atomic_class)) throw new RuntimeError(`Invalid match check: atomic value has wrong type (expected ${Type.getClassDatexType(atomic_class)}, found ${Type.ofValue(atomic_value)})`);
 
@@ -147,7 +154,9 @@ export class Logical<T> extends Set<T> {
 
 		// wrong atomic type at runtime
 		// guard for: against is T
-		if (!(against instanceof atomic_class)) throw new RuntimeError(`Invalid match check: atomic value has wrong type (expected ${Type.getClassDatexType(atomic_class)}, found ${Type.ofValue(against)})`);
+		if (!(against instanceof atomic_class)) {
+			throw new RuntimeError(`Invalid match check: atomic value has wrong type (expected ${Type.getClassDatexType(atomic_class)}, found ${Type.ofValue(against)})`);
+		}
 
 		// match
 		return atomic_class.logicalMatch(<T>Value.collapseValue(atomic_value, true, true), <T>against);

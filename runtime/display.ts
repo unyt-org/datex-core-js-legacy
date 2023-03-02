@@ -58,7 +58,7 @@ Cannot restore the current state. Please delete all caches (.datex-cache) and re
 	}
 }
 
-let show_init_screen = false;
+let show_init_screen = true;
 
 export function enableInitScreen(){
 	show_init_screen = true;

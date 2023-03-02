@@ -5381,7 +5381,6 @@ export class Runtime {
                         const remote:Disjunction<Endpoint> = Logical.collapse(INNER_SCOPE.active_value, Target);
                         delete INNER_SCOPE.active_value;
 
-                        console.log("remote: ", remote, (remote.size == 1 && [...remote][0] instanceof Endpoint && SCOPE.sender.equals([...remote][0]) && SCOPE.header.signed))
                         if (!SCOPE.impersonation_permission && !(remote.size == 1 && [...remote][0] instanceof Endpoint && SCOPE.sender.equals([...remote][0]) && SCOPE.header.signed)) {
                             throw new PermissionError("No permission to execute scopes on external endpoints", SCOPE)
                         }
