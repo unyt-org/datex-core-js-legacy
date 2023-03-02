@@ -707,13 +707,13 @@ function _old_publicStaticClass(original_class:Class) {
         // is default property
         if (original_class[METADATA]?.[Decorators.DEFAULT_PROPERTY]?.constructor) {
             const static_scope = initialized_static_scope_classes.get(original_class);
-            if (!Runtime.endpoint_default || typeof Runtime.endpoint_default != "object") Runtime.endpoint_default = {};
-            Runtime.endpoint_default[static_scope.name] = static_scope
+            if (!Runtime.endpoint_entrypoint || typeof Runtime.endpoint_entrypoint != "object") Runtime.endpoint_entrypoint = {};
+            Runtime.endpoint_entrypoint[static_scope.name] = static_scope
         }
         // is default value
         if (original_class[METADATA]?.[Decorators.DEFAULT]?.constructor) {
             const static_scope = initialized_static_scope_classes.get(original_class);
-            Runtime.endpoint_default = static_scope;
+            Runtime.endpoint_entrypoint = static_scope;
         }
 
 

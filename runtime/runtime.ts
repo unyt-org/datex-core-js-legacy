@@ -18,6 +18,7 @@ import {displayInit, displayClear} from "./display.ts";
 
 displayInit();
 
+
 globalThis.performance?.mark("runtime_start");
 
 // for debugging: converting bigints to JSON
@@ -28,7 +29,6 @@ Symbol.prototype.toJSON = function(){return globalThis.String(this)}
 
 /***** imports */
 import { Compiler, compiler_options, PrecompiledDXB, ProtocolDataTypesMap, DatexResponse} from "../compiler/compiler.ts"; // Compiler functions
-import type { BlockchainAdapter } from "../network/blockchain_adapter.ts";
 import { DecimalRef, IntegerRef, Pointer, PointerProperty, CompatValue, Value, TextRef, BooleanRef} from "./pointers.ts";
 import { Endpoint, endpoints, LOCAL_ENDPOINT, Target, target_clause, WildcardTarget } from "../types/addressing.ts";
 import { RuntimePerformance } from "./performance_measure.ts";
@@ -46,7 +46,7 @@ import { Crypto } from "../runtime/crypto.ts";
 import { ProtocolDataType } from "../compiler/protocol_types.ts";
 import { base64ToArrayBuffer, buffer2hex, getFileContent } from "../utils/utils.ts";
 import { IOHandler } from "./io_handler.ts";
-import { DX_PERMISSIONS, DX_SLOTS, DX_TYPE, DX_SERIALIZED, DX_VALUE, INVALID, MAX_UINT_16, NOT_EXISTING, UNKNOWN_TYPE, VOID, WILDCARD, SLOT_WRITE, SLOT_READ } from "./constants.ts";
+import { DX_PERMISSIONS, DX_SLOTS, DX_TYPE, DX_SERIALIZED, DX_VALUE, INVALID, MAX_UINT_16, NOT_EXISTING, UNKNOWN_TYPE, VOID, WILDCARD, SLOT_WRITE, SLOT_READ, DX_GET_PROPERTY, SLOT_GET, SLOT_SET } from "./constants.ts";
 import { baseURL, client_type, DEFAULT_HIDDEN_OBJECT_PROPERTIES, logger, TypedArray } from "../utils/global_values.ts";
 import { MessageLogger } from "../utils/message_logger.ts";
 import { JSInterface } from "./js_interface.ts";
@@ -56,13 +56,11 @@ import { Scope } from "../types/scope.ts";
 import { fundamental } from "../types/abstract_types.ts";
 import { IterationFunction as IteratorFunction, Iterator, RangeIterator } from "../types/iterator.ts";
 import { Assertion } from "../types/assertion.ts";
-import { $$, datex, eternal, f, pointer, static_pointer } from "../datex_short.ts";
-import { Maybe } from "../types/maybe.ts";
+import { Deferred } from "../types/deferred.ts";
 import { Task } from "../types/task.ts";
 import { DATEX_ERROR } from "../types/error_codes.ts";
 import { cnf, Conjunction, Disjunction, Logical, Negation } from "../types/logic.ts";
 import { Logger } from "../utils/logger.ts";
-import { Decompiler } from "./decompiler.ts";
 import { Debugger } from "./debugger.ts";
 import {decompile as wasm_decompile} from "../wasm/adapter/pkg/datex_wasm.js";
 
@@ -71,6 +69,19 @@ import { Time } from "../types/time.ts";
 import { initPublicStaticClasses } from "../js_adapter/js_class_adapter.ts";
 
 const mime = globalThis.Deno ? (await import("https://deno.land/x/mimetypes@v1.0.0/mod.ts")).mime : null;
+
+// from datex_short.ts --------------------------------------------
+function $$<T>(value:CompatValue<T>): MinimalJSRef<T> {
+    return <any> Pointer.createOrGet(value).js_value;
+}
+function static_pointer<T>(value:CompatValue<T>, endpoint:IdEndpoint, unique_id:number, label?:string|number) {
+    const static_id = Pointer.getStaticPointerId(endpoint, unique_id);
+    const pointer = Pointer.create(static_id, value)
+    if (label) pointer.addLabel(typeof label == "string" ? label.replace(/^\$/, '') : label);
+    return Value.collapseValue(pointer);
+}
+
+// --------------------------------------------------------------
 
 
 // @ts-ignore
@@ -87,14 +98,14 @@ const ReadableStreamDefaultReader = globalThis.ReadableStreamDefaultReader ?? cl
 export class StaticScope {
 
     public static STD: StaticScope;
-    public static scopes: {[name:string]:StaticScope} = {};
+    public static scopes = new Map<any, StaticScope>()
 
     public static readonly NAME: unique symbol = Symbol("name");
     public static readonly DOCS: unique symbol = Symbol("docs");
 
     // return a scope with a given name, if it already exists
     public static get(name?:string):StaticScope {
-        return this.scopes[name] || new StaticScope(name);
+        return this.scopes.get(name) || new StaticScope(name);
     }
 
     private constructor(name?:string){
@@ -112,14 +123,14 @@ export class StaticScope {
         return this[name] = value;
     }
     hasVariable(name: string) {
-        return this.hasOwnProperty(name)
+        return Object.hasOwn(this,name)
     }
 
     // update/set the name of this static scope
     set name(name:string){
-        if (this[StaticScope.NAME]) delete StaticScope.scopes[this[StaticScope.NAME]];
+        if (this[StaticScope.NAME]) StaticScope.scopes.delete(this[StaticScope.NAME]);
         this[StaticScope.NAME] = name;
-        StaticScope.scopes[this[StaticScope.NAME]] = this;
+        StaticScope.scopes.set(this[StaticScope.NAME], this);
         if (this[StaticScope.NAME] == "std") StaticScope.STD = this;
     }
 
@@ -136,7 +147,7 @@ export class StaticScope {
     }
 }
 
-DatexObject.setWritePermission(<Record<string|symbol,unknown>>StaticScope.scopes, undefined); // make readonly
+// DatexObject.setWritePermission(StaticScope.scopes, undefined); // make readonly
 
 
 // typed object
@@ -185,6 +196,7 @@ export class Runtime {
                             // recommended: true, otherwise all integers are implicitly casted to the type <decimal> in DATEX
         ERROR_STACK_TRACES: true, // create detailed stack traces with all DATEX Errors
         NATIVE_ERROR_STACK_TRACES: true, // create detailed stack traces of JS Errors (NATIVE_ERROR_MESSAGES must be true)
+        NATIVE_ERROR_DEBUG_STACK_TRACES: false, // also display internal DATEX library stack traces (hidden per default)
         NATIVE_ERROR_MESSAGES: true // expose native error messages
     }
 
@@ -214,7 +226,7 @@ export class Runtime {
                 else (
                     val text = local_map.'en';
                     val language = lang;
-                    @example :: #default.translate (text, language);
+                    @example.translate (text, language);
                 )
             )
             ` // used for persistent DATEX storage
@@ -244,7 +256,7 @@ export class Runtime {
                         else (
                             val text = local_map.'en'.(key);
                             val language = lang;
-                            @example :: #default.translate (text, language);
+                            @example.translate (text, language);
                         )
                     )` : '' // used for persistent DATEX storage
             );
@@ -283,7 +295,7 @@ export class Runtime {
                     else (
                         val text = local_map.'en'.(key);
                         val language = lang;
-                        @example :: #default.translate (text, language);
+                        @example.translate (text, language);
                     )
                 )`) // used for persistent DATEX storage
                 this.#not_loaded_local_strings.get(local_map)!.delete(key); // is now loaded
@@ -297,21 +309,11 @@ export class Runtime {
     }
 
     private static getTranslatedLocalString(text_en:string, lang:string) {
-        return <Promise<string>> datex `@example :: #default.translate (${text_en},${lang})`
+        return "TODO";// <Promise<string>> datex `@example.translate (${text_en},${lang})`
     }
 
     // @ts-ignore
     public static HOST_ENV = '';
-
-    static #blockchain_interface:BlockchainAdapter;
-
-    static get blockchain_interface(){
-            return this.#blockchain_interface
-    }
-
-    static set blockchain_interface(blockchain_interface: BlockchainAdapter){
-         this.#blockchain_interface = blockchain_interface
-    }
 
     static #endpoint: Endpoint;  // this endpoint (default is special local endpoint %000000000000000000000000)
 
@@ -320,13 +322,10 @@ export class Runtime {
     }
 
     static set endpoint(endpoint: Endpoint){
-        if (!endpoint.id_endpoint) {
-            throw new RuntimeError("Endpoint has no associated Endpoint Id, cannot set local runtime endpoint");
-        }
-        if (endpoint != LOCAL_ENDPOINT) logger.success("Changing local endpoint to " + endpoint);
+        if (endpoint != LOCAL_ENDPOINT) logger.success("using endpoint: " + endpoint);
         this.#endpoint = endpoint;
 
-        Pointer.pointer_prefix = this.endpoint.id_endpoint.getPointerPrefix();
+        Pointer.pointer_prefix = this.endpoint.getPointerPrefix();
         // has only local endpoint id (%0000) or global id?
         if (endpoint != LOCAL_ENDPOINT) Pointer.is_local = false;
         else Pointer.is_local = true;
@@ -341,7 +340,7 @@ export class Runtime {
 
     public static main_node:Endpoint; // TODO remove?
 
-    static endpoint_default:any = "no default set" // #default TODO
+    static endpoint_entrypoint:any
 
     private static utf8_decoder = new TextDecoder("utf-8");
     private static utf8_encoder = new TextEncoder();
@@ -414,7 +413,7 @@ export class Runtime {
 
 
     // default static scope: std
-    static STD_STATIC_SCOPE:StaticScope;
+    static STD_STATIC_SCOPE:Record<string,any>;
 
     private static STD_TYPES_ABOUT:Map<Type,Markdown>;
 
@@ -483,10 +482,17 @@ export class Runtime {
     static #url_content_cache = new Map<string,any>();
     static #url_raw_content_cache = new Map<string,any>();
 
+    // converts exports from DATEX tuple to normal JS object
+    private static normalizeDatexExports(module:any){
+        // TODO: fix tuple madness
+		if (module instanceof Tuple && !Pointer.getByValue(module)) module = Object.fromEntries(module.named);
+        return module;
+    }
+
     // get content of https://, file://, ...
-    public static async getURLContent<T=unknown>(url_string:string, raw?:boolean, cached?:boolean):Promise<T extends any ? T : [data:unknown, type?:string]>
-    public static async getURLContent<T=unknown>(url:URL, raw?:boolean, cached?:boolean):Promise<T extends any ? T : [data:unknown, type?:string]>
-    public static async getURLContent<T=unknown>(url_string:string|URL, raw=false, cached = false):Promise<T extends any ? T : [data:unknown, type?:string]> {
+    public static async getURLContent<T=unknown, RAW extends boolean = false>(url_string:string, raw?:RAW, cached?:boolean):Promise<RAW extends false ? T : [data:unknown, type?:string]>
+    public static async getURLContent<T=unknown, RAW extends boolean = false>(url:URL, raw?:RAW, cached?:boolean):Promise<RAW extends false ? T : [data:unknown, type?:string]>
+    public static async getURLContent<T=unknown, RAW extends boolean = false>(url_string:string|URL, raw:RAW=false, cached = false):Promise<RAW extends false ? T : [data:unknown, type?:string]> {
         const url = url_string instanceof URL ? url_string : new URL(url_string, baseURL);
         url_string = url.toString();
 
@@ -508,12 +514,12 @@ export class Runtime {
             if (type == "application/datex" || type == "text/dxb" || url_string.endsWith(".dxb")) {
                 const content = await response.arrayBuffer();
                 if (raw) result = [content, type];
-                else result = await this.executeDXBLocally(content, url);
+                else result = this.normalizeDatexExports(await this.executeDXBLocally(content, url));
             }
             else if (type?.startsWith("text/datex") || url_string.endsWith(".dx")) {
                 const content = await response.text()
                 if (raw) result = [content, type];
-                else result = await this.executeDatexLocally(content, undefined, undefined, url);
+                else result = this.normalizeDatexExports(await this.executeDatexLocally(content, undefined, undefined, url));
             }
             else if (type?.startsWith("application/json5") || url_string.endsWith(".json5")) {
                 const content = await response.text();
@@ -549,12 +555,12 @@ export class Runtime {
             if (filePath.endsWith('.dxb')) {
                 const content = (<Uint8Array>(await getFileContent(url, true, true))).buffer;
                 if (raw) result = [content, "application/datex"];
-                else result = await this.executeDXBLocally(content, url);
+                else result = this.normalizeDatexExports(await this.executeDXBLocally(content, url));
             }
             else if (filePath.endsWith('.dx')) {
                 const content = <string> await getFileContent(url);
                 if (raw) result = [content, "text/datex"];
-                else result = await this.executeDatexLocally(content, undefined, undefined, url);
+                else result = this.normalizeDatexExports(await this.executeDatexLocally(content, undefined, undefined, url));
             }
             else if (filePath.endsWith('.json')) {
                 const content = <string> await getFileContent(url);
@@ -566,7 +572,7 @@ export class Runtime {
                 if (raw) result = [content, "application/json5"];
                 else result = await Runtime.datexOut([content, [], {sign:false, encrypt:false, type:ProtocolDataType.DATA}]);
             }
-            else if (filePath.endsWith('.js') || filePath.endsWith('.ts')) {
+            else if (filePath.endsWith('.js') || filePath.endsWith('.ts')  || filePath.endsWith('.tsx') || filePath.endsWith('.jsx') || filePath.endsWith('.mts') || filePath.endsWith('.mjs')) {
                 const content = <string> await getFileContent(url);
                 if (raw) result = [content, "application/json5"];
                 else result = await import(url_string)
@@ -575,9 +581,9 @@ export class Runtime {
                 if (!mime) throw Error("Cannot infer type from URL content - missing mime module");
                 const content = <Uint8Array>(await getFileContent(url, true, true));
                 const ext = url.toString().match(/\.[^./]*$/)?.[0].replace(".","");
-                if (!ext) throw Error("Cannot infer type from URL content");
+                if (!ext) throw Error("Cannot infer type from URL content (no extension)");
                 const mime_type = mime.getType(ext);
-                if (!mime_type) throw Error("Cannot infer type from URL content");
+                if (!mime_type) throw Error("Cannot infer type from URL content - could not resolve mime type (extension: "+ext+")");
 
                 if (raw) result = [content, mime_type];
                 else {
@@ -955,22 +961,22 @@ export class Runtime {
         }, "TYPE");
 
         // create std static scope
-        this.STD_STATIC_SCOPE = StaticScope.get("std");
+        this.STD_STATIC_SCOPE = {};
 
         // std.print
         const print = DatexFunction.createFromJSFunction((meta, ...params:any[])=>{
             IOHandler.stdOut(params, meta.sender);
-        }, undefined, undefined, undefined, undefined, undefined, new Tuple({value:Type.std.Any}), 0)
+        }, undefined, undefined, undefined, undefined, undefined, new Tuple({v1:Type.std.Any, v2:Type.std.Any, v3:Type.std.Any, v4:Type.std.Any, v5:Type.std.Any, v6:Type.std.Any}), 0)
 
         // std.printf (formatted output)
         const printf = DatexFunction.createFromJSFunction(async (meta,...params:any[])=>{
             await IOHandler.stdOutF(params, meta.sender);
-        }, undefined, undefined, undefined, undefined, undefined, new Tuple({value:Type.std.Any}), 0);
+        }, undefined, undefined, undefined, undefined, undefined, new Tuple({v1:Type.std.Any, v2:Type.std.Any, v3:Type.std.Any, v4:Type.std.Any, v5:Type.std.Any, v6:Type.std.Any}), 0);
 
         // std.printn (native output)
         const printn = DatexFunction.createFromJSFunction((...params:any[])=>{
             console.log("printn >", ...params);
-        });
+        }, undefined, undefined, undefined, undefined, undefined, new Tuple({v1:Type.std.Any, v2:Type.std.Any, v3:Type.std.Any, v4:Type.std.Any, v5:Type.std.Any, v6:Type.std.Any}));
 
 
         // std.printn (native output)
@@ -1009,13 +1015,13 @@ export class Runtime {
         });
 
 
-        this.STD_STATIC_SCOPE.setVariable('print',      static_pointer(print, f('@@000000000000000000000000'), 0xaa00, "$std_print"));
-        this.STD_STATIC_SCOPE.setVariable('printf',     static_pointer(printf, f('@@000000000000000000000000'), 0xaa01, "$std_printf"));
-        this.STD_STATIC_SCOPE.setVariable('printn',     static_pointer(printn, f('@@000000000000000000000000'), 0xaa02, "$std_printn"));
-        this.STD_STATIC_SCOPE.setVariable('read',       static_pointer(read, f('@@000000000000000000000000'), 0xaa03, "$std_read"));
-        this.STD_STATIC_SCOPE.setVariable('sleep',      static_pointer(sleep, f('@@000000000000000000000000'), 0xaa04, "$std_sleep"));
-        this.STD_STATIC_SCOPE.setVariable('logger',     static_pointer(dx_logger, f('@@000000000000000000000000'), 0xaa05, "$std_dx_logger"));
-        this.STD_STATIC_SCOPE.setVariable('localtext',  static_pointer(localtext, f('@@000000000000000000000000'), 0xaa06, "$std_localtext"));
+        this.STD_STATIC_SCOPE['print']      = static_pointer(print, LOCAL_ENDPOINT, 0xaa00, "$std_print");
+        this.STD_STATIC_SCOPE['printf']     = static_pointer(printf, LOCAL_ENDPOINT, 0xaa01, "$std_printf");
+        this.STD_STATIC_SCOPE['printn']     = static_pointer(printn, LOCAL_ENDPOINT, 0xaa02, "$std_printn");
+        this.STD_STATIC_SCOPE['read']       = static_pointer(read, LOCAL_ENDPOINT, 0xaa03, "$std_read");
+        this.STD_STATIC_SCOPE['sleep']      = static_pointer(sleep, LOCAL_ENDPOINT, 0xaa04, "$std_sleep");
+        this.STD_STATIC_SCOPE['logger']     = static_pointer(dx_logger, LOCAL_ENDPOINT, 0xaa05, "$std_dx_logger");
+        this.STD_STATIC_SCOPE['localtext']  = static_pointer(localtext, LOCAL_ENDPOINT, 0xaa06, "$std_localtext");
     
         // std.types 
         // try to get from cdn.unyt.org
@@ -1163,7 +1169,7 @@ export class Runtime {
         
                     let instance = Runtime.utf8_decoder.decode(header_uint8.subarray(i, i+=instance_length))  // get instance
     
-                    const target = <Endpoint> Target.get(name, subspaces, instance, null, type);
+                    const target = <Endpoint> Target.get(name, instance, type);
 
                     targets.add(target)
     
@@ -1787,7 +1793,7 @@ export class Runtime {
                     break;
                 }
                 case Type.std.endpoint: {
-                    if (typeof old_value=="string") new_value = Endpoint.fromString(old_value)
+                    if (typeof old_value=="string") new_value = await Endpoint.fromStringAsync(old_value)
                     else new_value = INVALID;
                     break;
                 }
@@ -2493,7 +2499,7 @@ export class Runtime {
             let app_index:number
             if (target_list) app_index = SCOPE.buffer_views.uint8[SCOPE.current_index++];
 
-            return <InstanceType<T>> Target.get(name, subspaces, instance, app_index ? target_list[app_index-1] : null, type);
+            return <InstanceType<T>> Target.get(name, instance, type);
         },
         
         // removes trailing undefined/empty values from array (trim length)
@@ -2758,7 +2764,7 @@ export class Runtime {
             }
             // all other actions (+=, -=, ...)
             else {
-                Runtime.runtime_actions.assignAction(SCOPE, action_type, parent, key, value, current_val);
+                await Runtime.runtime_actions.assignAction(SCOPE, action_type, parent, key, value, current_val);
             }
         },
 
@@ -2867,7 +2873,7 @@ export class Runtime {
             else throw new RuntimeError("Could not get a child reference");
         },
         
-        // get parent[key]
+        // get parent[key]; !! Returns promise because of Endpoint.getProperty()
         getProperty(SCOPE:datex_scope, parent:any, key:any){
 
             if (parent instanceof UnresolvedValue) parent = parent[DX_VALUE];
@@ -2941,8 +2947,9 @@ export class Runtime {
 
             // was not handled by custom pseudo classes
             else if (new_obj == NOT_EXISTING) {
+
                 // get endpoint subspace
-                if (parent instanceof Endpoint) return parent.getSubspace(key?.toString());
+                if (parent instanceof Endpoint) return parent.getProperty(key?.toString());
                 // invalid key type
                 if (parent instanceof Array && typeof key != "bigint") throw new ValueError("Invalid key for <Array> - must be of type <integer>", SCOPE);
                 // sealed tuple
@@ -2951,17 +2958,21 @@ export class Runtime {
                     else return parent.get(key)
                 }
                 // sealed or frozen
-                else if ((Object.isSealed(parent) || Object.isFrozen(parent)) && !parent.hasOwnProperty(key)) throw new ValueError("Property '"+key.toString()+"' does not exist", SCOPE)
+                else if ((Object.isSealed(parent) || Object.isFrozen(parent)) && !Object.hasOwn(parent, key)) throw new ValueError("Property '"+key.toString()+"' does not exist", SCOPE)
                 // not a key string in a normal object
                 else if (typeof key != "string" && !(parent instanceof Array)) throw new ValueError("Invalid key for <Object> - must be of type <text>", SCOPE);
                 // default hidden properties
-                else if (DEFAULT_HIDDEN_OBJECT_PROPERTIES.has(key) || (parent && !(key in parent))) return VOID;
+                else if (DEFAULT_HIDDEN_OBJECT_PROPERTIES.has(key)) return VOID;
                 // get value
                 else {
                     if (parent instanceof Array && typeof key == "bigint" && key < 0n)  key = parent.length+Number(key)  // negative array indices
                    
                     // get single value
-                    else return parent[key];
+                    else {
+                        if (key in parent) return parent[key];
+                        else if (DX_SLOTS in parent && parent[DX_SLOTS]?.has(SLOT_GET)) return parent[DX_SLOTS].get(SLOT_GET)(key);
+                        else return undefined;
+                    }
                 }
             }
 
@@ -3092,6 +3103,15 @@ export class Runtime {
                     o_parent?.enableUpdatesForAll();
                     throw new ValueError("Property '"+key.toString()+"' can not be " + (value === VOID ? "deleted" : "set"), SCOPE);
                 }
+                // handle endpoint properties
+                else if (parent instanceof Endpoint) {
+                    try {
+                        parent.setProperty(key, value);
+                    } catch (e) {
+                        o_parent?.enableUpdatesForAll();
+                        throw e;
+                    }
+                }
                 // set value
                 else {
                     if (parent instanceof Array && typeof key == "bigint" && key < 0n)  key = parent.length+Number(key)  // negative array indices
@@ -3112,10 +3132,12 @@ export class Runtime {
                             if (parent instanceof Array && Number(key)+1==parent.length) Runtime.runtime_actions.trimArray(parent) // trim end
                         }
                         // set single value
-                        else parent[key] = value; // actually set value
+                        else {
+                            if (DX_SLOTS in parent && parent[DX_SLOTS]?.has(SLOT_SET) && !(key in parent)) return parent[DX_SLOTS].get(SLOT_SET)(key, value);
+                            else parent[key] = value;
+                        }
                     } catch (e) {
                         o_parent?.enableUpdatesForAll();
-                        console.log(e,parent,value);
                         throw new RuntimeError("Property '"+key.toString()+"' is readonly or does not exist", SCOPE)
                     }
                 }
@@ -3123,7 +3145,9 @@ export class Runtime {
             o_parent?.enableUpdatesForAll();
         },
 
-        assignAction(SCOPE:datex_scope, action_type:BinaryCode, parent:any, key:any, value:any, current_val = Runtime.runtime_actions.getProperty(SCOPE, parent, key)) {
+        async assignAction(SCOPE:datex_scope, action_type:BinaryCode, parent:any, key:any, value:any, current_val?:any) {
+
+            current_val ??= await Runtime.runtime_actions.getProperty(SCOPE, parent, key)
 
             if (parent instanceof UnresolvedValue) parent = parent[DX_VALUE];
 
@@ -3159,7 +3183,7 @@ export class Runtime {
                     else keys = Object.keys(parent);
                     if (!(Symbol.iterator in keys)) throw new RuntimeError("Value keys are not iterable", SCOPE);
                 }
-                Runtime.runtime_actions.assignAction(SCOPE, action_type, Pointer.pointerifyValue(parent), new Tuple(keys), value);
+                await Runtime.runtime_actions.assignAction(SCOPE, action_type, Pointer.pointerifyValue(parent), new Tuple(keys), value);
                 return;
             }
 
@@ -3170,12 +3194,12 @@ export class Runtime {
                 // distribute values over keys
                 if (value instanceof Tuple) {
                     for (let i=0; i<array.length; i++) {
-                        Runtime.runtime_actions.assignAction(SCOPE, action_type, parent, array[i], value[i])
+                        await Runtime.runtime_actions.assignAction(SCOPE, action_type, parent, array[i], value[i])
                     }
                 }
                 // use same value for all keys
                 else {
-                    for (let k of array) Runtime.runtime_actions.assignAction(SCOPE, action_type, parent, k, value)
+                    for (let k of array) await Runtime.runtime_actions.assignAction(SCOPE, action_type, parent, k, value)
                 }
                 return;
             }
@@ -3186,7 +3210,7 @@ export class Runtime {
                 if (value instanceof Tuple) {
                     if (current_val instanceof Array) {
                         for (let v of value.indexed) {
-                            Runtime.runtime_actions.assignAction(SCOPE, action_type, null, null, v, current_val);
+                            await Runtime.runtime_actions.assignAction(SCOPE, action_type, null, null, v, current_val);
                         }
                     }
                     else DatexObject.extend(current_val, value) // link value, don't copy
@@ -3224,10 +3248,10 @@ export class Runtime {
 
                         case BinaryCode.ADD:
                             if (current_val instanceof Array && !(current_val instanceof Tuple)) current_val.push(value); // Array push (TODO array extend?)
-                            else if (current_val instanceof TextRef && typeof value_prim == "string") current_val.val += value; // primitive pointer operations
-                            else if (current_val instanceof DecimalRef && typeof value_prim == "number") current_val.val = current_val.val + value_prim;
-                            else if (current_val instanceof IntegerRef && typeof value_prim == "bigint") current_val.val = current_val.val + value_prim;
-                            else if (current_val instanceof DecimalRef && typeof value_prim == "bigint") current_val.val = current_val.val + Number(value_prim);
+                            else if (current_val instanceof TextRef && typeof value_prim == "string") await current_val.setVal(current_val.val + value); // primitive pointer operations
+                            else if (current_val instanceof DecimalRef && typeof value_prim == "number") await current_val.setVal(current_val.val + value_prim);
+                            else if (current_val instanceof IntegerRef && typeof value_prim == "bigint") await current_val.setVal(current_val.val + value_prim);
+                            else if (current_val instanceof DecimalRef && typeof value_prim == "bigint") await current_val.setVal(current_val.val + Number(value_prim));
                             else if (current_val instanceof IntegerRef && typeof value_prim == "number") throw new ValueError("Cannot apply a <decimal> value to an <integer> pointer", SCOPE);
                             else if (typeof current_val_prim == "number" && typeof value_prim == "number") Runtime.runtime_actions.setProperty(SCOPE, parent, key, current_val_prim+value_prim) // add
                             else if ((typeof current_val_prim == "number" && typeof value_prim == "bigint") || (typeof current_val_prim == "bigint" && typeof value_prim == "number")) Runtime.runtime_actions.setProperty(SCOPE, parent, key, Number(current_val_prim)+Number(value_prim)) // add
@@ -3245,9 +3269,9 @@ export class Runtime {
 
                         case BinaryCode.SUBTRACT:
                             if (current_val instanceof Array) Runtime.runtime_actions._removeItemFromArray(current_val, value); // Array splice
-                            else if (current_val instanceof DecimalRef && typeof value_prim == "number") current_val.val = current_val.val - value_prim; // primitive pointer operations
-                            else if (current_val instanceof IntegerRef && typeof value_prim == "bigint") current_val.val = current_val.val - value_prim;
-                            else if (current_val instanceof DecimalRef && typeof value_prim == "bigint") current_val.val = current_val.val - Number(value_prim);
+                            else if (current_val instanceof DecimalRef && typeof value_prim == "number") await current_val.setVal(current_val.val - value_prim); // primitive pointer operations
+                            else if (current_val instanceof IntegerRef && typeof value_prim == "bigint") await current_val.setVal(current_val.val - value_prim);
+                            else if (current_val instanceof DecimalRef && typeof value_prim == "bigint") await current_val.setVal(current_val.val - Number(value_prim));
                             else if (current_val instanceof IntegerRef && typeof value_prim == "number") throw new ValueError("Cannot apply a <decimal> value to an <integer> pointer", SCOPE);
                             else if (typeof current_val_prim == "number" && typeof value_prim == "number") Runtime.runtime_actions.setProperty(SCOPE, parent, key, current_val_prim-value_prim) // subtract
                             else if ((typeof current_val_prim == "number" && typeof value_prim == "bigint") || (typeof current_val_prim == "bigint" && typeof value_prim == "number")) Runtime.runtime_actions.setProperty(SCOPE, parent, key, Number(current_val_prim)-Number(value_prim)) // subtract
@@ -3263,9 +3287,9 @@ export class Runtime {
                             break;
 
                         case BinaryCode.MULTIPLY:
-                            if (current_val instanceof DecimalRef && typeof value_prim == "number") current_val.val = current_val.val * value_prim; // primitive pointer operations
-                            else if (current_val instanceof IntegerRef && typeof value_prim == "bigint") current_val.val = current_val.val * value_prim;
-                            else if (current_val instanceof DecimalRef && typeof value_prim == "bigint") current_val.val = current_val.val * Number(value_prim);
+                            if (current_val instanceof DecimalRef && typeof value_prim == "number") await current_val.setVal(current_val.val * value_prim); // primitive pointer operations
+                            else if (current_val instanceof IntegerRef && typeof value_prim == "bigint") await current_val.setVal(current_val.val * value_prim);
+                            else if (current_val instanceof DecimalRef && typeof value_prim == "bigint") await current_val.setVal(current_val.val * Number(value_prim));
                             else if (current_val instanceof IntegerRef && typeof value_prim == "number") throw new ValueError("Cannot apply a <decimal> value to an <integer> pointer", SCOPE);
                             else if (typeof current_val_prim == "number" && typeof value_prim == "number") Runtime.runtime_actions.setProperty(SCOPE, parent, key, current_val_prim*value_prim) // subtract
                             else if ((typeof current_val_prim == "number" && typeof value_prim == "bigint") || (typeof current_val_prim == "bigint" && typeof value_prim == "number")) Runtime.runtime_actions.setProperty(SCOPE, parent, key, Number(current_val_prim)*Number(value_prim)) // subtract
@@ -3281,9 +3305,9 @@ export class Runtime {
                             break;
 
                         case BinaryCode.DIVIDE:
-                            if (current_val instanceof DecimalRef && typeof value_prim == "number") current_val.val = current_val.val / value_prim; // primitive pointer operations
-                            else if (current_val instanceof IntegerRef && typeof value_prim == "bigint") current_val.val = current_val.val / value_prim;
-                            else if (current_val instanceof DecimalRef && typeof value_prim == "bigint") current_val.val = current_val.val / Number(value_prim);
+                            if (current_val instanceof DecimalRef && typeof value_prim == "number") await current_val.setVal(current_val.val / value_prim); // primitive pointer operations
+                            else if (current_val instanceof IntegerRef && typeof value_prim == "bigint") await current_val.setVal(current_val.val / value_prim);
+                            else if (current_val instanceof DecimalRef && typeof value_prim == "bigint") await current_val.setVal(current_val.val / Number(value_prim));
                             else if (current_val instanceof IntegerRef && typeof value_prim == "number") throw new ValueError("Cannot apply a <decimal> value to an <integer> pointer", SCOPE);
                             else if (typeof current_val_prim == "number" && typeof value_prim == "number") Runtime.runtime_actions.setProperty(SCOPE, parent, key, current_val_prim/value_prim) // subtract
                             else if ((typeof current_val_prim == "number" && typeof value_prim == "bigint") || (typeof current_val_prim == "bigint" && typeof value_prim == "number")) Runtime.runtime_actions.setProperty(SCOPE, parent, key, Number(current_val_prim)/Number(value_prim)) // subtract
@@ -3299,16 +3323,16 @@ export class Runtime {
                             break;
 
                         case BinaryCode.POWER:
-                            if (current_val instanceof DecimalRef && typeof value_prim == "number") current_val.val = current_val.val ** value_prim; // primitive pointer operations
+                            if (current_val instanceof DecimalRef && typeof value_prim == "number") await current_val.setVal(current_val.val ** value_prim); // primitive pointer operations
                             else if (current_val instanceof IntegerRef && typeof value_prim == "bigint") {
                                 if (value_prim < 0) throw new ValueError("Cannot use a negative exponent with an integer")
                                 else current_val.val = current_val.val ** value_prim;
                             }
-                            else if (current_val instanceof DecimalRef && typeof value_prim == "bigint") current_val.val = current_val.val ** Number(value_prim);
+                            else if (current_val instanceof DecimalRef && typeof value_prim == "bigint") await current_val.setVal(current_val.val ** Number(value_prim));
                             else if (current_val instanceof IntegerRef && typeof value_prim == "number") throw new ValueError("Cannot apply a <decimal> value to an <integer> pointer", SCOPE);
-                            else if (typeof current_val_prim == "number" && typeof value_prim == "number") Runtime.runtime_actions.setProperty(SCOPE, parent, key, current_val_prim*value_prim) // subtract
-                            else if ((typeof current_val_prim == "number" && typeof value_prim == "bigint") || (typeof current_val_prim == "bigint" && typeof value_prim == "number")) Runtime.runtime_actions.setProperty(SCOPE, parent, key, Number(current_val_prim)**Number(value_prim)) // subtract
-                            else if (typeof current_val_prim == "bigint" && typeof value_prim == "bigint") Runtime.runtime_actions.setProperty(SCOPE, parent, key, current_val_prim**value_prim) // subtract
+                            else if (typeof current_val_prim == "number" && typeof value_prim == "number") Runtime.runtime_actions.setProperty(SCOPE, parent, key, current_val_prim**value_prim) // power
+                            else if ((typeof current_val_prim == "number" && typeof value_prim == "bigint") || (typeof current_val_prim == "bigint" && typeof value_prim == "number")) Runtime.runtime_actions.setProperty(SCOPE, parent, key, Number(current_val_prim)**Number(value_prim)) // power
+                            else if (typeof current_val_prim == "bigint" && typeof value_prim == "bigint") Runtime.runtime_actions.setProperty(SCOPE, parent, key, current_val_prim**value_prim) // power
                             else {
                                 try {
                                     Type.ofValue(current_val).handleActionPower(current_val, value, false, SCOPE.header.type==ProtocolDataType.UPDATE ? SCOPE.sender : null);
@@ -3320,9 +3344,9 @@ export class Runtime {
                             break;
 
                         case BinaryCode.MODULO:
-                            if (current_val instanceof DecimalRef && typeof value_prim == "number") current_val.val = current_val.val % value_prim; // primitive pointer operations
-                            else if (current_val instanceof IntegerRef && typeof value_prim == "bigint") current_val.val = current_val.val % value_prim;
-                            else if (current_val instanceof DecimalRef && typeof value_prim == "bigint") current_val.val = current_val.val % Number(value_prim);
+                            if (current_val instanceof DecimalRef && typeof value_prim == "number") await current_val.setVal(current_val.val % value_prim); // primitive pointer operations
+                            else if (current_val instanceof IntegerRef && typeof value_prim == "bigint") await current_val.setVal(current_val.val % value_prim);
+                            else if (current_val instanceof DecimalRef && typeof value_prim == "bigint") await current_val.setVal(current_val.val % Number(value_prim));
                             else if (current_val instanceof IntegerRef && typeof value_prim == "number") throw new ValueError("Cannot apply a <decimal> value to an <integer> pointer", SCOPE);
                             else if (typeof current_val_prim == "number" && typeof value_prim == "number") Runtime.runtime_actions.setProperty(SCOPE, parent, key, current_val_prim%value_prim) // subtract
                             else if ((typeof current_val_prim == "number" && typeof value_prim == "bigint") || (typeof current_val_prim == "bigint" && typeof value_prim == "number")) Runtime.runtime_actions.setProperty(SCOPE, parent, key, Number(current_val_prim)%Number(value_prim)) // subtract
@@ -3603,7 +3627,6 @@ export class Runtime {
 
             if (INNER_SCOPE.wait_dynamic_key) {
                 const key = el;
-                console.log("DYN>",key);
                 // add key for next value
                 INNER_SCOPE.waiting_key = key;       
                 INNER_SCOPE.wait_dynamic_key = false;
@@ -3704,7 +3727,7 @@ export class Runtime {
 
             // handle child get
             if (INNER_SCOPE.waiting_for_child == 1) {
-                el = Runtime.runtime_actions.getProperty(SCOPE, INNER_SCOPE.active_value, el);
+                el = await Runtime.runtime_actions.getProperty(SCOPE, INNER_SCOPE.active_value, el);
                 delete INNER_SCOPE.active_value; // no longer exists
                 INNER_SCOPE.waiting_for_child = 0;
                 // ... continue (insert new el)
@@ -3992,7 +4015,7 @@ export class Runtime {
                 
             }
 
-            // sync pointer
+            // stop sync pointer
             else if (INNER_SCOPE.stop_sync) {
                 INNER_SCOPE.stop_sync = false;
 
@@ -4021,8 +4044,6 @@ export class Runtime {
                     logger.success(SCOPE.sender + " unsubscribed from " + pointer.idString());
 
                     // not existing pointer or no access to this pointer
-                    // TODO check access permission
-                    // || (pointer.allowed_access && !pointer.allowed_access.test(SCOPE.sender))
                     if (!pointer.val) throw new PointerError("Pointer does not exist", SCOPE)
                     // valid, remove subscriber
                     else {
@@ -4330,14 +4351,14 @@ export class Runtime {
             else if (INNER_SCOPE.operator === BinaryCode.AND) {
 
                 // collapse primitive values
-                let val = Value.collapseValue(INNER_SCOPE.active_value, true, true);
+                const val = Value.collapseValue(INNER_SCOPE.active_value, true, true);
                 el = Value.collapseValue(el, true, true); 
 
                 // logical
                 if (val instanceof Logical) {
                     INNER_SCOPE.active_value = val.and(el);
                 }
-                else if (val instanceof Target || el instanceof Target || val instanceof Type || el instanceof Type) {
+                else if (val instanceof Target || el instanceof Target || val instanceof Type || el instanceof Type || val instanceof Assertion || el instanceof Assertion) {
                     INNER_SCOPE.active_value = new Conjunction(val, el)           
                 }
                 
@@ -4589,10 +4610,13 @@ export class Runtime {
             // get 'file://'...
             else if (INNER_SCOPE.get) {
                 if (el instanceof Target || el instanceof Logical) {
-                    if (!SCOPE.impersonation_permission && (!(el instanceof Endpoint) || !SCOPE.sender.equals(el)|| !SCOPE.header.signed)) {
+                    if (!SCOPE.impersonation_permission && !(el instanceof Endpoint && SCOPE.sender.equals(el) && SCOPE.header.signed)) { 
                         throw new PermissionError("No permission to execute scopes on external endpoints", SCOPE)
                     }
-                    INNER_SCOPE.active_value = await datex("#default", [], el);
+                    if (el instanceof Endpoint) INNER_SCOPE.active_value = await el.getEntrypoint();
+                    else {
+                        logger.warn("TODO: entrypoint from non-endpoint target?")
+                    }
                 }
                 else if (el instanceof URL) {
                     INNER_SCOPE.active_value = await Runtime.getURLContent(el, false, true);
@@ -5060,15 +5084,15 @@ export class Runtime {
                 //     await this.runtime_actions.insertToScope(SCOPE, SCOPE.meta.signed);
                 //     break;
                 // }
-                case BinaryCode.VAR_DEFAULT: { 
-                    await this.runtime_actions.insertToScope(SCOPE, Runtime.endpoint_default);
+                case BinaryCode.VAR_ENTRYPOINT: { 
+                    await this.runtime_actions.insertToScope(SCOPE, Runtime.endpoint_entrypoint);
                     break;
                 }
-                case BinaryCode.VAR_SENDER: { 
+                case BinaryCode.VAR_ORIGIN: { 
                     await this.runtime_actions.insertToScope(SCOPE, SCOPE.meta.sender);
                     break;
                 }
-                case BinaryCode.VAR_CURRENT: { 
+                case BinaryCode.VAR_ENDPOINT: { 
                     await this.runtime_actions.insertToScope(SCOPE, Runtime.endpoint);
                     break;
                 }
@@ -5095,6 +5119,10 @@ export class Runtime {
                 }
                 case BinaryCode.VAR_PUBLIC: {
                     await this.runtime_actions.insertToScope(SCOPE, StaticScope.scopes);
+                    break;
+                }
+                case BinaryCode.VAR_STD: {
+                    await this.runtime_actions.insertToScope(SCOPE, Runtime.STD_STATIC_SCOPE);
                     break;
                 }
                 case BinaryCode.VAR_VOID: {
@@ -5308,11 +5336,11 @@ export class Runtime {
                         await this.runtime_actions.insertToScope(SCOPE, result);
                     }
 
-                    // MAYBE
-                    else if (INNER_SCOPE.scope_block_for == BinaryCode.MAYBE) {
+                    // DEFERRED
+                    else if (INNER_SCOPE.scope_block_for == BinaryCode.DEFER) {
                         INNER_SCOPE.scope_block_for = null;
-                        const maybe = new Maybe(code_block, SCOPE.sender);
-                        await this.runtime_actions.insertToScope(SCOPE, maybe);
+                        const deferred = new Deferred(code_block, SCOPE.sender);
+                        await this.runtime_actions.insertToScope(SCOPE, deferred);
                     }
 
                     // SCOPE
@@ -5353,7 +5381,8 @@ export class Runtime {
                         const remote:Disjunction<Endpoint> = Logical.collapse(INNER_SCOPE.active_value, Target);
                         delete INNER_SCOPE.active_value;
 
-                        if (!SCOPE.impersonation_permission && (!(remote instanceof Endpoint) || !SCOPE.sender.equals(remote)|| !SCOPE.header.signed)) {
+                        console.log("remote: ", remote, (remote.size == 1 && [...remote][0] instanceof Endpoint && SCOPE.sender.equals([...remote][0]) && SCOPE.header.signed))
+                        if (!SCOPE.impersonation_permission && !(remote.size == 1 && [...remote][0] instanceof Endpoint && SCOPE.sender.equals([...remote][0]) && SCOPE.header.signed)) {
                             throw new PermissionError("No permission to execute scopes on external endpoints", SCOPE)
                         }
                
@@ -5535,8 +5564,8 @@ export class Runtime {
                 }
 
                 // MAYBE
-                case BinaryCode.MAYBE: {
-                    SCOPE.inner_scope.scope_block_for = BinaryCode.MAYBE;
+                case BinaryCode.DEFER: {
+                    SCOPE.inner_scope.scope_block_for = BinaryCode.DEFER;
                     SCOPE.inner_scope.scope_block_vars = [];
                     break;
                 }
@@ -6380,7 +6409,7 @@ export class Runtime {
 
 try {
     const res = await fetch(new URL("../version", import.meta.url));
-    if (res.ok) Runtime.VERSION = await res.text()
+    if (res.ok) Runtime.VERSION = (await res.text()).replaceAll("\n","");
 }
 catch {}
 
@@ -6409,8 +6438,9 @@ Observers.register(Runtime, "endpoint");
 Runtime.endpoint = LOCAL_ENDPOINT;
 Runtime.onEndpointChanged(initPublicStaticClasses)
 
+
 // set Runtime ENV
-Runtime.ENV = await eternal("ENV",()=>{
+Runtime.ENV = await Storage.loadOrCreate("Datex.Runtime.ENV", ()=>{
     return {
         LANG: globalThis.localStorage?.lang ?? globalThis?.navigator?.language?.split("-")[0] ?? 'en',
         VERSION: null
@@ -6433,7 +6463,7 @@ if (globalThis.Deno) {
 
 
 // init persistent memory
-Runtime.persistent_memory = (await eternal("MEMORY", ()=>new Map())).setAutoDefault(Object);
+Runtime.persistent_memory = (await Storage.loadOrCreate("Datex.Runtime.MEMORY", ()=>new Map())).setAutoDefault(Object);
 
 
 // @ts-ignore

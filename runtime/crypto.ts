@@ -81,10 +81,10 @@ export class Crypto {
     }
 
     /** Encypt + Decrypt (RSA) */
-    static async encrypt(buffer:ArrayBuffer, endpoint:Endpoint): Promise<ArrayBuffer|null> {
+    static async encrypt(buffer:ArrayBuffer, endpoint:Endpoint): Promise<ArrayBuffer> {
         if (!this.available) throw new SecurityError("Cannot encrypt DATEX requests, missing private keys");
         const keys = await this.getKeysForEndpoint(endpoint);
-        if (!keys || keys[1]==null) return null;
+        if (!keys || keys[1]==null) throw new SecurityError("Cannot encrypt DATEX requests, could not get keys for endpoint");
         return await crypto.subtle.encrypt("RSA-OAEP", keys[1], buffer);
     }
     static async decrypt(data:ArrayBuffer): Promise<ArrayBuffer> {
@@ -181,7 +181,7 @@ export class Crypto {
         let keyPromise:Promise<[CryptoKey, CryptoKey]>;
         this.#waiting_key_requests.set(endpoint, keyPromise = new Promise(async (resolve, reject)=>{
 
-            let exported_keys:[ArrayBuffer, ArrayBuffer];
+            let exported_keys:[ArrayBuffer, ArrayBuffer]|void;
 
             // first check cache:
             if (exported_keys=await Storage.getItem("keys_"+endpoint)) {
@@ -189,8 +189,8 @@ export class Crypto {
             }
             if (!exported_keys) {
                 logger.debug("requesting keys for " + endpoint);
-                exported_keys = await NetworkUtils.get_keys(endpoint); // fetch keys from network; TODO blockchain                   
-
+                exported_keys = await (await import("../network/blockchain_adapter.ts")).Blockchain.getEndpointPublicKeys(endpoint);
+                if (!exported_keys) exported_keys =  await NetworkUtils.get_keys(endpoint);
                 if (exported_keys) await Storage.setItem("keys_"+endpoint, exported_keys);
                 else {
                     reject(new Error("could not get keys from network"));
@@ -268,6 +268,8 @@ export class Crypto {
         return [this.rsa_verify_key_exported, this.rsa_sign_key_exported, this.rsa_enc_key_exported, this.rsa_dec_key_exported]
     }
 
+
+
     private static saveOwnPublicKeysInEndpointKeyMap () {
         // save in local endpoint key storage
         if (!this.public_keys.has(Runtime.endpoint)) this.public_keys.set(Runtime.endpoint, [null,null]);
@@ -313,19 +315,8 @@ export class Crypto {
 
     // generate new sign + encryption (public + private) keys, returns base64 verify, sign, enc, dec keys
     static async createOwnKeys(): Promise<Crypto.ExportedKeySet> { 
-        // create new encrpytion key pair
-        const enc_key_pair = <CryptoKeyPair> await crypto.subtle.generateKey(
-            this.enc_key_options,
-            true,
-            ["encrypt", "decrypt"]
-        );
-
-        // create new sign key pair
-        const sign_key_pair = <CryptoKeyPair>await crypto.subtle.generateKey(
-            this.sign_key_generator,
-            true,
-            ["sign", "verify"]
-        );
+        // create new encrpytion + sign key pair
+        const [enc_key_pair, sign_key_pair] = await this.generateKeysNewPairs();
     
         this.rsa_dec_key = enc_key_pair.privateKey
         this.rsa_enc_key = enc_key_pair.publicKey
@@ -345,6 +336,38 @@ export class Crypto {
             sign: [this.rsa_verify_key_exported, this.rsa_sign_key_exported],
             encrypt: [this.rsa_enc_key_exported, this.rsa_dec_key_exported]
         }
+    }
+
+    static async generateNewKeys(): Promise<Crypto.ExportedKeySet> { 
+        // create new encrpytion + sign key pair
+        const [enc_key_pair, sign_key_pair] = await this.generateKeysNewPairs();
+    
+        const rsa_enc_key_exported = await this.exportPublicKey(enc_key_pair.publicKey);
+        const rsa_dec_key_exported = await this.exportPrivateKey(enc_key_pair.privateKey);
+        const rsa_verify_key_exported = await this.exportPublicKey(sign_key_pair.publicKey);
+        const rsa_sign_key_exported = await this.exportPrivateKey(sign_key_pair.privateKey);
+
+        return {
+            sign: [rsa_verify_key_exported, rsa_sign_key_exported],
+            encrypt: [rsa_enc_key_exported, rsa_dec_key_exported]
+        }
+    }
+
+    private static async generateKeysNewPairs() {
+        // create new encrpytion key pair
+        const enc_key_pair = <CryptoKeyPair> await crypto.subtle.generateKey(
+            this.enc_key_options,
+            true,
+            ["encrypt", "decrypt"]
+        );
+
+        // create new sign key pair
+        const sign_key_pair = <CryptoKeyPair>await crypto.subtle.generateKey(
+            this.sign_key_generator,
+            true,
+            ["sign", "verify"]
+        );
+        return [enc_key_pair, sign_key_pair];
     }
 
     // export an public key to base64

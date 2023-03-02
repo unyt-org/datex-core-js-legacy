@@ -1,7 +1,7 @@
 export const Regex = {
     CLOSE_AND_STORE: /^(;\s*)+/, // one or multiple ;
 
-    VAR_REF_VAL: /^(export )? *(var|ref|val)\b\s*([A-Za-zÀ-ž_][A-Za-z0-9À-ž_]*)\s*(\:)?= *(\()?/, // var x, val x, ref x, export val x;
+    VAR_REF_VAL: /^(export )? *(var|ref|val|const)\b\s*([A-Za-zÀ-ž_][A-Za-z0-9À-ž_]*)\s*(\:)?= *(\()?/, // var x, val x, ref x, export val x;
     DIRECT_EXPORT: /^export\s+([A-Za-zÀ-ž_][A-Za-z0-9À-ž_]*)/, // export x;
 
     ROOT_VARIABLE: /^()([A-Za-zÀ-ž_][A-Za-z0-9À-ž_]*)(\s*[+-/*&|$]?=(?![=>/]))?/, // var_xxx or _ffefe
@@ -11,8 +11,8 @@ export const Regex = {
 
     HEX_VARIABLE: /^[A-Fa-f0-9_]*$/, // variable with hexadecimal name
 
-    JUMP: /^(jmp|jtr|jfa) +([A-Za-z_]\w*)?/, // jmp x, jeq x, ...
-    JUMP_LBL: /^lbl *([A-Za-z_]\w*)?/, // lbl x
+    JUMP: /^(jmp|jtr|jfa) +([A-Za-z_0-9]\w*)?/, // jmp x, jeq x, ...
+    JUMP_LBL: /^lbl *([A-Za-z_0-9]\w*)?/, // lbl x
 
     ERROR: /^\!(\w|\.)+/,
 
@@ -97,15 +97,14 @@ export const Regex = {
     VOID: /^void\b/, // void 
     QUASI_VOID: /^\(\s*\)/, //  empty brackets ( )
     
-    BROADCAST_ENDPOINT: /^\@(\*)((\.([A-Za-z0-9À-ž-_]{1,32}|\*))*)(\/(\*|[A-Za-z0-9À-ž-_]{1,8}))?/,
-    ENDPOINT: /^\@\@([A-Fa-f0-9_-]{2,26})((\.([A-Za-z0-9À-ž-_]{1,32}|\*))*)(\/(\*|[A-Za-z0-9À-ž-_]{1,8}))?/,
-    PERSON_ALIAS: /^\@([A-Za-z0-9À-ž-_]{1,32})((\.([A-Za-z0-9À-ž-_]{1,32}|\*))*)(\/(\*|[A-Za-z0-9À-ž-_]{1,8}))?/,
-    INSTITUTION_ALIAS: /^\@\+([A-Za-z0-9À-ž-_]{1,32})((\.([A-Za-z0-9À-ž-_]{1,32}|\*))*)(\/(\*|[A-Za-z0-9À-ž-_]{1,8}))?/,
-    BOT: /^\*\+?[A-Za-zÀ-ž_][A-Za-z0-9À-ž-_]{0,17}(\/(\*|[A-Za-z0-9À-ž-_]{1,8}))?/,
+    BROADCAST_ENDPOINT: /^\@(\*)((\.([A-Za-z0-9À-ž-_]{1,36}|\*))*)(\/(\*|[A-Za-z0-9À-ž-_]{1,8}))?/,
+    ENDPOINT: /^\@\@([A-Fa-f0-9_-]{2,36}|any|local)(\/(\*|[A-Za-z0-9]{1,4}))?/,
+    PERSON_ALIAS: /^\@([A-Za-z0-9À-ž-_]{1,18})(\/(\*|[A-Za-z0-9]{1,4}))?/,
+    INSTITUTION_ALIAS: /^\@\+([A-Za-z0-9À-ž-_]{1,18})(\/(\*|[A-Za-z0-9]{1,4}))?/,
 
     ANY_INSTITUTION: /^\+\+/,
 
-    _ANY_FILTER_TARGET: /^\@\+?[A-Za-z0-9À-ž-_]{1,32}(\:[A-Za-z0-9À-ž-_]{1,32})*(\/(\*|[A-Za-z0-9À-ž-_]{1,8}))?|\@\@[A-Fa-f0-9_-]{2,53}(\/(\*|[A-Za-z0-9À-ž-_]{1,8}))?$/,
+    _ANY_FILTER_TARGET: /^\@\+?[A-Za-z0-9À-ž-_]{1,36}(\:[A-Za-z0-9À-ž-_]{1,36})*(\/(\*|[A-Za-z0-9À-ž-_]{1,8}))?|\@\@[A-Fa-f0-9_-]{2,53}(\/(\*|[A-Za-z0-9À-ž-_]{1,8}))?$/,
 
     KEY: /^(#)?[A-Za-z0-9À-ž_-]+?\s*:(?!:)/,
     
@@ -164,13 +163,13 @@ export const Regex = {
     RUN: /^run\b\s*(\()?/,
     AWAIT: /^await\b/,
     DO: /^do\b\s*(\()?/,
-    FUNCTION: /^function\s+([A-Za-zÀ-ž_][A-Za-z0-9À-ž_]*)?\s*\(/,
-    FUNCTION_PARAM: /^(\s*(?:export\s+)?(?:named\s+)?(?:(?:ref|val|var)\s+)?)?([A-Za-zÀ-ž_][A-Za-z0-9À-ž_]*)\s*(\:|\=|,|\))?/,
+    FUNCTION: /^(export\s+)?function(?:\s+([A-Za-zÀ-ž_][A-Za-z0-9À-ž_]*))?\s*\(/,
+    FUNCTION_PARAM: /^(\s*(?:export\s+)?(?:named\s+)?(?:(?:ref|val|var|const)\s+)?)?([A-Za-zÀ-ž_][A-Za-z0-9À-ž_]*)\s*(\:|\=|,|\))?/,
     ASSERT: /^assert\b\s*(\()?/,
     SKIP: /^skip\b\s*(\()?/,
     LEAVE: /^leave\b\s*(\()?/,
     NEW: /^new\b\s*(\()?/,
-    MAYBE: /^maybe\b\s*(\()?/,
+    DEFER: /^defer\b\s*(\()?/,
     RESPONSE: /^response\b\s*(\()?/,
 
     TRY: /^try\b\s*(\()?/,

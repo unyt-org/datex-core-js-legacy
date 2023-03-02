@@ -6,12 +6,11 @@ import { client_type, logger } from "../utils/global_values.ts";
 import { Compiler } from "../compiler/compiler.ts";
 import { NOT_EXISTING } from "./constants.ts";
 import { Pointer, type MinimalJSRef } from "./pointers.ts";
-import { arrayBufferToBase64, base64ToArrayBuffer } from "../utils/utils.ts";
-import { pointer } from "../datex_short.ts";
-import { Datex } from "../datex.ts";
+import { base64ToArrayBuffer } from "../utils/utils.ts";
 import { localStorage } from "./local_storage.ts";
 import { MessageLogger } from "../utils/message_logger.ts";
 import { displayFatalError, displayInit} from "./display.ts"
+import { Type } from "../types/type.ts";
 
 displayInit();
 
@@ -25,6 +24,8 @@ const site_suffix = (()=>{
     }
     else return ""
 })();
+
+
 
 if (client_type === "deno") await import ("./deno_indexeddb.ts");
 
@@ -257,6 +258,7 @@ export class Storage {
 
     static setItem(key:string, value:any, listen_for_pointer_changes = true, location:Storage.Location|undefined = this.#primary_location):Promise<boolean>|boolean {
         Storage.cache.set(key, value); // save in cache
+        setTimeout(()=>Storage.cache.delete(key), 10000);
         const pointer = value instanceof Pointer ? value : Pointer.getByValue(value);
 
         if (location==undefined || location == Storage.Location.INDEXED_DB) return this.setItemDB(key, value, pointer, listen_for_pointer_changes);
@@ -291,7 +293,10 @@ export class Storage {
 
     private static setPointer(pointer:Pointer, listen_for_changes = true, location:Storage.Location|undefined = this.#primary_location): Promise<boolean>|boolean {
 
-        if (!pointer.value_initialized) {logger.warn("pointer value " + pointer.idString() + " not available")}
+        if (!pointer.value_initialized) {
+            logger.warn("pointer value " + pointer.idString() + " not available, cannot save in storage");
+            return false
+        }
         
         if (location==undefined || location == Storage.Location.INDEXED_DB) return this.initPointerDB(pointer, listen_for_changes);
         if (location==undefined || location == Storage.Location.FILESYSTEM_OR_LOCALSTORAGE) return this.initPointerLocalStorage(pointer, listen_for_changes);
@@ -398,7 +403,7 @@ export class Storage {
                     this.#trusted_pointers.add(pointer_id)
                 }
                 else {
-                    console.log("cannot init unint",pointer)
+                    console.log("cannot init pointer " +pointer_id)
                 }
             }
         }, 3000);
@@ -455,7 +460,7 @@ export class Storage {
     private static async getPointerLocalStorage(pointer_id:string, pointerify?:boolean, bind?:any) {
 
         let pointer:Pointer|undefined;
-        if (pointerify && (pointer = Pointer.get(pointer_id))) {
+        if (pointerify && (pointer = Pointer.get(pointer_id))?.value_initialized) {
             return pointer.val; // pointer still exists in runtime
         }
 
@@ -467,7 +472,7 @@ export class Storage {
 
         // bind serialized val to existing value
         if (bind) {
-            Datex.Type.ofValue(bind).updateValue(bind, val);
+            Type.ofValue(bind).updateValue(bind, val);
             val = bind;
         }
         
@@ -508,7 +513,7 @@ export class Storage {
 
         // bind serialized val to existing value
         if (bind) {
-            Datex.Type.ofValue(bind).updateValue(bind, val);
+            Type.ofValue(bind).updateValue(bind, val);
             val = bind;
         }
 
@@ -639,7 +644,7 @@ export class Storage {
         await Promise.all(promises);
     }
 
-    public static async getItem(key:string, location?:Storage.Location):Promise<any> {
+    public static async getItem(key:string, location?:Storage.Location|undefined/* = this.#primary_location*/):Promise<any> {
 
         if (this.#dirty) {
             displayFatalError('storage-unrecoverable');
@@ -694,7 +699,7 @@ export class Storage {
         return false;
     }
 
-    public static async removeItem(key:string, location:Storage.Location|undefined):Promise<void> {
+    public static async removeItem(key:string, location?:Storage.Location):Promise<void> {
         if (Storage.cache.has(key)) Storage.cache.delete(key); // delete from cache
 
         if (location == undefined || location == Storage.Location.INDEXED_DB) { 
@@ -735,8 +740,8 @@ export class Storage {
      * reset state, 
      */
     public static async clearAndReload() {
-        await Datex.Storage.clearAll();
-        Datex.Storage.allowExitWithoutSave();
+        await Storage.clearAll();
+        Storage.allowExitWithoutSave();
         if (globalThis.window) window.location.reload();
         else logger.error("Could not reload in non-browser context")
     }
@@ -751,7 +756,7 @@ export class Storage {
         }
         // create state
         else if (create){
-            const state = pointer(await create());
+            const state = Pointer.createOrGet(await create()).js_value;
             await this.setItem(state_name, state, true);
             return <any>state;
         }
@@ -787,7 +792,7 @@ if (globalThis.Deno) Deno.addSignalListener("SIGINT", ()=>Deno.exit())
 // ------------------------------------------------------------------------------
 
 // @ts-ignore storage reset
-globalThis.reset = Datex.Storage.clearAndReload
+globalThis.reset = Storage.clearAndReload
 
 // proxy for Storage
 class DatexStoragePointerSource implements PointerSource {
@@ -805,6 +810,7 @@ Pointer.registerPointerSource(new DatexStoragePointerSource());
 
 // default storage config:
 
+// @ts-ignore NO_INIT
 if (!globalThis.NO_INIT) {
     await Storage.addLocation(Storage.Location.INDEXED_DB, {
         modes: [Storage.Mode.SAVE_ON_CHANGE, Storage.Mode.SAVE_PERIODICALLY],

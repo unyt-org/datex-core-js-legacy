@@ -13,17 +13,20 @@ export const DX_PTR: unique symbol = Symbol("DX_PTR"); // key for pointer object
 export const DX_TYPE: unique symbol = Symbol("DX_TYPE");
 export const DX_SERIALIZED: unique symbol = Symbol("DX_SERIALIZED");
 export const DX_VALUE: unique symbol = Symbol("DX_VALUE");
+// TODO: remove? replaced with DX_SLOTS
 export const DX_TEMPLATE: unique symbol = Symbol("DX_TEMPLATE");
 export const DX_PERMISSIONS: unique symbol = Symbol("DX_PERMISSIONS");
 export const DX_PERMISSIONS_R: unique symbol = Symbol("DX_PERMISSIONS_R");
 export const DX_PERMISSIONS_U: unique symbol = Symbol("DX_PERMISSIONS_U");
 export const DX_PERMISSIONS_X: unique symbol = Symbol("DX_PERMISSIONS_X");
+// -------------------------------------
 export const DX_SLOTS: unique symbol = Symbol("DX_SLOTS");
 
 export const SLOT_WRITE = 0xfef0;
 export const SLOT_READ  = 0xfef1;
 export const SLOT_EXEC  = 0xfef2;
-
+export const SLOT_GET   = 0xfef3;
+export const SLOT_SET   = 0xfef4;
 
 
 

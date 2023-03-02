@@ -7,8 +7,10 @@ import { Runtime } from "../runtime/runtime.ts";
 import { Value } from "../runtime/pointers.ts";
 
 import { RuntimeError } from "./errors.ts";
+import { Assertion } from "./assertion.ts";
+import { Type } from "./type.ts";
 
-export type literal<T> = T|Negation<T>; // x, ~x
+export type literal<T> = T|Negation<T>|Assertion<T>; // x, ~x
 type cnf_disjunction<T> = Disjunction<literal<T>>|literal<T>; // x, x|y, x|~y, ...
 export type cnf<T> = Conjunction<cnf_disjunction<T>>; // (x|y) & (z) & ...
 
@@ -96,6 +98,13 @@ export class Logical<T> extends Set<T> {
         if (value instanceof Negation) {
             return !this.matches(value.not(), against, atomic_class)
         }
+
+		// assertion
+		if (value instanceof Assertion) {
+			throw "TODO asssertion";
+			// if (res instanceof Promise) throw new RuntimeError("async assertion cannot be evaluated in logical connective");
+			// return res
+		}
         
 		// default
 		return this.matchesSingle(<T>Value.collapseValue(value, true, true), against, atomic_class);
@@ -105,7 +114,7 @@ export class Logical<T> extends Set<T> {
     private static matchesSingle<T>(atomic_value:T, against: clause<T>, atomic_class:Class<T>&LogicalComparator<T>): boolean {
 
 		// wrong atomic type for atomic_value at runtime
-		if (atomic_class && !(atomic_value instanceof atomic_class)) throw new RuntimeError("Invalid match check: atomic value has wrong type");
+		if (atomic_class && !(atomic_value instanceof atomic_class)) throw new RuntimeError(`Invalid match check: atomic value has wrong type (expected ${Type.getClassDatexType(atomic_class)}, found ${Type.ofValue(atomic_value)})`);
 
         // or
         if (against instanceof Disjunction) {
@@ -128,9 +137,17 @@ export class Logical<T> extends Set<T> {
             return !this.matchesSingle(atomic_value, against.not(), atomic_class)
         }
 
+		// assertion
+		if (against instanceof Assertion) {
+			const res = against.assert(atomic_value, undefined, true);
+			if (res instanceof Promise) throw new RuntimeError("async assertion cannot be evaluated in logical connective");
+			return res
+		}
+
+
 		// wrong atomic type at runtime
 		// guard for: against is T
-		if (!(against instanceof atomic_class)) throw new RuntimeError("Invalid match check: atomic value has wrong type");
+		if (!(against instanceof atomic_class)) throw new RuntimeError(`Invalid match check: atomic value has wrong type (expected ${Type.getClassDatexType(atomic_class)}, found ${Type.ofValue(against)})`);
 
 		// match
 		return atomic_class.logicalMatch(<T>Value.collapseValue(atomic_value, true, true), <T>against);
@@ -179,7 +196,7 @@ export class Logical<T> extends Set<T> {
 		// default
 
 		value = <T>Value.collapseValue(value, true, true)
-		if (!(value instanceof atomic_class)) throw new RuntimeError("logical collapse: atomic value has wrong type");
+		if (!(value instanceof atomic_class)) throw new RuntimeError(`logical collapse: atomic value has wrong type (expected ${Type.getClassDatexType(atomic_class)}, found ${Type.ofValue(value)})`);
 
 		list.add(<T>value);
 

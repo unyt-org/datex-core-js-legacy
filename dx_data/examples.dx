@@ -1,5 +1,23 @@
 #!/usr/bin/datex
 
+const assert_is_int = assert #it matches <integer> and (#it > 12);
+
+const x = 10;
+assert_is_int x;
+
+
+
+function SQL(ref text: Array(decimal).size(100), x:integer) (
+    <Set> ()
+    Point.new(10,20)
+)
+
+const Array = Type & (
+
+    export function size() (
+
+    )
+)
 
 {
     #read: @12,
@@ -352,7 +370,7 @@ info 'step 1';
 
 var x = do (
     info 'step 1/2';
-    maybe (
+    defer (
         info 'step 3';
         [1,2,3]
     )

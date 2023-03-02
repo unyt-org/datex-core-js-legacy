@@ -9,7 +9,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 wasm-bindgen = "0.2.63"
-datex_core = { path = "../../../datex_core" }
+datex_core = { path = "../../../datex-core" }
 datex_cli_core = { path = "../../../datex_cli_core" }
 lazy_static = "1.4.0"
 

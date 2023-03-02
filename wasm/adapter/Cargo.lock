@@ -60,9 +60,6 @@ dependencies = [
 [[package]]
 name = "datex_cli_core"
 version = "0.1.0"
-dependencies = [
- "datex_core",
-]
 
 [[package]]
 name = "datex_core"

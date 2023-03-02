@@ -162,12 +162,6 @@ export function decompile(dxb, formatted, colorized, resolve_slots) {
     }
 }
 
-/**
-*/
-export function cli() {
-    wasm.cli();
-}
-
 async function load(module, imports) {
     if (typeof Response === 'function' && module instanceof Response) {
         if (typeof WebAssembly.instantiateStreaming === 'function') {

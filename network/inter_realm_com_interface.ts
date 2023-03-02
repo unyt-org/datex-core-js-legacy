@@ -2,7 +2,6 @@ import { LOCAL_ENDPOINT, Endpoint } from "../types/addressing.ts";
 import { Runtime } from "../runtime/runtime.ts";
 import { Logger } from "../utils/logger.ts";
 import InterfaceManager, { CommonInterface } from "./client.ts";
-import { f } from "../datex_short.ts";
 
 
 const logger = new Logger("Inter Realm Com")
@@ -17,10 +16,8 @@ export class InterRealmCommunicationInterface extends CommonInterface {
     static signalingChannel = BroadcastChannel ? new BroadcastChannel(InterRealmCommunicationInterface.SIGNALING) : undefined;
 
     private static rxChannel1:BroadcastChannel;
-    private static rxChannel2:BroadcastChannel;
 
     private static rx1Id = Runtime.endpoint.toString() + Math.round(Math.random()*Number.MAX_SAFE_INTEGER);
-    private static rx2Id = Runtime.endpoint.id_endpoint.toString() + Math.round(Math.random()*Number.MAX_SAFE_INTEGER);
 
     override in = true;
     override out = true;
@@ -69,15 +66,8 @@ export class InterRealmCommunicationInterface extends CommonInterface {
         // new data broadcast channels with endpoint name
         this.rxChannel1 = new BroadcastChannel(InterRealmCommunicationInterface.DATA+Runtime.endpoint);
 
-        // add additional channel for different id endpoint
-        if (Runtime.endpoint != Runtime.endpoint.id_endpoint) {
-            this.rxChannel2 = new BroadcastChannel(InterRealmCommunicationInterface.DATA+Runtime.endpoint.id_endpoint);
-        }
-
         this.announceEndpoint();
-
         this.addDataChannelListeners();
-
     }
 
     // announce endpoint via signaling
@@ -87,18 +77,11 @@ export class InterRealmCommunicationInterface extends CommonInterface {
         logger.success("announcing endpoint for inter-process messaging");
 
         if (this.rxChannel1) this.signalingChannel?.postMessage([this.rx1Id, Runtime.endpoint.toString()]);
-        if (this.rxChannel2) this.signalingChannel?.postMessage([this.rx2Id, Runtime.endpoint.id_endpoint.toString()]);
     }
 
     static addDataChannelListeners(){
         // DATEX block received on main channel
         if (this.rxChannel1) this.rxChannel1.addEventListener("message", event => {
-            //logger.info("inter-process data", event);
-            InterfaceManager.handleReceiveBlock(event.data);
-        })
-
-        // DATEX block received on second channel (id endpoint)
-        if (this.rxChannel2) this.rxChannel1.addEventListener("message", event => {
             //logger.info("inter-process data", event);
             InterfaceManager.handleReceiveBlock(event.data);
         })

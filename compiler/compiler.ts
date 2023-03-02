@@ -14,7 +14,7 @@ import { Logger } from "../utils/logger.ts";
 const logger = new Logger("datex compiler");
 
 import { ReadableStream, Runtime} from "../runtime/runtime.ts";
-import { Endpoint, IdEndpoint, Target, WildcardTarget, Institution, Person, Bot, BROADCAST, target_clause, endpoints } from "../types/addressing.ts";
+import { Endpoint, IdEndpoint, Target, WildcardTarget, Institution, Person, BROADCAST, target_clause, endpoints } from "../types/addressing.ts";
 import { Pointer, PointerProperty, Value } from "../runtime/pointers.ts";
 import { CompilerError, RuntimeError, Error as DatexError, ValueError } from "../types/errors.ts";
 import { Function as DatexFunction } from "../types/function.ts";
@@ -27,7 +27,7 @@ import { BinaryCode } from "./binary_codes.ts";
 import { Scope } from "../types/scope.ts";
 import { ProtocolDataType } from "./protocol_types.ts";
 import { Quantity } from "../types/quantity.ts";
-import { EXTENDED_OBJECTS, INHERITED_PROPERTIES, VOID, DX_SLOTS, SLOT_WRITE, SLOT_READ, SLOT_EXEC, NOT_EXISTING} from "../runtime/constants.ts";
+import { EXTENDED_OBJECTS, INHERITED_PROPERTIES, VOID, SLOT_WRITE, SLOT_READ, SLOT_EXEC, NOT_EXISTING, SLOT_GET, SLOT_SET } from "../runtime/constants.ts";
 import { arrayBufferToBase64, base64ToArrayBuffer, buffer2hex, hex2buffer } from "../utils/utils.ts";
 import { RuntimePerformance } from "../runtime/performance_measure.ts";
 import { Conjunction, Disjunction, Logical, Negation } from "../types/logic.ts";
@@ -36,7 +36,6 @@ import { baseURL, client_type, TypedArray } from "../utils/global_values.ts";
 import { type datex_scope } from "../utils/global_types.ts";
 import { unit_symbol } from "./unit_codes.ts";
 import { Time } from "../types/time.ts";
-import { f } from "../datex_short.ts";
 
 // WASM
 import wasm_init, {init_runtime as wasm_init_runtime, compile as wasm_compile, decompile as wasm_decompile} from "../wasm/adapter/pkg/datex_wasm.js";
@@ -115,7 +114,7 @@ type compiler_sub_scope = {
     parent_type?: BinaryCode, // Array or Object or empty
     auto_close_scope?: BinaryCode, // does a tuple need to be auto-closed?
 
-    vars?: {[name:string]: [type:'val'|'var'|'ref', slot:number]}
+    vars?: {[name:string]: [type:'val'|'var'|'ref'|'const', slot:number]}
 };
 
 
@@ -442,7 +441,7 @@ export class Compiler {
 
             const appspace = has_appspace ? this.extractHeaderSender(dx_block, last_byte, false, i) : undefined;
 
-            return <Endpoint> Target.get(name, subspaces, instance, appspace, sender_type);
+            return <Endpoint> Target.get(name, instance, sender_type);
         }
 
         if (last_byte) last_byte[0] = i;
@@ -474,7 +473,7 @@ export class Compiler {
             else if (sender_type == 1) bin_type = BinaryCode.PERSON_ALIAS;
             else if (sender_type == 2) bin_type = BinaryCode.INSTITUTION_ALIAS;
 
-            return <Endpoint> Target.get(name, undefined, instance, undefined, bin_type);
+            return <Endpoint> Target.get(name, instance, bin_type);
         }
 
         if (last_byte) last_byte[0] = i;
@@ -519,7 +518,7 @@ export class Compiler {
     
                 const instance = utf8_decoder.decode(header_uint8.subarray(i, i+=instance_length))  // get instance
 
-                const target = <Endpoint> Target.get(name, subspaces, instance, undefined, type);
+                const target = <Endpoint> Target.get(name, instance, type);
 
                 target_list.push(target)
     
@@ -659,7 +658,7 @@ export class Compiler {
             receiver_buffer = Compiler.targetsToDXB(evaluated_endpoints, endpoint_key_map, true);
         }
 
-        if (force_id && from) from = from.id_endpoint; 
+        // if (force_id && from) from = from.id_endpoint; 
 
         // generate sender buffer
         const sender_buffer = from ? this.endpointToDXB(from) : new ArrayBuffer(1);
@@ -870,19 +869,19 @@ export class Compiler {
 
         target_uint8[i++] = target.type;
         target_uint8[i++] = name_bin.byteLength; // write name length to buffer
-        target_uint8[i++] = target.subspaces.length; // write subspace number to buffer
+        target_uint8[i++] = 0//target.subspaces.length; // write subspace number to buffer
         target_uint8[i++] = instance_bin.byteLength == 0 ? 255 : instance_bin.byteLength;  // write instance length to buffer, 0 = wildcard, 255 = no instance
-        target_uint8[i++] = target.appspace ? 1 : 0; // has appspace?
+        target_uint8[i++] = 0; // has appspace?
         target_uint8.set(name_bin, i);  // write name to buffer
         i += name_bin.byteLength;
 
-        for (const subspace of target.subspaces ?? []) {
-            const subspace_bin = Compiler.utf8_encoder.encode(subspace); 
-            handleRequiredBufferSize(i+1+subspace_bin.byteLength);
-            target_uint8[i++] = subspace_bin.length;  // write subspace length to buffer
-            target_uint8.set(subspace_bin, i);  // write subspace_bin to buffer
-            i += subspace_bin.byteLength;
-        }
+        // for (const subspace of target.subspaces ?? []) {
+        //     const subspace_bin = Compiler.utf8_encoder.encode(subspace); 
+        //     handleRequiredBufferSize(i+1+subspace_bin.byteLength);
+        //     target_uint8[i++] = subspace_bin.length;  // write subspace length to buffer
+        //     target_uint8.set(subspace_bin, i);  // write subspace_bin to buffer
+        //     i += subspace_bin.byteLength;
+        // }
 
         handleRequiredBufferSize(instance_bin.length);
         target_uint8.set(instance_bin, i);  // write channel to buffer
@@ -890,9 +889,6 @@ export class Compiler {
 
         target_buffer = target_buffer.slice(0, i);
 
-        if (target.appspace) {
-            target_buffer = this.combineBuffers(target_buffer, this.endpointToDXB(target.appspace));            
-        }
         
         return target_buffer;
     }
@@ -907,7 +903,7 @@ export class Compiler {
             const uint8 = new Uint8Array(buffer);
             uint8[0] = 1;
             uint8.set(clause.id_buffer, 1);   // write pointer id to buffer
-            clause.id_buffer;
+            return clause.id_buffer;
         }
 
         else if (clause instanceof Disjunction) {
@@ -943,18 +939,18 @@ export class Compiler {
                 handleRequiredBufferSize(i+4+name_bin.length)
                 uint8[i++] = endpoint.type;
                 uint8[i++] = name_bin.byteLength; // write name length to buffer
-                uint8[i++] = endpoint.subspaces.length; // write subspace number to buffer
+                uint8[i++] = 0//endpoint.subspaces.length; // write subspace number to buffer
                 uint8[i++] = instance_bin.byteLength;  // write instance length to buffer
                 uint8.set(name_bin, i);  // write name to buffer
                 i += name_bin.byteLength;
 
-                for (let subspace of endpoint.subspaces ?? []) {
-                    let subspace_bin = Compiler.utf8_encoder.encode(subspace); 
-                    handleRequiredBufferSize(i+1+subspace_bin.byteLength);
-                    uint8[i++] = subspace_bin.length;  // write subspace length to buffer
-                    uint8.set(subspace_bin, i);  // write subspace_bin to buffer
-                    i += subspace_bin.byteLength;
-                }
+                // for (let subspace of endpoint.subspaces ?? []) {
+                //     let subspace_bin = Compiler.utf8_encoder.encode(subspace); 
+                //     handleRequiredBufferSize(i+1+subspace_bin.byteLength);
+                //     uint8[i++] = subspace_bin.length;  // write subspace length to buffer
+                //     uint8.set(subspace_bin, i);  // write subspace_bin to buffer
+                //     i += subspace_bin.byteLength;
+                // }
 
                 handleRequiredBufferSize(i+instance_bin.length+1+(key?encrypted_key_size+1:0));
                 uint8.set(instance_bin, i);  // write channel to buffer
@@ -1163,9 +1159,9 @@ export class Compiler {
             return <Promise<ArrayBuffer>> this.compile(script, data, {context_location, insert_header, parent_scope:insert_header!.root_scope, only_leak_inserts:true}, false, true);
         },
 
-        getAssignAction: (assign_string:string): [ACTION_TYPE, BinaryCode] => {
+        getAssignAction: (assign_string:string): [ACTION_TYPE, BinaryCode|undefined] => {
             let action_type = ACTION_TYPE.GET; 
-            let action_specifier:BinaryCode;
+            let action_specifier:BinaryCode|undefined;
 
             // is =, +=, -=
             if (assign_string) {
@@ -1237,7 +1233,7 @@ export class Compiler {
             // if child value for path, it is not an actual value
             if (SCOPE.inner_scope.path_info_index != -1 && SCOPE.inner_scope.path_info_index === SCOPE.b_index-1) return;
 
-            if ('value_count' in SCOPE.inner_scope)  SCOPE.inner_scope.value_count--; // update value count
+            if ('value_count' in SCOPE.inner_scope) SCOPE.inner_scope.value_count!--; // update value count
 
             SCOPE.inner_scope.last_value_index = SCOPE.b_index;
             if (SCOPE.inner_scope.first_value_index === undefined) SCOPE.inner_scope.first_value_index = SCOPE.b_index;
@@ -1266,12 +1262,12 @@ export class Compiler {
         // shift dynamic indices & jmp indices correctly (all indices after a specific index)
         shiftDynamicIndices: (SCOPE:compiler_scope, shift:number, after:number) => {
             // update dynamic indices
-            for (let i of SCOPE.dynamic_indices) {
+            for (const i of SCOPE.dynamic_indices) {
                 if (i[0] > after) i[0] += shift;
             }
 
             // update jmp_indices
-            for (let [i] of SCOPE.jmp_indices) {
+            for (const [i] of SCOPE.jmp_indices) {
                 if (i > after) {
                     const jmp_to = SCOPE.data_view.getUint32(i, true);
                     if (jmp_to > after) SCOPE.data_view.setUint32(i, jmp_to + shift, true); // shift current jmp_to index in buffer
@@ -1279,8 +1275,8 @@ export class Compiler {
             }
 
             // update assignment_end_indices
-            let new_end_indices = new Set<number>();
-            for (let i of SCOPE.assignment_end_indices) {
+            const new_end_indices = new Set<number>();
+            for (const i of SCOPE.assignment_end_indices) {
                  new_end_indices.add(i > after ? i+shift : i);
             }
             SCOPE.assignment_end_indices = new_end_indices;
@@ -1374,17 +1370,22 @@ export class Compiler {
 
             // cannot set reference ($=) of ref variable
             if (action_type == ACTION_TYPE.SET_REFERENCE && type === "ref") {
-                throw new CompilerError("Cannot override the reference of a reference variable")
+                throw new CompilerError("Cannot override the reference of the reference variable '"+name+"'")
             }
 
             // cannot set reference ($=) of val variable
             if (action_type == ACTION_TYPE.SET_REFERENCE && type === "val") {
-                throw new CompilerError("Cannot override the reference of a value variable")
+                throw new CompilerError("Cannot override the reference of the value variable '"+name+"'")
             }
 
             // val variables from parent scope are readonly
             if (action_type != ACTION_TYPE.GET && parent_var && type === "val"){
-                throw new CompilerError("Value variables borrowed from the parent scope are readonly")
+                throw new CompilerError("The value variables '"+name+"' borrowed from the parent scope is readonly")
+            }
+
+            // const is readonly
+            if ((action_type == ACTION_TYPE.SET_REFERENCE || action_type == ACTION_TYPE.SET) && type === "const") {
+                throw new CompilerError("The const variable '"+name+"' is readonly")
             }
 
             // insert at current position of scope
@@ -1393,7 +1394,7 @@ export class Compiler {
 
         // recursively generates right variable index for val var ref
         // resolve pseudo variable var,ref,val, recursively update parents
-        resolveValVarRef: async (SCOPE:compiler_scope, name:string): Promise<[type:'val'|'var'|'ref'|null, index:number, parent_var:boolean]> => {
+        resolveValVarRef: async (SCOPE:compiler_scope, name:string): Promise<[type:'val'|'var'|'ref'|'const'|null, index:number, parent_var:boolean]> => {
 
             // is direct scope variable, can just insert
             if (SCOPE.inner_scope.vars && name in SCOPE.inner_scope.vars) {
@@ -1833,6 +1834,8 @@ export class Compiler {
             if (k == "write") slot = SLOT_WRITE;
             else if (k == "read")  slot = SLOT_READ;
             else if (k == "exec")  slot = SLOT_EXEC;
+            else if (k == "get")  slot = SLOT_GET;
+            else if (k == "set")  slot = SLOT_SET;
             else slot = SCOPE.inner_scope.object_slot_index++;
 
             SCOPE.inner_scope.object_slots.set(k, slot);
@@ -1857,7 +1860,7 @@ export class Compiler {
         },
 
 
-        addFilterTargetFromParts: (type:BinaryCode, name:string|Uint8Array, subspaces:string[]|null, instance:string, appspace:Endpoint, SCOPE:compiler_scope) => {
+        addFilterTargetFromParts: (type:BinaryCode, name:string|Uint8Array, instance:string, SCOPE:compiler_scope) => {
             Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+4, SCOPE);
             Compiler.builder.valueIndex(SCOPE);
             const type_index = SCOPE.b_index;
@@ -1865,27 +1868,27 @@ export class Compiler {
             const name_bin = (name instanceof Uint8Array) ? name : Compiler.utf8_encoder.encode(name); 
             const instance_bin = Compiler.utf8_encoder.encode(instance); 
             SCOPE.uint8[SCOPE.b_index++] = name_bin.byteLength; // write name length to buffer
-            SCOPE.uint8[SCOPE.b_index++] = subspaces?.length ?? 0;  // write subspace number to buffer
+            SCOPE.uint8[SCOPE.b_index++] = 0;  // write subspace number to buffer
             // instance length == 0 => wildcard, instance length == 255 => any instance
             SCOPE.uint8[SCOPE.b_index++] = instance ? (instance == "*" ? 0 : instance_bin.byteLength) : 255;  // write instance length to buffer
             Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+name_bin.byteLength, SCOPE);
             SCOPE.uint8.set(name_bin, SCOPE.b_index);  // write name to buffer
             SCOPE.b_index+=name_bin.byteLength;
 
-            for (const subspace of subspaces ?? []) {
-                // wildcard
-                if (subspace == "*") {
-                    SCOPE.uint8[SCOPE.b_index++] = 0;
-                    SCOPE.uint8[type_index] = type + 1;
-                }
-                else {
-                    const subspace_bin = Compiler.utf8_encoder.encode(subspace); 
-                    Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+subspace_bin.byteLength, SCOPE);
-                    SCOPE.uint8[SCOPE.b_index++] = subspace_bin.byteLength;  // write subspace length to buffer
-                    SCOPE.uint8.set(subspace_bin, SCOPE.b_index);  // write subspace_bin to buffer
-                    SCOPE.b_index+=subspace_bin.byteLength;
-                }
-            }
+            // for (const subspace of subspaces ?? []) {
+            //     // wildcard
+            //     if (subspace == "*") {
+            //         SCOPE.uint8[SCOPE.b_index++] = 0;
+            //         SCOPE.uint8[type_index] = type + 1;
+            //     }
+            //     else {
+            //         const subspace_bin = Compiler.utf8_encoder.encode(subspace); 
+            //         Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+subspace_bin.byteLength, SCOPE);
+            //         SCOPE.uint8[SCOPE.b_index++] = subspace_bin.byteLength;  // write subspace length to buffer
+            //         SCOPE.uint8.set(subspace_bin, SCOPE.b_index);  // write subspace_bin to buffer
+            //         SCOPE.b_index+=subspace_bin.byteLength;
+            //     }
+            // }
 
             Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+instance_bin.byteLength, SCOPE);
 
@@ -1896,26 +1899,21 @@ export class Compiler {
             }
 
 
-            // append appspace?
-            if (appspace) Compiler.builder.addTarget(appspace, SCOPE);
-
+            // // append appspace?
+            // if (appspace) Compiler.builder.addTarget(appspace, SCOPE);
         },
         
-        addPersonByNameAndChannel: (name:string, subspaces:string[]|null, instance:string, appspace:Endpoint, SCOPE:compiler_scope) => {
-            Compiler.builder.addFilterTargetFromParts(BinaryCode.PERSON_ALIAS, name, subspaces, instance, appspace, SCOPE);
+        addPersonByNameAndChannel: (name:Uint8Array|string, instance:string, SCOPE:compiler_scope) => {
+            Compiler.builder.addFilterTargetFromParts(BinaryCode.PERSON_ALIAS, name, instance, SCOPE);
         },
       
-        addBotByNameAndChannel: (name:string, subspaces:string[]|null, instance:string, appspace:Endpoint, SCOPE:compiler_scope) => {
-            Compiler.builder.addFilterTargetFromParts(BinaryCode.BOT, name, subspaces, instance, appspace, SCOPE);
-        },
-
-    
-        addInstitutionByNameAndChannel: (name:string, subspaces:string[]|null, instance:string, appspace:Endpoint, SCOPE:compiler_scope) => {
-            Compiler.builder.addFilterTargetFromParts(BinaryCode.INSTITUTION_ALIAS, name, subspaces, instance, appspace, SCOPE);
+     
+        addInstitutionByNameAndChannel: (name:Uint8Array|string, instance:string, SCOPE:compiler_scope) => {
+            Compiler.builder.addFilterTargetFromParts(BinaryCode.INSTITUTION_ALIAS, name, instance, SCOPE);
         },
        
-        addIdEndpointByIdAndChannel: (id:Uint8Array, subspaces:string[]|null, instance:string, appspace:Endpoint, SCOPE:compiler_scope) => {
-            Compiler.builder.addFilterTargetFromParts(BinaryCode.ENDPOINT, id, subspaces, instance, appspace, SCOPE);
+        addIdEndpointByIdAndChannel: (id:Uint8Array|string, instance:string, SCOPE:compiler_scope) => {
+            Compiler.builder.addFilterTargetFromParts(BinaryCode.ENDPOINT, id, instance, SCOPE);
         },
 
         addBuffer: (buffer:Uint8Array, SCOPE:compiler_scope) => {
@@ -1933,10 +1931,9 @@ export class Compiler {
         },
 
         addTarget: (el:Target, SCOPE:compiler_scope) => {
-            if (el instanceof Institution) Compiler.builder.addInstitutionByNameAndChannel(el.name, el.subspaces, el.instance, el.appspace, SCOPE);
-            else if (el instanceof Person) Compiler.builder.addPersonByNameAndChannel(el.name, el.subspaces, el.instance, el.appspace, SCOPE);
-            else if (el instanceof Bot) Compiler.builder.addBotByNameAndChannel(el.name, el.subspaces, el.instance, el.appspace, SCOPE);
-            else if (el instanceof IdEndpoint) Compiler.builder.addIdEndpointByIdAndChannel(el.binary, el.subspaces, el.instance, el.appspace, SCOPE);
+            if (el instanceof Institution) Compiler.builder.addInstitutionByNameAndChannel(el.binary, el.instance, SCOPE);
+            else if (el instanceof Person) Compiler.builder.addPersonByNameAndChannel(el.binary, el.instance, SCOPE);
+            else if (el instanceof IdEndpoint) Compiler.builder.addIdEndpointByIdAndChannel(el.binary, el.instance, SCOPE);
         },
 
 
@@ -2059,13 +2056,13 @@ export class Compiler {
         },
 
 
-        addValVarRefDeclaration: async (name:string, type:'val'|'var'|'ref', SCOPE:compiler_scope, init = false, init_brackets = false) => {
+        addValVarRefDeclaration: async (name:string, type:'val'|'var'|'ref'|'const', SCOPE:compiler_scope, init = false, init_brackets = false) => {
             const INNER_SCOPE = SCOPE.inner_scope;
 
             if (!INNER_SCOPE.vars) INNER_SCOPE.vars = {}
 
             // TODO replace with Object.hasOwn
-            if (INNER_SCOPE.vars.hasOwnProperty(name)) throw new CompilerError("Cannot redeclare "+type+" '"+name + "'", SCOPE.stack);
+            if (Object.hasOwn(INNER_SCOPE.vars, name)) throw new CompilerError("Cannot redeclare "+type+" '"+name + "'", SCOPE.stack);
             else {
                 if (SCOPE.var_index==undefined) SCOPE.var_index = 0x0100; // 0x00 - 0xff reserved for extracted variables for function, do, ...
                 const index = SCOPE.var_index++;
@@ -2085,7 +2082,7 @@ export class Compiler {
 
             // insert preemptive pointer
             const id_buffer = typeof id == "string" ? hex2buffer(id, Pointer.MAX_POINTER_ID_SIZE, true) : id;
-            const pointer_origin = <IdEndpoint> Target.get(id_buffer.slice(1,13), undefined, id_buffer.slice(13,21), undefined, BinaryCode.ENDPOINT);
+            const pointer_origin = <IdEndpoint> Target.get(id_buffer.slice(1,19), id_buffer.slice(19,21), BinaryCode.ENDPOINT);
             // preemptive_pointer_init enabled, is get, is own pointer, not sending to self
             if (SCOPE.options.preemptive_pointer_init !== false && action_type == ACTION_TYPE.GET && Runtime.endpoint.equals(pointer_origin) && SCOPE.options.to != Runtime.endpoint) {
                 return Compiler.builder.addPreemptivePointer(SCOPE, id)
@@ -3112,8 +3109,8 @@ export class Compiler {
             SCOPE.last_command_end = last_command_end; // last command still valid
 
             const doc_comment = m[3]??m[2];
-            // replace with markdown insertion
-            SCOPE.datex = `<text/markdown> '${doc_comment.replace(/\'/g, "\\'")}'\n` + SCOPE.datex;
+            // TODO: reenable? replace with markdown insertion
+            // SCOPE.datex = `<text/markdown> '${doc_comment.replace(/\'/g, "\\'")}';\n` + SCOPE.datex;
         }
 
         // COMMENT - before ASSIGN, ...
@@ -3748,45 +3745,37 @@ export class Compiler {
         // PERSON
         else if (m = SCOPE.datex.match(Regex.PERSON_ALIAS)) {
             SCOPE.datex = SCOPE.datex.substring(m[0].length);  // pop datex
-            const subspace_string = m[2].substring(1);
-            const subspaces = subspace_string ? subspace_string.split(":") : null;
-            Compiler.builder.addPersonByNameAndChannel(m[1], subspaces, m[6], null, SCOPE);
-            isEffectiveValue = true;
-        }
-
-        // BOT   
-        else if (m = SCOPE.datex.match(Regex.BOT)) {
-            SCOPE.datex = SCOPE.datex.substring(m[0].length);  // pop datex
-            const all = m[0].substring(1);
-            const name_channel = all.split("/");
-            Compiler.builder.addBotByNameAndChannel(name_channel[0], null, name_channel[1], null, SCOPE);
+            // const subspace_string = m[2].substring(1);
+            // const subspaces = subspace_string ? subspace_string.split(":") : null;
+            Compiler.builder.addPersonByNameAndChannel(m[1], m[3], SCOPE);
             isEffectiveValue = true;
         }
 
         // INSTITUTION
         else if (m = SCOPE.datex.match(Regex.INSTITUTION_ALIAS)) {
             SCOPE.datex = SCOPE.datex.substring(m[0].length);  // pop datex
-            const subspace_string = m[2].substring(1);
-            const subspaces = subspace_string ? subspace_string.split(":") : null;
-            Compiler.builder.addInstitutionByNameAndChannel(m[1], subspaces, m[6], null, SCOPE);
+            // const subspace_string = m[2].substring(1);
+            // const subspaces = subspace_string ? subspace_string.split(":") : null;
+            Compiler.builder.addInstitutionByNameAndChannel(m[1], m[3], SCOPE);
             isEffectiveValue = true;
         }
 
         // ID_ENDPOINT
         else if (m = SCOPE.datex.match(Regex.ENDPOINT)) {
             SCOPE.datex = SCOPE.datex.substring(m[0].length);  // pop datex
-            const subspace_string = m[2].substring(1);
-            const subspaces = subspace_string ? subspace_string.split(":") : null;
-            Compiler.builder.addIdEndpointByIdAndChannel( hex2buffer(m[1].replace(/[_-]/g, "")), subspaces, m[6], null, SCOPE);
+            // const subspace_string = m[2].substring(1);
+            // const subspaces = subspace_string ? subspace_string.split(":") : null;
+            const endpoint = IdEndpoint.get('@@'+m[1])
+            Compiler.builder.addIdEndpointByIdAndChannel(endpoint.binary, m[3], SCOPE);
             isEffectiveValue = true;
         }
 
-        // ID_ENDPOINT
+        // BROADCAST_ENDPOINT TODO: how to use this with new subspaces?
         else if (m = SCOPE.datex.match(Regex.BROADCAST_ENDPOINT)) {
             SCOPE.datex = SCOPE.datex.substring(m[0].length);  // pop datex
             const subspace_string = m[2].substring(1);
             const subspaces = subspace_string ? subspace_string.split(":") : null;
-            Compiler.builder.addIdEndpointByIdAndChannel(BROADCAST.binary, subspaces, m[6], null, SCOPE);
+            Compiler.builder.addIdEndpointByIdAndChannel(BROADCAST.binary, m[6], SCOPE);
             isEffectiveValue = true;
         }
 
@@ -4063,10 +4052,22 @@ export class Compiler {
         // FUNCTION
         else if (m = SCOPE.datex.match(Regex.FUNCTION)) {
             SCOPE.datex = SCOPE.datex.substring(m[0].length);  // pop datex
-            const name = m[1];
-            if (name) console.log("TODO function name ",name);
+            const exporting = !!m[1]
+            const name = m[2];
+            if (name) {
+                if (exporting) {
+                    if (!SCOPE.inner_scope.exports) SCOPE.inner_scope.exports = {};
+                    // remember internal variable for exports
+                    SCOPE.inner_scope.exports[name] = await Compiler.builder.addValVarRefDeclaration(name, 'ref', SCOPE);
+                }
+    
+                else await Compiler.builder.addValVarRefDeclaration(name, 'ref', SCOPE);
+            }
+            else if (exporting) {
+                throw new CompilerError("Invalid function declaration: cannot export a function without a name (use 'export function NAME()')")
+            }
 
-            const params:{[name:string]: [named:boolean, type:'val'|'var'|'ref', type_init:string, default_init:string, exporting:boolean]} = {}
+            const params:{[name:string]: [named:boolean, type:'val'|'var'|'ref'|'const', type_init:string, default_init:string, exporting:boolean]} = {}
 
             while (true) {
                 const param = SCOPE.datex.match(Regex.FUNCTION_PARAM);
@@ -4142,7 +4143,6 @@ export class Compiler {
             SCOPE.datex = type_signature + init + SCOPE.datex;
         }
 
-
         // RUN
         else if (m = SCOPE.datex.match(Regex.RUN)) {
             SCOPE.datex = SCOPE.datex.substring(m[0].length);  // pop datex
@@ -4167,10 +4167,10 @@ export class Compiler {
             await Compiler.builder.addScopeBlock(BinaryCode.RESPONSE, !!m[1], false, SCOPE)  
         }
 
-        // MAYBE
-        else if (m = SCOPE.datex.match(Regex.MAYBE)) {
+        // DEFER
+        else if (m = SCOPE.datex.match(Regex.DEFER)) {
             SCOPE.datex = SCOPE.datex.substring(m[0].length);  // pop datex
-            await Compiler.builder.addScopeBlock(BinaryCode.MAYBE, !!m[1], false, SCOPE)     
+            await Compiler.builder.addScopeBlock(BinaryCode.DEFER, !!m[1], false, SCOPE)     
         }
 
         // AWAIT
@@ -4228,7 +4228,7 @@ export class Compiler {
         else if (m = SCOPE.datex.match(Regex.VAR_REF_VAL)) {
             SCOPE.datex = SCOPE.datex.substring(m[0].length);  // pop datex
             const exporting = !!m[1];
-            const type = <"val" | "var" | "ref"> m[2];
+            const type = <"val" | "var" | "ref" | "const"> m[2];
             const name = m[3];
             const init_eternal = !!m[4];
             const init_brackets = !!m[5];
@@ -4245,6 +4245,7 @@ export class Compiler {
             else await Compiler.builder.addValVarRefDeclaration(name, type, SCOPE, init_eternal, init_brackets);
         }
 
+
         // export x
         else if (m = SCOPE.datex.match(Regex.DIRECT_EXPORT)) {
             SCOPE.datex = SCOPE.datex.substring(m[0].length);  // pop datex
@@ -4258,6 +4259,7 @@ export class Compiler {
 
         }
         
+
         // INTERNAL_VAR or ROOT_VARIABLE or LABELED_POINTER
         else if ((m = SCOPE.datex.match(Regex.INTERNAL_VAR)) || (m = SCOPE.datex.match(Regex.ROOT_VARIABLE)) || (m = SCOPE.datex.match(Regex.LABELED_POINTER))) {
             let v_name:string|number = m[2]; // get var name
@@ -4291,12 +4293,12 @@ export class Compiler {
             if (is_internal) {
                 if (v_name == "result") {base_type = BinaryCode.VAR_RESULT; v_name = undefined}
                 else if (v_name == "sub_result") {base_type = BinaryCode.VAR_SUB_RESULT; v_name = undefined}
-                else if (v_name == "origin") {base_type = BinaryCode.VAR_ORIGIN; v_name = undefined}
+                else if (v_name == "_origin") {base_type = BinaryCode._VAR_ORIGIN; v_name = undefined}
                 else if (v_name == "it") {base_type =  BinaryCode.VAR_IT; v_name = undefined}
                 else if (v_name == "void") {base_type =  BinaryCode.VAR_VOID; v_name = undefined}
 
-                else if (v_name == "sender") {if (action_type != ACTION_TYPE.GET) throw new CompilerError("Invalid action on internal variable #sender", SCOPE.stack); base_type = BinaryCode.VAR_SENDER; v_name = undefined}
-                else if (v_name == "current") {if (action_type != ACTION_TYPE.GET) throw new CompilerError("Invalid action on internal variable #current", SCOPE.stack); base_type = BinaryCode.VAR_CURRENT; v_name = undefined}
+                else if (v_name == "origin") {if (action_type != ACTION_TYPE.GET) throw new CompilerError("Invalid action on internal variable #origin", SCOPE.stack); base_type = BinaryCode.VAR_ORIGIN; v_name = undefined}
+                else if (v_name == "endpoint") {if (action_type != ACTION_TYPE.GET) throw new CompilerError("Invalid action on internal variable #endpoint", SCOPE.stack); base_type = BinaryCode.VAR_ENDPOINT; v_name = undefined}
                 else if (v_name == "location") {if (action_type != ACTION_TYPE.GET) throw new CompilerError("Invalid action on internal variable #location", SCOPE.stack); base_type = BinaryCode.VAR_LOCATION; v_name = undefined}
                 else if (v_name == "env") {if (action_type != ACTION_TYPE.GET) throw new CompilerError("Invalid action on internal variable #env", SCOPE.stack); base_type = BinaryCode.VAR_ENV; v_name = undefined}
                 // else if (v_name == "timestamp") {if (action_type != ACTION_TYPE.GET) throw new CompilerError("Invalid action on internal variable #timestamp", SCOPE.stack); base_type = BinaryCode.VAR_TIMESTAMP; v_name = undefined}
@@ -4306,8 +4308,9 @@ export class Compiler {
                 else if (v_name == "public") {  if (action_type != ACTION_TYPE.GET) throw new CompilerError("Invalid action on internal variable #public", SCOPE.stack); base_type =  BinaryCode.VAR_PUBLIC; v_name = undefined}
                 else if (v_name == "this") {  if (action_type != ACTION_TYPE.GET) throw new CompilerError("Invalid action on internal variable #this", SCOPE.stack); base_type =  BinaryCode.VAR_THIS; v_name = undefined}
                 else if (v_name == "remote") {if (action_type != ACTION_TYPE.GET) throw new CompilerError("Invalid action on internal variable #remote", SCOPE.stack); base_type = BinaryCode.VAR_REMOTE; v_name = undefined}
-                else if (v_name == "default") {if (action_type != ACTION_TYPE.GET) throw new CompilerError("Invalid action on internal variable #default", SCOPE.stack); base_type = BinaryCode.VAR_DEFAULT; v_name = undefined}
-                
+                else if (v_name == "entrypoint") {if (action_type != ACTION_TYPE.GET) throw new CompilerError("Invalid action on internal variable #entrypoint", SCOPE.stack); base_type = BinaryCode.VAR_ENTRYPOINT; v_name = undefined}
+                else if (v_name == "std") {  if (action_type != ACTION_TYPE.GET) throw new CompilerError("Invalid action on internal variable #std", SCOPE.stack); base_type =  BinaryCode.VAR_STD; v_name = undefined}
+
                 // resolve internal var proxy name
                 else if (typeof v_name == "string") {
                     v_name = Compiler.builder.resolveInternalProxyName(SCOPE, <string>v_name);
@@ -5007,8 +5010,15 @@ export class Compiler {
             let name:string
             // use filename if url provided
             if (output_name_or_path instanceof URL) name = output_name_or_path.pathname.split('/').pop()!;
+            else if (output_name_or_path) {
+                name = output_name_or_path;
+            }
             // default filename
-            else name = output_name_or_path ?? "out";
+            else {
+                const date = new Date();
+                const timestamp = `${date.getFullYear()}_${date.getMonth()+1}_${date.getDate()}_${date.getHours().toString().padStart(2,'0')}${date.getMinutes().toString().padStart(2,'0')}${date.getSeconds().toString().padStart(2,'0')}`
+                name = `datex_script_${timestamp}`;
+            }
 
             // normalize file name
             name = this.normalizeFileName(name, file_type);
@@ -5131,7 +5141,7 @@ export class Compiler {
     }
 
     // same as compile, but accepts a precompiled dxb array instead of a Datex Script string -> faster compilation
-    static compilePrecompiled(precompiled:PrecompiledDXB, data:any[] = [], options:compiler_options={}, add_header=true):Promise<ArrayBuffer> {
+    static compilePrecompiled(precompiled:PrecompiledDXB, data:any[] = [], options:compiler_options={}, add_header=true):Promise<ArrayBuffer>|ArrayBuffer {
         
         // get / compile all array buffers
         const buffers:ArrayBuffer[] = [];
@@ -5171,7 +5181,7 @@ export class Compiler {
         return Compiler.appendHeader(
             finalBuffer,
             options.end_of_scope,
-            options.force_id ? (options.from??Runtime.endpoint).id_endpoint : options.from, //sender
+            options.force_id ? (options.from??Runtime.endpoint) : options.from, //sender
             options.to, // to
             options.flood, // flood
             options.type, // type

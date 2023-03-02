@@ -3,8 +3,8 @@ import { Runtime } from "../runtime/runtime.ts";
 import { Compiler } from "../compiler/compiler.ts";
 import { Endpoint } from "../types/addressing.ts";
 import type { dxb_header } from "../utils/global_types.ts";
-import { Decompiler } from "../runtime/decompiler.ts";
 import { Pointer } from "../runtime/pointers.ts";
+import {decompile} from "../wasm/adapter/pkg/datex_wasm.js";
 
 /** <std:Scope> */
 export class Scope<T=any> {
@@ -34,13 +34,13 @@ export class Scope<T=any> {
         this.compiled = compiled;
         // decompile
         if (generate_decompiled) {
-            this._decompiled_f = Decompiler.decompile(this.compiled, false, true, false, false);
-            this._decompiled   = Decompiler.decompile(this.compiled, false, false, true, false);
+            this._decompiled_f = decompile(new Uint8Array(this.compiled), true, false, true);
+            this._decompiled   = decompile(new Uint8Array(this.compiled), false, false, true);
         }
     }
 
     // run the dxb with arguments, executed by a specific endpoint
-    public async execute(executed_by:Endpoint, context?:any, it?:any):Promise<T> {
+    public execute(executed_by:Endpoint, context?:any, it?:any):Promise<T> {
         
         // generate new header using executor scope header
         const header:dxb_header = {

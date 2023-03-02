@@ -435,6 +435,12 @@ export type JSValueWith$<T> = T & {
     $$:PropertyProxy$<T> // always returns a pointer property reference
 };
 
+// TODO: does this make sense? (probably requires proxy for all pointer objects)
+// export type JSValueWith$<T> = T & 
+//     {[P in keyof T & string as `$${P}`]: Value<T[P]>} & 
+//     {[P in keyof T & string as `$prop_${P}`]: PointerProperty<T[P]>}
+
+
 // convert from any JS/DATEX value to minimal representation with reference
 export type MinimalJSRefGeneralTypes<T, _C = CollapsedValue<T>> = 
     JSPrimitiveToDatexRef<_C> extends never ? JSValueWith$<_C> : JSPrimitiveToDatexRef<_C>
@@ -672,7 +678,7 @@ export class Pointer<T = any> extends Value<T> {
      * returns a unique pointer hash: HASH + UNIQUE TIME
      */
     public static readonly MAX_POINTER_ID_SIZE = 26;
-    public static readonly STATIC_POINTER_SIZE = 18;
+    public static readonly STATIC_POINTER_SIZE = 26;
 
     private static last_c = 0;
     private static last_t = 0;
@@ -681,17 +687,21 @@ export class Pointer<T = any> extends Value<T> {
 
     public static POINTER_TYPE:
     {
-        DEFAULT:pointer_type,
+        ENDPOINT:pointer_type,
+        ENDPOINT_PERSONAL:pointer_type,
+        ENDPOINT_INSTITUTION:pointer_type,
         IPV6_ID:pointer_type,
         STATIC:pointer_type,
         BLOCKCHAIN_PTR:pointer_type,
         PUBLIC:pointer_type
     } = {
-        DEFAULT: 1,
-        IPV6_ID: 2,
-        STATIC:  3,
+        ENDPOINT: BinaryCode.ENDPOINT,
+        ENDPOINT_PERSONAL: BinaryCode.PERSON_ALIAS,
+        ENDPOINT_INSTITUTION: BinaryCode.INSTITUTION_ALIAS,
+        IPV6_ID: 4,
+        STATIC:  5,
         BLOCKCHAIN_PTR:  0xBC, // blockchain ptr $BC, ...
-        PUBLIC:  5, // static public address
+        PUBLIC:  6, // static public address
     }
 
     public static pointer_prefix = new Uint8Array(21); // gets overwritten in DatexRuntime when endpoint id exists
@@ -710,16 +720,16 @@ export class Pointer<T = any> extends Value<T> {
     }
     public static get is_local() {return this.#is_local}
 
-    /** 21 bytes address: 1 byte address type () 12/16 byte origin id - 8/4 byte origin instance - 4 bytes timestamp - 1 byte counter*/
+    /** 21 bytes address: 1 byte address type () 18/16 byte origin id - 2/4 byte origin instance - 4 bytes timestamp - 1 byte counter*/
     /**
      * Endpoint id types:
-     *  + Full Endpoint ID:   EEEE EEEE EEEE / IIII IIII
+     *  + Full Endpoint ID:   EEEE EEEE EEEE EEEE EE / II
      *  + IPv6 compatible ID: IIII IIII IIII IIII / PPPP 
      * Pointer id types:
      * Associaated with an endpoint id:
-     *  + Full Endpoint ID pointer: A EEEE EEEE EEEE IIII IIII TTTT C    (A = Address type, E = endpoint id, I = instance id, T = timestamp, C = counter )
+     *  + Full Endpoint ID pointer: A EEEE EEEE EEEE EEEE EEII TTTT C    (A = Address type, E = endpoint id, I = instance id, T = timestamp, C = counter )
      *  + IPv6 compatible Address:  A IIII IIII IIII IIII PPPP TTTT C    (I = IPv6 address, P = port) 
-     *  + Endpoint static pointer:  A EEEE EEEE EEEE UUUU U              (E = endpoint id, U = unique id (agreed among all instances))
+     *  + Endpoint static pointer:  A EEEE EEEE EEEE EEEE EEUU UUUU U    (E = endpoint id, U = unique id (agreed among all instances))
      * Global / public:
      *  + Blockchain address:       A BBBB BBBB BBBB                     (B = unique block address)
      *  + Global static pointer:    A UUUU UUUU UUUU                     (U = unique id, stored in blockchain / decentralized) 
@@ -731,7 +741,7 @@ export class Pointer<T = any> extends Value<T> {
         const id = new Uint8Array(this.MAX_POINTER_ID_SIZE);
         const id_view = new DataView(id.buffer)
         // add custom origin id
-        if (!forPointer.is_origin) id.set(forPointer.origin.id_endpoint.getPointerPrefix());
+        if (!forPointer.is_origin) id.set(forPointer.origin.getPointerPrefix());
         // add current endpoint origin id
         else id.set(this.pointer_prefix)
 
@@ -819,7 +829,7 @@ export class Pointer<T = any> extends Value<T> {
     private static loading_pointers:WeakMap<datex_scope, Set<string>> = new WeakMap();
 
     // load from storage or request from remote endpoint if pointer not yet loaded
-    static async load(id:string|Uint8Array, SCOPE?:datex_scope, only_load_local = false, sender_knows_pointer = true): Promise<Pointer>{
+    static async load(id:string|Uint8Array, SCOPE?:datex_scope, only_load_local = false, sender_knows_pointer = true, allow_failure = false): Promise<Pointer>{
 
         const id_string = Pointer.normalizePointerId(id);
 
@@ -851,7 +861,12 @@ export class Pointer<T = any> extends Value<T> {
             let source:PointerSource|null = null;
             let priority:number;
             for ([source,priority] of this.#pointer_sources) {
-                stored = await source.getPointer(pointer.id, !SCOPE);
+                try {
+                    stored = await source.getPointer(pointer.id, !SCOPE);
+                }
+                catch (e) {
+                    console.log("ptresr",e)
+                }
                 if (stored != NOT_EXISTING) break;
             }
 
@@ -913,7 +928,8 @@ export class Pointer<T = any> extends Value<T> {
                         loading_pointers?.delete(id_string);
                         pointer.delete();
                         if (e instanceof NetworkError) {
-                            displayFatalError('pointer-unresolvable');
+                            if (!allow_failure) displayFatalError('pointer-unresolvable');
+                            console.log(pointer)
                             throw new PointerError("Could not get the pointer from the current, the owner, or the requesting endpoint: $"+id_string)
                         }
                         else throw e;
@@ -949,7 +965,7 @@ export class Pointer<T = any> extends Value<T> {
                     loading_pointers?.delete(id_string);
                     // could not subscribe, remove pointer again
                     pointer.delete();
-                    displayFatalError('owned-pointer-unresolvable');
+                    if (!allow_failure) displayFatalError('owned-pointer-unresolvable');
                     throw new PointerError("Owned pointer could not be loaded locally or from sender")
                 }
             }
@@ -966,7 +982,7 @@ export class Pointer<T = any> extends Value<T> {
                 console.warn("perror")
                 // if (globalThis.UIX) UIX.State.resetPage(); // this should not happen
                 // else
-                displayFatalError('pointer-not-found');
+                if (!allow_failure) displayFatalError('pointer-not-found');
                 throw new PointerError("Pointer $"+id_string+" has no assigned value", SCOPE);
             }
         }
@@ -1189,8 +1205,8 @@ export class Pointer<T = any> extends Value<T> {
 
         // get origin based on pointer id if no origin provided
         // TODO different pointer address formats / types
-        if (!this.origin && id && !anonymous && this.#id_buffer && this.pointer_type == Pointer.POINTER_TYPE.DEFAULT) {
-            this.origin = <IdEndpoint> Target.get(this.#id_buffer.slice(1,13), null, this.#id_buffer.slice(13,21), null, BinaryCode.ENDPOINT);
+        if (!this.origin && id && !anonymous && this.#id_buffer && (this.pointer_type == Pointer.POINTER_TYPE.ENDPOINT || this.pointer_type == Pointer.POINTER_TYPE.ENDPOINT_PERSONAL || this.pointer_type == Pointer.POINTER_TYPE.ENDPOINT_INSTITUTION)) {
+            this.origin = <Endpoint>Target.get(this.#id_buffer.slice(1,19), this.#id_buffer.slice(19,21), this.pointer_type);
             //console.log("pointer origin based on id: " + this.toString() + " -> " + this.origin)
         }
         else if (!this.origin) this.origin = Runtime.endpoint; // default origin is local endpoint
@@ -1252,7 +1268,7 @@ export class Pointer<T = any> extends Value<T> {
 
     //readonly:boolean = false; // can the value ever be changed?
     sealed:boolean = false; // can the value be changed from the client side? (otherwise, it can only be changed via DATEX calls)
-    #scheduleder: UpdateScheduler = null  // has fixed update_interval
+    #scheduleder: UpdateScheduler|null = null  // has fixed update_interval
 
     #allowed_access: target_clause // who has access to this pointer?, undefined = all
 
@@ -1301,22 +1317,17 @@ export class Pointer<T = any> extends Value<T> {
      */
     public transferOwnership(new_owner:Endpoint|endpoint_name, recursive = false) {
         const endpoint = new_owner instanceof Endpoint ? new_owner : (<Person>Endpoint.get(new_owner));
-        if (!endpoint.id_endpoint) throw new PointerError("Cannot transfer ownership to endpoint with unknown id (TODO)");
-        else {
-            const id_endpoint = endpoint;
+        const old_id = this.idString();
+        this.origin = endpoint;
+        this.id = Pointer.getUniquePointerID(this);
+    
+        logger.info(`pointer transfer to origin ${this.origin}: ${old_id} -> ${this.idString()}`);
 
-            const old_id = this.idString();
-            this.origin = id_endpoint;
-            this.id = Pointer.getUniquePointerID(this);
-        
-            logger.info(`pointer transfer to origin ${this.origin}: ${old_id} -> ${this.idString()}`);
-
-            if (recursive && !this.type.is_primitive) {
-                for (const key of this.getKeys()) {
-                    const prop = this.getProperty(key);
-                    const pointer = Pointer.getByValue(prop);
-                    if (pointer) pointer.transferOwnership(new_owner, recursive);
-                }
+        if (recursive && !this.type.is_primitive) {
+            for (const key of this.getKeys()) {
+                const prop = this.getProperty(key);
+                const pointer = Pointer.getByValue(prop);
+                if (pointer) pointer.transferOwnership(new_owner, recursive);
             }
         }
     }
@@ -1364,7 +1375,7 @@ export class Pointer<T = any> extends Value<T> {
 
         if (get_value) {
             // try {
-            const pointer_value = await Runtime.datexOut(['#sender <== ?', [this]], endpoint) 
+            const pointer_value = await Runtime.datexOut(['#origin <== ?', [this]], endpoint) 
             if (pointer_value === VOID) { // TODO: could be allowed, but is currently considered a bug
                 throw new RuntimeError("pointer value "+this.idString()+" was resolved to void");
             }
@@ -1426,7 +1437,7 @@ export class Pointer<T = any> extends Value<T> {
         let datex = '';
         const pointers = [];
         for (const ptr of pool) {
-            datex += '#sender <==: ?;'
+            datex += '#origin <==: ?;'
             pointers.push(ptr)
         }
         logger.debug("subscription pool for " + endpoint + ", " + pointers.length + " pointers");
@@ -1438,7 +1449,7 @@ export class Pointer<T = any> extends Value<T> {
         if (!this.#subscribed) return; // already unsubscribed
         const endpoint = this.origin;
         logger.info("unsubscribing from " + this + " ("+endpoint+")");
-        Runtime.datexOut(['#sender </= ?', [this]], endpoint);
+        Runtime.datexOut(['#origin </= ?', [this]], endpoint);
         this.#subscribed = false;
     }
 
@@ -1491,7 +1502,7 @@ export class Pointer<T = any> extends Value<T> {
         //placeholder replacement
         if (Pointer.pointer_value_map.has(v)) {
             if (this.#loaded) {throw new PointerError("Cannot assign a new value to an already initialized pointer")}
-            let existing_pointer = Pointer.pointer_value_map.get(v);
+            const existing_pointer = Pointer.pointer_value_map.get(v)!;
             existing_pointer.unPlaceholder(this.id) // no longer placeholder, this pointer gets 'overriden' by existing_pointer
             return existing_pointer;
         }
@@ -1994,6 +2005,19 @@ export class Pointer<T = any> extends Value<T> {
         return;
     }
 
+
+    #custom_prop_getter?:(key:unknown)=>unknown
+    #custom_prop_setter?:(key:unknown, value:unknown)=>unknown
+
+    public setPropertyGetter(getter:(key:unknown)=>unknown) {
+        this.#custom_prop_getter = getter; 
+    }
+
+    public setPropertySetter(setter: (key:unknown, value:unknown)=>unknown) {
+        this.#custom_prop_setter = setter; 
+    }
+
+
     /** create proxy for object and adds listeners */
     private addObjProxy(obj:T):T {
 
@@ -2092,6 +2116,8 @@ export class Pointer<T = any> extends Value<T> {
 
 			const proxy = new Proxy(<any>obj, {
                 get: (_target, key) => {
+                    if (this.#custom_prop_getter && (!this.shadow_object || !(key in this.shadow_object)) && !(typeof key == "symbol")) return this.#custom_prop_getter(key);
+
                     const val = Value.collapseValue(this.shadow_object?.[key], true, true);
                     /*if (typeof val == "function" && key != "$" && key != "$$") {
                         try {
@@ -2107,6 +2133,9 @@ export class Pointer<T = any> extends Value<T> {
                     else*/ return val
                 },
                 set: (target, val_name: keyof any, val: any) => {
+                    if (this.#custom_prop_setter) {
+                        return this.#custom_prop_setter(val_name, val);
+                    }
 
                     // length changed
                     if (is_array && val_name == "length") {

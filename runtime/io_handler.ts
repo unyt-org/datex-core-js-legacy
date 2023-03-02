@@ -7,6 +7,7 @@ import type { datex_scope, dxb_header } from "../utils/global_types.ts";
 import { client_type } from "../utils/global_values.ts";
 import { Endpoint, Target, target_clause } from "../types/addressing.ts";
 import { Runtime } from "./runtime.ts";
+import { Datex } from "../datex.ts";
 
 // handles observers for all incoming/outgoing DATEX
 export class IOHandler {
@@ -80,6 +81,7 @@ export class IOHandler {
         else if (this.std_outf) await this.std_outf(params);
     }
     public static stdOut(params:any[], endpoint:Target){
+        for (let i=0;i<params.length;i++) params[i] = Datex.Value.collapseValue(params[i],true,true);
         if(this.e_std_outs.has(endpoint)) this.e_std_outs.get(endpoint)(params);
         else if (this.std_out) this.std_out(params);
     }

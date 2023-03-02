@@ -6,11 +6,12 @@ import { ProtocolDataType } from "../compiler/protocol_types.ts"
 import { Endpoint, Target, target_clause } from "../types/addressing.ts"
 import { compiler_options, PrecompiledDXB, DatexResponse } from "../compiler/compiler.ts"
 import { cnf, Connective, Disjunction } from "../types/logic.ts"
-import { NOT_EXISTING } from "../datex_all.ts"
+import { NOT_EXISTING } from "../runtime/constants.ts";
 
 
 // return type for remote function calls
-export type Return<T=void> = Promise<T|void|DatexResponse<T>>|T|void|DatexResponse<T>;
+export type Return<T=void> = Promise<T|void>|T|void;
+// export type Return<T=void> = Promise<T|void|DatexResponse<T>>|T|void|DatexResponse<T>;
 
 export interface PointerSource {
     getPointer(pointer_id:string, pointerify?:boolean): Promise<any|typeof NOT_EXISTING>|any|typeof NOT_EXISTING

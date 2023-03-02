@@ -1,8 +1,7 @@
 
 
-import { logger } from "./global_values.ts";
-import { ValueError } from "../datex_all.ts";
 //import { Storage } from "../runtime/storage.ts"; TODO Storage cannot be importet here, handle file caching somehow (somewhere else)
+import { ValueError } from "../types/errors.ts";
 import { baseURL, client_type, Deno } from "./global_values.ts";
 
 export function getRandomString(template: string = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx", charset: string = "abcdefghijklmnopqrstuvwxyz0123456789") {
@@ -37,7 +36,7 @@ export async function getFileContent<E extends boolean = true>(url:string|URL, e
     } 
     catch(e) {
         if (error_on_fail) {
-            logger.error("Could not read file " + path);
+            // logger.error("Could not read file " + path);
             throw (e)
         }
     }
@@ -55,7 +54,7 @@ export async function getLocalFileContent<E extends boolean = true>(file_path:st
     }
     catch (e) {
         if (error_on_fail) {
-            logger.error("Could not read file " + file_path);
+            // logger.error("Could not read file " + file_path);
             throw (e)
         }
     }
