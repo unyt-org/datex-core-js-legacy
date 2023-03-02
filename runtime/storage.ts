@@ -195,6 +195,7 @@ export class Storage {
     
     // called when a full backup to this storage location was made
     private static updateSaveTime(location:Storage.Location) {
+        if (this.#exit_without_save) return; // currently exiting
         localStorage.setItem(this.meta_prefix+'__saved__' + Storage.Location[location], new Date().getTime().toString());
     }
 
@@ -222,6 +223,7 @@ export class Storage {
      * save current dirty states in localstorage
      */
     private static saveDirtyState(){
+        if (this.#exit_without_save) return; // currently exiting
         for (const location of this.#dirty_locations) {
             localStorage.setItem(this.meta_prefix+'__dirty__' + Storage.Location[location], new Date().getTime().toString());
         }
