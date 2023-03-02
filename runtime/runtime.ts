@@ -6409,7 +6409,7 @@ export class Runtime {
 
 try {
     const res = await fetch(new URL("../version", import.meta.url));
-    if (res.ok) Runtime.VERSION = await res.text()
+    if (res.ok) Runtime.VERSION = (await res.text()).replaceAll("\n","");
 }
 catch {}
 
