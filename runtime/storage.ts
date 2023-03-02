@@ -25,6 +25,8 @@ const site_suffix = (()=>{
     else return ""
 })();
 
+
+
 if (client_type === "deno") await import ("./deno_indexeddb.ts");
 
 // db based storage for DATEX value caching (IndexDB in the browser)

@@ -77,6 +77,8 @@ export function getCallerDir() {
 export function getCallerInfo() {
 	let parts = getPartsFromStack(new Error().stack);
 	if (!parts) return null;
+	// remove second line '@...' without name in safari
+	if (is_safari && parts[1].startsWith("@")) parts.splice(1, 1); 
 	parts = parts.slice(Math.min(parts.length-1, 2))
 
 	const info = [];
@@ -87,7 +89,7 @@ export function getCallerInfo() {
 		let name:string|null|undefined = part.trim().startsWith('module code') ? null : part.match(caller_name)?.[1];
 		// ignore if just at http://
 		if (name == 'at' && part.trim().startsWith('at ')) name = null;
-
+		
 		info.push({
 			file: part.match(caller_file)?.[1] || null,
 			name: name || null,

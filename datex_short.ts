@@ -182,6 +182,7 @@ export function instance<T>(fromClassOrType:{new(...params:any[]):T}|Type<T>, pr
 
 // generate a pointer for an object and returns the proxified object or the primitive pointer
 export function pointer<T>(value:CompatValue<T>): MinimalJSRef<T> {
+
     const pointer = <any> Pointer.createOrGet(value).js_value;
     // store as eternal?
     if (waiting_eternals.size) {

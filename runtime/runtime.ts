@@ -18,6 +18,7 @@ import {displayInit, displayClear} from "./display.ts";
 
 displayInit();
 
+
 globalThis.performance?.mark("runtime_start");
 
 // for debugging: converting bigints to JSON
