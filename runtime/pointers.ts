@@ -1995,9 +1995,14 @@ export class Pointer<T = any> extends Value<T> {
         // iterate up until Object.protoype reached
         while ((prototype = Object.getPrototypeOf(prototype)) != Object.prototype) {
             for (const name of this.visible_children ?? Object.keys(prototype)) {
-                if (prototype[name] instanceof Value && !high_priority_keys.has(name)) { // only observer Values, and ignore if already observed higher up in prototype chain
-                    this.initShadowObjectPropertyObserver(name, <Value>prototype[name]);
+                try {
+                    if (prototype[name] instanceof Value && !high_priority_keys.has(name)) { // only observer Values, and ignore if already observed higher up in prototype chain
+                        this.initShadowObjectPropertyObserver(name, <Value>prototype[name]);
+                    }
+                } catch (e) {
+                    logger.warn("could not check prototype property:",name)
                 }
+               
                 high_priority_keys.add(name);
             }
         }

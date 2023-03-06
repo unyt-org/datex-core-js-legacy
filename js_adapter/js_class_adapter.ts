@@ -943,18 +943,21 @@ function _old_publicStaticClass(original_class:Class) {
 
 const templated_classes = new Map<Function, Function>() // original class, templated class
 
-export function createTemplateClass(original_class:{ new(...args: any[]): any; }, type:Type, sync = true){
+export function createTemplateClass(original_class:{ new(...args: any[]): any; }, type:Type, sync = true, add_js_interface = true){
 
     if (templated_classes.has(original_class)) return templated_classes.get(original_class);
 
     original_class[DX_TYPE] = type;
 
     // set JS interface
-    type.setJSInterface({
-        class: original_class,
-        proxify_children: true, // proxify children per default
-        is_normal_object: true, // handle like a normal object
-    });
+    if (add_js_interface) {
+        type.setJSInterface({
+            class: original_class,
+            proxify_children: true, // proxify children per default
+            is_normal_object: true, // handle like a normal object
+        });
+    }
+
 
     // set constructor, replicator, destructor
     const constructor_name = Object.keys(original_class.prototype[METADATA]?.[Decorators.CONSTRUCTOR]?.public??{})[0]
@@ -1120,7 +1123,6 @@ export function proxyClass<T extends { new(...args: any[]): any;}>(original_clas
     // add Proxy trap for construct
     const new_class = new Proxy(original_class, {
         construct(target: T, args: any[], newTarget:Function) {
-
             // cast from type
             if (new_class == newTarget) {
                 // cast and immediately create pointer if auto_sync
