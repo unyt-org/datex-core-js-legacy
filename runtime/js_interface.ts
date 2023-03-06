@@ -16,6 +16,7 @@ export type js_interface_configuration<T=any> = {
     // either type or generate_type is needed
     get_type?: (value:T)=>Type<T>, // get a specific <Type> for a value (with variation/parameters)
     cast?: (value:any, type:Type<T>, context?:any, origin?:Endpoint)=>T|typeof INVALID,     // a function that casts a given value to a value of the type of the pseudo cast, if possible
+    cast_no_tuple?: (value:any, type:Type<T>, context?:any, origin?:Endpoint)=>T|typeof INVALID,     // a function that casts a given value to a value of the type of the pseudo cast, if possible - ignores construct (cast from tuple)
     serialize?: (value:T)=>fundamental, // a function that creates a fundamental value from a given pseudo class value
                                                 // if not provided, assume the value is already a DATEX fundamental value
     empty_generator?: (type:Type<T>, context?:any, origin?:Endpoint)=>any // return an default empty value if the type is casted from <Void>
@@ -165,7 +166,7 @@ export class JSInterface {
 
     // apply get_property, set_property, ... if parent matches a pseudo type
     private static applyMethod(type:Type, parent:any, method_name:string, args:any[]):any {
-        const config = this.configurations_by_type.get(type.root_type);
+        const config = this.configurations_by_type.get(type.root_type) ?? this.configurations_by_type.get(type);
         if (!config) return NOT_EXISTING;
         if (config.is_normal_object && !(method_name in config)) return NOT_EXISTING; // act like this pseudo class does not exist, handle default (if method is not implemented)
         if (config.detect_class instanceof globalThis.Function && !(<globalThis.Function>config.detect_class)(parent)) return NOT_EXISTING; // detect class invalid

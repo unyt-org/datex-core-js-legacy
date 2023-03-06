@@ -1118,7 +1118,7 @@ export function datex_advanced<T>(_class:T) {
 // if no type is provided, <ext:ClassName> is created as type by default
 export function proxyClass<T extends { new(...args: any[]): any;}>(original_class:T, type?:Type, auto_sync = true):DatexClass&T {
                 
-    type = type ?? Type.get("ext", original_class.name);
+    type = type ?? Type.get("ext", original_class.name)!;
     
     // add Proxy trap for construct
     const new_class = new Proxy(original_class, {

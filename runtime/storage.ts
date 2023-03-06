@@ -17,10 +17,11 @@ displayInit();
 /***** imports and definitions with top-level await - node.js / browser interoperability *******************************/
 const site_suffix = (()=>{
     // remove hash from url
-    if (globalThis.location?.href) {
-        const url = new URL(globalThis.location.href)
-        url.hash = "";
-        return url.toString();
+    if (globalThis.location?.origin) {
+        // const url = new URL(globalThis.location.href)
+        // url.hash = "";
+        // return url.toString();
+        return globalThis.location.origin
     }
     else return ""
 })();

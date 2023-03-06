@@ -216,17 +216,20 @@ export class Type<T = any> {
     }
 
     // cast any value to a value of this type (for custom types)
-    public cast(value: any, context?:any, origin:Endpoint = Runtime.endpoint, make_pointer = false):T {
+    public cast(value: any, context?:any, origin:Endpoint = Runtime.endpoint, make_pointer = false, ignore_js_config = false):T {
         // unknown type (no template or config)
         //if (!this.interface_config && !this.template) return UNKNOWN_TYPE;
         
         // has a JS configuration
-        if (this.interface_config){
+        if (!ignore_js_config && this.interface_config){
             // generate default value
             if (value === VOID && this.interface_config.empty_generator instanceof globalThis.Function) return this.interface_config.empty_generator(this, context, origin);
             // custom cast method
             else if (this.interface_config.cast) {
                 return this.interface_config.cast(value, this, context, origin);
+            }
+            else if (this.interface_config.cast_no_tuple && !(value instanceof Tuple)) {
+                return this.interface_config.cast_no_tuple(value, this, context, origin);
             }
             // special cast: prototype
             else if (typeof value == "object" && this.interface_config.prototype) {
@@ -247,26 +250,33 @@ export class Type<T = any> {
             is_constructor = false; // is replicated object, not created with constructor arguments
         }
 
-        // create new instance - TODO 'this' as last constructor argument still required?
-        Type.#current_constructor = this.interface_config?.class;
-        let instance = this.interface_config?.class ? Reflect.construct(Type.#current_constructor, is_constructor?[...args/*,this*/]:[]) : new TypedValue(this);
-        Type.#current_constructor = null;
+        const instance = this.newJSInstance(is_constructor, args);
 
         // initialize properties
-        if (!is_constructor) {
-            // initialize with template
-            if (this.#template) this.createFromTemplate(value, instance)
-            // just copy all properties if no template found
-            else {
-                Object.assign(instance, value);
-            }
-        }
+        if (!is_constructor) this.initProperties(instance, value);
         
         // call DATEX construct methods and create pointer
         return this.construct(instance, args, is_constructor, make_pointer);
     }
 
-    public construct(instance:any, args:any[], is_constructor = true, make_pointer = false) {
+    public newJSInstance(is_constructor = true, args?:any[]) {
+        // create new instance - TODO 'this' as last constructor argument still required?
+        Type.#current_constructor = this.interface_config?.class;
+        const instance = <T> (this.interface_config?.class ? Reflect.construct(Type.#current_constructor, is_constructor?[...args/*,this*/]:[]) : new TypedValue(this));
+        Type.#current_constructor = null;
+        return instance;
+    }
+
+    public initProperties(instance:any, value:any) {
+        // initialize with template
+        if (this.#template) this.createFromTemplate(value, instance)
+        // just copy all properties if no template found
+        else {
+            Object.assign(instance, value);
+        }
+    }
+
+    public construct(instance:T, args?:any[], is_constructor = true, make_pointer = false) {
         instance[DX_TEMPLATE] = this.#template;
 
         // make pointer?

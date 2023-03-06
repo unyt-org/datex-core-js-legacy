@@ -652,7 +652,16 @@ export class Pointer<T = any> extends Value<T> {
         this.pointer_value_change_listeners.add(listener);
     }
 
-    public static onPointerForValueCreated(value:any, listener: (p:Pointer)=>void){
+    public static onPointerForValueCreated(value:any, listener: (p:Pointer)=>void, trigger_if_exists = true){
+        // value already has a pointer?
+        if (trigger_if_exists) {
+            const ptr = Pointer.getByValue(value);
+            if (ptr) {
+                listener(ptr);
+                return;
+            }
+        }
+        // set listener
         if (!this.pointer_for_value_created_listeners.has(value)) this.pointer_for_value_created_listeners.set(value, new Set());
         this.pointer_for_value_created_listeners.get(value)?.add(listener);
     }
@@ -865,7 +874,7 @@ export class Pointer<T = any> extends Value<T> {
                     stored = await source.getPointer(pointer.id, !SCOPE);
                 }
                 catch (e) {
-                    console.log("ptresr",e)
+                    logger.error("pointer source error:",e)
                 }
                 if (stored != NOT_EXISTING) break;
             }
@@ -1363,7 +1372,7 @@ export class Pointer<T = any> extends Value<T> {
 
     public async subscribeForPointerUpdates(override_endpoint?:Endpoint, get_value = !this.#loaded):Promise<Pointer> {
         if (this.#subscribed) {
-            logger.debug("already subscribed to " + this.idString());
+            // logger.debug("already subscribed to " + this.idString());
             return this;
         }
         
