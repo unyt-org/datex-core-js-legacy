@@ -6470,6 +6470,7 @@ Runtime.ENV.DATEX_VERSION = Runtime.VERSION;
 Runtime.persistent_memory = (await Storage.loadOrCreate("Datex.Runtime.MEMORY", ()=>new Map())).setAutoDefault(Object);
 
 
+
 // @ts-ignore
 if (globalThis.navigator?.userAgentData?.brands) {
     // @ts-ignore

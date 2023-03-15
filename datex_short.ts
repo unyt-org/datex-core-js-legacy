@@ -1,12 +1,13 @@
 
 // shortcut functions
 // import { Datex } from "./datex.ts";
-import { baseURL, Runtime, PrecompiledDXB, Type, Pointer, Value, PointerProperty, primitive, any_class, Target, IdEndpoint, TransformFunctionInputs, AsyncTransformFunction, TransformFunction, TextRef, Markdown, DecimalRef, BooleanRef, IntegerRef, MinimalJSRef, CompatValue, CompatPartial, datex_meta, getMeta, ObjectWithDatexValues, Compiler, endpoint_by_endpoint_name, endpoint_name, Storage, compiler_scope, datex_scope, DatexResponse, target_clause, ValueError, logger } from "./datex_all.ts";
+import { baseURL, Runtime, PrecompiledDXB, Type, Pointer, Value, PointerProperty, primitive, any_class, Target, IdEndpoint, TransformFunctionInputs, AsyncTransformFunction, TransformFunction, TextRef, Markdown, DecimalRef, BooleanRef, IntegerRef, MinimalJSRef, CompatValue, CompatPartial, datex_meta, ObjectWithDatexValues, Compiler, endpoint_by_endpoint_name, endpoint_name, Storage, compiler_scope, datex_scope, DatexResponse, target_clause, ValueError, logger, Class, getDefaultLocalMeta } from "./datex_all.ts";
 
 /** make decorators global */
 import {property as _property, sync as _sync, endpoint as _endpoint, template as _template} from "./datex_all.ts";
 import { DX_SLOTS, SLOT_GET, SLOT_SET } from "./runtime/constants.ts";
-import { getCallerFile, getCallerInfo } from "./utils/caller_metadata.ts";
+import { AssertionError } from "./types/errors.ts";
+import { getCallerFile, getCallerInfo, getMeta } from "./utils/caller_metadata.ts";
 
 declare global {
 	const property: typeof _property;
@@ -25,17 +26,31 @@ globalThis.endpoint = _endpoint;
 globalThis.template = _template;
 
 
-
 // can be used instead of import(), calls a DATEX get instruction, works for urls, endpoint, ...
-export function get<T=unknown>(dx:string|URL, context_location?:URL|string):Promise<T> {
+export async function get<T=unknown>(dx:string|URL, assert_type?:Type<T> | Class<T> | string, context_location?:URL|string):Promise<T> {
     // auto retrieve location from stack
     context_location ??= getCallerFile();
     // TODO:just a workaournd, how to do this better
     //  if context location is index.html (no 'x.y' file extension) -> set to root url
     if (!context_location.toString().match(/\/[^\/]*\.[^\/]*$/) && (context_location.toString().startsWith("http://") || context_location.toString().startsWith("https://"))) context_location = new URL(context_location).origin + "/"
-    // workaround -> convert absolute path to relative (TODO: handle in DATEX?)
-    if (typeof dx == "string" && dx.startsWith("/")) dx = "." + dx;
-    return <Promise<T>> _datex('get (' + dx + ' )', undefined, undefined, undefined, undefined, context_location)
+    // workaround -> convert absolute path to url/relative (TODO: handle in DATEX?)
+    if (typeof dx == "string" && dx.startsWith("/")) {
+        if (globalThis.location?.origin) dx = globalThis.location.origin + dx;
+        else dx = "." + dx;
+    }
+
+    const res = <T> await _datex('get (' + dx + ' )', undefined, undefined, undefined, undefined, context_location);
+
+    if (typeof assert_type == "string") assert_type = Type.get(assert_type);
+
+    if (assert_type instanceof Type) {
+        if (!assert_type.matches(res)) throw new AssertionError("Invalid type in datex.get: Expected "+assert_type+", found "+Type.ofValue(res)+"")
+    }
+    else if (assert_type) {
+        if (!(res instanceof assert_type)) throw new AssertionError("Invalid type in datex.get: Expected instance of "+assert_type.name+", found "+Type.ofValue(res)+"")
+    }
+
+    return res;
 }
 
 
@@ -49,7 +64,7 @@ function _datex(dx:string|TemplateStringsArray|PrecompiledDXB, data?:unknown[], 
 
     // auto retrieve location from stack
     if (!context_location) {
-        context_location = new Error().stack?.trim()?.match(/((?:https?|file)\:\/\/.*?)(?::\d+)*(?:$|\nevaluate@)/)?.[1];
+        context_location = getCallerFile();
     }
 
     // template string (datex `...`)
@@ -80,9 +95,13 @@ function _datex(dx:string|TemplateStringsArray|PrecompiledDXB, data?:unknown[], 
 }
 
 // add datex.meta
-Object.defineProperty(_datex, 'meta', {get:()=>getMeta(), set:()=>{}, configurable:false})
+Object.defineProperty(_datex, 'meta', {get:()=>{
+    const meta = getMeta();
+    if (!meta) throw new Error("Function was called locally - no datex.meta available");
+    return meta;
+}, set:()=>{}, configurable:false})
 // add datex.get
-Object.defineProperty(_datex, 'get', {value:(res:string)=>get(res,getCallerFile()), configurable:false})
+Object.defineProperty(_datex, 'get', {value:(res:string, type:Class|Type)=>get(res,type,getCallerFile()), configurable:false})
 
 // add globalThis.meta
 // Object.defineProperty(globalThis, 'meta', {get:()=>getMeta(), set:()=>{}, configurable:false})
@@ -388,46 +407,61 @@ const waiting_lazy_eternals = new Map<string,string>();
 
 export async function loadEternalValues(){
     eternals = await Storage.loadOrCreate("eternals", ()=>new Map<string,unknown>());
+    // console.log("eternal",eternals,Pointer.getByValue(eternals)?.idString())
 }
 
 
 // get a stored eternal value from a caller location
-export function getEternal() {
-    const info = getCallerInfo()?.[0];
+export function getEternal(info?:ReturnType<typeof getCallerInfo>, customIdentifier?:string) {
+    info ??= getCallerInfo();
     if (!info) throw new Error("eternal values are not supported in this runtime environment");
-    const unique_row = `${info.file}:${info.row}`;
-    const unique = `${unique_row}:${info.col}`
-    if (!eternals.has(unique)) {
-        waiting_eternals.set(unique_row, unique); // assign next pointer to this eternal
+    const line = info[0]
+
+    const unique_row = `${line.file}:${line.row}`;
+    const key = customIdentifier ? `${line.file}#${customIdentifier}` : `${unique_row}:${line.col}`; // use file location or customIdentifier as key
+
+    if (!eternals.has(key)) {
+        waiting_eternals.set(unique_row, key); // assign next pointer to this eternal
         setTimeout(()=>{
             if (waiting_eternals.has(unique_row)) logger.error(`uncaptured eternal value at ${unique_row}: please surround the value with $$(), otherwise it cannot be restored correctly`)
         }, 1000)
     }
-    return eternals.get(unique)
+    return eternals.get(key)
 }
 
-export async function getLazyEternal() {
-    const info = getCallerInfo()?.[0];
+export async function getLazyEternal(info?:ReturnType<typeof getCallerInfo>, customIdentifier?:string) {
+    info ??= getCallerInfo();
     if (!info) throw new Error("eternal values are not supported in this runtime environment");
-    const unique_row = `${info.file}:${info.row}`;
-    const unique = `${unique_row}:${info.col}`
-    if (!await Storage.hasItem(unique)) {
-        waiting_lazy_eternals.set(unique_row, unique); // assign next pointer to this eternal
+    const line = info[0]
+
+    const unique_row = `${line.file}:${line.row}`;
+    const key = customIdentifier ? `${line.file}#${customIdentifier}` : `${unique_row}:${line.col}`; // use file location or customIdentifier as key
+    
+    if (!await Storage.hasItem(key)) {
+        waiting_lazy_eternals.set(unique_row, key); // assign next pointer to this eternal
         setTimeout(()=>{
             if (waiting_lazy_eternals.has(unique_row)) logger.error(`uncaptured lazy_eternal value at ${unique_row}: please surround the value with $$(), otherwise it cannot be restored correctly`)
         }, 1000)
     }
-    return Storage.getItem(unique);
+    return Storage.getItem(key);
 }
 
 
 
 Object.defineProperty(globalThis, 'eternal', {get:getEternal, configurable:false})
+// TODO: remove lazy_eternal
 Object.defineProperty(globalThis, 'lazy_eternal', {get:getLazyEternal, configurable:false})
+Object.defineProperty(globalThis, 'lazyEternal', {get:getLazyEternal, configurable:false})
+
+Object.defineProperty(globalThis, 'eternalVar', {value:(customIdentifier:string)=>getEternal(getCallerInfo(), customIdentifier), configurable:false})
+Object.defineProperty(globalThis, 'lazyEternalVar', {value:(customIdentifier:string)=>getLazyEternal(getCallerInfo(), customIdentifier), configurable:false})
 
 declare global {
     const eternal: undefined
-    const lazy_eternal: undefined
+    const lazyEternal: undefined
+
+    const eternalVar: (customIdentifier:string)=>undefined
+    const lazyEternalVar: (customIdentifier:string)=>undefined
 }
 
 // TODO: '123456'.$$, [1,2,3].$$ ?
@@ -445,7 +479,9 @@ declare global {
 
 
 // load all eternal values from storage
-await loadEternalValues();
+
+// @ts-ignore NO_INIT
+if (!globalThis.NO_INIT) await loadEternalValues();
 
 
 // create any filter Target from a string

@@ -573,6 +573,7 @@ export class UpdateScheduler {
             }
 
             (async ()=>{
+                if (receiver instanceof Disjunction && !receiver.size) return;
                 try {
                     await Runtime.datexOut([datex, data, {end_of_scope:false, type:ProtocolDataType.UPDATE}], receiver, undefined, false, undefined, undefined, false, undefined, this.datex_timeout);
                 } catch(e) {
@@ -1693,7 +1694,7 @@ export class Pointer<T = any> extends Value<T> {
             if (!this.#exclude_origin_from_updates) this.handleDatexUpdate(null, '#0=?;? = #0', [this.val, this], this.origin, true)
         }
         else if (this.is_origin && this.subscribers.size) {
-            logger.debug("forwarding update to subscribers ?", this.#update_endpoints);
+            logger.debug("forwarding update to subscribers", this.#update_endpoints);
             // console.log(this.#update_endpoints);
             this.handleDatexUpdate(null, '#0=?;? = #0', [this.val, this], this.#update_endpoints, true)
         }
@@ -2606,6 +2607,7 @@ export class Pointer<T = any> extends Value<T> {
 
         // directly send update
         else {
+            if (receiver instanceof Disjunction && !receiver.size) return;
             try {
                 await Runtime.datexOut([datex, data, {collapse_first_inserted, type:ProtocolDataType.UPDATE}], receiver, undefined, false, undefined, undefined, false, undefined, this.datex_timeout);
             } catch(e) {

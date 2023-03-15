@@ -35,7 +35,6 @@ export class Assertion<T=any> extends ExtensibleFunction implements ValueConsume
 
     
     assert<B extends boolean = false>(value:T|Tuple<T>, SCOPE?:datex_scope, return_boolean:B = false): B extends true ? boolean|Promise<boolean> : void|Promise<void> {
-
         // ntarget
         if (this.ntarget) {
             if (this.ntarget_async) return this.checkResultPromise(<Promise<string | boolean>>this.ntarget(...(value instanceof Tuple ? value.toArray() : value)), return_boolean)

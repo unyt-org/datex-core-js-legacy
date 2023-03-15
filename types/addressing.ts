@@ -144,7 +144,7 @@ export class Endpoint extends Target {
 	#entrypoint?: unknown
 
 	#n: string
-	n: string // show for debugging
+	// n: string // show for debugging
 
 	get name() {return this.#name}
 	get instance() {return this.#instance}
@@ -193,7 +193,7 @@ export class Endpoint extends Target {
 			this.#instance = buffer2hex(instance);
 		}
 		else if (typeof instance == "number") {
-			this.#instance_binary = new Uint8Array(new BigUint64Array([BigInt(instance??0)]).buffer);
+			this.#instance_binary = new Uint8Array(new Uint16Array([instance??0]));
 			this.#instance = buffer2hex(this.#instance_binary);
 		}
 		else if (typeof instance == "string" && instance) {
@@ -209,7 +209,7 @@ export class Endpoint extends Target {
 
 		// get toString() value
 		this.#n = this.toString()
-		this.n = this.#n; // just for debugging/display purposes
+		// this.n = this.#n; // just for debugging/display purposes
 		
 		// target already exists? return existing filtertarget
 		if (Target.targets.has(this.#n)) {
@@ -286,7 +286,7 @@ export class Endpoint extends Target {
 
 	
 	/** returns a certain instance of an existing filter */
-	public getInstance(instance:string){
+	public getInstance(instance:string|number|Uint8Array){
 		return Target.get(this.name, instance, <any> this.constructor);
 	}
 	

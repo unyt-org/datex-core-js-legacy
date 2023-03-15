@@ -13,6 +13,7 @@ import { PermissionError, RuntimeError, TypeError, ValueError } from "./errors.t
 import { ProtocolDataType } from "../compiler/protocol_types.ts";
 import { VOID } from "../runtime/constants.ts";
 import { Type, type_clause } from "./type.ts";
+import { callWithMetadata, callWithMetadataAsync } from "../utils/caller_metadata.ts";
 
 export class ExtensibleFunction {
     constructor(f:globalThis.Function) {
@@ -34,7 +35,7 @@ export interface Callable<args extends any[], return_type> {
  * inject meta info to stack trace
  */
 
-function getDefaultLocalMeta(){
+export function getDefaultLocalMeta(){
     return {
         sender: Runtime.endpoint,
         current: Runtime.endpoint,
@@ -45,57 +46,57 @@ function getDefaultLocalMeta(){
     }
 }
 
-const free_ids:Set<number> = new Set(Array(500).fill(1).map((x, y) => x + y)); // 500 free ids
-const meta = new Map<number, any>();
+// const free_ids:Set<number> = new Set(Array(500).fill(1).map((x, y) => x + y)); // 500 free ids
+// const meta = new Map<number, any>();
 
-function createMetaMapping(object:any){
-    const key = <number> free_ids.values().next().value;
-    if (key == undefined) throw new RuntimeError("not enough meta mapping ids (limit 500) - too many function were called at once"); // TODO better solution?
-    free_ids.delete(key);
-    meta.set(key, object);
-    return key;
-}
-function removeMeta(key:number){
-    meta.delete(key);
-    free_ids.add(key);
-}
+// function createMetaMapping(object:any){
+//     const key = <number> free_ids.values().next().value;
+//     if (key == undefined) throw new RuntimeError("not enough meta mapping ids (limit 500) - too many function were called at once"); // TODO better solution?
+//     free_ids.delete(key);
+//     meta.set(key, object);
+//     return key;
+// }
+// function removeMeta(key:number){
+//     meta.delete(key);
+//     free_ids.add(key);
+// }
 
 
-// @ts-ignore check for safari
-const is_safari = !!globalThis.Deno && (typeof globalThis.webkitConvertPointFromNodeToPage === 'function')
+// // @ts-ignore check for safari
+// const is_safari = !!globalThis.Deno && (typeof globalThis.webkitConvertPointFromNodeToPage === 'function')
 
-/**
- * Injects meta data to the stack trace, which can be accessed within the function.
- * Calls the function (async) with paramters.
- * @param meta object that can be accessed within the function by calling getMeta()
- * @param ctx value of 'this' inside the function
- * @param fn the function to call
- * @param args function arguments array
- * @returns return value of the function call
- */
-async function callWithMeta<args extends any[], returns>(meta:any, ctx:any, fn:(...args:args)=>returns, args:args): any {
-    const key = createMetaMapping(meta);
-    const encoded = '__DX_meta__'+key+'__';
-    try {
-        const res = await (is_safari ? new globalThis.Function('f', 'a', '(function '+encoded+'(){f.call(...a)})()')(fn, [ctx, ...args]) : ({[encoded]:()=>fn.call(ctx,...args)})[encoded]());
-        removeMeta(key); // clear meta
-        return res;
-    }
-    catch (e) {
-        removeMeta(key); // clear meta
-        throw e;
-    }
-}
+// /**
+//  * Injects meta data to the stack trace, which can be accessed within the function.
+//  * Calls the function (async) with paramters.
+//  * @param meta object that can be accessed within the function by calling getMeta()
+//  * @param ctx value of 'this' inside the function
+//  * @param fn the function to call
+//  * @param args function arguments array
+//  * @returns return value of the function call
+//  */
+// async function callWithMeta<args extends any[], returns>(meta:any, ctx:any, fn:(...args:args)=>returns, args:args): any {
+//     const key = createMetaMapping(meta);
+//     const encoded = '__DX_meta__'+key+'__';
+//     try {
+//         const res = await (is_safari ? new globalThis.Function('f', 'a', '(function '+encoded+'(){f.call(...a)})()')(fn, [ctx, ...args]) : ({[encoded]:()=>fn.call(ctx,...args)})[encoded]());
+//         removeMeta(key); // clear meta
+//         return res;
+//     }
+//     catch (e) {
+//         removeMeta(key); // clear meta
+//         throw e;
+//     }
+// }
 
-/**
- * get the current DATEX meta data within a JS function scope
- * @returns meta object
- */
-let default_meta:datex_meta;
-export function getMeta(){
-    const key = new Error().stack?.match(/__DX_meta__([^_]+)__/)?.[1];
-    return meta.get(Number(key)) ?? (default_meta ?? (default_meta = Object.freeze(getDefaultLocalMeta())));
-}
+// /**
+//  * get the current DATEX meta data within a JS function scope
+//  * @returns meta object
+//  */
+// let default_meta:datex_meta;
+// export function getMeta(){
+//     const key = new Error().stack?.match(/__DX_meta__([^_]+)__/)?.[1];
+//     return meta.get(Number(key)) ?? (default_meta ?? (default_meta = Object.freeze(getDefaultLocalMeta())));
+// }
 
 
 /** function - execute datex or js code - use for normal functions, not for static scope functions */
@@ -113,6 +114,8 @@ export class Function<T extends (...args: any) => any = (...args: any) => any> e
     anonymize_result:boolean
     params: Tuple<type_clause>
     params_keys: string[]
+
+    is_async = true;
 
     meta_index?: number
 
@@ -192,7 +195,9 @@ export class Function<T extends (...args: any) => any = (...args: any) => any> e
         // execute native JS code
         else if (typeof ntarget == "function") {
             const ctx = context instanceof Pointer ? context.val : context;
-            this.fn = ctx ? ntarget.bind(ctx) : ntarget;
+            this.fn = (ctx && ntarget.bind) ? ntarget.bind(ctx) : ntarget;
+            // is asnyc or sync fnc (TODO: only checks for AsyncFunction, function might still return a Promise!)
+            this.is_async = this.fn.constructor.name == "AsyncFunction"
         }
 
         this.allowed_callers = allowed_callers;
@@ -310,11 +315,11 @@ export class Function<T extends (...args: any) => any = (...args: any) => any> e
     // call the function either from JS directly (meta data is automatically generated, sender is always the current endpoint) or from a DATEX scope
     handleApply(value:any, SCOPE?: datex_scope):Promise<ReturnType<T>>|ReturnType<T>{
 
-
         // call function remotely
         if (!Runtime.endpoint.equals(this.location) && this.location != LOCAL_ENDPOINT) this.setRemoteEndpoint(this.location);
 
         let meta:any; // meta (scope variables)
+
 
         // called from DATEX scope
         if (SCOPE) {
@@ -399,13 +404,15 @@ export class Function<T extends (...args: any) => any = (...args: any) => any> e
 
         const required_param_nr = this.params.size;
 
+
         // no meta index, still crop the params to the required size if possible
         // injects meta to stack trace, can be accessed via Datex.getMeta()
         if (this.meta_index==undefined) {
+            const call = <CallableFunction&(typeof callWithMetadata)> (this.is_async ? callWithMetadataAsync : callWithMetadata);
             if (required_param_nr==undefined || params.length<=required_param_nr) {
-                return callWithMeta(meta, context, this.fn, params) // this.fn.call(context, ...params); 
+                return call(meta, this.fn, params, context) // this.fn.call(context, ...params); 
             }
-            else return callWithMeta(meta, context, this.fn, params.slice(0,required_param_nr));// this.fn.call(context, ...params.slice(0,required_param_nr));
+            else return call(meta, this.fn, params.slice(0,required_param_nr), context);// this.fn.call(context, ...params.slice(0,required_param_nr));
         }
         // inject meta information at given index when calling the function
         else if (this.meta_index==-1) {

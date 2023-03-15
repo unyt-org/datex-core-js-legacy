@@ -636,7 +636,7 @@ class WebsocketClientInterface extends CommonInterface {
                 // });
                 this.socket!.addEventListener('error', async (event) => {
                     this.connecting = false;
-                    if (this.is_first_try && !window.location?.href.startsWith("https://")) this.protocol = 'ws'
+                    if (this.is_first_try && !globalThis.location?.href.startsWith("https://")) this.protocol = 'ws'
                     else {
                         this.protocol = 'wss'
                         this.logger.error("connection error:" + `${this.protocol}://${this.host}`);

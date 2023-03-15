@@ -27,7 +27,7 @@ import { BinaryCode } from "./binary_codes.ts";
 import { Scope } from "../types/scope.ts";
 import { ProtocolDataType } from "./protocol_types.ts";
 import { Quantity } from "../types/quantity.ts";
-import { EXTENDED_OBJECTS, INHERITED_PROPERTIES, VOID, SLOT_WRITE, SLOT_READ, SLOT_EXEC, NOT_EXISTING, SLOT_GET, SLOT_SET } from "../runtime/constants.ts";
+import { EXTENDED_OBJECTS, INHERITED_PROPERTIES, VOID, SLOT_WRITE, SLOT_READ, SLOT_EXEC, NOT_EXISTING, SLOT_GET, SLOT_SET, DX_IGNORE } from "../runtime/constants.ts";
 import { arrayBufferToBase64, base64ToArrayBuffer, buffer2hex, hex2buffer } from "../utils/utils.ts";
 import { RuntimePerformance } from "../runtime/performance_measure.ts";
 import { Conjunction, Disjunction, Logical, Negation } from "../types/logic.ts";
@@ -186,6 +186,8 @@ export type compiler_scope = {
 
     stack: [Endpoint, string?][],
 
+    unused_extensions?: Set<string>, // set of all extensions used in the script, to check against options.required_extensions
+
     b_index: number,
 
     streaming?: ReadableStreamDefaultReader<unknown>,
@@ -235,6 +237,9 @@ export type compiler_options = {
     send_sym_encrypt_key?: boolean, // send the encrypted encryption key to all receivers (only send once for a session per default)
     allow_execute?:boolean, // allow calling functions, per default only allowed for datex requests
     
+    extensions?: string[] // list of enabled extensions
+    required_extensions?: string[] // list of enabled extensions that must be used
+
     // for routing header
     __routing_ttl?:number,
     __routing_prio?:number,
@@ -1366,7 +1371,22 @@ export class Compiler {
             const [type, index, parent_var] = await Compiler.builder.resolveValVarRef(SCOPE, <string>name);
                         
             // variable not found
-            if (index == -1) throw new CompilerError("Variable '"+name+"' was not declared in scope", SCOPE.stack);
+            if (index == -1) {
+                // readonly - #std variable? (#std.name)
+                if (action_type == ACTION_TYPE.GET && name in Runtime.STD_STATIC_SCOPE) {
+                    Compiler.builder.insertVariable(SCOPE, undefined, ACTION_TYPE.GET, undefined, BinaryCode.VAR_STD, undefined);
+                    Compiler.builder.handleRequiredBufferSize(SCOPE.b_index, SCOPE);
+                    SCOPE.uint8[SCOPE.b_index++] = BinaryCode.CHILD_GET;
+                    Compiler.builder.addText(name, SCOPE);
+                    return;
+                }
+                // readonly - #std.type?
+                if (action_type == ACTION_TYPE.GET && Type.has('std', name)) {
+                    Compiler.builder.addTypeByNamespaceAndName(SCOPE, 'std', name);
+                    return;
+                }
+                else throw new CompilerError("Variable '"+name+"' was not declared in scope", SCOPE.stack);
+            }
 
             // cannot set reference ($=) of ref variable
             if (action_type == ACTION_TYPE.SET_REFERENCE && type === "ref") {
@@ -2164,6 +2184,12 @@ export class Compiler {
             for (let i = 0; i<trimmed_length; i++) {
 
                 let val = a[i];
+
+                // ignore in DATEX
+                if (val[DX_IGNORE]) {
+                    continue;
+                }
+            
                 // is recursive value?
                 if (SCOPE.inserted_values.has(val) && parents.has(val)) {
                     // make sure variable for parent exists
@@ -2313,14 +2339,15 @@ export class Compiler {
 
         insert_exports: (SCOPE:compiler_scope) => {
             if (SCOPE.uint8[SCOPE.b_index-1] != BinaryCode.CLOSE_AND_STORE) SCOPE.uint8[SCOPE.b_index++] = BinaryCode.CLOSE_AND_STORE; // add ;
-            SCOPE.uint8[SCOPE.b_index++] = BinaryCode.TUPLE_START;
+            // TODO: use tuple, object just workaround for better compatibility
+            SCOPE.uint8[SCOPE.b_index++] = BinaryCode.OBJECT_START;
 
-            for (let [key, int] of Object.entries(SCOPE.inner_scope.exports)) {
+            for (const [key, int] of Object.entries(SCOPE.inner_scope.exports)) {
                 Compiler.builder.addKey(key, SCOPE);
                 Compiler.builder.insertVariable(SCOPE, int, ACTION_TYPE.GET, undefined, BinaryCode.INTERNAL_VAR);
             }
 
-            SCOPE.uint8[SCOPE.b_index++] = BinaryCode.TUPLE_END;
+            SCOPE.uint8[SCOPE.b_index++] = BinaryCode.OBJECT_END;
             SCOPE.uint8[SCOPE.b_index++] = BinaryCode.CLOSE_AND_STORE; 
         },
 
@@ -4143,6 +4170,31 @@ export class Compiler {
             SCOPE.datex = type_signature + init + SCOPE.datex;
         }
 
+        // EXTENSION
+        else if (m = SCOPE.datex.match(Regex.EXTENSION)) {
+            SCOPE.datex = SCOPE.datex.substring(m[0].length);  // pop datex
+            const name = m[1];
+
+            
+            // extension enabled?
+            if (SCOPE.options.extensions?.includes(name) || SCOPE.options.required_extensions?.includes(name)) {
+                SCOPE.unused_extensions?.delete(name);
+                SCOPE.datex = `export const ${name} = (` + SCOPE.datex;
+            }
+
+            // not enabled, ignore
+            else {
+                // compile and ignore (required to find closing bracket)
+                // TODO: optimize this, no full compilation required
+                const brackets = true;
+                const return_data:{datex:string} = {datex: SCOPE.datex}; 
+                await this.compile(return_data, SCOPE.data, {parent_scope:SCOPE}, false, true, false, undefined, Infinity, brackets?1:2, SCOPE.current_data_index);
+
+                SCOPE.datex = return_data.datex; // update position in current datex script
+            }
+
+        }
+
         // RUN
         else if (m = SCOPE.datex.match(Regex.RUN)) {
             SCOPE.datex = SCOPE.datex.substring(m[0].length);  // pop datex
@@ -4839,6 +4891,13 @@ export class Compiler {
             // end of scope reached
             if (SCOPE.end || !SCOPE.datex) { 
 
+                // check for required extensions
+                if (SCOPE.unused_extensions?.size) {
+                    const ext = [...SCOPE.unused_extensions];
+                    if (SCOPE.unused_extensions.size == 1) throw new CompilerError(`Extension "${ext[0]}" is required, but not found in script`);
+                    else throw new CompilerError(`Extensions "${ext.join(",")}" are required, but not found in script`);
+                }
+
                 // check for missing object brackets
                 for (const scope of SCOPE.subscopes) {
                     if (scope.parent_type == BinaryCode.OBJECT_START) {
@@ -5304,6 +5363,8 @@ export class Compiler {
             _code_block_type: _code_block_type
         };
 
+        // keep track of used extensions
+        if (SCOPE.options.required_extensions?.length) SCOPE.unused_extensions = new Set(SCOPE.options.required_extensions);
 
         if (!SCOPE.options.insert_header) {
             SCOPE.options.insert_header = {
@@ -5528,7 +5589,8 @@ export class PrecompiledDXB extends Array<ArrayBuffer|number|[number,number]> {
 
 export const FILE_TYPE = {
     DATEX_SCRIPT: ["text/datex",        "dx"],
-    DATEX_BINARY: ["application/datex", "dxb"]
+    DATEX_BINARY: ["application/datex", "dxb"],
+    JSON:         ["application/json", "json"]
 } as const;
 
 export type DATEX_FILE_TYPE = typeof FILE_TYPE[keyof typeof FILE_TYPE];

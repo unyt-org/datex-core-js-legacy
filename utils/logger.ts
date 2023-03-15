@@ -460,6 +460,7 @@ export class Logger {
         }
         // end tag
         if (esc_tag) tag += ESCAPE_SEQUENCES.RESET + " " + color_esc;
+        else tag += " "
 
         return tag;
     }

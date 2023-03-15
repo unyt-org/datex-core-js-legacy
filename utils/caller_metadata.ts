@@ -50,7 +50,7 @@ export function getCallerFile() {
 	return parts
 		?.[Math.min(parts.length-1, 2)]
 		?.match(caller_file)
-		?.[1] ?? window.location?.href
+		?.[1] ?? globalThis.location?.href
 }
 
 /**
@@ -62,7 +62,7 @@ export function getCallerDir() {
 		?.[Math.min(parts.length-1, 2)]
 		?.match(caller_file)
 		?.[1]
-		?.replace(/[^\/\\]*$/, '') ?? window.location?.href
+		?.replace(/[^\/\\]*$/, '') ?? globalThis.location?.href
 }
 
 /**
@@ -138,7 +138,7 @@ export async function callWithMetadataAsync<args extends any[], returns extends 
 	const key = createMetaMapping(meta);
 	try {
         const res = await _callWithMetaData(key, func, args, ctx);
-        removeMeta(key); // clear meta
+		removeMeta(key); // clear meta
         return res;
     }
     catch (e) {

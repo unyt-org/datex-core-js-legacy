@@ -73,11 +73,11 @@ class EndpointConfig implements EndpointConfigData {
 			// get config from cache
 			const serialized = globalThis.localStorage?.getItem("endpoint_config::"+(globalThis.location?.href ?? ''));
 			if (serialized) {
-				config = <EndpointConfigData> await Runtime.executeDatexLocally(serialized, undefined, undefined, window.location?.href ? new URL(window.location.href) : undefined)
+				config = <EndpointConfigData> await Runtime.executeDatexLocally(serialized, undefined, undefined, globalThis.location?.href ? new URL(globalThis.location.href) : undefined)
 			}
 			// try to get from .dx url
 			else {
-				if (!path) path = new URL('/'+this.DX_FILE_NAME, window.location.href)
+				if (!path) path = new URL('/'+this.DX_FILE_NAME, globalThis.location.href)
 				try {
 					config = await datex.get(path);
 					logger.info("loaded endpoint config from " + path);
