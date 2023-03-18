@@ -36,14 +36,14 @@ export interface Callable<args extends any[], return_type> {
  */
 
 export function getDefaultLocalMeta(){
-    return {
+    return Object.seal({
         sender: Runtime.endpoint,
         current: Runtime.endpoint,
         timestamp: new Date(),
         signed: true,
         type: ProtocolDataType.LOCAL,
         local: true // set true if function was executed locally, not via DATEX (not a DATEX variable)
-    }
+    })
 }
 
 // const free_ids:Set<number> = new Set(Array(500).fill(1).map((x, y) => x + y)); // 500 free ids

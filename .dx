@@ -1,0 +1,2 @@
+endpoint: @+unyt.lib.core.js
+init: @+unyt.utils.generate_docs

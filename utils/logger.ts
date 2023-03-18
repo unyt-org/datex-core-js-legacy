@@ -339,6 +339,10 @@ export class Logger {
     private readonly pointer:string|undefined;
     private readonly origin_value?:any;
 
+    private locked = false;
+    private lockedContent?: string;
+
+
     private box_width = 50;
     public formatting:LOG_FORMATTING;
     private production = false;
@@ -379,6 +383,10 @@ export class Logger {
     }
 
     private log(color: COLOR, text: string, data:any[], log_level:LOG_LEVEL = LOG_LEVEL.DEFAULT, only_log_own_stream = false, add_tag = true) {
+
+        if (this.production && (log_level < Logger.production_log_level)) return; // don't log for production
+        if (!this.production && (log_level < Logger.development_log_level)) return; // don't log for development
+
         const browser_compat_mode_required:[boolean] = [false];
         const log_string = this.generateLogString(color, text, data, add_tag, browser_compat_mode_required);
         this.logRaw(log_string, log_level, only_log_own_stream, browser_compat_mode_required[0]);
@@ -397,11 +405,8 @@ export class Logger {
         //Logger.setCursorY(globalThis.process?.stdout, Logger.getCursorY(globalThis.process?.stdout)+1);
 
         if (this.log_to_console) {
-            // remove unnessary underline for browser console
-            if (client_type == "browser") console_log([text], log_level);
-            else {
-                console_log([text]);
-            }
+            if (this.locked) this.lockedContent = this.lockedContent ? this.lockedContent + '\n' + text : text;
+            else console_log([text], log_level);
         }
 
         // handle log streams
@@ -721,11 +726,25 @@ export class Logger {
     }
 
     // does not have an effect in the native browser console or log streams with multiple logger inputs (intentionally)
-    public clear(){
+    public clear(silent = false){
         this.logRaw(ESCAPE_SEQUENCES.CLEAR, LOG_LEVEL.DEFAULT, true)
-        this.logRaw(ESCAPE_SEQUENCES.ITALIC + '[' + (this.origin??'?') + '] was cleared' + ESCAPE_SEQUENCES.RESET);
+        this.logRaw('\x1bc', LOG_LEVEL.DEFAULT, true)
+        if (!silent) this.logRaw(ESCAPE_SEQUENCES.ITALIC + '[' + (this.origin??'?') + '] was cleared' + ESCAPE_SEQUENCES.RESET);
     }
 
+
+    /**
+     * accumulate all logs and only console.log() once when flush() called
+     */
+    public lock() {
+        this.locked = true;
+    }
+
+    public flush() {
+        this.locked = false;
+        this.logRaw(this.lockedContent??'');
+        this.lockedContent = null;
+    }
 
 
     public dynamic(text:TemplateStringsArray, ...data:any[]):void

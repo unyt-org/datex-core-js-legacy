@@ -38,15 +38,20 @@ class LocalStorage implements Storage {
 		// file setup
 		this.#cache_file = new URL(name, ptr_cache_path);
 		try {
-			Deno.openSync(ptr_cache_path);
-		} catch {
-			Deno.mkdirSync(ptr_cache_path, {recursive:true});
+			try {
+				Deno.openSync(ptr_cache_path);
+			} catch {
+				Deno.mkdirSync(ptr_cache_path, {recursive:true});
+			}
+	
+			try {
+				Deno.openSync(this.#cache_file);
+			} catch {
+				Deno.writeTextFileSync(this.#cache_file, '{}');
+			}
 		}
-
-		try {
-			Deno.openSync(this.#cache_file);
-		} catch {
-			Deno.writeTextFileSync(this.#cache_file, '{}');
+		catch {
+			logger.error("Cannot save local storage cache file")
 		}
 	}
 

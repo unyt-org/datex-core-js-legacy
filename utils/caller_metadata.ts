@@ -45,8 +45,8 @@ function getPartsFromStack(stack:string|undefined) {
 /**
  * returns the URL location from where the function that called getCallerFile() was called
  */
-export function getCallerFile() {
-	const parts = getPartsFromStack(new Error().stack);
+export function getCallerFile(error?: Error) {
+	const parts = getPartsFromStack((error??new Error()).stack);
 	return parts
 		?.[Math.min(parts.length-1, 2)]
 		?.match(caller_file)
@@ -56,8 +56,8 @@ export function getCallerFile() {
 /**
  * returns the URL location directory from where the function that called getCallerDir() was called
  */
-export function getCallerDir() {
-	const parts = getPartsFromStack(new Error().stack);
+export function getCallerDir(error?: Error) {
+	const parts = getPartsFromStack((error??new Error()).stack);
 	return parts
 		?.[Math.min(parts.length-1, 2)]
 		?.match(caller_file)
@@ -74,8 +74,8 @@ export function getCallerDir() {
  * 		col: number|null
  * }
  */
-export function getCallerInfo() {
-	let parts = getPartsFromStack(new Error().stack);
+export function getCallerInfo(error?: Error) {
+	let parts = getPartsFromStack((error??new Error()).stack);
 	if (!parts) return null;
 	// remove second line '@...' without name in safari
 	if (is_safari && parts[1].startsWith("@")) parts.splice(1, 1); 
@@ -152,15 +152,15 @@ export async function callWithMetadataAsync<args extends any[], returns extends 
  * get the current DATEX meta data within a JS function scope
  * @returns meta object
  */
-export function getMeta(){
-    const key = new Error().stack?.match(extract_meta)?.[1];
+export function getMeta(error?: Error){
+    const key = (error??new Error()).stack?.match(extract_meta)?.[1];
     return meta.get(Number(key));
 }
 
 /**
  * clear metadata for further call stack
  */
-export function clearMeta(){
-    const key = Number(new Error().stack?.match(extract_meta)?.[1]);
+export function clearMeta(error?: Error){
+    const key = Number((error??new Error()).stack?.match(extract_meta)?.[1]);
     if (!isNaN(key)) removeMeta(key);
 }

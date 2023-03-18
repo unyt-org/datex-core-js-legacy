@@ -2310,7 +2310,7 @@ export class Compiler {
             const start_index = (SCOPE.inner_scope.comma_indices ? SCOPE.inner_scope.comma_indices[SCOPE.inner_scope.comma_indices.length-1] : SCOPE.inner_scope.start_index) + 1;
             const permission_prefix = (SCOPE.b_index - start_index) != 0 && SCOPE.uint8[SCOPE.b_index-1] != BinaryCode.CLOSE_AND_STORE; // not a permission_prefix if command before (;)
 
-            console.log(start_index, SCOPE.inner_scope.comma_indices, SCOPE.b_index)
+            // console.log(start_index, SCOPE.inner_scope.comma_indices, SCOPE.b_index)
 
             if (permission_prefix) {
                 // replace ELEMENT byte (is not an element, but a permission prefix)
@@ -3964,8 +3964,31 @@ export class Compiler {
             SCOPE.uint8[SCOPE.b_index++] = BinaryCode.COLLAPSE;  
         }
 
-        // get TYPE of value
-        else if (m = SCOPE.datex.match(Regex.GET_TYPE)) {
+        // create new type short command
+        else if (m = SCOPE.datex.match(Regex.CREATE_TYPE)) {
+            SCOPE.datex = SCOPE.datex.substring(m[0].length);  // pop datex
+            console.log("create type",m)
+
+            const exporting = !!m[1];
+            const type = "ref";
+            const name = m[3];
+            const init_eternal = true;
+            const init_brackets = !!m[4];
+
+            // restore "("
+            if (!init_eternal && init_brackets) SCOPE.datex = "(" + SCOPE.datex;
+
+            if (exporting) {
+                if (!SCOPE.inner_scope.exports) SCOPE.inner_scope.exports = {};
+                // remember internal variable for exports
+                SCOPE.inner_scope.exports[name] = await Compiler.builder.addValVarRefDeclaration(name, type, SCOPE, init_eternal, init_brackets);
+            }
+
+            else await Compiler.builder.addValVarRefDeclaration(name, type, SCOPE, init_eternal, init_brackets);
+        }
+
+        // typeof
+        else if (m = SCOPE.datex.match(Regex.TYPEOF)) {
             SCOPE.datex = SCOPE.datex.substring(m[0].length);  // pop datex
             Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+1, SCOPE);
             Compiler.builder.valueIndex(SCOPE);

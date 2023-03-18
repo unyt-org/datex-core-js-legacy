@@ -97,16 +97,17 @@ function _datex(dx:string|TemplateStringsArray|PrecompiledDXB, data?:unknown[], 
 // add datex.meta
 Object.defineProperty(_datex, 'meta', {get:()=>{
     const meta = getMeta();
-    if (!meta) throw new Error("Function was called locally - no datex.meta available");
+    // if (!meta) throw new Error("Function was called locally - no datex.meta available");
     return meta;
 }, set:()=>{}, configurable:false})
 // add datex.get
 Object.defineProperty(_datex, 'get', {value:(res:string, type:Class|Type)=>get(res,type,getCallerFile()), configurable:false})
+Object.defineProperty(_datex, 'localMeta', {value:getDefaultLocalMeta(), configurable:false})
 
 // add globalThis.meta
 // Object.defineProperty(globalThis, 'meta', {get:()=>getMeta(), set:()=>{}, configurable:false})
 
-export const datex = <typeof _datex & {meta:datex_meta, get:typeof get}><unknown>_datex;
+export const datex = <typeof _datex & {meta?:datex_meta, localMeta:ReturnType<typeof getDefaultLocalMeta>, get:typeof get}><unknown>_datex;
 // @ts-ignore global datex
 globalThis.datex = datex;
 // global access to datex and meta
