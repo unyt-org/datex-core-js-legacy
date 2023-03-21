@@ -23,7 +23,7 @@ export async function uploadDatexFile(){
 	
 	// open file picker
 	// @ts-ignore new api
-	const [fileHandle] = await window.showOpenFilePicker(pickerOpts);
+	const [fileHandle] = await globalThis.showOpenFilePicker(pickerOpts);
 	return getDatexContentFromFileHandle(fileHandle);
 }
 

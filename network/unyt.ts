@@ -69,7 +69,7 @@ export class Unyt {
     // TODO add colored logo dark - light mode
     public static async logEndpointInfo(){
         const info = this.endpoint_info;
-        
+
         let content = "";
 
         const endpoint = info.endpoint ? await this.formatEndpoint(info.endpoint) : undefined;

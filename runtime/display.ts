@@ -41,7 +41,7 @@ export function displayFatalError(code:string, reset_btn = true) {
 		document.body.innerHTML = `
 <div style="display:flex;flex-direction:column;width:100%;height:100%;background:#0f0f0f;font-family:sans-serif;text-align:center;padding:5px;box-sizing:border-box">
 	<div style="flex:1;display:flex;flex-direction:column;width:100%;justify-content:center;align-items:center;color:#ddd;">
-		<h3>Oh no, something bad happened :/</h3>
+		<h3 style="color:#ddd">Oh no, something bad happened :/</h3>
 		<div style="color:#bbb;margin-bottom:15px;">Your app data on this device might not be recoverable</div>
 		${reset_btn ? `<button style="all:unset;background:#333;padding:8px;border-radius:10px;text-align:center;font-size:1.1em" onclick="errorReset()">
 			Reset App

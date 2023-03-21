@@ -160,6 +160,10 @@ export class TypedValue<T extends Type = Type>  {
         this[DX_TYPE] = type;
     }
 
+    toString() {
+        return "[Could not resolve type: "+ this[DX_TYPE] + "]"
+    }
+
 }
 
 
@@ -207,7 +211,7 @@ export class Runtime {
 
     static mime_type_classes = new Map(Object.entries(this.MIME_TYPE_MAPPING).map(x=>[('class' in x[1] && typeof x[1].class == "function") ? x[1].class : x[1], x[0]])) 
 
-    public static ENV:{LANG:string, VERSION:string}
+    public static ENV:{LANG:string, DATEX_VERSION:string}
     public static VERSION = "0.0.0";
 
     public static PRECOMPILED_DXB: {[key:string]:PrecompiledDXB}
@@ -1026,7 +1030,7 @@ export class Runtime {
         // std.types 
         // try to get from cdn.unyt.org
         try {
-            this.STD_TYPES_ABOUT = await Runtime.getURLContent('https://cdn.unyt.org/unyt_core@dev/dx_data/type_info.dx')
+            this.STD_TYPES_ABOUT = await Runtime.getURLContent('https://cdn.unyt.org/unyt_core/dx_data/type_info.dx')
         }
         // otherwise try to get local file (only backend)
         catch {
@@ -6441,28 +6445,30 @@ Runtime.onEndpointChanged(initPublicStaticClasses)
 // set Runtime ENV
 Runtime.ENV = await Storage.loadOrCreate("Datex.Runtime.ENV", ()=>{
     return {
-        LANG: globalThis.localStorage?.lang ?? globalThis?.navigator?.language?.split("-")[0] ?? 'en',
-        VERSION: null
+        LANG: globalThis.localStorage?.lang ?? globalThis?.navigator?.language?.split("-")[0]?.split("_")[0] ?? 'en',
+        DATEX_VERSION: null
     }
 });
-if (Runtime.ENV) {
-    Runtime.ENV.VERSION = Runtime.VERSION;
-}
+
 // workaround, should never happen
-else {
+if (!Runtime.ENV) {
     logger.error("Runtime ENV is undefined");
-    Runtime.ENV = {LANG: globalThis.localStorage?.lang ?? globalThis?.navigator?.language?.split("-")[0] ?? 'en', VERSION: null}
+    Runtime.ENV = {LANG: globalThis.localStorage?.lang ?? globalThis?.navigator?.language?.split("-")[0]?.split("_")[0] ?? 'en', DATEX_VERSION: null}
 }
 
+// add environment variables to #env (might override existing env settings (LANG))
 if (globalThis.Deno) {
     for (const [key, val] of Object.entries(Deno.env.toObject())) {
-        Runtime.ENV[key] = val;
-    }    
+        if (key == "LANG") Runtime.ENV[key] = val.split("-")[0]?.split("_")[0];
+        else Runtime.ENV[key] = val;
+    }
 }
 
+Runtime.ENV.DATEX_VERSION = Runtime.VERSION;
 
 // init persistent memory
 Runtime.persistent_memory = (await Storage.loadOrCreate("Datex.Runtime.MEMORY", ()=>new Map())).setAutoDefault(Object);
+
 
 
 // @ts-ignore

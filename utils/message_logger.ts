@@ -23,7 +23,7 @@ export class MessageLogger {
          
             return wasm_decompile(new Uint8Array(dxb), true, colorized, true).replace(/\r\n$/, '');
         } catch (e) {
-            console.log("decompiler error",e);
+            console.log("decompiler error",e.message);
             return "/* ERROR: Decompiler Error */";
         }
     }

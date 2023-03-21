@@ -11,7 +11,7 @@ export function getRandomString(template: string = "xxxxxxxx-xxxx-xxxx-xxxx-xxxx
 }
 
 export function getRandomInt(min = 0, max: number = Number.MAX_SAFE_INTEGER): number {
-    const byte: number = window.crypto.getRandomValues(new Uint8Array(1))[0];
+    const byte: number = globalThis.crypto.getRandomValues(new Uint8Array(1))[0];
     const range = max - min + 1;
     if (byte >= Math.floor(256 / range) * range)
         return getRandomInt(min, max);

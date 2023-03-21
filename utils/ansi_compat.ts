@@ -324,17 +324,17 @@ function getLogMethodWithEscSeq(original_method:Function) {
  * console object with methods supporting the ANSI escape sequences
  */
 export const console = {
-	log: getLogMethodWithEscSeq(globalThis.console.log),
-	error: getLogMethodWithEscSeq(globalThis.console.error),
-	warn: getLogMethodWithEscSeq(globalThis.console.warn),
-	debug: getLogMethodWithEscSeq(globalThis.console.debug)
+	log: getLogMethodWithEscSeq(globalThis.console.log.bind(globalThis.console)),
+	error: getLogMethodWithEscSeq(globalThis.console.error.bind(globalThis.console)),
+	warn: getLogMethodWithEscSeq(globalThis.console.warn.bind(globalThis.console)),
+	debug: getLogMethodWithEscSeq(globalThis.console.debug.bind(globalThis.console))
 }
 
 function enable(){
-	globalThis.console.log = console.log;
-	globalThis.console.error = console.error;
-	globalThis.console.warn = console.warn;
-	globalThis.console.debug = console.debug;
+	globalThis.console.log = console.log.bind(globalThis.console);
+	globalThis.console.error = console.error.bind(globalThis.console);
+	globalThis.console.warn = console.warn.bind(globalThis.console);
+	globalThis.console.debug = console.debug.bind(globalThis.console);
 }
 
 

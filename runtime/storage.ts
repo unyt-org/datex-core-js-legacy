@@ -17,10 +17,11 @@ displayInit();
 /***** imports and definitions with top-level await - node.js / browser interoperability *******************************/
 const site_suffix = (()=>{
     // remove hash from url
-    if (globalThis.location?.href) {
-        const url = new URL(globalThis.location.href)
-        url.hash = "";
-        return url.toString();
+    if (globalThis.location?.origin) {
+        // const url = new URL(globalThis.location.href)
+        // url.hash = "";
+        // return url.toString();
+        return globalThis.location.origin
     }
     else return ""
 })();
@@ -51,7 +52,8 @@ export class Storage {
     
     static cache:Map<string,any> = new Map(); // save stored values in a Map, return when calling getItem
 
-    static state_prefix = "dxstate::"+site_suffix+"::"
+
+    static state_prefix = "dxstate::"
 
     static pointer_prefix = "dxptr::"+site_suffix+"::"
     static item_prefix = "dxitem::"+site_suffix+"::"
@@ -148,6 +150,7 @@ export class Storage {
             if (options.modes.includes(<any>Storage.Mode.SAVE_ON_EXIT)) Storage.saveCurrentState(loc);
             if (loc == Storage.Location.FILESYSTEM_OR_LOCALSTORAGE && localStorage.saveFile) localStorage.saveFile(); // deno local storage, save file
         }
+        logger.debug("exit - state saved in cache");
     }
 
 
@@ -258,9 +261,10 @@ export class Storage {
         this.trusted_location = this.getLastUpdatedStorage() ?? this.primary_location;
     }
 
-    static setItem(key:string, value:any, listen_for_pointer_changes = true, location:Storage.Location|undefined = this.#primary_location):Promise<boolean>|boolean {
+    static setItem(key:string, value:any, listen_for_pointer_changes = true, location:Storage.Location|null|undefined = this.#primary_location):Promise<boolean>|boolean {
         Storage.cache.set(key, value); // save in cache
-        setTimeout(()=>Storage.cache.delete(key), 10000);
+        // cache deletion does not work, problems with storage item backup
+        // setTimeout(()=>Storage.cache.delete(key), 10000);
         const pointer = value instanceof Pointer ? value : Pointer.getByValue(value);
 
         if (location==undefined || location == Storage.Location.INDEXED_DB) return this.setItemDB(key, value, pointer, listen_for_pointer_changes);
@@ -781,8 +785,10 @@ export namespace Storage {
 }
 
 // TODO: convert to static block (saFrari) --------------------------------------
-
-Storage.determineTrustedLocation();
+// @ts-ignore NO_INIT
+if (!globalThis.NO_INIT) {
+    Storage.determineTrustedLocation();
+}
 
 addEventListener("unload", ()=>Storage.handleExit(), {capture: true});
 // @ts-ignore document

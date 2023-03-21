@@ -106,8 +106,8 @@ const exampletype = init (
 )
 
 use exampletype from #public.uix;
-<exampletype> ();
-<#public.uix.exampletype> ();
+exampletype ();
+#public.uix.exampletype ();
 
 
 # <Account> = (<LegacyAccount> | <text> | <XY> | <NativeTypeLoader>);

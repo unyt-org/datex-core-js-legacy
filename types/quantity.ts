@@ -573,7 +573,7 @@ export class Quantity<U extends Unit|undefined = undefined> {
 
 
     hasSameDimension(other:Quantity) {
-        return this.unit_binary === other.unit_binary; // same binaries are always pointing to the same arraybuffer
+        return this.unit_binary === other?.unit_binary; // same binaries are always pointing to the same arraybuffer
     }
 
 

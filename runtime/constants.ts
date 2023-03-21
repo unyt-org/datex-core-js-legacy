@@ -19,6 +19,8 @@ export const DX_PERMISSIONS: unique symbol = Symbol("DX_PERMISSIONS");
 export const DX_PERMISSIONS_R: unique symbol = Symbol("DX_PERMISSIONS_R");
 export const DX_PERMISSIONS_U: unique symbol = Symbol("DX_PERMISSIONS_U");
 export const DX_PERMISSIONS_X: unique symbol = Symbol("DX_PERMISSIONS_X");
+export const DX_IGNORE: unique symbol = Symbol("DX_IGNORE"); // ignore in DX (when serializing, only works for elements in array-like values)
+
 // -------------------------------------
 export const DX_SLOTS: unique symbol = Symbol("DX_SLOTS");
 

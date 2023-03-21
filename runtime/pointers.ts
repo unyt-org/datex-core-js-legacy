@@ -573,6 +573,7 @@ export class UpdateScheduler {
             }
 
             (async ()=>{
+                if (receiver instanceof Disjunction && !receiver.size) return;
                 try {
                     await Runtime.datexOut([datex, data, {end_of_scope:false, type:ProtocolDataType.UPDATE}], receiver, undefined, false, undefined, undefined, false, undefined, this.datex_timeout);
                 } catch(e) {
@@ -652,7 +653,16 @@ export class Pointer<T = any> extends Value<T> {
         this.pointer_value_change_listeners.add(listener);
     }
 
-    public static onPointerForValueCreated(value:any, listener: (p:Pointer)=>void){
+    public static onPointerForValueCreated(value:any, listener: (p:Pointer)=>void, trigger_if_exists = true){
+        // value already has a pointer?
+        if (trigger_if_exists) {
+            const ptr = Pointer.getByValue(value);
+            if (ptr) {
+                listener(ptr);
+                return;
+            }
+        }
+        // set listener
         if (!this.pointer_for_value_created_listeners.has(value)) this.pointer_for_value_created_listeners.set(value, new Set());
         this.pointer_for_value_created_listeners.get(value)?.add(listener);
     }
@@ -865,7 +875,7 @@ export class Pointer<T = any> extends Value<T> {
                     stored = await source.getPointer(pointer.id, !SCOPE);
                 }
                 catch (e) {
-                    console.log("ptresr",e)
+                    logger.error("pointer source error:",e)
                 }
                 if (stored != NOT_EXISTING) break;
             }
@@ -1363,7 +1373,7 @@ export class Pointer<T = any> extends Value<T> {
 
     public async subscribeForPointerUpdates(override_endpoint?:Endpoint, get_value = !this.#loaded):Promise<Pointer> {
         if (this.#subscribed) {
-            logger.debug("already subscribed to " + this.idString());
+            // logger.debug("already subscribed to " + this.idString());
             return this;
         }
         
@@ -1684,7 +1694,7 @@ export class Pointer<T = any> extends Value<T> {
             if (!this.#exclude_origin_from_updates) this.handleDatexUpdate(null, '#0=?;? = #0', [this.val, this], this.origin, true)
         }
         else if (this.is_origin && this.subscribers.size) {
-            logger.debug("forwarding update to subscribers ?", this.#update_endpoints);
+            logger.debug("forwarding update to subscribers", this.#update_endpoints);
             // console.log(this.#update_endpoints);
             this.handleDatexUpdate(null, '#0=?;? = #0', [this.val, this], this.#update_endpoints, true)
         }
@@ -1995,9 +2005,14 @@ export class Pointer<T = any> extends Value<T> {
         // iterate up until Object.protoype reached
         while ((prototype = Object.getPrototypeOf(prototype)) != Object.prototype) {
             for (const name of this.visible_children ?? Object.keys(prototype)) {
-                if (prototype[name] instanceof Value && !high_priority_keys.has(name)) { // only observer Values, and ignore if already observed higher up in prototype chain
-                    this.initShadowObjectPropertyObserver(name, <Value>prototype[name]);
+                try {
+                    if (prototype[name] instanceof Value && !high_priority_keys.has(name)) { // only observer Values, and ignore if already observed higher up in prototype chain
+                        this.initShadowObjectPropertyObserver(name, <Value>prototype[name]);
+                    }
+                } catch (e) {
+                    logger.warn("could not check prototype property:",name)
                 }
+               
                 high_priority_keys.add(name);
             }
         }
@@ -2592,6 +2607,7 @@ export class Pointer<T = any> extends Value<T> {
 
         // directly send update
         else {
+            if (receiver instanceof Disjunction && !receiver.size) return;
             try {
                 await Runtime.datexOut([datex, data, {collapse_first_inserted, type:ProtocolDataType.UPDATE}], receiver, undefined, false, undefined, undefined, false, undefined, this.datex_timeout);
             } catch(e) {

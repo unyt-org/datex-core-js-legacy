@@ -26,6 +26,7 @@ import { Tuple } from "../types/tuple.ts";
 import { DX_PERMISSIONS, DX_TYPE } from "../runtime/constants.ts";
 import { type Class } from "../utils/global_types.ts";
 import { Conjunction, Disjunction, Logical } from "../types/logic.ts";
+import { getCallerInfo } from "../utils/caller_metadata.ts";
 
 const logger = new Logger("DATEX JS Adapter");
 
@@ -83,13 +84,14 @@ export class Decorators {
     static PROPERTY      = Symbol("PROPERTY");
     static STATIC_PROPERTY  = Symbol("STATIC_PROPERTY");
     static SERIALIZE     = Symbol("SERIALIZE");
+    static JSDOC         = Symbol("JSDOC");
 
     static ALLOW_FILTER  = Symbol("ALLOW_FILTER");
     static SEND_FILTER   = Symbol("SEND_FILTER");
 
-    static NAMESPACE    = Symbol("SCOPE_NAME");
+    static NAMESPACE     = Symbol("SCOPE_NAME");
 
-    static DEFAULT = Symbol("ROOT_EXTENSION");
+    static DEFAULT       = Symbol("ROOT_EXTENSION");
     static DEFAULT_PROPERTY = Symbol("ROOT_VARIABLE");
 
     static DOCS          = Symbol("DOCS");
@@ -307,6 +309,25 @@ export class Decorators {
             else setMetadata(Decorators.PROPERTY, params?.[0] ?? name)
         }
 
+    }
+
+    /** @jsdoc: add a field as a template property */
+    // TODO: only works with real js decorators, otherwise line numbers don't match
+    static jsdoc(value:any, name:context_name, kind:context_kind, is_static:boolean, is_private:boolean, setMetadata:context_meta_setter, getMetadata:context_meta_getter, params:[]) {
+
+        logger.error("@jsdoc decorators are not yet supported")
+        // const caller = getCallerInfo()?.at(-1)!;
+
+        // if (!caller?.file || !caller.row) {
+        //     logger.error("cannot get JSDoc data (@jsdoc was used on the " + kind + " "+name+")")
+        //     return;
+        // }
+
+        // (async()=>{
+        //     const path = new Path(caller.file!);
+        //     const content = (await path.getTextContent()).split("\n").slice(Math.min(0,caller.row-60), caller.row).join("\n");    
+        //     setMetadata(Decorators.JSDOC, "TODO")
+        // })()
     }
 
 
@@ -943,18 +964,21 @@ function _old_publicStaticClass(original_class:Class) {
 
 const templated_classes = new Map<Function, Function>() // original class, templated class
 
-export function createTemplateClass(original_class:{ new(...args: any[]): any; }, type:Type, sync = true){
+export function createTemplateClass(original_class:{ new(...args: any[]): any; }, type:Type, sync = true, add_js_interface = true){
 
     if (templated_classes.has(original_class)) return templated_classes.get(original_class);
 
     original_class[DX_TYPE] = type;
 
     // set JS interface
-    type.setJSInterface({
-        class: original_class,
-        proxify_children: true, // proxify children per default
-        is_normal_object: true, // handle like a normal object
-    });
+    if (add_js_interface) {
+        type.setJSInterface({
+            class: original_class,
+            proxify_children: true, // proxify children per default
+            is_normal_object: true, // handle like a normal object
+        });
+    }
+
 
     // set constructor, replicator, destructor
     const constructor_name = Object.keys(original_class.prototype[METADATA]?.[Decorators.CONSTRUCTOR]?.public??{})[0]
@@ -1115,12 +1139,11 @@ export function datex_advanced<T>(_class:T) {
 // if no type is provided, <ext:ClassName> is created as type by default
 export function proxyClass<T extends { new(...args: any[]): any;}>(original_class:T, type?:Type, auto_sync = true):DatexClass&T {
                 
-    type = type ?? Type.get("ext", original_class.name);
+    type = type ?? Type.get("ext", original_class.name)!;
     
     // add Proxy trap for construct
     const new_class = new Proxy(original_class, {
         construct(target: T, args: any[], newTarget:Function) {
-
             // cast from type
             if (new_class == newTarget) {
                 // cast and immediately create pointer if auto_sync

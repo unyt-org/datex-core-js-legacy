@@ -25,6 +25,6 @@ function showOpenFilePickerPolyfill(options) {
     });
 }
 
-if (typeof window.showOpenFilePicker !== 'function') {
-    window.showOpenFilePicker = showOpenFilePickerPolyfill
+if (typeof globalThis.showOpenFilePicker !== 'function') {
+    globalThis.showOpenFilePicker = showOpenFilePickerPolyfill
 }

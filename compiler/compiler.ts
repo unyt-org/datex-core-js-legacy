@@ -27,7 +27,7 @@ import { BinaryCode } from "./binary_codes.ts";
 import { Scope } from "../types/scope.ts";
 import { ProtocolDataType } from "./protocol_types.ts";
 import { Quantity } from "../types/quantity.ts";
-import { EXTENDED_OBJECTS, INHERITED_PROPERTIES, VOID, SLOT_WRITE, SLOT_READ, SLOT_EXEC, NOT_EXISTING, SLOT_GET, SLOT_SET } from "../runtime/constants.ts";
+import { EXTENDED_OBJECTS, INHERITED_PROPERTIES, VOID, SLOT_WRITE, SLOT_READ, SLOT_EXEC, NOT_EXISTING, SLOT_GET, SLOT_SET, DX_IGNORE } from "../runtime/constants.ts";
 import { arrayBufferToBase64, base64ToArrayBuffer, buffer2hex, hex2buffer } from "../utils/utils.ts";
 import { RuntimePerformance } from "../runtime/performance_measure.ts";
 import { Conjunction, Disjunction, Logical, Negation } from "../types/logic.ts";
@@ -186,6 +186,8 @@ export type compiler_scope = {
 
     stack: [Endpoint, string?][],
 
+    unused_plugins?: Set<string>, // set of all plugins used in the script, to check against options.required_plugins
+
     b_index: number,
 
     streaming?: ReadableStreamDefaultReader<unknown>,
@@ -235,6 +237,9 @@ export type compiler_options = {
     send_sym_encrypt_key?: boolean, // send the encrypted encryption key to all receivers (only send once for a session per default)
     allow_execute?:boolean, // allow calling functions, per default only allowed for datex requests
     
+    plugins?: string[] // list of enabled plugins
+    required_plugins?: string[] // list of enabled plugins that must be used
+
     // for routing header
     __routing_ttl?:number,
     __routing_prio?:number,
@@ -1366,7 +1371,22 @@ export class Compiler {
             const [type, index, parent_var] = await Compiler.builder.resolveValVarRef(SCOPE, <string>name);
                         
             // variable not found
-            if (index == -1) throw new CompilerError("Variable '"+name+"' was not declared in scope", SCOPE.stack);
+            if (index == -1) {
+                // readonly - #std variable? (#std.name)
+                if (action_type == ACTION_TYPE.GET && name in Runtime.STD_STATIC_SCOPE) {
+                    Compiler.builder.insertVariable(SCOPE, undefined, ACTION_TYPE.GET, undefined, BinaryCode.VAR_STD, undefined);
+                    Compiler.builder.handleRequiredBufferSize(SCOPE.b_index, SCOPE);
+                    SCOPE.uint8[SCOPE.b_index++] = BinaryCode.CHILD_GET;
+                    Compiler.builder.addText(name, SCOPE);
+                    return;
+                }
+                // readonly - #std.type?
+                if (action_type == ACTION_TYPE.GET && Type.has('std', name)) {
+                    Compiler.builder.addTypeByNamespaceAndName(SCOPE, 'std', name);
+                    return;
+                }
+                else throw new CompilerError("Variable '"+name+"' was not declared in scope", SCOPE.stack);
+            }
 
             // cannot set reference ($=) of ref variable
             if (action_type == ACTION_TYPE.SET_REFERENCE && type === "ref") {
@@ -2164,6 +2184,12 @@ export class Compiler {
             for (let i = 0; i<trimmed_length; i++) {
 
                 let val = a[i];
+
+                // ignore in DATEX
+                if (val[DX_IGNORE]) {
+                    continue;
+                }
+            
                 // is recursive value?
                 if (SCOPE.inserted_values.has(val) && parents.has(val)) {
                     // make sure variable for parent exists
@@ -2284,7 +2310,7 @@ export class Compiler {
             const start_index = (SCOPE.inner_scope.comma_indices ? SCOPE.inner_scope.comma_indices[SCOPE.inner_scope.comma_indices.length-1] : SCOPE.inner_scope.start_index) + 1;
             const permission_prefix = (SCOPE.b_index - start_index) != 0 && SCOPE.uint8[SCOPE.b_index-1] != BinaryCode.CLOSE_AND_STORE; // not a permission_prefix if command before (;)
 
-            console.log(start_index, SCOPE.inner_scope.comma_indices, SCOPE.b_index)
+            // console.log(start_index, SCOPE.inner_scope.comma_indices, SCOPE.b_index)
 
             if (permission_prefix) {
                 // replace ELEMENT byte (is not an element, but a permission prefix)
@@ -2313,14 +2339,15 @@ export class Compiler {
 
         insert_exports: (SCOPE:compiler_scope) => {
             if (SCOPE.uint8[SCOPE.b_index-1] != BinaryCode.CLOSE_AND_STORE) SCOPE.uint8[SCOPE.b_index++] = BinaryCode.CLOSE_AND_STORE; // add ;
-            SCOPE.uint8[SCOPE.b_index++] = BinaryCode.TUPLE_START;
+            // TODO: use tuple, object just workaround for better compatibility
+            SCOPE.uint8[SCOPE.b_index++] = BinaryCode.OBJECT_START;
 
-            for (let [key, int] of Object.entries(SCOPE.inner_scope.exports)) {
+            for (const [key, int] of Object.entries(SCOPE.inner_scope.exports)) {
                 Compiler.builder.addKey(key, SCOPE);
                 Compiler.builder.insertVariable(SCOPE, int, ACTION_TYPE.GET, undefined, BinaryCode.INTERNAL_VAR);
             }
 
-            SCOPE.uint8[SCOPE.b_index++] = BinaryCode.TUPLE_END;
+            SCOPE.uint8[SCOPE.b_index++] = BinaryCode.OBJECT_END;
             SCOPE.uint8[SCOPE.b_index++] = BinaryCode.CLOSE_AND_STORE; 
         },
 
@@ -3937,8 +3964,31 @@ export class Compiler {
             SCOPE.uint8[SCOPE.b_index++] = BinaryCode.COLLAPSE;  
         }
 
-        // get TYPE of value
-        else if (m = SCOPE.datex.match(Regex.GET_TYPE)) {
+        // create new type short command
+        else if (m = SCOPE.datex.match(Regex.CREATE_TYPE)) {
+            SCOPE.datex = SCOPE.datex.substring(m[0].length);  // pop datex
+            console.log("create type",m)
+
+            const exporting = !!m[1];
+            const type = "ref";
+            const name = m[3];
+            const init_eternal = true;
+            const init_brackets = !!m[4];
+
+            // restore "("
+            if (!init_eternal && init_brackets) SCOPE.datex = "(" + SCOPE.datex;
+
+            if (exporting) {
+                if (!SCOPE.inner_scope.exports) SCOPE.inner_scope.exports = {};
+                // remember internal variable for exports
+                SCOPE.inner_scope.exports[name] = await Compiler.builder.addValVarRefDeclaration(name, type, SCOPE, init_eternal, init_brackets);
+            }
+
+            else await Compiler.builder.addValVarRefDeclaration(name, type, SCOPE, init_eternal, init_brackets);
+        }
+
+        // typeof
+        else if (m = SCOPE.datex.match(Regex.TYPEOF)) {
             SCOPE.datex = SCOPE.datex.substring(m[0].length);  // pop datex
             Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+1, SCOPE);
             Compiler.builder.valueIndex(SCOPE);
@@ -4141,6 +4191,31 @@ export class Compiler {
             type_signature += '),)>';
 
             SCOPE.datex = type_signature + init + SCOPE.datex;
+        }
+
+        // PLUGIN
+        else if (m = SCOPE.datex.match(Regex.PLUGIN)) {
+            SCOPE.datex = SCOPE.datex.substring(m[0].length);  // pop datex
+            const name = m[1];
+
+            
+            // plugin enabled?
+            if (SCOPE.options.plugins?.includes(name) || SCOPE.options.required_plugins?.includes(name)) {
+                SCOPE.unused_plugins?.delete(name);
+                SCOPE.datex = `export const ${name} = (` + SCOPE.datex;
+            }
+
+            // not enabled, ignore
+            else {
+                // compile and ignore (required to find closing bracket)
+                // TODO: optimize this, no full compilation required
+                const brackets = true;
+                const return_data:{datex:string} = {datex: SCOPE.datex}; 
+                await this.compile(return_data, SCOPE.data, {parent_scope:SCOPE}, false, true, false, undefined, Infinity, brackets?1:2, SCOPE.current_data_index);
+
+                SCOPE.datex = return_data.datex; // update position in current datex script
+            }
+
         }
 
         // RUN
@@ -4839,6 +4914,13 @@ export class Compiler {
             // end of scope reached
             if (SCOPE.end || !SCOPE.datex) { 
 
+                // check for required plugins
+                if (SCOPE.unused_plugins?.size) {
+                    const ext = [...SCOPE.unused_plugins];
+                    if (SCOPE.unused_plugins.size == 1) throw new CompilerError(`Plugin "${ext[0]}" is required, but not found in script`);
+                    else throw new CompilerError(`Plugins "${ext.join(",")}" are required, but not found in script`);
+                }
+
                 // check for missing object brackets
                 for (const scope of SCOPE.subscopes) {
                     if (scope.parent_type == BinaryCode.OBJECT_START) {
@@ -5304,6 +5386,8 @@ export class Compiler {
             _code_block_type: _code_block_type
         };
 
+        // keep track of used extensions
+        if (SCOPE.options.required_plugins?.length) SCOPE.unused_plugins = new Set(SCOPE.options.required_plugins);
 
         if (!SCOPE.options.insert_header) {
             SCOPE.options.insert_header = {
@@ -5528,7 +5612,8 @@ export class PrecompiledDXB extends Array<ArrayBuffer|number|[number,number]> {
 
 export const FILE_TYPE = {
     DATEX_SCRIPT: ["text/datex",        "dx"],
-    DATEX_BINARY: ["application/datex", "dxb"]
+    DATEX_BINARY: ["application/datex", "dxb"],
+    JSON:         ["application/json", "json"]
 } as const;
 
 export type DATEX_FILE_TYPE = typeof FILE_TYPE[keyof typeof FILE_TYPE];

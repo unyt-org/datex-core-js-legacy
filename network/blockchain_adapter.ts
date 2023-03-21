@@ -129,6 +129,7 @@ export type BCData<T extends BCEntryType> =
 
 		// check if endpoint is already registered
 		if (this.isEntryOfType(entry, BCEntryType.ENDPOINT_REGISTRATION)) {
+			if (!(entry.data.keys instanceof Array && entry.data.keys.length == 2 && entry.data.keys[0] instanceof ArrayBuffer && entry.data.keys[1] instanceof ArrayBuffer)) throw new Error(`invalid Blockchain entry (${BCEntryType[entry.type]}): invalid keys`);
 			if (await this.getEndpointPublicKeys(entry.data.endpoint)) throw new Error(`invalid Blockchain entry (${BCEntryType[entry.type]}): endpoint already registered`);
 			if (entry.creator && entry.data.endpoint.equals(entry.creator)) throw new Error(`invalid Blockchain entry (${BCEntryType[entry.type]}): endpoint cannot certify itself`);
 		}

@@ -74,8 +74,17 @@ export class Supranet {
         }
 
         // load runtime, own endpoint, nodes
+        this.#connected = false;
         endpoint = await this.init(endpoint, local_cache, sign_keys, enc_keys)
-        if (this.#connected && endpoint === Runtime.endpoint) {return true} // already connected to endpoint during init
+
+        // already connected to endpoint during init
+        if (this.#connected && endpoint === Runtime.endpoint) {
+            logger.success("Connected to the supranet as " + endpoint)
+            for (const i of InterfaceManager.active_interfaces) {
+                if (i.type != "local") this.sayHello(i.endpoint)
+            }
+            return true;
+        } 
 
         return this._connect(via_node);
     }

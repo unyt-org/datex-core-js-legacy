@@ -73,11 +73,11 @@ class EndpointConfig implements EndpointConfigData {
 			// get config from cache
 			const serialized = globalThis.localStorage?.getItem("endpoint_config::"+(globalThis.location?.href ?? ''));
 			if (serialized) {
-				config = <EndpointConfigData> await Runtime.executeDatexLocally(serialized, undefined, undefined, window.location?.href ? new URL(window.location.href) : undefined)
+				config = <EndpointConfigData> await Runtime.executeDatexLocally(serialized, undefined, undefined, globalThis.location?.href ? new URL(globalThis.location.href) : undefined)
 			}
 			// try to get from .dx url
 			else {
-				if (!path) path = new URL('/'+this.DX_FILE_NAME, window.location.href)
+				if (!path) path = new URL('/'+this.DX_FILE_NAME, globalThis.location.href)
 				try {
 					config = await datex.get(path);
 					logger.info("loaded endpoint config from " + path);
@@ -109,12 +109,17 @@ class EndpointConfig implements EndpointConfigData {
 
 		if (client_type=="deno") {
 			try {
-				Deno.openSync(cache_path);
-			} catch {
-				Deno.mkdirSync(cache_path, {recursive:true});
+				try {
+					Deno.openSync(cache_path);
+				} catch {
+					Deno.mkdirSync(cache_path, {recursive:true});
+				}
+				const config_file = new URL('./.dx', cache_path);
+				Deno.writeTextFileSync(config_file, serialized)
 			}
-			const config_file = new URL('./.dx', cache_path);
-			Deno.writeTextFileSync(config_file, serialized)
+			catch {
+				logger.error("Cannot save endpoint config cache file");
+			}			
 		}
 		else if (!globalThis.localStorage) logger.warn("Cannot save endpoint config persistently")
 		else globalThis.localStorage.setItem("endpoint_config::"+(globalThis.location?.href ?? ''), serialized);
