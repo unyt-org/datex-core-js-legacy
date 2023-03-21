@@ -311,7 +311,7 @@ class DATEXFormatter implements LogFormatter {
     formatValue(value: any, params: any[]): string {
         const collapse = params.includes("collapse");
         const color = !params.includes("plain");
-        return _Runtime.valueToDatexStringExperimental(value, true, color, collapse, true, true);
+        return _Runtime ? _Runtime.valueToDatexStringExperimental(value, true, color, collapse, true, true) : (value?.toString??"");
     }
     
 }
@@ -353,6 +353,8 @@ export class Logger {
     private static browser_supports_ansi_escape_codes = !!globalThis.chrome
 
     public log_to_console = true;
+    public log_to_cache = false;
+    public cache?: string
     private out_streams = new Set<StreamSink>();
 
     constructor(origin?:string, production?:boolean, formatting?:LOG_FORMATTING) 
@@ -397,7 +399,6 @@ export class Logger {
     // force_browser_compat_mode: if true, browser console formatting falls back to %c sequences (required for non compatible ascii sequences or images)
     private logRaw(text:string, log_level:LOG_LEVEL = LOG_LEVEL.DEFAULT, only_log_own_stream = false, browser_compat_mode_required = false) {
 
-
         if (this.production && (log_level < Logger.production_log_level)) return; // don't log for production
         if (!this.production && (log_level < Logger.development_log_level)) return; // don't log for development
 
@@ -405,8 +406,11 @@ export class Logger {
         //Logger.setCursorY(globalThis.process?.stdout, Logger.getCursorY(globalThis.process?.stdout)+1);
 
         if (this.log_to_console) {
-            if (this.locked) this.lockedContent = this.lockedContent ? this.lockedContent + '\n' + text : text;
+            if (this.locked) this.lockedContent = this.lockedContent ? this.lockedContent + '\r\n' + text : text;
             else console_log([text], log_level);
+        }
+        if (this.log_to_cache) {
+            this.cache = this.cache ? this.cache + '\r\n' + text : text;
         }
 
         // handle log streams
@@ -464,8 +468,8 @@ export class Logger {
             else tag += ESCAPE_SEQUENCES.INVERSE+ESCAPE_SEQUENCES.UNDERLINE + this.getFormattingColor(COLOR.POINTER) + " " + this.pointer + " ";
         }
         // end tag
-        if (esc_tag) tag += ESCAPE_SEQUENCES.RESET + " " + color_esc;
-        else tag += " "
+        if (this.formatting != LOG_FORMATTING.PLAINTEXT) tag += ESCAPE_SEQUENCES.RESET + (esc_tag ? " " : "") + color_esc;
+        else if (esc_tag) tag += " "
 
         return tag;
     }
@@ -909,27 +913,19 @@ enableFullSupport();
 
 
 // set log level (browser default true, deno default false)
-let verbose = true;
+Logger.development_log_level = globalThis.Deno ? LOG_LEVEL.DEFAULT : LOG_LEVEL.VERBOSE
+Logger.production_log_level = globalThis.Deno ? LOG_LEVEL.DEFAULT : LOG_LEVEL.VERBOSE;
 
-// command line args (--watch-backend)
-if (globalThis.Deno) {
-    verbose = false
-    const parse = (await import("https://deno.land/std@0.168.0/flags/mod.ts")).parse;
-    const flags = parse(Deno.args, {
-        boolean: ["verbose"],
-        alias: {
-            v: "verbose",
-        },
-        default: {verbose}
-    });
-    verbose = flags["verbose"]
-}
+if (globalThis.Deno) (async ()=> {
+    const verbose = !!(await import("./args.ts")).commandLineOptions.option("verbose", {aliases: ["v"], type: "boolean", default: false, description: "Show logs for all levels, including debug logs"})
 
-if (verbose) {
-    Logger.development_log_level = LOG_LEVEL.VERBOSE;
-    Logger.production_log_level = LOG_LEVEL.VERBOSE;
-}
-else {
-    Logger.development_log_level = LOG_LEVEL.DEFAULT;
-    Logger.production_log_level = LOG_LEVEL.DEFAULT;
-}
+    if (verbose) {
+        Logger.development_log_level = LOG_LEVEL.VERBOSE;
+        Logger.production_log_level = LOG_LEVEL.VERBOSE;
+    }
+    else {
+        Logger.development_log_level = LOG_LEVEL.DEFAULT;
+        Logger.production_log_level = LOG_LEVEL.DEFAULT;
+    }
+})()
+

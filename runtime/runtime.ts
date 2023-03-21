@@ -1030,7 +1030,7 @@ export class Runtime {
         // std.types 
         // try to get from cdn.unyt.org
         try {
-            this.STD_TYPES_ABOUT = await Runtime.getURLContent('https://cdn.unyt.org/unyt_core@dev/dx_data/type_info.dx')
+            this.STD_TYPES_ABOUT = await Runtime.getURLContent('https://cdn.unyt.org/unyt_core/dx_data/type_info.dx')
         }
         // otherwise try to get local file (only backend)
         catch {

@@ -186,7 +186,7 @@ export type compiler_scope = {
 
     stack: [Endpoint, string?][],
 
-    unused_extensions?: Set<string>, // set of all extensions used in the script, to check against options.required_extensions
+    unused_plugins?: Set<string>, // set of all plugins used in the script, to check against options.required_plugins
 
     b_index: number,
 
@@ -237,8 +237,8 @@ export type compiler_options = {
     send_sym_encrypt_key?: boolean, // send the encrypted encryption key to all receivers (only send once for a session per default)
     allow_execute?:boolean, // allow calling functions, per default only allowed for datex requests
     
-    extensions?: string[] // list of enabled extensions
-    required_extensions?: string[] // list of enabled extensions that must be used
+    plugins?: string[] // list of enabled plugins
+    required_plugins?: string[] // list of enabled plugins that must be used
 
     // for routing header
     __routing_ttl?:number,
@@ -4193,15 +4193,15 @@ export class Compiler {
             SCOPE.datex = type_signature + init + SCOPE.datex;
         }
 
-        // EXTENSION
-        else if (m = SCOPE.datex.match(Regex.EXTENSION)) {
+        // PLUGIN
+        else if (m = SCOPE.datex.match(Regex.PLUGIN)) {
             SCOPE.datex = SCOPE.datex.substring(m[0].length);  // pop datex
             const name = m[1];
 
             
-            // extension enabled?
-            if (SCOPE.options.extensions?.includes(name) || SCOPE.options.required_extensions?.includes(name)) {
-                SCOPE.unused_extensions?.delete(name);
+            // plugin enabled?
+            if (SCOPE.options.plugins?.includes(name) || SCOPE.options.required_plugins?.includes(name)) {
+                SCOPE.unused_plugins?.delete(name);
                 SCOPE.datex = `export const ${name} = (` + SCOPE.datex;
             }
 
@@ -4914,11 +4914,11 @@ export class Compiler {
             // end of scope reached
             if (SCOPE.end || !SCOPE.datex) { 
 
-                // check for required extensions
-                if (SCOPE.unused_extensions?.size) {
-                    const ext = [...SCOPE.unused_extensions];
-                    if (SCOPE.unused_extensions.size == 1) throw new CompilerError(`Extension "${ext[0]}" is required, but not found in script`);
-                    else throw new CompilerError(`Extensions "${ext.join(",")}" are required, but not found in script`);
+                // check for required plugins
+                if (SCOPE.unused_plugins?.size) {
+                    const ext = [...SCOPE.unused_plugins];
+                    if (SCOPE.unused_plugins.size == 1) throw new CompilerError(`Plugin "${ext[0]}" is required, but not found in script`);
+                    else throw new CompilerError(`Plugins "${ext.join(",")}" are required, but not found in script`);
                 }
 
                 // check for missing object brackets
@@ -5387,7 +5387,7 @@ export class Compiler {
         };
 
         // keep track of used extensions
-        if (SCOPE.options.required_extensions?.length) SCOPE.unused_extensions = new Set(SCOPE.options.required_extensions);
+        if (SCOPE.options.required_plugins?.length) SCOPE.unused_plugins = new Set(SCOPE.options.required_plugins);
 
         if (!SCOPE.options.insert_header) {
             SCOPE.options.insert_header = {

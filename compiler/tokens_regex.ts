@@ -166,7 +166,7 @@ export const Regex = {
     DO: /^do\b\s*(\()?/,
     FUNCTION: /^(export\s+)?function(?:\s+([A-Za-zÀ-ž_][A-Za-z0-9À-ž_]*))?\s*\(/,
     FUNCTION_PARAM: /^(\s*(?:export\s+)?(?:named\s+)?(?:(?:ref|val|var|const)\s+)?)?([A-Za-zÀ-ž_][A-Za-z0-9À-ž_]*)\s*(\:|\=|,|\))?/,
-    EXTENSION: /^extension(?:\s+([A-Za-zÀ-ž_][A-Za-z0-9À-ž_]*))\s*\(/,
+    PLUGIN: /^plugin(?:\s+([A-Za-zÀ-ž_][A-Za-z0-9À-ž_]*))\s*\(/,
     ASSERT: /^assert\b\s*(\()?/,
     SKIP: /^skip\b\s*(\()?/,
     LEAVE: /^leave\b\s*(\()?/,

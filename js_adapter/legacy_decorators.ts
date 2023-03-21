@@ -247,6 +247,12 @@ export function property(...args:any[]): any {
     return handleDecoratorArgs(args, Decorators.property);
 }
 
+export function jsdoc(target: any, name?: string, method?:any):any
+export function jsdoc(...args:any[]): any {
+    return handleDecoratorArgs(args, Decorators.jsdoc);
+}
+
+
 export function serialize(serializer:(parent:any, value:any)=>any):any
 export function serialize(...args:any[]): any {
     return handleDecoratorArgs(args, Decorators.serialize, true);

@@ -4,13 +4,14 @@
 import { baseURL, Runtime, PrecompiledDXB, Type, Pointer, Value, PointerProperty, primitive, any_class, Target, IdEndpoint, TransformFunctionInputs, AsyncTransformFunction, TransformFunction, TextRef, Markdown, DecimalRef, BooleanRef, IntegerRef, MinimalJSRef, CompatValue, CompatPartial, datex_meta, ObjectWithDatexValues, Compiler, endpoint_by_endpoint_name, endpoint_name, Storage, compiler_scope, datex_scope, DatexResponse, target_clause, ValueError, logger, Class, getDefaultLocalMeta } from "./datex_all.ts";
 
 /** make decorators global */
-import {property as _property, sync as _sync, endpoint as _endpoint, template as _template} from "./datex_all.ts";
+import {property as _property, sync as _sync, endpoint as _endpoint, template as _template, jsdoc as _jsdoc} from "./datex_all.ts";
 import { DX_SLOTS, SLOT_GET, SLOT_SET } from "./runtime/constants.ts";
 import { AssertionError } from "./types/errors.ts";
 import { getCallerFile, getCallerInfo, getMeta } from "./utils/caller_metadata.ts";
 
 declare global {
 	const property: typeof _property;
+    const jsdoc: typeof _property;
 	const sync: typeof _sync;
 	const endpoint: typeof _endpoint;
 	const template: typeof _template;
@@ -24,7 +25,8 @@ globalThis.sync = _sync;
 globalThis.endpoint = _endpoint;
 // @ts-ignore global
 globalThis.template = _template;
-
+// @ts-ignore global
+globalThis.jsdoc = _jsdoc;
 
 // can be used instead of import(), calls a DATEX get instruction, works for urls, endpoint, ...
 export async function get<T=unknown>(dx:string|URL, assert_type?:Type<T> | Class<T> | string, context_location?:URL|string):Promise<T> {
@@ -459,15 +461,16 @@ Object.defineProperty(globalThis, 'lazyEternalVar', {value:(customIdentifier:str
 
 declare global {
     const eternal: undefined
-    const lazyEternal: undefined
+    const lazyEternal: undefined    
+    const $$: typeof pointer
 
     const eternalVar: (customIdentifier:string)=>undefined
     const lazyEternalVar: (customIdentifier:string)=>undefined
 }
 
+
 // TODO: '123456'.$$, [1,2,3].$$ ?
 // declare global {
-//     const $$: typeof pointer
 
 //     interface Object {
 // 		$$<T>(this:T): MinimalJSRef<T>
