@@ -67,6 +67,7 @@ import {decompile as wasm_decompile} from "../wasm/adapter/pkg/datex_wasm.js";
 import "../types/native_types.ts"; // load prototype overrides
 import { Time } from "../types/time.ts";
 import { initPublicStaticClasses } from "../js_adapter/js_class_adapter.ts";
+import { getCallerInfo } from "../utils/caller_metadata.ts";
 
 const mime = globalThis.Deno ? (await import("https://deno.land/x/mimetypes@v1.0.0/mod.ts")).mime : null;
 
@@ -313,7 +314,7 @@ export class Runtime {
     }
 
     private static getTranslatedLocalString(text_en:string, lang:string) {
-        return "TODO";// <Promise<string>> datex `@example.translate (${text_en},${lang})`
+        return "TODO translate";// <Promise<string>> datex `@example.translate (${text_en},${lang})`
     }
 
     // @ts-ignore

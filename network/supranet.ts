@@ -22,7 +22,7 @@ import { Logger } from "../utils/logger.ts";
 import { ProtocolDataType } from "../compiler/protocol_types.ts";
 import { buffer2hex } from "../utils/utils.ts";
 import { endpoint_config } from "../runtime/endpoint_config.ts";
-import { UnresolvedEndpointProperty } from "../datex_all.ts";
+import { endpoint_name, UnresolvedEndpointProperty } from "../datex_all.ts";
 const logger = new Logger("DATEX Supranet");
 
 // entry point to connect to the datex network
@@ -68,8 +68,8 @@ export class Supranet {
     // TODO problem: using same keys as stored endpoint!
     public static async connect(endpoint?:Endpoint|UnresolvedEndpointProperty, local_cache = true, sign_keys?:[ArrayBuffer|CryptoKey,ArrayBuffer|CryptoKey], enc_keys?:[ArrayBuffer|CryptoKey,ArrayBuffer|CryptoKey], via_node?:Endpoint) {
 
-        if (this.#connected && endpoint === Runtime.endpoint) {
-            logger.info("already connected as", endpoint);
+        if (this.#connected && (!endpoint || endpoint === Runtime.endpoint)) {
+            logger.info("already connected as", Runtime.endpoint);
             return true;
         }
 
@@ -126,7 +126,9 @@ export class Supranet {
     }
 
     // only init, don't (re)connect
-    public static async init(endpoint?:Endpoint|UnresolvedEndpointProperty, local_cache = true, sign_keys?:[ArrayBuffer|CryptoKey,ArrayBuffer|CryptoKey], enc_keys?:[ArrayBuffer|CryptoKey,ArrayBuffer|CryptoKey]):Promise<Endpoint>  {
+    public static async init(endpoint?:Endpoint|UnresolvedEndpointProperty|endpoint_name, local_cache = true, sign_keys?:[ArrayBuffer|CryptoKey,ArrayBuffer|CryptoKey], enc_keys?:[ArrayBuffer|CryptoKey,ArrayBuffer|CryptoKey]):Promise<Endpoint>  {
+
+        if (typeof endpoint == "string") endpoint = await Endpoint.fromStringAsync(endpoint);
 
         await endpoint_config.load(); // load config from storage/file
 

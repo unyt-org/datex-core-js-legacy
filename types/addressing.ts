@@ -360,10 +360,12 @@ export class Endpoint extends Target {
 		}
 	}
 
-	public static fromStringAsync(string:string) {
+	public static async fromStringAsync(string:string) {
 		// TODO: regex
 		// normal DATEX endpoint
-		return datex(string);
+		const val = await datex(string);
+		if (!(val instanceof Endpoint || val instanceof UnresolvedEndpointProperty)) throw new ValueError(`Could not parse endpoint string: "${string}" - Not an endpoint`);
+		return val;
 	}
 	
 

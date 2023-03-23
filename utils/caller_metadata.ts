@@ -25,7 +25,7 @@ function _callWithMetaData<args extends any[], returns>(key:number, fn:(...args:
     const encoded = '__meta__'+key+'__';
 	const _args = <args> args ?? [];
 	return is_safari ? 
-		new globalThis.Function('f', 'c', 'a', 'return (function '+encoded+'(){return c ? f.apply(c, a) : f(a)})()')(fn, ctx, args) : 
+		new globalThis.Function('f', 'c', 'a', 'return (function '+encoded+'(){return c ? f.apply(c, a) : f(...a)})()')(fn, ctx, args) : 
 		({[encoded]:()=>ctx ? fn.apply(ctx, _args) : fn(..._args)})[encoded]()
 }
 
@@ -48,7 +48,7 @@ function getPartsFromStack(stack:string|undefined) {
 export function getCallerFile(error?: Error) {
 	const parts = getPartsFromStack((error??new Error()).stack);
 	return parts
-		?.[Math.min(parts.length-1, 2)]
+		?.[Math.max(parts.length-1, 2)] // get either last item or at least > 2rd item to ignore last intermediate calls
 		?.match(caller_file)
 		?.[1] ?? globalThis.location?.href
 }
