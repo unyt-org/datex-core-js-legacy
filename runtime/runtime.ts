@@ -1030,13 +1030,13 @@ export class Runtime {
     
         // std.types 
         // try to get from cdn.unyt.org
-        try {
-            this.STD_TYPES_ABOUT = await Runtime.getURLContent('https://cdn.unyt.org/unyt_core/dx_data/type_info.dx')
-        }
-        // otherwise try to get local file (only backend)
-        catch {
-            this.STD_TYPES_ABOUT = await Runtime.getURLContent(new URL('../dx_data/type_info.dx', import.meta.url));
-        }
+        // try {
+        //     this.STD_TYPES_ABOUT = await Runtime.getURLContent('https://cdn.unyt.org/unyt_core/dx_data/type_info.dx')
+        // }
+        // // otherwise try to get local file (only backend)
+        // catch {
+        //     this.STD_TYPES_ABOUT = await Runtime.getURLContent(new URL('../dx_data/type_info.dx', import.meta.url));
+        // }
 
         DatexObject.setWritePermission(<Record<string|symbol,unknown>>this.STD_STATIC_SCOPE, undefined); // make readonly
         DatexObject.seal(this.STD_STATIC_SCOPE);
