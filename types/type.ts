@@ -19,6 +19,7 @@ import { Time } from "./time.ts";
 import type { Task } from "./task.ts";
 import { Assertion } from "./assertion.ts";
 import type { Iterator } from "./iterator.ts";
+import {StorageMap} from "./storage_map.ts"
 
 
 // types with '&|~' combinations
@@ -862,6 +863,8 @@ export class Type<T = any> {
         Assertion:  Type.get<Assertion>("std:Assertion"),
         Iterator: Type.get<Iterator<any>>("std:Iterator"),
 
+        StorageMap: Type.get<StorageMap<unknown, unknown>>("std:StorageMap"),
+
         Error: Type.get<Error>("std:Error"),
         SyntaxError: Type.get("std:SyntaxError"),
         CompilerError: Type.get("std:CompilerError"),
@@ -922,8 +925,16 @@ Type.std.Function.addImplementedType(Type.std.StreamConsumer);
 Type.std.Stream.addImplementedType(Type.std.StreamConsumer);
 
 
-Type.get("std:Assertion").setJSInterface({
+Type.std.Assertion.setJSInterface({
     class: Assertion,
+    is_normal_object: true,
+    proxify_children: true,
+    visible_children: new Set(),
+})
+
+
+Type.std.StorageMap.setJSInterface({
+    class: StorageMap,
     is_normal_object: true,
     proxify_children: true,
     visible_children: new Set(),

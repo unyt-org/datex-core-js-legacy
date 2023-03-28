@@ -420,6 +420,8 @@ export function getEternal(info?:ReturnType<typeof getCallerInfo>, customIdentif
     if (!info) throw new Error("eternal values are not supported in this runtime environment");
     const line = info[0]
 
+    if (!line.file) throw new Error("eternal values are only supported inside module files");
+
     const unique_row = `${line.file}:${line.row}`;
     const key = customIdentifier ? `${line.file}#${customIdentifier}` : `${unique_row}:${line.col}`; // use file location or customIdentifier as key
 
@@ -427,7 +429,7 @@ export function getEternal(info?:ReturnType<typeof getCallerInfo>, customIdentif
         waiting_eternals.set(unique_row, key); // assign next pointer to this eternal
         setTimeout(()=>{
             if (waiting_eternals.has(unique_row)) logger.error(`uncaptured eternal value at ${unique_row}: please surround the value with $$(), otherwise it cannot be restored correctly`)
-        }, 1000)
+        }, 6000)
     }
     return eternals.get(key)
 }
@@ -437,6 +439,8 @@ export async function getLazyEternal(info?:ReturnType<typeof getCallerInfo>, cus
     if (!info) throw new Error("eternal values are not supported in this runtime environment");
     const line = info[0]
 
+    if (!line.file) throw new Error("eternal values are only supported inside module files");
+
     const unique_row = `${line.file}:${line.row}`;
     const key = customIdentifier ? `${line.file}#${customIdentifier}` : `${unique_row}:${line.col}`; // use file location or customIdentifier as key
     
@@ -444,7 +448,7 @@ export async function getLazyEternal(info?:ReturnType<typeof getCallerInfo>, cus
         waiting_lazy_eternals.set(unique_row, key); // assign next pointer to this eternal
         setTimeout(()=>{
             if (waiting_lazy_eternals.has(unique_row)) logger.error(`uncaptured lazy_eternal value at ${unique_row}: please surround the value with $$(), otherwise it cannot be restored correctly`)
-        }, 1000)
+        }, 6000)
     }
     return Storage.getItem(key);
 }

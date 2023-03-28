@@ -519,12 +519,12 @@ export class Runtime {
             if (type == "application/datex" || type == "text/dxb" || url_string.endsWith(".dxb")) {
                 const content = await response.arrayBuffer();
                 if (raw) result = [content, type];
-                else result = this.normalizeDatexExports(await this.executeDXBLocally(content, url));
+                else result = await this.executeDXBLocally(content, url);
             }
             else if (type?.startsWith("text/datex") || url_string.endsWith(".dx")) {
                 const content = await response.text()
                 if (raw) result = [content, type];
-                else result = this.normalizeDatexExports(await this.executeDatexLocally(content, undefined, undefined, url));
+                else result = await this.executeDatexLocally(content, undefined, undefined, url);
             }
             else if (type?.startsWith("application/json5") || url_string.endsWith(".json5")) {
                 const content = await response.text();
@@ -560,12 +560,12 @@ export class Runtime {
             if (filePath.endsWith('.dxb')) {
                 const content = (<Uint8Array>(await getFileContent(url, true, true))).buffer;
                 if (raw) result = [content, "application/datex"];
-                else result = this.normalizeDatexExports(await this.executeDXBLocally(content, url));
+                else result = await this.executeDXBLocally(content, url);
             }
             else if (filePath.endsWith('.dx')) {
                 const content = <string> await getFileContent(url);
                 if (raw) result = [content, "text/datex"];
-                else result = this.normalizeDatexExports(await this.executeDatexLocally(content, undefined, undefined, url));
+                else result = await this.executeDatexLocally(content, undefined, undefined, url);
             }
             else if (filePath.endsWith('.json')) {
                 const content = <string> await getFileContent(url);
@@ -880,10 +880,12 @@ export class Runtime {
                 this.callbacks_by_sid.set(unique_sid, [resolve, reject]);
                 // default timeout
                 if (timeout == undefined) timeout = this.OPTIONS.DEFAULT_REQUEST_TIMEOUT;
-                setTimeout(()=>{
-                    // reject if response wasn't already received (might still be processed, and resolve not yet called)
-                    if (!this.callbacks_by_sid.get(unique_sid)?.[2]) reject(new NetworkError("DATEX request timeout after "+timeout+"ms: " + unique_sid));
-                }, timeout);
+                if (timeout > 0 && Number.isFinite(timeout)) {
+                    setTimeout(()=>{
+                        // reject if response wasn't already received (might still be processed, and resolve not yet called)
+                        if (!this.callbacks_by_sid.get(unique_sid)?.[2]) reject(new NetworkError("DATEX request timeout after "+timeout+"ms: " + unique_sid));
+                    }, timeout);
+                }
             }
             else resolve(true)
         })
@@ -2792,6 +2794,7 @@ export class Runtime {
         // throws an error if no permission
         checkValueUpdatePermission(SCOPE:datex_scope, parent:any, key:string){
 
+            console.log("check",parent,key)
             // #write slot
             if (parent[DX_SLOTS]?.has(SLOT_WRITE)) {
                 const filter = parent[DX_SLOTS].get(SLOT_WRITE);
@@ -3162,7 +3165,7 @@ export class Runtime {
             key = Value.collapseValue(key,true,true);
 
             // check read/write permission (throws an error)
-            Runtime.runtime_actions.checkValueUpdatePermission(parent, key)
+            if (parent) Runtime.runtime_actions.checkValueUpdatePermission(SCOPE, parent, key)
 
             // key is * -  add for all matching keys (recursive)
             if (key === WILDCARD) {

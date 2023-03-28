@@ -2102,9 +2102,9 @@ export class Compiler {
 
             // insert preemptive pointer
             const id_buffer = typeof id == "string" ? hex2buffer(id, Pointer.MAX_POINTER_ID_SIZE, true) : id;
-            const pointer_origin = <IdEndpoint> Target.get(id_buffer.slice(1,19), id_buffer.slice(19,21), BinaryCode.ENDPOINT);
+            const pointer_origin = (id_buffer[0]==BinaryCode.ENDPOINT || id_buffer[0]==BinaryCode.PERSON_ALIAS || id_buffer[0]==BinaryCode.INSTITUTION_ALIAS) ? <IdEndpoint> Target.get(id_buffer.slice(1,19), id_buffer.slice(19,21), id_buffer[0]) : null;
             // preemptive_pointer_init enabled, is get, is own pointer, not sending to self
-            if (SCOPE.options.preemptive_pointer_init !== false && action_type == ACTION_TYPE.GET && Runtime.endpoint.equals(pointer_origin) && SCOPE.options.to != Runtime.endpoint) {
+            if (pointer_origin && SCOPE.options.preemptive_pointer_init !== false && action_type == ACTION_TYPE.GET && Runtime.endpoint.equals(pointer_origin) && SCOPE.options.to != Runtime.endpoint) {
                 return Compiler.builder.addPreemptivePointer(SCOPE, id)
             }
 
@@ -5220,6 +5220,20 @@ export class Compiler {
 
     static async getValueHashString(value:any):Promise<string> {
         return arrayBufferToBase64(await Compiler.getValueHash(value))
+    }
+
+    /**
+     * returns pointer id for pointer values, hash for primitive values
+     * @param value
+     * @returns 
+     */
+    static getUniqueValueIdentifier(value:any): Promise<string>|string {
+        // value is pointer - get id
+        if (value instanceof Pointer) return value.idString();
+        const ptr = Pointer.getByValue(value);
+        if (ptr) return ptr.idString();
+        // get value hash
+        else return this.getValueHashString(value);
     }
 
     // same as compile, but accepts a precompiled dxb array instead of a Datex Script string -> faster compilation

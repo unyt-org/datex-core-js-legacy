@@ -2131,9 +2131,10 @@ export class Pointer<T = any> extends Value<T> {
 
 			const proxy = new Proxy(<any>obj, {
                 get: (_target, key) => {
+                    if (key == DX_PTR) return this;
                     if (this.#custom_prop_getter && (!this.shadow_object || !(key in this.shadow_object)) && !(typeof key == "symbol")) return this.#custom_prop_getter(key);
-
                     const val = Value.collapseValue(this.shadow_object?.[key], true, true);
+
                     /*if (typeof val == "function" && key != "$" && key != "$$") {
                         try {
                             const bind = Value.collapseValue(val.bind, true, true);

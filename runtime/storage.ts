@@ -391,9 +391,9 @@ export class Storage {
         return false;
     }
 
-    private static getPreferredLocation(pointer_id:string) {
-        if (this.#trusted_pointers.has(pointer_id)) return this.#primary_location; // value already loaded from trusted location, use primary location now
-        else return this.#trusted_location // first try to get from trusted location
+    private static getLocationPriorityOrder(pointer_id:string) {
+        if (this.#trusted_pointers.has(pointer_id)) return [this.#primary_location, this.#trusted_location]; // value already loaded from trusted location, use primary location now
+        else return [this.#trusted_location, this.#primary_location] // first try to get from trusted location
     }
 
     private static initPrimaryFromTrustedLocation(pointer_id:string, maybe_trusted_location:Storage.Location) {
@@ -442,9 +442,18 @@ export class Storage {
             throw new Error(`cannot restore dirty state of ${Storage.Location[this.#primary_location!]}, no trusted secondary storage location found`)
         }
 
-        if (location == undefined) location = this.getPreferredLocation(pointer_id);
+        // try to find pointer at a storage location
+        for (const loc of (location!=undefined ? [location] : this.getLocationPriorityOrder(pointer_id))) {
+            if (loc==undefined) continue;
+            const val = await this.getPointerFromLocation(pointer_id, pointerify, bind, loc);
+            if (val !== NOT_EXISTING) return val;
+        }
+        
+        return NOT_EXISTING
+    }
 
-        if (location == undefined || location == Storage.Location.INDEXED_DB) {
+    private static async getPointerFromLocation(pointer_id:string, pointerify: boolean|undefined, bind:any|undefined, location:Storage.Location) {
+        if (location == Storage.Location.INDEXED_DB) {
             const val = await this.getPointerDB(pointer_id, pointerify, bind);
             if (val !== NOT_EXISTING){ 
                 await this.initPrimaryFromTrustedLocation(pointer_id, Storage.Location.INDEXED_DB)
@@ -452,14 +461,13 @@ export class Storage {
             }
         }
 
-        if (location == undefined || location == Storage.Location.FILESYSTEM_OR_LOCALSTORAGE) {
+        else if (location == Storage.Location.FILESYSTEM_OR_LOCALSTORAGE) {
             const val = await this.getPointerLocalStorage(pointer_id, pointerify, bind);
             if (val !== NOT_EXISTING){
                 await this.initPrimaryFromTrustedLocation(pointer_id, Storage.Location.FILESYSTEM_OR_LOCALSTORAGE)
                 return val;
             }
         }
-        
         return NOT_EXISTING
     }
 
@@ -558,38 +566,57 @@ export class Storage {
         }
     }
 
-    public static async getPointerDecompiled(pointer_id:string, colorized = false, location?:Storage.Location):Promise<string|undefined> {
-        
-        if (location == undefined) location = this.getPreferredLocation(pointer_id);
+    public static async getPointerDecompiled(pointer_id:string, colorized = false, location?:Storage.Location):Promise<string|undefined|typeof NOT_EXISTING> {
+        // try to find pointer at a storage location
+        for (const loc of (location!=undefined ? [location] : this.getLocationPriorityOrder(pointer_id))) {
+            if (loc==undefined) continue;
+            const val = await this.getPointerDecompiledFromLocation(pointer_id, colorized, loc);
+            if (val !== NOT_EXISTING) return val;
+        }
+        return NOT_EXISTING;
+    }
+
+
+    private static async getPointerDecompiledFromLocation(pointer_id:string, colorized = false, location:Storage.Location) {
 
         // get from datex_storage
-        if (location == undefined || location == Storage.Location.INDEXED_DB) { 
+        if (location == Storage.Location.INDEXED_DB) { 
             const buffer = <ArrayBuffer><any>await datex_pointer_storage.getItem(pointer_id);
             if (buffer != null) return MessageLogger.decompile(buffer, false, colorized);
         }
 
         // get from local storage
-        if (location == undefined || location == Storage.Location.FILESYSTEM_OR_LOCALSTORAGE) { 
+        else if (location == Storage.Location.FILESYSTEM_OR_LOCALSTORAGE) { 
             const base64 = localStorage.getItem(this.pointer_prefix+pointer_id);
             if (base64!=null) return MessageLogger.decompile(base64ToArrayBuffer(base64), false, colorized);
         }
+
+        return NOT_EXISTING;
     }
 
-    public static async getItemDecompiled(key:string, colorized = false, location?:Storage.Location):Promise<string|undefined> {
+    public static async getItemDecompiled(key:string, colorized = false, location?:Storage.Location) {
+        // try to find pointer at a storage location
+        for (const loc of (location!=undefined ? [location] : this.getLocationPriorityOrder(key))) {
+            if (loc==undefined) continue;
+            const val = await this.getItemDecompiledFromLocation(key, colorized, loc);
+            if (val !== NOT_EXISTING) return val;
+        }
+        return NOT_EXISTING;
+    }
 
-        if (location == undefined) location = this.getPreferredLocation(key);
-
+    public static async getItemDecompiledFromLocation(key:string, colorized = false, location:Storage.Location) {
         // get from datex_storage
-        if (location == undefined || location == Storage.Location.INDEXED_DB) { 
+        if (location == Storage.Location.INDEXED_DB) { 
             const buffer = <ArrayBuffer><any>await datex_item_storage.getItem(key);
             if (buffer != null) return MessageLogger.decompile(buffer, false, colorized);
         }
 
         // get from local storage
-        if (location == undefined || location == Storage.Location.FILESYSTEM_OR_LOCALSTORAGE) { 
+        else if (location == Storage.Location.FILESYSTEM_OR_LOCALSTORAGE) { 
             const base64 = localStorage.getItem(this.item_prefix+key);
             if (base64!=null) return MessageLogger.decompile(base64ToArrayBuffer(base64), false, colorized);
         }
+        return NOT_EXISTING;
     }
 
     public static async getItemKeys(location?:Storage.Location){
@@ -657,13 +684,24 @@ export class Storage {
             throw new Error(`cannot restore dirty state of ${Storage.Location[this.#primary_location!]}, no trusted secondary storage location found`)
         }
 
-        if (location == undefined) location = this.getPreferredLocation(key);
-
         // get from cache
         if (Storage.cache.has(key)) return Storage.cache.get(key);
 
+        // try to find item at a storage location
+        for (const loc of (location!=undefined ? [location] : this.getLocationPriorityOrder(key))) {
+            if (loc==undefined) continue;
+            const val = await this.getItemFromLocation(key, loc);
+            if (val!==NOT_EXISTING) return val;
+        }
+
+        return undefined;
+    }
+
+
+    public static async getItemFromLocation(key:string, location:Storage.Location/* = this.#primary_location*/):Promise<any> {
+
         // get from db storage
-        if (location == undefined || location == Storage.Location.INDEXED_DB) { 
+        if (location == Storage.Location.INDEXED_DB) { 
             const buffer = <ArrayBuffer><any>await datex_item_storage.getItem(key);
             if (buffer != null) {
                 const val = await Runtime.decodeValue(buffer);
@@ -674,7 +712,7 @@ export class Storage {
         }
 
         // get from local storage
-        if (location == undefined || location == Storage.Location.FILESYSTEM_OR_LOCALSTORAGE) { 
+        else if (location == Storage.Location.FILESYSTEM_OR_LOCALSTORAGE) { 
             const base64 = localStorage.getItem(this.item_prefix+key);
             if (base64!=null) {
                 const val = await Runtime.decodeValueBase64(base64);
@@ -683,22 +721,33 @@ export class Storage {
                 return val;
             }
         }
+
+        return NOT_EXISTING;
     }
 
     
     public static async hasItem(key:string, location?:Storage.Location):Promise<boolean> {
 
-        if (location == undefined) location = this.getPreferredLocation(key);
-
         if (Storage.cache.has(key)) return true; // get from cache
-        
+ 
+        // try to find item at a storage location
+        for (const loc of (location!=undefined ? [location] : this.getLocationPriorityOrder(key))) {
+            if (loc==undefined) continue;
+            const val = await this.hasItemFromLocation(key, loc);
+            if (val) return true;
+        }
+
+        return false;
+    }
+
+    public static async hasItemFromLocation(key:string, location:Storage.Location):Promise<boolean> {
         // get from datex_storage
-        if (location == undefined || location == Storage.Location.INDEXED_DB) { 
+        if (location == Storage.Location.INDEXED_DB) { 
             return (await datex_item_storage.getItem(key) != null)
         }
 
         // get from local storage
-        if (location == undefined || location == Storage.Location.FILESYSTEM_OR_LOCALSTORAGE) { 
+        else if (location == Storage.Location.FILESYSTEM_OR_LOCALSTORAGE) { 
             return localStorage.getItem(this.item_prefix+key) != null
         }
 

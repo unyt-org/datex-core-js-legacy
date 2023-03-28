@@ -60,6 +60,8 @@ export * from "./types/tuple.ts";
 export * from "./types/type.ts";
 export * from "./types/quantity.ts";
 export * from "./types/time.ts";
+export * from "./types/storage_map.ts";
 
 // polyfills
 import "./utils/polyfills.ts"
+import "./utils/promises.ts"
