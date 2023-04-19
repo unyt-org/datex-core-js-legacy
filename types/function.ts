@@ -359,7 +359,10 @@ export class Function<T extends (...args: any) => any = (...args: any) => any> e
                 // normal number index
                 if (!isNaN(Number(key.toString()))) {
                     if (Number(key.toString()) < 0) throw new RuntimeError("Invalid function arguments: '" + key + "'");
-                    if (Number(key.toString()) >= this.params.size) throw new RuntimeError("Maximum number of function arguments is " + (this.params.size), SCOPE);
+                    if (Number(key.toString()) >= this.params.size) {
+                        // ignore if no params (TODO: just workaround to prevent errors)
+                        if (this.params.size !== 0) throw new RuntimeError("Maximum number of function arguments is " + (this.params.size), SCOPE);
+                    }
                     params[Number(key.toString())] = val;
                 }
                 // get index of named argument
@@ -374,7 +377,11 @@ export class Function<T extends (...args: any) => any = (...args: any) => any> e
         else if (value == VOID) params = [];
         // single arg
         else {
-            if (this.params.size == 0) throw new RuntimeError("Maximum number of function arguments is " + (this.params.size), SCOPE);
+            if (this.params.size == 0) {
+                // ignore if no params (TODO: just workaround to prevent errors)
+                // throw new RuntimeError("Maximum number of function arguments is " + (this.params.size), SCOPE);
+                params = [];
+            }
             else params = [value];
         }
 
@@ -458,7 +465,7 @@ export class Function<T extends (...args: any) => any = (...args: any) => any> e
 
 declare global {
 	interface CallableFunction {
-		to<T, A extends unknown[], R>(this: (this: T, ...args: A) => R, receiver?:string): (...args: A)=>Promise<R>;
+		to<T, A extends unknown[], R>(this: (this: T, ...args: A) => R, receiver?:string): (...args: A)=>Promise<Awaited<Promise<R>>>;
 	}
 }
 

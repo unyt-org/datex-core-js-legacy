@@ -1,17 +1,13 @@
 import "../lib/marked.js"; // required for Markdown highlighting
 declare const marked:Function;
 
-const HTMLElement = globalThis.HTMLElement ?? Object;
 
 /** <text/markdown> */
-export class Markdown extends HTMLElement {
+export class Markdown {
     content:string
     constructor(content:string|ArrayBuffer|Uint8Array = "") {
-        super();
         if (content instanceof ArrayBuffer || content instanceof Uint8Array) this.content = new TextDecoder().decode(content);
         else this.content = content;
-        this.style.display = "block";
-        this.append(this.getHTML(false));
     }
     toString(){
         return this.content;
@@ -49,9 +45,3 @@ export class Markdown extends HTMLElement {
         return code;
     }
 }
-
-
-if (globalThis.window.customElements) {
-    window.customElements.define("text-markdown", Markdown)
-}
-

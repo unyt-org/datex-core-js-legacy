@@ -271,7 +271,11 @@ export class Endpoint extends Target {
 
 	public async getAlias(){
 		// resolve alias from Blockchain
-		return this.#alias = <string | undefined> (await import("../network/blockchain_adapter.ts")).Blockchain.resolveAlias(this);
+		try {
+			this.#alias = <string | undefined> await (await import("../network/blockchain_adapter.ts")).Blockchain.resolveAlias(this);
+		}
+		catch {}
+		return this.#alias
 	}
 
 	public async getCertifier(){
@@ -409,6 +413,11 @@ export class UnresolvedEndpointProperty {
 
 	toString() {
 		return `${this.parent}.${this.property}`;
+	}
+
+	// to make compatible with Endpoint.getAlias()
+	getAlias() {
+		return this.toString()
 	}
 }
 

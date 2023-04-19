@@ -33,7 +33,7 @@ export type TRACABLE_DATA = {
 
 export type ENDPOINT_REGISTRATION_DATA = TRACABLE_DATA & {
 	endpoint: Endpoint, 
-	keys: [ArrayBuffer, ArrayBuffer],
+	keys: [verify:ArrayBuffer, encrypt:ArrayBuffer],
 } 
 export type ENDPOINT_PROPERTY_DATA = {
 	key: unknown,
@@ -160,12 +160,12 @@ export class BlockchainActions {
 	/**
 	 * Register a new endpoint with corresponding public keys in the blockchain
 	 * @param endpoint the new endpoint
-	 * @param keys endpoint public keys (encrypt + verify signature)
+	 * @param keys endpoint public keys (verify + encrypt)
 	 * @param sign optional, let the current endpoint sign the block
 	 * @param trace entry id of a linked property assignment (for reverse alias resolution)
 	 * @returns 
 	 */
-	public static async registerEndpoint(endpoint: Endpoint, keys: [ArrayBuffer, ArrayBuffer], sign = false, trace?:property_entry_index) {
+	public static async registerEndpoint(endpoint: Endpoint, keys: [verify:ArrayBuffer, encrypt:ArrayBuffer], sign = false, trace?:property_entry_index) {
 		const entry = instance(BCEntry<BCEntryType.ENDPOINT_REGISTRATION>, {
 			type: BCEntryType.ENDPOINT_REGISTRATION,
 			data: {
@@ -264,9 +264,9 @@ export class BlockchainActions {
 	 * Create a new sub endpoint for the current endpoint
 	 * @param name name of the endpoint property (@example.*name*)
 	 * @param sub_endpoint the actual endpoint to which the sub endpoint resolves
-	 * @param keys public keys for the sub endpoint (encrypt + verify signature)
+	 * @param keys public keys for the sub endpoint (verify + encrypt)
 	 */
-	public static async registerSubEndpoint(name:string, sub_endpoint: Endpoint, keys: [ArrayBuffer, ArrayBuffer]) {
+	public static async registerSubEndpoint(name:string, sub_endpoint: Endpoint, keys: [verify:ArrayBuffer, encrypt:ArrayBuffer]) {
 		// store as property of current endpoint
 		const trace = (await this.storeEndpointProperty(name, sub_endpoint))!;
 

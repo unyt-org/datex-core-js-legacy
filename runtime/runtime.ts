@@ -29,7 +29,7 @@ Symbol.prototype.toJSON = function(){return globalThis.String(this)}
 
 /***** imports */
 import { Compiler, compiler_options, PrecompiledDXB, ProtocolDataTypesMap, DatexResponse} from "../compiler/compiler.ts"; // Compiler functions
-import { DecimalRef, IntegerRef, Pointer, PointerProperty, CompatValue, Value, TextRef, BooleanRef} from "./pointers.ts";
+import { DecimalRef, IntegerRef, Pointer, PointerProperty, CompatValue, Value, TextRef, BooleanRef, ObjectWithDatexValues, JSValueWith$} from "./pointers.ts";
 import { Endpoint, endpoints, LOCAL_ENDPOINT, Target, target_clause, WildcardTarget } from "../types/addressing.ts";
 import { RuntimePerformance } from "./performance_measure.ts";
 import { NetworkError, PermissionError, PointerError, RuntimeError, SecurityError, ValueError, Error as DatexError, CompilerError, TypeError, SyntaxError, AssertionError } from "../types/errors.ts";
@@ -212,7 +212,7 @@ export class Runtime {
 
     static mime_type_classes = new Map(Object.entries(this.MIME_TYPE_MAPPING).map(x=>[('class' in x[1] && typeof x[1].class == "function") ? x[1].class : x[1], x[0]])) 
 
-    public static ENV:{LANG:string, DATEX_VERSION:string}
+    public static ENV: JSValueWith$<{LANG:string, DATEX_VERSION:string, [key:string]:string}>
     public static VERSION = "0.0.0";
 
     public static PRECOMPILED_DXB: {[key:string]:PrecompiledDXB}
@@ -229,9 +229,12 @@ export class Runtime {
             always (
                 if (local_map.(lang)) (local_map.(lang))
                 else (
+                    'Could not translate to (lang)'
+                    /*
                     val text = local_map.'en';
                     val language = lang;
                     @example.translate (text, language);
+                    */
                 )
             )
             ` // used for persistent DATEX storage
@@ -259,9 +262,12 @@ export class Runtime {
                     always (
                         if (local_map.(lang)) (local_map.(lang).(key))
                         else (
+                            'Could not translate to (lang)'
+                            /*
                             val text = local_map.'en'.(key);
                             val language = lang;
                             @example.translate (text, language);
+                            */
                         )
                     )` : '' // used for persistent DATEX storage
             );
@@ -298,9 +304,12 @@ export class Runtime {
                 always (
                     if (local_map.(lang)) (local_map.(lang).(key))
                     else (
+                        'Could not translate to (lang)'
+                        /*
                         val text = local_map.'en'.(key);
                         val language = lang;
                         @example.translate (text, language);
+                        */
                     )
                 )`) // used for persistent DATEX storage
                 this.#not_loaded_local_strings.get(local_map)!.delete(key); // is now loaded
@@ -314,7 +323,7 @@ export class Runtime {
     }
 
     private static getTranslatedLocalString(text_en:string, lang:string) {
-        return "TODO translate";// <Promise<string>> datex `@example.translate (${text_en},${lang})`
+        return "Could not translate to " + lang;// <Promise<string>> datex `@example.translate (${text_en},${lang})`
     }
 
     // @ts-ignore
@@ -510,7 +519,14 @@ export class Runtime {
         let result:any;
 
         if (url.protocol == "https:" || url.protocol == "http:") {
-            const response = await fetch(url);
+            let response:Response;
+            // workaround: Failed to fetch: Fetch twice
+            try {
+                response = await fetch(url);
+            }
+            catch {
+                response = await fetch(url);
+            }
             if (!response.ok) {
                 throw new RuntimeError("Cannot get content of '"+url_string+"'");
             }
@@ -531,7 +547,7 @@ export class Runtime {
                 if (raw) result = [content, type];
                 else result = await Runtime.datexOut([content, [], {sign:false, encrypt:false, type:ProtocolDataType.DATA}]);
             }
-            else if (type?.startsWith("application/json")) {
+            else if (type?.startsWith("application/json") || type?.endsWith("+json")) {
                 if (raw) result = [await response.text(), type]; 
                 else result = await response.json()
             }
@@ -2794,7 +2810,6 @@ export class Runtime {
         // throws an error if no permission
         checkValueUpdatePermission(SCOPE:datex_scope, parent:any, key:string){
 
-            console.log("check",parent,key)
             // #write slot
             if (parent[DX_SLOTS]?.has(SLOT_WRITE)) {
                 const filter = parent[DX_SLOTS].get(SLOT_WRITE);
@@ -3989,7 +4004,7 @@ export class Runtime {
                     // not existing pointer or no access to this pointer
                     // TODO check access permission
                     // || (pointer.allowed_access && !pointer.allowed_access.test(SCOPE.sender))
-                    if (!pointer.val) throw new PointerError("Pointer does not exist", SCOPE)
+                    if (!pointer.value_initialized) throw new PointerError("Pointer does not exist", SCOPE)
                     // valid, add subscriber
                     else {
                         pointer.addSubscriber(SCOPE.sender);
@@ -4052,7 +4067,7 @@ export class Runtime {
                     logger.success(SCOPE.sender + " unsubscribed from " + pointer.idString());
 
                     // not existing pointer or no access to this pointer
-                    if (!pointer.val) throw new PointerError("Pointer does not exist", SCOPE)
+                    if (!pointer.value_initialized) throw new PointerError("Pointer does not exist", SCOPE)
                     // valid, remove subscriber
                     else {
                         pointer.removeSubscriber(SCOPE.sender);
@@ -6463,7 +6478,11 @@ if (!Runtime.ENV) {
 // add environment variables to #env (might override existing env settings (LANG))
 if (globalThis.Deno) {
     for (const [key, val] of Object.entries(Deno.env.toObject())) {
-        if (key == "LANG") Runtime.ENV[key] = val.split("-")[0]?.split("_")[0];
+        if (key == "LANG") {
+            let lang = val.split("-")[0]?.split("_")[0];
+            if (lang == "C" || lang?.startsWith("C.")) lang = "en";
+            Runtime.ENV[key] = lang;
+        }
         else Runtime.ENV[key] = val;
     }
 }

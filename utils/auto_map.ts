@@ -12,14 +12,6 @@ export {};
 // TODO
 declare global {
     interface Map<K, V> {
-        clear(): void;
-        delete(key: K): boolean;
-        forEach(callbackfn: (value: V, key: K, map: Map<K, V>) => void, thisArg?: any): void;
-        get(key: K): V | undefined;
-        has(key: K): boolean;
-        set(key: K, value: V): this;
-        readonly size: number;
-
         setAutoDefault(default_class_or_creator_function_or_value:V|any_class<V>|(()=>V)):Map<K, V>;
         getAuto(key: K): V;
     }

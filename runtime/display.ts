@@ -2,18 +2,20 @@
 /**
  * used to display error and reset page to user
  */
-
-// @ts-ignore
-globalThis.errorReset = ()=> {
+const errorReset = async ()=> {
 	try {
+		// TODO: remove localStorage.clear here?
+		localStorage.clear();
 		// @ts-ignore
-		if (globalThis.reset) reset()
+		if (globalThis.reset) await reset()
 		else throw ""
 	}
 	catch {
 		localStorage.clear(); // last resort, clear localStorage - TODO: also clear indexeddb?
 	}
 }
+// @ts-ignore
+globalThis.errorReset = errorReset
 
 function setup() {
 	// @ts-ignore
@@ -53,8 +55,10 @@ export function displayFatalError(code:string, reset_btn = true) {
 	else {
 		console.log `
 FATAL ERROR: ${code}
-Cannot restore the current state. Please delete all caches (.datex-cache) and restart.
+Cannot restore the current state. Deleting all caches (.datex-cache).
 		`
+		// @ts-ignore
+		errorReset()
 	}
 }
 
@@ -68,13 +72,23 @@ export function disableInitScreen(){
 	show_init_screen = false;
 }
 
+let keepScreen = false;
+let showing_init_screen = false;
+
 export function displayInit(message?:string) {
+	if (showing_init_screen) return;
 	if (!show_init_screen) return;
 	// @ts-ignore
 	if (!globalThis.Deno && globalThis.window && globalThis.document) {
 		// @ts-ignore
 		const document = globalThis.document;
+		// already content there, don't show init page
+		if (document.body.children.length) {
+			keepScreen = true;
+			return; 
+		}
 		setup();
+		showing_init_screen = true;
 		document.head.innerHTML += `<style>
 		/**
 		 * ==============================================
@@ -136,10 +150,11 @@ export function displayInit(message?:string) {
 }
 
 export function displayClear() {
-	if (!show_init_screen) return;
+	if (!show_init_screen || keepScreen) return;
 	// @ts-ignore
 	if (!globalThis.Deno && globalThis.window && globalThis.document) {
 		// @ts-ignore
+		showing_init_screen = false;
 		globalThis.document.body.innerHTML = "";
 	}
 }

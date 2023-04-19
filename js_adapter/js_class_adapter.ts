@@ -35,7 +35,7 @@ const CONSTRUCT_OPTIONS = Symbol("CONSTRUCT_OPTIONS");
 
 // create metadata symbol
 if (!Symbol['metadata']) Symbol['metadata'] = Symbol('metadata');
-export const METADATA:symbol = Symbol['metadata'];
+export const METADATA:unique symbol = Symbol['metadata'];
 
 /**
  * List of decorators

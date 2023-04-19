@@ -621,16 +621,43 @@ export class Storage {
 
     public static async getItemKeys(location?:Storage.Location){
 
-        // TODO: return which keys, if location undefined?
-        if (location == undefined || location == Storage.Location.INDEXED_DB) return await datex_item_storage.keys();
+        const indexedDBKeys = (location == undefined || location == Storage.Location.INDEXED_DB) ? await datex_item_storage.keys() : null;
 
-        if (location == undefined || Storage.Location.FILESYSTEM_OR_LOCALSTORAGE) { 
-            const keys = []
-            for (const key of Object.keys(localStorage)) {
-                if (key.startsWith(this.item_prefix)) keys.push(key.replace(this.item_prefix,""))
+        return (function*(){
+            const used = new Set<string>();
+        
+            // INDEXED_DB
+            if (location == undefined || location == Storage.Location.INDEXED_DB) {
+                for (const key of indexedDBKeys!) {
+                    if (used.has(key)) continue;
+                    used.add(key);
+                    yield key;
+                } 
             }
-            return keys;
-        }
+    
+            // FILESYSTEM_OR_LOCALSTORAGE
+            if (location == undefined || location == Storage.Location.FILESYSTEM_OR_LOCALSTORAGE) {
+                for (const _key of Object.keys(localStorage)) {
+                    if (_key.startsWith(Storage.item_prefix)) {
+                        const key = _key.replace(Storage.item_prefix,"");
+                        if (used.has(key)) continue;
+                        used.add(key);
+                        yield key;
+                    }
+                }
+            }
+        
+        })()
+    }
+
+
+    public static async getItemKeysStartingWith(prefix:string, location?:Storage.Location) {
+        const keyIterator = await Storage.getItemKeys(location);
+        return (function*(){
+            for (const key of keyIterator) {
+                if (key.startsWith(prefix)) yield key;
+            }
+        })()
     }
 
     public static async getPointerKeys(location?:Storage.Location){
@@ -638,7 +665,7 @@ export class Storage {
         // TODO: return which keys, if location undefined?
         if (location == undefined || location == Storage.Location.INDEXED_DB) return await datex_pointer_storage.keys();
 
-        if (location == undefined || location == Storage.Location.FILESYSTEM_OR_LOCALSTORAGE) { 
+        if (location == Storage.Location.FILESYSTEM_OR_LOCALSTORAGE) { 
             const keys = []
             for (const key of Object.keys(localStorage)) {
                 if (key.startsWith(this.pointer_prefix)) keys.push(key.replace(this.pointer_prefix,""))
@@ -798,7 +825,8 @@ export class Storage {
         await Storage.clearAll();
         Storage.allowExitWithoutSave();
         if (globalThis.window) window.location.reload();
-        else logger.error("Could not reload in non-browser context")
+        else if (globalThis.Deno) Deno.exit(1);
+        else logger.error("Could not reload in non-browser or Deno context")
     }
 
     // load saved state

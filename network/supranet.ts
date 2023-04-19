@@ -69,7 +69,7 @@ export class Supranet {
     public static async connect(endpoint?:Endpoint|UnresolvedEndpointProperty, local_cache = true, sign_keys?:[ArrayBuffer|CryptoKey,ArrayBuffer|CryptoKey], enc_keys?:[ArrayBuffer|CryptoKey,ArrayBuffer|CryptoKey], via_node?:Endpoint) {
 
         if (this.#connected && (!endpoint || endpoint === Runtime.endpoint)) {
-            logger.info("already connected as", Runtime.endpoint);
+            // logger.info("already connected as", Runtime.endpoint);
             return true;
         }
 

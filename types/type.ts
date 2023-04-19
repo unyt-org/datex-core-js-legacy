@@ -1,4 +1,4 @@
-import { DX_PERMISSIONS, DX_TEMPLATE, DX_TYPE, EXTENDED_OBJECTS, INVALID, NOT_EXISTING, VOID } from "../runtime/constants.ts";
+import { DX_PERMISSIONS, DX_TEMPLATE, DX_TYPE, EXTENDED_OBJECTS, INIT_PROPS, INVALID, NOT_EXISTING, VOID } from "../runtime/constants.ts";
 import { Runtime, TypedValue } from "../runtime/runtime.ts";
 import { JSInterface, js_interface_configuration } from "../runtime/js_interface.ts";
 import { Endpoint, Target } from "./addressing.ts";
@@ -19,7 +19,8 @@ import { Time } from "./time.ts";
 import type { Task } from "./task.ts";
 import { Assertion } from "./assertion.ts";
 import type { Iterator } from "./iterator.ts";
-import {StorageMap} from "./storage_map.ts"
+import {StorageMap, StorageWeakMap} from "./storage_map.ts"
+import {StorageSet} from "./storage_set.ts"
 
 
 // types with '&|~' combinations
@@ -251,24 +252,39 @@ export class Type<T = any> {
             is_constructor = false; // is replicated object, not created with constructor arguments
         }
 
-        const instance = this.newJSInstance(is_constructor, args);
+        const propertyInitializer = this.getPropertyInitializer(value);
+        const instance = this.newJSInstance(is_constructor, args, propertyInitializer);
 
-        // initialize properties
-        if (!is_constructor) this.initProperties(instance, value);
+        // initialize properties, if not [INIT_PROPS] yet called inside constructor
+        if (!is_constructor) propertyInitializer[INIT_PROPS](instance);
         
         // call DATEX construct methods and create pointer
         return this.construct(instance, args, is_constructor, make_pointer);
     }
 
-    public newJSInstance(is_constructor = true, args?:any[]) {
+    /** returns an object with a [INIT_PROPS] function that can be passed to newJSInstance() or called manually */
+    public getPropertyInitializer(value:any) {
+        const initialized = {i:false};
+        // property initializer - sets existing property for pointer object (is passed as first constructor argument when reconstructing)
+        return Object.freeze({
+            [INIT_PROPS]: (instance:any)=>{
+                if (initialized.i) return; 
+                initialized.i=true; 
+                this.initProperties(instance, value)
+            }
+        })
+    }
+
+    public newJSInstance(is_constructor = true, args:any[]|undefined, propertyInitializer:{[INIT_PROPS]:(instance:any)=>void}) {
         // create new instance - TODO 'this' as last constructor argument still required?
         Type.#current_constructor = this.interface_config?.class;
-        const instance = <T> (this.interface_config?.class ? Reflect.construct(Type.#current_constructor, is_constructor?[...args/*,this*/]:[]) : new TypedValue(this));
+        const instance = <T> (this.interface_config?.class ? Reflect.construct(Type.#current_constructor, is_constructor?[...args]:[propertyInitializer]) : new TypedValue(this));
         Type.#current_constructor = null;
         return instance;
     }
 
     public initProperties(instance:any, value:any) {
+        if (!value) return;
         // initialize with template
         if (this.#template) this.createFromTemplate(value, instance)
         // just copy all properties if no template found
@@ -864,6 +880,8 @@ export class Type<T = any> {
         Iterator: Type.get<Iterator<any>>("std:Iterator"),
 
         StorageMap: Type.get<StorageMap<unknown, unknown>>("std:StorageMap"),
+        StorageWeakMap: Type.get<StorageWeakMap<unknown, unknown>>("std:StorageWeakMap"),
+        StorageSet: Type.get<StorageSet<unknown, unknown>>("std:StorageSet"),
 
         Error: Type.get<Error>("std:Error"),
         SyntaxError: Type.get("std:SyntaxError"),
@@ -935,6 +953,20 @@ Type.std.Assertion.setJSInterface({
 
 Type.std.StorageMap.setJSInterface({
     class: StorageMap,
+    is_normal_object: true,
+    proxify_children: true,
+    visible_children: new Set(),
+})
+
+Type.std.StorageWeakMap.setJSInterface({
+    class: StorageWeakMap,
+    is_normal_object: true,
+    proxify_children: true,
+    visible_children: new Set(),
+})
+
+Type.std.StorageSet.setJSInterface({
+    class: StorageSet,
     is_normal_object: true,
     proxify_children: true,
     visible_children: new Set(),

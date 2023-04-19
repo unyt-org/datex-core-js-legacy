@@ -12,7 +12,7 @@
 import type { Runtime } from "../runtime/runtime.ts";
 import type { Type } from "../types/type.ts";
 import type { Pointer } from "../runtime/pointers.ts";
-import { enableFullSupport, enableMinimal } from "./ansi_compat.ts";
+import { console as console_ansi } from "./ansi_compat.ts";
 
 let _Runtime:typeof Runtime; // to circular imports logger - Runtime
 let _Type:typeof Type; // to circular imports logger - Type
@@ -28,7 +28,9 @@ const client_type = "Deno" in globalThis ? 'deno' : 'browser';
 
 
 
-
+/**
+ * Predefined unyt specific color scheme.
+ */
 export const UNYT_COLORS = {
     RED: [234,43,81],
     GREEN: [30,218,109],
@@ -39,8 +41,11 @@ export const UNYT_COLORS = {
     BLACK: [5,5,5],
     WHITE: [250,250,250],
     GREY: [150,150,150]
-}
+} as const
 
+/**
+ * Common ANSI esacpe sequences for colors and text style
+ */
 export const ESCAPE_SEQUENCES = {
 
     CLEAR:      "\x1b[2J", // clear screen
@@ -99,7 +104,7 @@ export const ESCAPE_SEQUENCES = {
 
     UNYT_POINTER:  "\x1b[38;2;65;102;238m",
 
-}
+} as const
 
 
 
@@ -133,10 +138,10 @@ try {
 
 function console_log(log_data:any[], log_level:LOG_LEVEL=LOG_LEVEL.DEFAULT) {
     switch (log_level) {
-        case LOG_LEVEL.ERROR: console.error(...log_data);break;
-        case LOG_LEVEL.WARNING: console.warn(...log_data);break;
-        case LOG_LEVEL.VERBOSE: console.debug(...log_data);break;
-        default: console.log(...log_data);break;
+        case LOG_LEVEL.ERROR: console_ansi.error(...log_data);break;
+        case LOG_LEVEL.WARNING: console_ansi.warn(...log_data);break;
+        case LOG_LEVEL.VERBOSE: console_ansi.debug(...log_data);break;
+        default: console_ansi.log(...log_data);break;
     }
 }
 
@@ -454,7 +459,7 @@ export class Logger {
         // start tag
         if (esc_tag) {
             tag += 
-                ESCAPE_SEQUENCES.INVERSE+ESCAPE_SEQUENCES.UNDERLINE + Logger.getEscapedBackgroundColor(this.getFormattingColor(COLOR.BLACK)) +
+                ESCAPE_SEQUENCES.INVERSE+ESCAPE_SEQUENCES.UNDERLINE + Logger.getEscapedBackgroundColor(this.getFormattingColor(color==COLOR.BLACK?COLOR.WHITE:COLOR.BLACK)) +
                 color_esc +
                 (this.formatting == LOG_FORMATTING.COLOR_RGB ? ESCAPE_SEQUENCES.BOLD : '')
         }
@@ -908,8 +913,6 @@ Logger.registerLogFormatter(new TextFormatter);
 
 // @ts-ignore set global logger for dev console
 globalThis.logger = new Logger("main");
-
-enableFullSupport();
 
 
 // set log level (browser default true, deno default false)

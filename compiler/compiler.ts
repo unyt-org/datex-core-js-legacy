@@ -2157,6 +2157,12 @@ export class Compiler {
 
         addPointer: (p:Pointer, SCOPE:compiler_scope|extract_var_scope, action_type:ACTION_TYPE = ACTION_TYPE.GET, action_specifier?:BinaryCode):Promise<void>|void => {
 
+            // ignore value - insert void
+            if (p.value_initialized && p.val?.[DX_IGNORE]) {
+                Compiler.builder.addVoid(SCOPE);
+                return;
+            }
+
             // pre extract per default
             if ((<compiler_scope>SCOPE).extract_pointers && action_type == ACTION_TYPE.GET) {
                 Compiler.builder.insertExtractedVariable(<compiler_scope>SCOPE, BinaryCode.POINTER, buffer2hex(p.id_buffer));
@@ -2627,9 +2633,14 @@ export class Compiler {
                 // try to proxify serialized value again to pointer (proxify exceptions!) 
                 if (!no_proxify) value = Pointer.pointerifyValue(value);
             }
+
+            // ignore value - insert void
+            if (value?.[DX_IGNORE]) {
+                Compiler.builder.addVoid(SCOPE);
+            }
             
             // only fundamentals here:
-            if (value instanceof Quantity)                   Compiler.builder.addQuantity(value, SCOPE); // UNIT
+            else if (value instanceof Quantity)              Compiler.builder.addQuantity(value, SCOPE); // UNIT
             else if (value===VOID)                           Compiler.builder.addVoid(SCOPE); // Datex.VOID
             else if (value===null)                           Compiler.builder.addNull(SCOPE); // NULL
             else if (typeof value == 'bigint')               Compiler.builder.addInt(value, SCOPE); // INT
