@@ -492,7 +492,7 @@ export type RestrictSameType<T extends CompatValue<unknown>, _C = CollapsedValue
     never;
 
 // transform functions
-export type TransformFunctionInputs = readonly [CompatValue<unknown>]| readonly CompatValue<unknown>[];
+export type TransformFunctionInputs = readonly any[];
 export type TransformFunction<Values extends TransformFunctionInputs, ReturnType> = (...values:CollapsedDatexArray<Values>)=>RestrictSameType<CompatValue<ReturnType>>;
 export type AsyncTransformFunction<Values extends TransformFunctionInputs, ReturnType> = (...values:CollapsedDatexArray<Values>)=>Promise<RestrictSameType<CompatValue<ReturnType>>>|RestrictSameType<CompatValue<ReturnType>>;
 
@@ -618,7 +618,6 @@ export class UpdateScheduler {
 }
 
 export type pointer_type = number;
-
 
 
 /** Wrapper class for all pointer values ($xxxxxxxx) */
@@ -884,7 +883,7 @@ export class Pointer<T = any> extends Value<T> {
             if (stored!=NOT_EXISTING) {
                 // if the value is a pointer with a tranform scope, copy the transform, not the value (TODO still just a workaround to preserve transforms in storage, maybe better solution?)
                 if (stored instanceof Pointer && stored.transform_scope) {
-                    await pointer.transformAsync(stored.transform_scope.internal_vars, stored.transform_scope);
+                    await pointer.handleTransformAsync(stored.transform_scope.internal_vars, stored.transform_scope);
                 }
                 // set normal value
                 else pointer = pointer.setValue(stored);
@@ -1049,14 +1048,14 @@ export class Pointer<T = any> extends Value<T> {
     
 
     // create a new pointer with a transform value
-    static createTransform<T,V extends TransformFunctionInputs>(observe_values:V, transform:TransformFunction<V,T>, persistent_datex_transform?:string):Pointer<T> {
-        return Pointer.create(undefined, NOT_EXISTING).transform(observe_values, transform, persistent_datex_transform);
+    static createTransform<const T, const V extends TransformFunctionInputs>(observe_values:V, transform:TransformFunction<V,T>, persistent_datex_transform?:string):Pointer<T> {
+        return Pointer.create(undefined, NOT_EXISTING).handleTransform(observe_values, transform, persistent_datex_transform);
     }
 
-    static createTransformAsync<T,V extends TransformFunctionInputs>(observe_values:V, transform:AsyncTransformFunction<V,T>, persistent_datex_transform?:string):Promise<Pointer<T>>
-    static createTransformAsync<T,V extends TransformFunctionInputs>(observe_values:V, transform:Scope<CompatValue<T>>):Promise<Pointer<T>>
-    static createTransformAsync<T,V extends TransformFunctionInputs>(observe_values:V, transform:AsyncTransformFunction<V,T>|Scope<CompatValue<T>>, persistent_datex_transform?:string):Promise<Pointer<T>>{
-        return Pointer.create(undefined, NOT_EXISTING).transformAsync(observe_values, transform, persistent_datex_transform);
+    static createTransformAsync<const T,V extends TransformFunctionInputs>(observe_values:V, transform:AsyncTransformFunction<V,T>, persistent_datex_transform?:string):Promise<Pointer<T>>
+    static createTransformAsync<const T,V extends TransformFunctionInputs>(observe_values:V, transform:Scope<CompatValue<T>>):Promise<Pointer<T>>
+    static createTransformAsync<const T,V extends TransformFunctionInputs>(observe_values:V, transform:AsyncTransformFunction<V,T>|Scope<CompatValue<T>>, persistent_datex_transform?:string):Promise<Pointer<T>>{
+        return Pointer.create(undefined, NOT_EXISTING).handleTransformAsync(observe_values, transform, persistent_datex_transform);
     }
 
     // only creates the same pointer once => unique pointers
@@ -1367,6 +1366,22 @@ export class Pointer<T = any> extends Value<T> {
         // add to globalThis
         Object.defineProperty(globalThis, Runtime.formatVariableName(label, '$'), {get:()=>this.val, set:(value)=>this.val=value, configurable:true})
     }
+
+
+    /**
+     * create a new transformed pointer from an existing pointer
+     */
+    public transform<R>(transform:TransformFunction<[this],R>) {
+        return Value.collapseValue(Pointer.createTransform([this], transform));
+    }
+
+    /**
+     * create a new transformed pointer from an existing pointer (Async transform function)
+     */
+    public transformAsync<R>(transform:AsyncTransformFunction<[this],R>) {
+        return Value.collapseValue(Pointer.createTransformAsync([this], transform));
+    }
+
 
     /**
     * Subscribe for external pointer updates at remote endpoint -> might return a different pointer if current pointer was placeholder
@@ -1726,7 +1741,7 @@ export class Pointer<T = any> extends Value<T> {
      * @param transform DATEX Scope or JS function
      * @param persistent_datex_transform  JUST A WORKAROUND - if transform is a JS function, a DATEX Script can be provided to be stored as a transform method
      */
-    protected async transformAsync<R,V extends TransformFunctionInputs>(observe_values:V, transform:AsyncTransformFunction<V,T&R>|Scope<CompatValue<T&R>>, persistent_datex_transform?:string): Promise<Pointer<R>> {     
+    protected async handleTransformAsync<R,V extends TransformFunctionInputs>(observe_values:V, transform:AsyncTransformFunction<V,T&R>|Scope<CompatValue<T&R>>, persistent_datex_transform?:string): Promise<Pointer<R>> {     
         
         const transformMethod = transform instanceof Function ? transform : ()=>transform.execute(Runtime.endpoint);
 
@@ -1747,7 +1762,7 @@ export class Pointer<T = any> extends Value<T> {
         return <Pointer<T&R>>this;
     }
 
-    protected transform<R,V extends TransformFunctionInputs>(observe_values:V, transform:TransformFunction<V,T&R>, persistent_datex_transform?:string): Pointer<R> {     
+    protected handleTransform<R,V extends TransformFunctionInputs>(observe_values:V, transform:TransformFunction<V,T&R>, persistent_datex_transform?:string): Pointer<R> {     
         const initialValue = observe_values.length==1 ? transform(...<CollapsedDatexObjectWithRequiredProperties<V>>[Value.collapseValue(observe_values[0], true, true)]) : transform(...<CollapsedDatexObjectWithRequiredProperties<V>>observe_values.map(v=>Value.collapseValue(v, true, true))); // transform current value
         if (initialValue === VOID) throw new ValueError("initial tranform value cannot be void");
         this.setVal(initialValue, true, true);
@@ -2780,6 +2795,13 @@ export class Pointer<T = any> extends Value<T> {
 
 }
 
+
+
+(()=>{
+    const x = $$ (0);
+    const y = Pointer.createTransform([x], (...args)=>[args[0],2]);
+
+})
 
 export namespace Value {
     export enum UPDATE_TYPE {

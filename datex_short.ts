@@ -60,8 +60,8 @@ export async function get<T=unknown>(dx:string|URL|Endpoint, assert_type?:Type<T
 // default endpoint: DatexRuntime.endpoint
 // sign per default if not local endpoint
 // do not encrypt per default
-function _datex(dx:TemplateStringsArray, ...args:any[]):Promise<unknown>
-function _datex(dx:string|PrecompiledDXB, data?:unknown[], to?:Target|target_clause|endpoint_name, sign?:boolean, encrypt?:boolean, context_location?:URL|string):Promise<unknown>
+function _datex<T=unknown>(dx:TemplateStringsArray, ...args:any[]):Promise<T>
+function _datex<T=unknown>(dx:string|PrecompiledDXB, data?:unknown[], to?:Target|target_clause|endpoint_name, sign?:boolean, encrypt?:boolean, context_location?:URL|string):Promise<T>
 function _datex(dx:string|TemplateStringsArray|PrecompiledDXB, data?:unknown[], to?:Target|target_clause|endpoint_name, sign?:boolean, encrypt?:boolean, context_location?:URL|string) {
 
     // auto retrieve location from stack
@@ -245,7 +245,7 @@ export function text(value:CompatValue<string>|TemplateStringsArray = "", ...var
     if (value instanceof Value) value = value.val; // collapse
     // template transform
     if (value instanceof Array) {
-        return <Promise<TextRef<string>>>_datex(`always '${value.raw.map(s=>s.replace(/\(/g, '\\(').replace(/\'/g, "\\'")).join("(?)")}'`, vars)
+        return <Promise<TextRef<string>>>_datex(`always '${value.raw.map(s=>s.replace(/\(/g, '\\(').replace(/\'/g, "\\'")).join(INSERT_MARK)}'`, vars)
     }
     else return Pointer.create(undefined, String(value)) // adds pointer or returns existing pointer
 }
@@ -262,7 +262,7 @@ export function md(value:CompatValue<string>|TemplateStringsArray = "", ...vars:
     // transform string reference
     if (value instanceof Value) return <Promise<Markdown>> _datex `always <text/markdown> ${value}`
     // template transform
-    else if (value instanceof Array) return <Promise<Markdown>>_datex(`always <text/markdown>'${value.raw.map(s=>s.replace(/\(/g, '\\(').replace(/\'/g, "\\'")).join("(?)")}'`, vars)
+    else if (value instanceof Array) return <Promise<Markdown>>_datex(`always <text/markdown>'${value.raw.map(s=>s.replace(/\(/g, '\\(').replace(/\'/g, "\\'")).join(INSERT_MARK)}'`, vars)
     // pointer from string
     else return Pointer.create(undefined, new Markdown(value)).val // adds pointer or returns existing pointer
 }

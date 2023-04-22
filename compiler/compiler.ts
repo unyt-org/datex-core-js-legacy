@@ -280,6 +280,8 @@ export type compiler_options = {
 
 const utf8_decoder = new TextDecoder();
 
+export const INSERT_MARK = '\u0001\udddd\uaaaa\ueeee\u0001'
+
 export class Compiler {
 
     static readonly VERSION_NUMBER = 1;
@@ -5323,6 +5325,11 @@ export class Compiler {
         if (datex === '?' && !add_header) {
             return Compiler.compileValue(data[0], options);
         }
+
+        // replace insert marks with explicitly inserted (?) - also works inside strings
+        if (typeof datex == "string") datex = datex.replaceAll(INSERT_MARK, '(?)');
+        // @ts-ignore
+        else if (typeof datex?.datex == "string") datex.datex = datex.datex.replaceAll(INSERT_MARK, '(?)');
 
         const SCOPE = this.createCompilerScope(datex, data, options, add_header, is_child_scope_block, extract_pointers, save_precompiled, max_block_size, _code_block_type, _current_data_index);
 
