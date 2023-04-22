@@ -25,7 +25,7 @@ function _callWithMetaData<args extends any[], returns>(key:number, fn:(...args:
     const encoded = '__meta__'+key+'__';
 	const _args = <args> args ?? [];
 	return is_safari ? 
-		new globalThis.Function('f', 'c', 'a', 'return (function '+encoded+'(){return c ? f.apply(c, a) : f(a)})()')(fn, ctx, args) : 
+		new globalThis.Function('f', 'c', 'a', 'return (function '+encoded+'(){return c ? f.apply(c, a) : f(...a)})()')(fn, ctx, args) : 
 		({[encoded]:()=>ctx ? fn.apply(ctx, _args) : fn(..._args)})[encoded]()
 }
 
@@ -37,9 +37,22 @@ function getPartsFromStack(stack:string|undefined) {
 		.replace(/^Error\n/, '') // remove chrome Error line
 		.replace(/(\n.*@\[native code\])+$/, '') // remove safari [native code] lines at the end
 		.replace(/\n *at ModuleJob\.run \(node\:internal\/(.|\n)*$/, '') // remove nodejs internal stack
+		.replace(/\n(?: |.)* \(ext:core\/.*$/, '') // remove deno internal stack
+		.replace(/\n *at DecorateConstructor \(.*$/m, '') // replace reflect decorators
+		.replace(/\n *at Reflect.decorate \(.*$/m, '') // replace reflect decorators
+		.replace(/\n *at __decorate \(.*$/m, '') // replace reflect decorators
 		.split('\n');
 }
 
+function getCallerLineFromParts(parts?:string[]|null) {
+	const safari_double_call = is_safari && parts?.[1]?.startsWith("@"); // safari sometimes insert double call to stack, with anonymous name (starts with @)
+	const line = parts?.[Math.min(parts.length-1, 2+(safari_double_call?1:0))] // get 2nd item (ignore this function and the function that called it, sometimes +1 for safari) - if stack too small, get last item
+	if (!line) return null;
+	if (is_safari && line.endsWith("@")) {
+		console.error("caller metadata: call order not supported in safari: " + line)
+	}
+	return line.match(caller_file)?.[1]
+}
 
 
 /**
@@ -47,10 +60,7 @@ function getPartsFromStack(stack:string|undefined) {
  */
 export function getCallerFile(error?: Error) {
 	const parts = getPartsFromStack((error??new Error()).stack);
-	return parts
-		?.[Math.min(parts.length-1, 2)]
-		?.match(caller_file)
-		?.[1] ?? globalThis.location?.href
+	return getCallerLineFromParts(parts) ?? globalThis.location?.href
 }
 
 /**
@@ -58,11 +68,7 @@ export function getCallerFile(error?: Error) {
  */
 export function getCallerDir(error?: Error) {
 	const parts = getPartsFromStack((error??new Error()).stack);
-	return parts
-		?.[Math.min(parts.length-1, 2)]
-		?.match(caller_file)
-		?.[1]
-		?.replace(/[^\/\\]*$/, '') ?? globalThis.location?.href
+	return getCallerLineFromParts(parts)?.replace(/[^\/\\]*$/, '') ?? globalThis.location?.href
 }
 
 /**

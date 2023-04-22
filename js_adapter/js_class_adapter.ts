@@ -35,7 +35,7 @@ const CONSTRUCT_OPTIONS = Symbol("CONSTRUCT_OPTIONS");
 
 // create metadata symbol
 if (!Symbol['metadata']) Symbol['metadata'] = Symbol('metadata');
-export const METADATA:symbol = Symbol['metadata'];
+export const METADATA:unique symbol = Symbol['metadata'];
 
 /**
  * List of decorators
@@ -268,6 +268,7 @@ export class Decorators {
 
     /** @timeout(msecs?:number): DATEX request timeout */
     static timeout(value:any, name:context_name, kind:context_kind, is_static:boolean, is_private:boolean, setMetadata:context_meta_setter, getMetadata:context_meta_getter, params:[number?] = []) {
+        if (params[0] && params[0] > 2**31) throw new Error("@timeout: timeout too big (max value is 2^31), use Infinity if you want to disable the timeout")
         setMetadata(Decorators.TIMEOUT, params[0])
     }
 

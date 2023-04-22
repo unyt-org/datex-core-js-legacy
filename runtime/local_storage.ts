@@ -94,3 +94,4 @@ if (client_type !== "deno" && !globalThis.localStorage) {
 }
 
 export const localStorage = client_type == "deno" ? new LocalStorage() : globalThis.localStorage;
+if (client_type == "deno") globalThis.localStorage = localStorage;

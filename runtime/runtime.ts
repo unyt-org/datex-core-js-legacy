@@ -29,7 +29,7 @@ Symbol.prototype.toJSON = function(){return globalThis.String(this)}
 
 /***** imports */
 import { Compiler, compiler_options, PrecompiledDXB, ProtocolDataTypesMap, DatexResponse} from "../compiler/compiler.ts"; // Compiler functions
-import { DecimalRef, IntegerRef, Pointer, PointerProperty, CompatValue, Value, TextRef, BooleanRef} from "./pointers.ts";
+import { DecimalRef, IntegerRef, Pointer, PointerProperty, CompatValue, Value, TextRef, BooleanRef, ObjectWithDatexValues, JSValueWith$} from "./pointers.ts";
 import { Endpoint, endpoints, LOCAL_ENDPOINT, Target, target_clause, WildcardTarget } from "../types/addressing.ts";
 import { RuntimePerformance } from "./performance_measure.ts";
 import { NetworkError, PermissionError, PointerError, RuntimeError, SecurityError, ValueError, Error as DatexError, CompilerError, TypeError, SyntaxError, AssertionError } from "../types/errors.ts";
@@ -67,6 +67,7 @@ import {decompile as wasm_decompile} from "../wasm/adapter/pkg/datex_wasm.js";
 import "../types/native_types.ts"; // load prototype overrides
 import { Time } from "../types/time.ts";
 import { initPublicStaticClasses } from "../js_adapter/js_class_adapter.ts";
+import { getCallerInfo } from "../utils/caller_metadata.ts";
 
 const mime = globalThis.Deno ? (await import("https://deno.land/x/mimetypes@v1.0.0/mod.ts")).mime : null;
 
@@ -211,7 +212,7 @@ export class Runtime {
 
     static mime_type_classes = new Map(Object.entries(this.MIME_TYPE_MAPPING).map(x=>[('class' in x[1] && typeof x[1].class == "function") ? x[1].class : x[1], x[0]])) 
 
-    public static ENV:{LANG:string, DATEX_VERSION:string}
+    public static ENV: JSValueWith$<{LANG:string, DATEX_VERSION:string, [key:string]:string}>
     public static VERSION = "0.0.0";
 
     public static PRECOMPILED_DXB: {[key:string]:PrecompiledDXB}
@@ -228,9 +229,12 @@ export class Runtime {
             always (
                 if (local_map.(lang)) (local_map.(lang))
                 else (
+                    'Could not translate to (lang)'
+                    /*
                     val text = local_map.'en';
                     val language = lang;
                     @example.translate (text, language);
+                    */
                 )
             )
             ` // used for persistent DATEX storage
@@ -258,9 +262,12 @@ export class Runtime {
                     always (
                         if (local_map.(lang)) (local_map.(lang).(key))
                         else (
+                            'Could not translate to (lang)'
+                            /*
                             val text = local_map.'en'.(key);
                             val language = lang;
                             @example.translate (text, language);
+                            */
                         )
                     )` : '' // used for persistent DATEX storage
             );
@@ -297,9 +304,12 @@ export class Runtime {
                 always (
                     if (local_map.(lang)) (local_map.(lang).(key))
                     else (
+                        'Could not translate to (lang)'
+                        /*
                         val text = local_map.'en'.(key);
                         val language = lang;
                         @example.translate (text, language);
+                        */
                     )
                 )`) // used for persistent DATEX storage
                 this.#not_loaded_local_strings.get(local_map)!.delete(key); // is now loaded
@@ -313,7 +323,7 @@ export class Runtime {
     }
 
     private static getTranslatedLocalString(text_en:string, lang:string) {
-        return "TODO";// <Promise<string>> datex `@example.translate (${text_en},${lang})`
+        return "Could not translate to " + lang;// <Promise<string>> datex `@example.translate (${text_en},${lang})`
     }
 
     // @ts-ignore
@@ -509,7 +519,14 @@ export class Runtime {
         let result:any;
 
         if (url.protocol == "https:" || url.protocol == "http:") {
-            const response = await fetch(url);
+            let response:Response;
+            // workaround: Failed to fetch: Fetch twice
+            try {
+                response = await fetch(url);
+            }
+            catch {
+                response = await fetch(url);
+            }
             if (!response.ok) {
                 throw new RuntimeError("Cannot get content of '"+url_string+"'");
             }
@@ -518,19 +535,19 @@ export class Runtime {
             if (type == "application/datex" || type == "text/dxb" || url_string.endsWith(".dxb")) {
                 const content = await response.arrayBuffer();
                 if (raw) result = [content, type];
-                else result = this.normalizeDatexExports(await this.executeDXBLocally(content, url));
+                else result = await this.executeDXBLocally(content, url);
             }
             else if (type?.startsWith("text/datex") || url_string.endsWith(".dx")) {
                 const content = await response.text()
                 if (raw) result = [content, type];
-                else result = this.normalizeDatexExports(await this.executeDatexLocally(content, undefined, undefined, url));
+                else result = await this.executeDatexLocally(content, undefined, undefined, url);
             }
             else if (type?.startsWith("application/json5") || url_string.endsWith(".json5")) {
                 const content = await response.text();
                 if (raw) result = [content, type];
                 else result = await Runtime.datexOut([content, [], {sign:false, encrypt:false, type:ProtocolDataType.DATA}]);
             }
-            else if (type?.startsWith("application/json")) {
+            else if (type?.startsWith("application/json") || type?.endsWith("+json")) {
                 if (raw) result = [await response.text(), type]; 
                 else result = await response.json()
             }
@@ -559,12 +576,12 @@ export class Runtime {
             if (filePath.endsWith('.dxb')) {
                 const content = (<Uint8Array>(await getFileContent(url, true, true))).buffer;
                 if (raw) result = [content, "application/datex"];
-                else result = this.normalizeDatexExports(await this.executeDXBLocally(content, url));
+                else result = await this.executeDXBLocally(content, url);
             }
             else if (filePath.endsWith('.dx')) {
                 const content = <string> await getFileContent(url);
                 if (raw) result = [content, "text/datex"];
-                else result = this.normalizeDatexExports(await this.executeDatexLocally(content, undefined, undefined, url));
+                else result = await this.executeDatexLocally(content, undefined, undefined, url);
             }
             else if (filePath.endsWith('.json')) {
                 const content = <string> await getFileContent(url);
@@ -879,10 +896,12 @@ export class Runtime {
                 this.callbacks_by_sid.set(unique_sid, [resolve, reject]);
                 // default timeout
                 if (timeout == undefined) timeout = this.OPTIONS.DEFAULT_REQUEST_TIMEOUT;
-                setTimeout(()=>{
-                    // reject if response wasn't already received (might still be processed, and resolve not yet called)
-                    if (!this.callbacks_by_sid.get(unique_sid)?.[2]) reject(new NetworkError("DATEX request timeout after "+timeout+"ms: " + unique_sid));
-                }, timeout);
+                if (timeout > 0 && Number.isFinite(timeout)) {
+                    setTimeout(()=>{
+                        // reject if response wasn't already received (might still be processed, and resolve not yet called)
+                        if (!this.callbacks_by_sid.get(unique_sid)?.[2]) reject(new NetworkError("DATEX request timeout after "+timeout+"ms: " + unique_sid));
+                    }, timeout);
+                }
             }
             else resolve(true)
         })
@@ -1029,13 +1048,13 @@ export class Runtime {
     
         // std.types 
         // try to get from cdn.unyt.org
-        try {
-            this.STD_TYPES_ABOUT = await Runtime.getURLContent('https://cdn.unyt.org/unyt_core/dx_data/type_info.dx')
-        }
-        // otherwise try to get local file (only backend)
-        catch {
-            this.STD_TYPES_ABOUT = await Runtime.getURLContent(new URL('../dx_data/type_info.dx', import.meta.url));
-        }
+        // try {
+        //     this.STD_TYPES_ABOUT = await Runtime.getURLContent('https://cdn.unyt.org/unyt_core/dx_data/type_info.dx')
+        // }
+        // // otherwise try to get local file (only backend)
+        // catch {
+        //     this.STD_TYPES_ABOUT = await Runtime.getURLContent(new URL('../dx_data/type_info.dx', import.meta.url));
+        // }
 
         DatexObject.setWritePermission(<Record<string|symbol,unknown>>this.STD_STATIC_SCOPE, undefined); // make readonly
         DatexObject.seal(this.STD_STATIC_SCOPE);
@@ -3161,7 +3180,7 @@ export class Runtime {
             key = Value.collapseValue(key,true,true);
 
             // check read/write permission (throws an error)
-            Runtime.runtime_actions.checkValueUpdatePermission(parent, key)
+            if (parent) Runtime.runtime_actions.checkValueUpdatePermission(SCOPE, parent, key)
 
             // key is * -  add for all matching keys (recursive)
             if (key === WILDCARD) {
@@ -3985,7 +4004,7 @@ export class Runtime {
                     // not existing pointer or no access to this pointer
                     // TODO check access permission
                     // || (pointer.allowed_access && !pointer.allowed_access.test(SCOPE.sender))
-                    if (!pointer.val) throw new PointerError("Pointer does not exist", SCOPE)
+                    if (!pointer.value_initialized) throw new PointerError("Pointer does not exist", SCOPE)
                     // valid, add subscriber
                     else {
                         pointer.addSubscriber(SCOPE.sender);
@@ -4048,7 +4067,7 @@ export class Runtime {
                     logger.success(SCOPE.sender + " unsubscribed from " + pointer.idString());
 
                     // not existing pointer or no access to this pointer
-                    if (!pointer.val) throw new PointerError("Pointer does not exist", SCOPE)
+                    if (!pointer.value_initialized) throw new PointerError("Pointer does not exist", SCOPE)
                     // valid, remove subscriber
                     else {
                         pointer.removeSubscriber(SCOPE.sender);
@@ -6459,7 +6478,11 @@ if (!Runtime.ENV) {
 // add environment variables to #env (might override existing env settings (LANG))
 if (globalThis.Deno) {
     for (const [key, val] of Object.entries(Deno.env.toObject())) {
-        if (key == "LANG") Runtime.ENV[key] = val.split("-")[0]?.split("_")[0];
+        if (key == "LANG") {
+            let lang = val.split("-")[0]?.split("_")[0];
+            if (lang == "C" || lang?.startsWith("C.")) lang = "en";
+            Runtime.ENV[key] = lang;
+        }
         else Runtime.ENV[key] = val;
     }
 }

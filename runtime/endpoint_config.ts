@@ -71,7 +71,7 @@ class EndpointConfig implements EndpointConfigData {
 		}
 		else {
 			// get config from cache
-			const serialized = globalThis.localStorage?.getItem("endpoint_config::"+(globalThis.location?.href ?? ''));
+			const serialized = globalThis.localStorage?.getItem("endpoint_config::"+(globalThis.location.origin ?? ''));
 			if (serialized) {
 				config = <EndpointConfigData> await Runtime.executeDatexLocally(serialized, undefined, undefined, globalThis.location?.href ? new URL(globalThis.location.href) : undefined)
 			}

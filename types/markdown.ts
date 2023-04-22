@@ -1,6 +1,7 @@
 import "../lib/marked.js"; // required for Markdown highlighting
 declare const marked:Function;
 
+
 /** <text/markdown> */
 export class Markdown {
     content:string
@@ -44,4 +45,3 @@ export class Markdown {
         return code;
     }
 }
-

@@ -184,7 +184,8 @@ export class Crypto {
             let exported_keys:[ArrayBuffer, ArrayBuffer]|void;
 
             // first check cache:
-            if (exported_keys=await Storage.getItem("keys_"+endpoint)) {
+            if (await Storage.hasItem("keys_"+endpoint)) {
+                exported_keys = await Storage.getItem("keys_"+endpoint)
                 logger.debug("getting keys from cache for " + endpoint);
             }
             if (!exported_keys) {
@@ -208,7 +209,8 @@ export class Crypto {
                 return;
             }
             catch (e) {
-                reject(new Error("Error importing keys"));
+                console.log(e);
+                reject(new Error("Error importing keys for " + endpoint));
                 await Storage.removeItem("keys_"+endpoint);
                 this.#waiting_key_requests.delete(endpoint); // remove from key promises
                 return;

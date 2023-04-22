@@ -1,3 +1,4 @@
+// deno-lint-ignore-file no-control-regex
 export const Regex = {
     CLOSE_AND_STORE: /^(;\s*)+/, // one or multiple ;
 

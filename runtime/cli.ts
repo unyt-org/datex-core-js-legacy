@@ -2,7 +2,6 @@ import { Logger } from "../utils/logger.ts";
 // if (globalThis.Deno && !globalThis.NO_INIT) enableCLI();
 
 export async function enableCLI() {
-	if (!globalThis.Deno) return;
 	try {
 		const InputLoop = (await import("https://deno.land/x/input@2.0.3/index.ts")).default;
 		const logger = new Logger("CLI");

@@ -12,7 +12,7 @@
 import type { Runtime } from "../runtime/runtime.ts";
 import type { Type } from "../types/type.ts";
 import type { Pointer } from "../runtime/pointers.ts";
-import { enableFullSupport, enableMinimal } from "./ansi_compat.ts";
+import { console as console_ansi } from "./ansi_compat.ts";
 
 let _Runtime:typeof Runtime; // to circular imports logger - Runtime
 let _Type:typeof Type; // to circular imports logger - Type
@@ -28,7 +28,9 @@ const client_type = "Deno" in globalThis ? 'deno' : 'browser';
 
 
 
-
+/**
+ * Predefined unyt specific color scheme.
+ */
 export const UNYT_COLORS = {
     RED: [234,43,81],
     GREEN: [30,218,109],
@@ -39,8 +41,11 @@ export const UNYT_COLORS = {
     BLACK: [5,5,5],
     WHITE: [250,250,250],
     GREY: [150,150,150]
-}
+} as const
 
+/**
+ * Common ANSI esacpe sequences for colors and text style
+ */
 export const ESCAPE_SEQUENCES = {
 
     CLEAR:      "\x1b[2J", // clear screen
@@ -99,7 +104,7 @@ export const ESCAPE_SEQUENCES = {
 
     UNYT_POINTER:  "\x1b[38;2;65;102;238m",
 
-}
+} as const
 
 
 
@@ -133,10 +138,10 @@ try {
 
 function console_log(log_data:any[], log_level:LOG_LEVEL=LOG_LEVEL.DEFAULT) {
     switch (log_level) {
-        case LOG_LEVEL.ERROR: console.error(...log_data);break;
-        case LOG_LEVEL.WARNING: console.warn(...log_data);break;
-        case LOG_LEVEL.VERBOSE: console.debug(...log_data);break;
-        default: console.log(...log_data);break;
+        case LOG_LEVEL.ERROR: console_ansi.error(...log_data);break;
+        case LOG_LEVEL.WARNING: console_ansi.warn(...log_data);break;
+        case LOG_LEVEL.VERBOSE: console_ansi.debug(...log_data);break;
+        default: console_ansi.log(...log_data);break;
     }
 }
 
@@ -198,7 +203,6 @@ export let font_family = 'font-family: Menlo, Monaco, "Courier New", monospace';
 
 export interface LogFormatter {
     name: string,
-    browser_compat_mode_required?: boolean
 
     variables?: {[name:string]:any}
     spread_variables?: {[name:string]:any} // 'tuple' values, get spread as multiple arguments
@@ -320,8 +324,6 @@ class ImageFormatter implements LogFormatter {
 
     name = 'image'
 
-    browser_compat_mode_required = true
-
     formatValue(value: any, params: any[]): string {
         // currently only supported in browser console
         return client_type == "deno" ? '' : `\x1b[1337;File=;${params[0]?'height='+params[0]+'px;':''}inline=1:${value}\x07`
@@ -329,6 +331,9 @@ class ImageFormatter implements LogFormatter {
     
 }
 
+type dynamicReturn = {
+    readonly update: (text: string | TemplateStringsArray, ...data: any[]) => void;
+}
 
 export class Logger {
 
@@ -340,7 +345,7 @@ export class Logger {
     private readonly origin_value?:any;
 
     private locked = false;
-    private lockedContent?: string;
+    private lockedContent?: string|null;
 
 
     private box_width = 50;
@@ -388,24 +393,25 @@ export class Logger {
 
         if (this.production && (log_level < Logger.production_log_level)) return; // don't log for production
         if (!this.production && (log_level < Logger.development_log_level)) return; // don't log for development
-
-        const browser_compat_mode_required:[boolean] = [false];
-        const log_string = this.generateLogString(color, text, data, add_tag, browser_compat_mode_required);
-        this.logRaw(log_string, log_level, only_log_own_stream, browser_compat_mode_required[0]);
+        const log_string = this.generateLogString(color, text, data, add_tag);
+        this.logRaw(log_string, log_level, only_log_own_stream);
     }
 
     // log_level: decides which console log method is used (log, error, warn, debug)
     // only_log_own_stream: if true, only streams where no other logger is piped in are affected (e.g. to prevent clear of all loggers)
     // force_browser_compat_mode: if true, browser console formatting falls back to %c sequences (required for non compatible ascii sequences or images)
-    private logRaw(text:string, log_level:LOG_LEVEL = LOG_LEVEL.DEFAULT, only_log_own_stream = false, browser_compat_mode_required = false) {
+    private logRaw(text:string, log_level:LOG_LEVEL = LOG_LEVEL.DEFAULT, only_log_own_stream = false, update_xy = true) {
 
         if (this.production && (log_level < Logger.production_log_level)) return; // don't log for production
         if (!this.production && (log_level < Logger.development_log_level)) return; // don't log for development
 
-        // TODO: replace globalThis.process
-        //Logger.setCursorY(globalThis.process?.stdout, Logger.getCursorY(globalThis.process?.stdout)+1);
-
         if (this.log_to_console) {
+            // update newlines
+            if (globalThis.Deno && update_xy) {
+                const new_lines = 1 + (text.match(/\n/g) || []).length
+                Logger.setCursorY(globalThis.Deno.stdout, Logger.getCursorY(globalThis.Deno.stdout)+new_lines);
+            }
+
             if (this.locked) this.lockedContent = this.lockedContent ? this.lockedContent + '\r\n' + text : text;
             else console_log([text], log_level);
         }
@@ -454,7 +460,7 @@ export class Logger {
         // start tag
         if (esc_tag) {
             tag += 
-                ESCAPE_SEQUENCES.INVERSE+ESCAPE_SEQUENCES.UNDERLINE + Logger.getEscapedBackgroundColor(this.getFormattingColor(COLOR.BLACK)) +
+                ESCAPE_SEQUENCES.INVERSE+ESCAPE_SEQUENCES.UNDERLINE + Logger.getEscapedBackgroundColor(this.getFormattingColor(color==COLOR.BLACK?COLOR.WHITE:COLOR.BLACK)) +
                 color_esc +
                 (this.formatting == LOG_FORMATTING.COLOR_RGB ? ESCAPE_SEQUENCES.BOLD : '')
         }
@@ -485,12 +491,12 @@ export class Logger {
         return Logger.getFormattingColor(color, this.formatting)
     }
 
-    private generateLogString(color:COLOR, text:string, data:any[], add_tag = true, browser_compat_mode_required:[boolean]): string {
+    private generateLogString(color:COLOR, text:string, data:any[], add_tag = true): string {
 
         const color_esc = this.getFormattingColor(color);
 
 
-        const message = Logger.applyLogFormatters(Logger.formatEscapeSequences(text, color_esc), data, color_esc, browser_compat_mode_required, this.formatting)
+        const message = Logger.applyLogFormatters(Logger.formatEscapeSequences(text, color_esc), data, color_esc, this.formatting)
             .replace(/\n/g, '\r\n');
 
 
@@ -508,7 +514,7 @@ export class Logger {
             new RegExp('(?:#([a-zA-Z0-9_-]+)(?:\\(((?:(?<=\\\\)\\)|[^\\)])*)\\))?(?:(\\[((?:(?<=\\\\)\\]|[^\\]])*)\\]|\\?))?|(?<!\\\\)\\?)','g')
             ///(?:#([a-zA-Z0-9_-]+)(?:\(((?:(?<=\\)\)|[^\)])*)\))?(?:(\[((?:(?<=\\)\]|[^\]])*)\]|\?))?|(?<!\\)\?)/g
 
-    private static applyLogFormatters(text:string, data:any[], main_color:string, browser_compat_mode_required:[boolean], formatting:LOG_FORMATTING){
+    private static applyLogFormatters(text:string, data:any[], main_color:string, formatting:LOG_FORMATTING){
         text = text.replace(Logger.match_log_formatter, (all,name,_args,outer_content,content) => {
 
             // standalone '?'
@@ -522,9 +528,6 @@ export class Logger {
 
                 const formatter:LogFormatter = this.formatters.get(name) ?? <LogFormatter>this.formatters.get('text'); // fallback formatter is 'text'
                 let args:any[] = _args?.split(',').map((a:string)=>this.parseFormatterArgument(a,formatter.variables)) ?? [];
-
-                // compat mode for formatter required?
-                if (formatter.browser_compat_mode_required) browser_compat_mode_required[0] = true;
 
                 // spread var
                 if (args.length == 1 && formatter.spread_variables && (args[0] in formatter.spread_variables)) args = formatter.spread_variables[args[0]];  
@@ -751,39 +754,43 @@ export class Logger {
     }
 
 
-    public dynamic(text:TemplateStringsArray, ...data:any[]):void
-    public dynamic(text:string, ...data:any[]):void
+    public dynamic(text:TemplateStringsArray, ...data:any[]): dynamicReturn
+    public dynamic(text:string, ...data:any[]): dynamicReturn
     public dynamic(text:string|TemplateStringsArray,...data:any[]) {
-        // TODO: replace node process
+        if (!globalThis.Deno) {
+            throw "[Logger.dynamic is only supported in Deno environments]";
+        }
+        const logLevel = LOG_LEVEL.DEFAULT;
+        if (this.production && (logLevel < Logger.production_log_level)) return; // don't log for production
+        if (!this.production && (logLevel < Logger.development_log_level)) return; // don't log for development
 
-        // const y = Logger.getCursorY(globalThis.process?.stdout);
-        // const x = Logger.getCursorX(globalThis.process?.stdout);
 
-        // this.log(console_theme == 'dark' ?  COLOR.WHITE : COLOR.BLACK, this.normalizeLogText(text), data)
+        const y = Logger.getCursorY(Deno.stdout);
+        const x = Logger.getCursorX(Deno.stdout);
+
+        this.log(console_theme == 'dark' ?  COLOR.WHITE : COLOR.BLACK, this.normalizeLogText(text), data, LOG_LEVEL.DEFAULT, false, false)
         
-        // return {
-        //     update: (text:string|TemplateStringsArray,...data:any[]) => {
-        //         const dy = y-Logger.getCursorY(globalThis.process?.stdout);
-        //         const dx = x-Logger.getCursorX(globalThis.process?.stdout);
+        return {
+            update: (text:string|TemplateStringsArray,...data:any[]) => {
+                const dy = y-Logger.getCursorY(Deno.stdout);
+                const dx = x-Logger.getCursorX(Deno.stdout);
 
-        //         const browser_compat_mode_required:[boolean] = [false];
-        //         const log_string = this.generateLogString(console_theme == 'dark' ?  COLOR.WHITE : COLOR.BLACK, this.normalizeLogText(text), data, true, browser_compat_mode_required);
-
-
-        //         this.logRaw(
-        //             Logger.moveCursor(dx,dy) + 
-        //             log_string +
-        //             Logger.moveCursor(-dx,-dy-1),
-        //             LOG_LEVEL.DEFAULT,
-        //             false,
-        //             browser_compat_mode_required[0]
-        //         )
-        //         Logger.setCursorY(globalThis.process?.stdout, Logger.getCursorY(globalThis.process?.stdout)-1);
-        //         // process.stdout.write(Logger.moveCursor(dx,dy));
-        //         // process.stdout.write(this.normalizeLogText(text)+'\r\n');
-        //         // process.stdout.write(Logger.moveCursor(-dx,-dy))
-        //     }
-        // }
+                const log_string = this.generateLogString(console_theme == 'dark' ?  COLOR.WHITE : COLOR.BLACK, this.normalizeLogText(text), data, false);
+                const new_lines = 1 + (log_string.match(/\n/g) || []).length
+                this.logRaw(
+                    Logger.moveCursor(dx,dy) + 
+                    Logger.clearCursorLine +
+                    log_string +
+                    Logger.moveCursor(-dx,-dy-new_lines),
+                    LOG_LEVEL.DEFAULT,
+                    false,
+                    false
+                )
+                // process.stdout.write(Logger.moveCursor(dx,dy));
+                // process.stdout.write(this.normalizeLogText(text)+'\r\n');
+                // process.stdout.write(Logger.moveCursor(-dx,-dy))
+            }
+        } as const
 
     }
 
@@ -794,19 +801,13 @@ export class Logger {
 
 
     static getCursorX(term:any) {
-        if (this.cursor_x.has(term)) return this.cursor_x.get(term)
-        else {
-            this.cursor_x.set(term, 0);
-            return this.cursor_x.get(term)
-        }
+        if (!this.cursor_x.has(term)) this.cursor_x.set(term, 0);
+        return this.cursor_x.get(term)!;
     }
 
     static getCursorY(term={}) {
-        if (this.cursor_y.has(term)) return this.cursor_y.get(term)
-        else {
-            this.cursor_y.set(term, 0);
-            return this.cursor_y.get(term)
-        }
+        if (!this.cursor_y.has(term)) this.cursor_y.set(term, 0);
+        return this.cursor_y.get(term)!
     }
 
     static setCursorX(term={}, value:number) {
@@ -821,6 +822,8 @@ export class Logger {
         return `\x1b[${y};${x}H`
     }
 
+
+    private static readonly clearCursorLine = `\x1b[K`;
 
     private static moveCursor(x:number, y:number){
         let move = '';
@@ -908,8 +911,6 @@ Logger.registerLogFormatter(new TextFormatter);
 
 // @ts-ignore set global logger for dev console
 globalThis.logger = new Logger("main");
-
-enableFullSupport();
 
 
 // set log level (browser default true, deno default false)

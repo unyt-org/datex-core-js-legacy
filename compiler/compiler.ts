@@ -280,6 +280,8 @@ export type compiler_options = {
 
 const utf8_decoder = new TextDecoder();
 
+export const INSERT_MARK = '\u0001\udddd\uaaaa\ueeee\u0001'
+
 export class Compiler {
 
     static readonly VERSION_NUMBER = 1;
@@ -2102,9 +2104,9 @@ export class Compiler {
 
             // insert preemptive pointer
             const id_buffer = typeof id == "string" ? hex2buffer(id, Pointer.MAX_POINTER_ID_SIZE, true) : id;
-            const pointer_origin = <IdEndpoint> Target.get(id_buffer.slice(1,19), id_buffer.slice(19,21), BinaryCode.ENDPOINT);
+            const pointer_origin = (id_buffer[0]==BinaryCode.ENDPOINT || id_buffer[0]==BinaryCode.PERSON_ALIAS || id_buffer[0]==BinaryCode.INSTITUTION_ALIAS) ? <IdEndpoint> Target.get(id_buffer.slice(1,19), id_buffer.slice(19,21), id_buffer[0]) : null;
             // preemptive_pointer_init enabled, is get, is own pointer, not sending to self
-            if (SCOPE.options.preemptive_pointer_init !== false && action_type == ACTION_TYPE.GET && Runtime.endpoint.equals(pointer_origin) && SCOPE.options.to != Runtime.endpoint) {
+            if (pointer_origin && SCOPE.options.preemptive_pointer_init !== false && action_type == ACTION_TYPE.GET && Runtime.endpoint.equals(pointer_origin) && SCOPE.options.to != Runtime.endpoint) {
                 return Compiler.builder.addPreemptivePointer(SCOPE, id)
             }
 
@@ -2156,6 +2158,12 @@ export class Compiler {
         },
 
         addPointer: (p:Pointer, SCOPE:compiler_scope|extract_var_scope, action_type:ACTION_TYPE = ACTION_TYPE.GET, action_specifier?:BinaryCode):Promise<void>|void => {
+
+            // ignore value - insert void
+            if (p.value_initialized && p.val?.[DX_IGNORE]) {
+                Compiler.builder.addVoid(SCOPE);
+                return;
+            }
 
             // pre extract per default
             if ((<compiler_scope>SCOPE).extract_pointers && action_type == ACTION_TYPE.GET) {
@@ -2627,9 +2635,14 @@ export class Compiler {
                 // try to proxify serialized value again to pointer (proxify exceptions!) 
                 if (!no_proxify) value = Pointer.pointerifyValue(value);
             }
+
+            // ignore value - insert void
+            if (value?.[DX_IGNORE]) {
+                Compiler.builder.addVoid(SCOPE);
+            }
             
             // only fundamentals here:
-            if (value instanceof Quantity)                   Compiler.builder.addQuantity(value, SCOPE); // UNIT
+            else if (value instanceof Quantity)              Compiler.builder.addQuantity(value, SCOPE); // UNIT
             else if (value===VOID)                           Compiler.builder.addVoid(SCOPE); // Datex.VOID
             else if (value===null)                           Compiler.builder.addNull(SCOPE); // NULL
             else if (typeof value == 'bigint')               Compiler.builder.addInt(value, SCOPE); // INT
@@ -5222,6 +5235,20 @@ export class Compiler {
         return arrayBufferToBase64(await Compiler.getValueHash(value))
     }
 
+    /**
+     * returns pointer id for pointer values, hash for primitive values
+     * @param value
+     * @returns 
+     */
+    static getUniqueValueIdentifier(value:any): Promise<string>|string {
+        // value is pointer - get id
+        if (value instanceof Pointer) return value.idString();
+        const ptr = Pointer.getByValue(value);
+        if (ptr) return ptr.idString();
+        // get value hash
+        else return this.getValueHashString(value);
+    }
+
     // same as compile, but accepts a precompiled dxb array instead of a Datex Script string -> faster compilation
     static compilePrecompiled(precompiled:PrecompiledDXB, data:any[] = [], options:compiler_options={}, add_header=true):Promise<ArrayBuffer>|ArrayBuffer {
         
@@ -5298,6 +5325,11 @@ export class Compiler {
         if (datex === '?' && !add_header) {
             return Compiler.compileValue(data[0], options);
         }
+
+        // replace insert marks with explicitly inserted (?) - also works inside strings
+        if (typeof datex == "string") datex = datex.replaceAll(INSERT_MARK, '(?)');
+        // @ts-ignore
+        else if (typeof datex?.datex == "string") datex.datex = datex.datex.replaceAll(INSERT_MARK, '(?)');
 
         const SCOPE = this.createCompilerScope(datex, data, options, add_header, is_child_scope_block, extract_pointers, save_precompiled, max_block_size, _code_block_type, _current_data_index);
 
