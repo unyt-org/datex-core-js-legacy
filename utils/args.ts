@@ -1,7 +1,7 @@
 // TODO: fix this (cdn problems)
 let CommandLineOptions: any // typeof import("https://dev.cdn.unyt.org/command-line-args/main.ts").CommandLineOptions;
 try {
-    ({CommandLineOptions} = await import("https://dev.cdn.unyt.org/command-line-args/main.ts"));
+    ({CommandLineOptions} = await import("https://dev.cdn.unyt.org/"+"command-line-args/main.ts"));
 }
 catch {
     console.warn("using fallback CommandLineOptions module, cdn not reachable");

@@ -457,7 +457,7 @@ export type CollapsedValueAdvanced<T extends CompatValue<unknown>, COLLAPSE_POIN
         T extends PointerProperty ?
             (COLLAPSE_POINTER_PROPERTY extends true ? _C : T) : // PointerProperty either collapsed or PointerProperty returned
         // else
-            _C  // otherwise pointer is always collapsed
+            JSValueWith$<_C>  // otherwise pointer is always collapsed
 
 
 // convert value to DATEX reference value
@@ -481,15 +481,17 @@ export type DatexObjectPartialInit<T> = {[K in keyof T]?: CompatValue<T[K]>}; //
 
 // make sure a type union has the same be type (e.g. union of strings, ...)
 // returns the input T if valid, otherwise 'never'
+type NotTheSameReturnType = never;
+
 export type RestrictSameType<T extends CompatValue<unknown>, _C = CollapsedValue<T>> =
     // make sure if primitive, it's only one primitive type
-    _C extends string ? (Exclude<_C,string> extends never ? T : never) :
-    _C extends number ? (Exclude<_C,number> extends never ? T : never) :
-    _C extends bigint ? (Exclude<_C,bigint> extends never ? T : never) :
-    _C extends boolean ? (Exclude<_C,boolean> extends never ? T : never) :
-    _C extends null ? (Exclude<_C,null> extends never ? T : never) :
-    _C extends undefined ? (Exclude<_C,undefined> extends never ? T : never) :
-    never;
+    _C extends string ? (Exclude<_C,string> extends never ? T : NotTheSameReturnType) :
+    _C extends number ? (Exclude<_C,number> extends never ? T : NotTheSameReturnType) :
+    _C extends bigint ? (Exclude<_C,bigint> extends never ? T : NotTheSameReturnType) :
+    _C extends boolean ? (Exclude<_C,boolean> extends never ? T : NotTheSameReturnType) :
+    _C extends null ? (Exclude<_C,null> extends never ? T : NotTheSameReturnType) :
+    _C extends undefined ? (Exclude<_C,undefined> extends never ? T : NotTheSameReturnType) :
+    T
 
 // transform functions
 export type TransformFunctionInputs = readonly any[];
@@ -2796,12 +2798,6 @@ export class Pointer<T = any> extends Value<T> {
 }
 
 
-
-(()=>{
-    const x = $$ (0);
-    const y = Pointer.createTransform([x], (...args)=>[args[0],2]);
-
-})
 
 export namespace Value {
     export enum UPDATE_TYPE {
