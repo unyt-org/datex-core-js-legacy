@@ -30,24 +30,37 @@ export type observe_options = {types?:Value.UPDATE_TYPE[], ignore_transforms?:bo
 // root class for pointers and pointer properties, value changes can be observed
 export abstract class Value<T = any> {
 
+    #observerCount = 0;
+
     #observers?: Map<observe_handler, observe_options|undefined>
     #observers_bound_objects?: Map<object, Map<observe_handler, observe_options|undefined>>
 
     #val?: T;
 
     constructor(value?:CompatValue<T>) {
-        value = Value.collapseValue(value)
+        value = Value.collapseValue(value);
         if (value!=undefined) this.val = value;
     }
 
-    public get val(): T {
+    public get val(): T|undefined {
+        this.valueGetHandler();
         return this.#val;
     }
-    public set val(value: T) {
+    public set val(value: T|undefined) {
         const previous = this.#val;
         this.#val = <T> Value.collapseValue(value, true, true);
         if (previous !== this.#val) this.triggerValueInitEvent()
     }
+
+    /**
+     * get the current #val without triggering getters
+     * Only use this internally to get the current value,
+     * should not be acessed from outside the Value
+     */
+    private get current_val():T|undefined {
+        return this.#val;
+    }
+
     // same as val setter, but can be awaited
     public setVal(value:T, trigger_observers = true, is_transform?:boolean):Promise<any>|void {
         const previous = this.#val;
@@ -56,7 +69,7 @@ export abstract class Value<T = any> {
     }
     
     protected triggerValueInitEvent(is_transform = false){
-        const value = this.val;
+        const value = this.current_val;
         const promises = [];
         for (const [o, options] of this.#observers??[]) {
             if ((!options?.types || options.types.includes(Value.UPDATE_TYPE.INIT)) && !(is_transform && options?.ignore_transforms)) promises.push(o(value, VOID, Value.UPDATE_TYPE.INIT, is_transform));
@@ -186,6 +199,7 @@ export abstract class Value<T = any> {
             if (!this.#observers) this.#observers = new Map();
             this.#observers.set(handler, options);
         }
+        this.updateObserverCount(+1);
     }
 
     // stop observation
@@ -195,7 +209,9 @@ export abstract class Value<T = any> {
     // remove all observers for bound_object
     public unobserve(bound_object:object): void
 
-    public unobserve(handler_or_bound_object:observe_handler|object, bound_object?:object): void {
+    public unobserve(handler_or_bound_object:observe_handler|object, bound_object?:object) {
+
+        let wasRemoved = false;
 
         let handler: observe_handler|undefined
         if (handler_or_bound_object instanceof globalThis.Function) handler = handler_or_bound_object;
@@ -204,17 +220,19 @@ export abstract class Value<T = any> {
         if (bound_object) {
             if (handler) {
                 if (this.#observers_bound_objects) {
-                    this.#observers_bound_objects.get(bound_object)?.delete(handler)
+                    wasRemoved = !!this.#observers_bound_objects.get(bound_object)?.delete(handler)
                     if (this.#observers_bound_objects.get(bound_object)?.size === 0) this.#observers_bound_objects.delete(bound_object)
                 }
             }
             else {
-                this.#observers_bound_objects?.delete(bound_object);
+                wasRemoved = !!this.#observers_bound_objects?.delete(bound_object);
             }
         }
         else {
-            this.#observers?.delete(handler!);
+            wasRemoved = !!this.#observers?.delete(handler!);
         }
+        if (wasRemoved) this.updateObserverCount(-1);
+        return wasRemoved;
     }
 
     toString(){
@@ -272,6 +290,102 @@ export abstract class Value<T = any> {
     static mirror<T extends primitive>(from:Value<T>, to:Value<T>) {
         from.observe((v,k,p)=> to.val = v);
     }
+
+
+
+    protected static capturedGetters = new Map<Value, Set<Value>>()
+    
+    /**
+     * Used for handling smart transforms
+     * captureGetters must be called before transform, getCaptuedGetters after to
+     * get a list of all dependencies
+     */
+    protected static captureGetters(referrer: Value) {
+        this.capturedGetters.set(referrer, new Set());
+    }
+
+    protected static getCapturedGetters(referrer: Value) {
+        const captured = this.capturedGetters.get(referrer);
+        this.capturedGetters.delete(referrer)
+        return captured;
+    }
+
+    /**
+     * must be called each time the current value of the Value is requested
+     * to keeo track of dependencies and update transform
+     */
+    protected valueGetHandler() {
+        // trigger transform update if not live
+        if (this.#transformSource && !this.#liveTransform) this.#transformSource.update();
+        for (const list of Value.capturedGetters.values()) list.add(this);
+    }
+
+    #liveTransform = false;
+    #transformSource?: TransformSource
+
+    /**
+     * add a new transform source
+     */
+    protected setTransformSource(transformSource: TransformSource) {
+        if (this.#transformSource) throw new Error("Value already has a transform source");
+        this.#transformSource = transformSource;
+        // initial value init
+        transformSource.update();
+    }
+
+    /**
+     * if there are no observers for this value and a live transform exists,
+     * the live mode is disabled, otherwise it is enabled
+     */
+    protected updateObserverCount(add:number) {
+        this.#observerCount += add;
+        console.log("OC",this.#observerCount)
+
+        if (this.#transformSource) {
+            if (this.#observerCount == 0 && this.#liveTransform) this.disableLiveTransforms(); 
+            else if (this.#observerCount && !this.#liveTransform) this.enableLiveTransforms();
+        }
+    }
+
+    /**
+     * Should be called when live transforms are needed,
+     * i.e. when oberservers for this value are active
+     */
+    protected enableLiveTransforms() {
+        console.log("+ live",this)
+        this.#liveTransform = true;
+        this.#transformSource!.enableLive();
+    }
+
+    /**
+     * Should be called when live transforms are not needed,
+     * i.e. when there are no oberservers for this value
+     */
+    protected disableLiveTransforms() {
+        console.log("- live",this)
+        this.#liveTransform = false;
+        this.#transformSource!.disableLive();
+    }
+
+
+}
+
+
+export type TransformSource = {
+    /**
+     * called to indicate that the the .val should now always be
+     * automatically updated when dependencies change
+     */
+    enableLive: ()=>void
+    /**
+     * called to indicate that the transformed value should now
+     * only be calculated when update() is called
+     */
+    disableLive: ()=>void
+    /**
+     * called to update the transformed value
+     */
+    update: ()=>void
 }
 
 
@@ -301,6 +415,7 @@ export class PointerProperty<T=any> extends Value<T> {
 
     // get current pointer property
     public override get val():T {
+        this.valueGetHandler();
         return this.pointer.getProperty(this.key, this.#leak_js_properties);
     }
 
@@ -497,6 +612,8 @@ export type RestrictSameType<T extends CompatValue<unknown>, _C = CollapsedValue
 export type TransformFunctionInputs = readonly any[];
 export type TransformFunction<Values extends TransformFunctionInputs, ReturnType> = (...values:CollapsedDatexArray<Values>)=>RestrictSameType<CompatValue<ReturnType>>;
 export type AsyncTransformFunction<Values extends TransformFunctionInputs, ReturnType> = (...values:CollapsedDatexArray<Values>)=>Promise<RestrictSameType<CompatValue<ReturnType>>>|RestrictSameType<CompatValue<ReturnType>>;
+export type SmartTransformFunction<ReturnType> = ()=>Awaited<RestrictSameType<CompatValue<ReturnType>>>;
+
 
 // send datex updates from pointers only at specific times / intervals
 // either create new DatexUpdateScheduler(update_interval) or manually call trigger() to trigger an update for all pointers
@@ -1054,6 +1171,17 @@ export class Pointer<T = any> extends Value<T> {
         return Pointer.create(undefined, NOT_EXISTING).handleTransform(observe_values, transform, persistent_datex_transform);
     }
 
+    /**
+     * Create a new pointer with a transform value generated with smart js transform
+     * @param observe_values 
+     * @param transform 
+     * @param persistent_datex_transform 
+     * @returns 
+     */
+    static createSmartTransform<const T>(transform:SmartTransformFunction<T>, persistent_datex_transform?:string):Pointer<T> {
+        return Pointer.create(undefined, NOT_EXISTING).smartTransform(transform, persistent_datex_transform);
+    }
+
     static createTransformAsync<const T,V extends TransformFunctionInputs>(observe_values:V, transform:AsyncTransformFunction<V,T>, persistent_datex_transform?:string):Promise<Pointer<T>>
     static createTransformAsync<const T,V extends TransformFunctionInputs>(observe_values:V, transform:Scope<CompatValue<T>>):Promise<Pointer<T>>
     static createTransformAsync<const T,V extends TransformFunctionInputs>(observe_values:V, transform:AsyncTransformFunction<V,T>|Scope<CompatValue<T>>, persistent_datex_transform?:string):Promise<Pointer<T>>{
@@ -1549,7 +1677,7 @@ export class Pointer<T = any> extends Value<T> {
             throw new PointerError("Cannot get value of uninitialized pointer")
         }
         // deref and check if not garbage collected
-        if (super.val instanceof WeakRef) {
+        if (!this.is_persistant && !this.is_js_primitive && super.val instanceof WeakRef) {
             const val = super.val.deref();
             // seems to be garbage collected
             if (val === undefined && this.#loaded && !this.#is_js_primitive) {
@@ -1781,11 +1909,70 @@ export class Pointer<T = any> extends Value<T> {
             });
         }
 
-        return <Pointer<T&R>>this;
+        return this as unknown as Pointer<R>;
     }
 
-    protected observeForTransform() {
-        // TODO:
+    protected smartTransform<R>(transform:SmartTransformFunction<T&R>, persistent_datex_transform?:string): Pointer<R> {
+        if (persistent_datex_transform) this.setDatexTransform(persistent_datex_transform) // TODO: only workaround
+
+        const deps = new Set<Value>();
+        let isLive = false;
+
+        const update = () => {
+            console.warn("update",this)
+            // no live transforms needed, just get current value
+            if (!isLive) {
+                this.setVal(transform() as T, true, true);
+            }
+            // get transform value and update dependency observers
+            else {
+                let val!: T
+                let getters!: Set<Value>;
+    
+                Value.captureGetters(this);
+    
+                try {
+                    val = transform() as T;
+                    // also trigger getter if pointer is returned
+                    Value.collapseValue(val, true, true); 
+                }
+                catch (e) {
+                    throw e;
+                }
+                // always cleanup capturing
+                finally {
+                    getters = Value.getCapturedGetters(this)!;
+                }
+    
+                // update value
+                this.setVal(val, true, true);
+                // observe newly discovered dependencies
+                for (const getter of getters) {
+                    if (deps.has(getter)) continue;
+                    deps.add(getter)
+                    getter.observe(update, this);
+                }
+            }
+            
+        }
+
+        // set transform source with TransformSource interface
+        this.setTransformSource({
+            enableLive: () => {
+                isLive = true;
+                // get current value and automatically reenable observers
+                update(); 
+            },
+            disableLive: () => {
+                isLive = false;
+                // disable all observers
+                for (const dep of deps) dep.unobserve(update, this);
+                deps.clear();
+            },
+            update
+        })
+
+        return this as unknown as Pointer<R>;
     }
 
 

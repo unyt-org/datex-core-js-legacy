@@ -1,7 +1,7 @@
 
 // shortcut functions
 // import { Datex } from "./datex.ts";
-import { baseURL, Runtime, PrecompiledDXB, Type, Pointer, Value, PointerProperty, primitive, any_class, Target, IdEndpoint, TransformFunctionInputs, AsyncTransformFunction, TransformFunction, TextRef, Markdown, DecimalRef, BooleanRef, IntegerRef, MinimalJSRef, CompatValue, CompatPartial, datex_meta, ObjectWithDatexValues, Compiler, endpoint_by_endpoint_name, endpoint_name, Storage, compiler_scope, datex_scope, DatexResponse, target_clause, ValueError, logger, Class, getDefaultLocalMeta, Endpoint } from "./datex_all.ts";
+import { baseURL, Runtime, PrecompiledDXB, Type, Pointer, Value, PointerProperty, primitive, any_class, Target, IdEndpoint, TransformFunctionInputs, AsyncTransformFunction, TransformFunction, TextRef, Markdown, DecimalRef, BooleanRef, IntegerRef, MinimalJSRef, CompatValue, CompatPartial, datex_meta, ObjectWithDatexValues, Compiler, endpoint_by_endpoint_name, endpoint_name, Storage, compiler_scope, datex_scope, DatexResponse, target_clause, ValueError, logger, Class, getDefaultLocalMeta, Endpoint, INSERT_MARK, CollapsedValueAdvanced, CollapsedValue, SmartTransformFunction } from "./datex_all.ts";
 
 /** make decorators global */
 import {property as _property, sync as _sync, endpoint as _endpoint, template as _template, jsdoc as _jsdoc} from "./datex_all.ts";
@@ -71,7 +71,7 @@ function _datex(dx:string|TemplateStringsArray|PrecompiledDXB, data?:unknown[], 
 
     // template string (datex `...`)
     if (dx instanceof Array && !(dx instanceof PrecompiledDXB)) {
-        dx = dx.raw.join("?");
+        dx = dx.raw.join(INSERT_MARK);
         data = Array.from(arguments);
         data.splice(0,1);
         // arguments have no meaning when using template string, set to default
@@ -144,7 +144,7 @@ export function raw<T=unknown>(dx_or_url:string|URL|TemplateStringsArray):DatexR
 const context_compiler_scopes = new Map<string, compiler_scope>();
 const context_runtime_scopes = new Map<string, datex_scope>();
 
-// OTDO
+// TODO:
 export async function script(dx:TemplateStringsArray, ...args:any[]):Promise<any>
 export async function script(dx:string|PrecompiledDXB, data?:any[], to?:Target|target_clause|endpoint_name, sign?:boolean, encrypt?:boolean):Promise<any>
 export async function script(dx:string|TemplateStringsArray|PrecompiledDXB, data:any[]=[], to:Target|target_clause|endpoint_name = Runtime.endpoint, sign=to!=Runtime.endpoint, encrypt=false) {
@@ -326,11 +326,51 @@ export function or(...values:CompatValue<boolean>[]): BooleanRef {
 }
 
 
-// same as datex `always ...`
-export async function always(script:TemplateStringsArray, ...vars:any[]):Promise<Pointer|any> {
-    return Value.collapseValue(await _datex(`always (${script.raw.join("?")})`, vars))
+// math operations
+export function add<T>(...values:CompatValue<T>[]): MinimalJSRef<T>
+export function add(...args:any[]) {
+    return transform([...args], (...args) => args.reduce((a, b) => a + b, 0));
+}
+export function sub(...numbers:CompatValue<bigint>[]): MinimalJSRef<bigint>
+export function sub(...numbers:CompatValue<number>[]): MinimalJSRef<number>
+export function sub(...args:any[]) {
+    return transform([...args], (...args) => args.slice(1).reduce((a, b) => a - b, args[0]));
+}
+export function mul(...numbers:CompatValue<bigint>[]): MinimalJSRef<bigint>
+export function mul(...numbers:CompatValue<number>[]): MinimalJSRef<number>
+export function mul(...args:any[]) {
+    return transform([...args], (...args) => args.reduce((a, b) => a * b, 1));
+}
+export function div(...numbers:CompatValue<bigint>[]): MinimalJSRef<bigint>
+export function div(...numbers:CompatValue<number>[]): MinimalJSRef<number>
+export function div(...args:any[]) {
+    return transform([...args], (...args) => args.slice(1).reduce((a, b) => a / b, args[0]));
+}
+export function pow(...numbers:CompatValue<bigint>[]): MinimalJSRef<bigint>
+export function pow(...numbers:CompatValue<number>[]): MinimalJSRef<number>
+export function pow(...args:any[]) {
+    return transform([...args], (...args) => args.slice(1).reduce((a, b) => a ** b, args[0]));
 }
 
+
+export function always<T,V extends TransformFunctionInputs>(transform:SmartTransformFunction<T>): CollapsedValueAdvanced<Pointer<T>, false, false, CollapsedValue<Pointer<T>>> // return signature from Value.collapseValue(Pointer.smartTransform())
+/**
+ * Shortcut for datex `always (...)`
+ * @param script 
+ * @param vars 
+ */
+export function always<T=unknown>(script:TemplateStringsArray, ...vars:any[]): Promise<MinimalJSRef<T>>
+export function always(scriptOrJSTransform:TemplateStringsArray|SmartTransformFunction<any>, ...vars:any[]) {
+    // js function
+    if (typeof scriptOrJSTransform == "function") return Value.collapseValue(Pointer.createSmartTransform(scriptOrJSTransform));
+    // datex script
+    else return (async ()=>Value.collapseValue(await _datex(`always (${scriptOrJSTransform.raw.join(INSERT_MARK)})`, vars)))()
+}
+
+(async ()=>{
+    const y = await always<string> `1+2`;
+    const z = always(()=>($$(1) as Pointer<number>&number) + 2)
+})
 
 // generate a static pointer for an object
 export function static_pointer<T>(value:CompatValue<T>, endpoint:IdEndpoint, unique_id:number, label?:string|number) {
