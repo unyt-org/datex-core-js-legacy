@@ -6,6 +6,9 @@ Includes
  * DATEX Compiler for JavaScript
  * Unyt default node configurations
 
+## Documentation
+ 1. [Introduction](./docs/manual/Introduction.md)
+
 ## Run Tests
 ```bash
 clear && node ../unyt_tests/run.js tests/

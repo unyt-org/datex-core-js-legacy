@@ -397,6 +397,7 @@ export class Type<T = any> {
     // operators and other type specific runtime behaviour
 
     public updateValue(ref:T, value:T) {
+        console.log("update",ref,value)
 
         if (Type.ofValue(ref)!==this) throw new ValueError("Cannot update value, reference has wrong type")
 

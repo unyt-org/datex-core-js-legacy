@@ -57,7 +57,7 @@ export abstract class Value<T = any> {
      * Only use this internally to get the current value,
      * should not be acessed from outside the Value
      */
-    private get current_val():T|undefined {
+    protected get current_val():T|undefined {
         return this.#val;
     }
 
@@ -320,7 +320,7 @@ export abstract class Value<T = any> {
         for (const list of Value.capturedGetters.values()) list.add(this);
     }
 
-    #liveTransform = false;
+    #liveTransform:boolean|'force' = false;
     #transformSource?: TransformSource
 
     /**
@@ -339,7 +339,6 @@ export abstract class Value<T = any> {
      */
     protected updateObserverCount(add:number) {
         this.#observerCount += add;
-        console.log("OC",this.#observerCount)
 
         if (this.#transformSource) {
             if (this.#observerCount == 0 && this.#liveTransform) this.disableLiveTransforms(); 
@@ -351,9 +350,8 @@ export abstract class Value<T = any> {
      * Should be called when live transforms are needed,
      * i.e. when oberservers for this value are active
      */
-    protected enableLiveTransforms() {
-        console.log("+ live",this)
-        this.#liveTransform = true;
+    protected enableLiveTransforms(force?:boolean) {
+        this.#liveTransform = force ? 'force' : true;
         this.#transformSource!.enableLive();
     }
 
@@ -362,7 +360,7 @@ export abstract class Value<T = any> {
      * i.e. when there are no oberservers for this value
      */
     protected disableLiveTransforms() {
-        console.log("- live",this)
+        if (this.#liveTransform == "force") return;
         this.#liveTransform = false;
         this.#transformSource!.disableLive();
     }
@@ -419,6 +417,10 @@ export class PointerProperty<T=any> extends Value<T> {
         return this.pointer.getProperty(this.key, this.#leak_js_properties);
     }
 
+    public override get current_val():T {
+        return this.pointer.getProperty(this.key, this.#leak_js_properties);
+    }
+
     // update pointer property
     public override set val(value:T) {
         this.pointer.handleSet(this.key, Value.collapseValue(value, true, true));
@@ -433,7 +435,7 @@ export class PointerProperty<T=any> extends Value<T> {
 
     // callback on property value change and when the property value changes internally
     public override observe(handler: observe_handler, bound_object?:Record<string, unknown>, options?:observe_options) {
-        const value_pointer = Pointer.pointerifyValue(this.val);
+        const value_pointer = Pointer.pointerifyValue(this.current_val);
         if (value_pointer instanceof Value) value_pointer.observe(handler, bound_object, options); // also observe internal value changes
 
         const internal_handler = (v:unknown)=>{
@@ -451,7 +453,7 @@ export class PointerProperty<T=any> extends Value<T> {
     }
 
     public override unobserve(handler: observe_handler, bound_object?:object) {
-        const value_pointer = Pointer.pointerifyValue(this.val);
+        const value_pointer = Pointer.pointerifyValue(this.current_val);
         if (value_pointer instanceof Value) value_pointer.unobserve(handler, bound_object); // also unobserve internal value changes
 
         let internal_handler:observe_handler|undefined
@@ -561,7 +563,7 @@ export type MinimalJSRefGeneralTypes<T, _C = CollapsedValue<T>> =
     JSPrimitiveToDatexRef<_C> extends never ? JSValueWith$<_C> : JSPrimitiveToDatexRef<_C>
 // same as MinimalJSRefGeneralTypes, but returns Pointer<2|5> instead of IntergerRef
 export type MinimalJSRef<T, _C = CollapsedValue<T>> = 
-    JSPrimitiveToDatexRef<_C> extends never ? JSValueWith$<_C> : Pointer<_C>
+    JSPrimitiveToDatexRef<_C> extends never ? JSValueWith$<_C> : (Pointer<_C> & _C)
 
 export type CollapsedValueAdvanced<T extends CompatValue<unknown>, COLLAPSE_POINTER_PROPERTY extends boolean|undefined = true, COLLAPSE_PRIMITIVE_POINTER extends boolean|undefined = true, _C = CollapsedValue<T>> = 
     // if
@@ -1361,8 +1363,8 @@ export class Pointer<T = any> extends Value<T> {
         // else logger.error("Deleting pointer " + this.idString());
 
         // delete from maps
-        if (this.#loaded && !this.#garbage_collected && this.val) {
-            Pointer.pointer_value_map.delete(this.val);
+        if (this.#loaded && !this.#garbage_collected && this.current_val) {
+            Pointer.pointer_value_map.delete(this.current_val);
         } 
         if (this.original_value) {
             Pointer.pointer_value_map.delete(this.original_value);
@@ -1439,12 +1441,12 @@ export class Pointer<T = any> extends Value<T> {
     // change the persistant state of this pointer
     set is_persistant(persistant:boolean) {
         if (persistant && !this.#is_persistent) {
-            super.val = <any>this.val;
+            super.val = <any>this.current_val;
             this.#is_persistent = true;
             this.updateGarbageCollection()
         }
         else if (!persistant && this.#is_persistent){
-            super.val = <any>new WeakRef(<any>this.val);
+            super.val = <any>new WeakRef(<any>this.current_val);
             this.#is_persistent = false;
             this.updateGarbageCollection()
         }
@@ -1671,7 +1673,7 @@ export class Pointer<T = any> extends Value<T> {
 
     
 
-    override get val():T {
+    override get val():T|undefined {
         if (this.#garbage_collected) throw new PointerError("Pointer was garbage collected");
         else if (!this.#loaded) {
             throw new PointerError("Cannot get value of uninitialized pointer")
@@ -1690,11 +1692,33 @@ export class Pointer<T = any> extends Value<T> {
         // return the value directly
         else return super.val;
     }
-
     override set val(v:T) {
         if (this.#loaded) this.updateValue(v);
         else this.initializeValue(v);
     }
+
+    // same as get val, with current_val (calling super.current_val)
+    override get current_val():T|undefined {
+        if (this.#garbage_collected) throw new PointerError("Pointer was garbage collected");
+        else if (!this.#loaded) {
+            throw new PointerError("Cannot get value of uninitialized pointer")
+        }
+        // deref and check if not garbage collected
+        if (!this.is_persistant && !this.is_js_primitive && super.current_val instanceof WeakRef) {
+            const val = super.current_val.deref();
+            // seems to be garbage collected
+            if (val === undefined && this.#loaded && !this.#is_js_primitive) {
+                this.handleGarbageCollected()
+                throw new PointerError("Pointer was garbage collected");
+            }
+            // can be returned
+            return val;
+        }
+        // return the value directly
+        else return super.current_val;
+    }
+
+
     // same as val setter, but can be awaited - don't confuse with Pointer.setValue (TODO: rename?)
     override setVal(v:T, trigger_observers = true, is_transform?:boolean) {
         if (this.#loaded) return this.updateValue(v, trigger_observers, is_transform);
@@ -1831,18 +1855,18 @@ export class Pointer<T = any> extends Value<T> {
             updatePromise = super.setVal(val, trigger_observers, is_transform);
         }
         else {
-            this.type.updateValue(this.val, val);
+            this.type.updateValue(this.current_val, val);
             if (trigger_observers) updatePromise = this.triggerValueInitEvent(is_transform); // super.value setter is not called, trigger value INIT seperately
         }
 
         // propagate updates via datex
         if (this.origin && !this.is_origin) {
-            if (!this.#exclude_origin_from_updates) this.handleDatexUpdate(null, '#0=?;? = #0', [this.val, this], this.origin, true)
+            if (!this.#exclude_origin_from_updates) this.handleDatexUpdate(null, '#0=?;? = #0', [this.current_val, this], this.origin, true)
         }
         else if (this.is_origin && this.subscribers.size) {
             logger.debug("forwarding update to subscribers", this.#update_endpoints);
             // console.log(this.#update_endpoints);
-            this.handleDatexUpdate(null, '#0=?;? = #0', [this.val, this], this.#update_endpoints, true)
+            this.handleDatexUpdate(null, '#0=?;? = #0', [this.current_val, this], this.#update_endpoints, true)
         }
 
         // pointer value change listeners
@@ -1912,20 +1936,24 @@ export class Pointer<T = any> extends Value<T> {
         return this as unknown as Pointer<R>;
     }
 
-    protected smartTransform<R>(transform:SmartTransformFunction<T&R>, persistent_datex_transform?:string): Pointer<R> {
+    protected smartTransform<R>(transform:SmartTransformFunction<T&R>, persistent_datex_transform?:string, forceLive = false): Pointer<R> {
         if (persistent_datex_transform) this.setDatexTransform(persistent_datex_transform) // TODO: only workaround
 
         const deps = new Set<Value>();
         let isLive = false;
+        let isFirst = true;
 
         const update = () => {
-            console.warn("update",this)
             // no live transforms needed, just get current value
-            if (!isLive) {
+            // capture getters in first update() call to check if there
+            // is a static transform and show a warning
+            if (!isLive && !isFirst) {
                 this.setVal(transform() as T, true, true);
             }
             // get transform value and update dependency observers
             else {
+                isFirst = false;
+
                 let val!: T
                 let getters!: Set<Value>;
     
@@ -1946,11 +1974,20 @@ export class Pointer<T = any> extends Value<T> {
     
                 // update value
                 this.setVal(val, true, true);
-                // observe newly discovered dependencies
-                for (const getter of getters) {
-                    if (deps.has(getter)) continue;
-                    deps.add(getter)
-                    getter.observe(update, this);
+
+                // no dependencies, will never change, this is not the intention of the transform
+                if (!getters.size) {
+                    logger.warn("The transform value for " + this.idString() + " is a static value:", val);
+                }
+
+                if (isLive) {
+                    console.log("get",getters)
+                    // observe newly discovered dependencies
+                    for (const getter of getters) {
+                        if (deps.has(getter)) continue;
+                        deps.add(getter)
+                        getter.observe(update, this);
+                    }
                 }
             }
             
@@ -1971,6 +2008,8 @@ export class Pointer<T = any> extends Value<T> {
             },
             update
         })
+
+        if (forceLive) this.enableLiveTransforms(true);
 
         return this as unknown as Pointer<R>;
     }
@@ -2002,14 +2041,14 @@ export class Pointer<T = any> extends Value<T> {
             if (!(super.val instanceof WeakRef)) super.setVal(<any>new WeakRef(<any>super.val), false);
 
             // add to garbage collection after timeout
-            const _keep = this.val;
+            const _keep = this.current_val;
             setTimeout(()=>{
                 if (!this.garbage_collected && this.value_initialized) {
                     _keep; // prevent garbage collection until timeout finished
                     // logger.success("giving " + this.idString() + " free for garbage collection")
                     this.#garbage_collectable = true;
                     try {
-                        Pointer.garbage_registry.register(<object><unknown>this.val, this.id)
+                        Pointer.garbage_registry.register(<object><unknown>this.current_val, this.id)
                     }
                     catch (e){
                         console.log(e)
@@ -2151,21 +2190,21 @@ export class Pointer<T = any> extends Value<T> {
         // restricted to visible_children
         if (this.visible_children) return this.visible_children;
 
-        let keys = JSInterface.handleKeys(this.val, this.type);
+        let keys = JSInterface.handleKeys(this.current_val, this.type);
         if (keys == INVALID) throw new ValueError("Value has no iterable content");
         if (keys == NOT_EXISTING) {
-            if (this.val instanceof Array) {
-                if (array_indices_as_numbers) return [...this.val.keys()]
-                else return [...this.val.keys()].map(BigInt);
+            if (this.current_val instanceof Array) {
+                if (array_indices_as_numbers) return [...this.current_val.keys()]
+                else return [...this.current_val.keys()].map(BigInt);
             }
-            else keys = Object.keys(this.val); // default Object.keys
+            else keys = Object.keys(this.current_val); // default Object.keys
         }
         return keys;
     }
 
     // proxify a (child) value, use the pointer context
     private proxifyChild(name:any, value:any) {
-        let child = value === NOT_EXISTING ? this.val[name] : value;
+        let child = value === NOT_EXISTING ? this.current_val[name] : value;
         
         // special native function -> <Function> conversion;
         if (typeof child == "function" && !(child instanceof DatexFunction)) {
@@ -2439,9 +2478,9 @@ export class Pointer<T = any> extends Value<T> {
         if (property_value == INVALID || property_value == NOT_EXISTING) {
             // all JS properties
             if (leak_js_properties) {
-                property_value = this.val?.[key]; 
+                property_value = this.current_val?.[key]; 
                 // also bind non-datex function to parent
-                return (typeof property_value == "function") ? (...args:unknown[])=>(<Function>property_value).apply(this.val, args) : property_value;
+                return (typeof property_value == "function") ? (...args:unknown[])=>(<Function>property_value).apply(this.current_val, args) : property_value;
             }
             // restricted to DATEX properties
             else property_value = Value.collapseValue(this.shadow_object?.[key], true, true)
@@ -2475,12 +2514,12 @@ export class Pointer<T = any> extends Value<T> {
     // directly set value of property (reference)
     handleSet(key:unknown, value:unknown, ignore_if_unchanged = true) {
 
-        if(!this.val) return;
+        if(!this.current_val) return;
         // convert value/key to datex conform value/key
         value = this.proxifyChild(key, value);
         key = Pointer.proxifyValue(key);
         
-        const obj = this.val;
+        const obj = this.current_val;
         let existed_before = false;
 
         // write permission?
@@ -2542,7 +2581,7 @@ export class Pointer<T = any> extends Value<T> {
         }
 
         // make sure the array index is a number
-        if (this.val instanceof Array) key = Number(key);
+        if (this.current_val instanceof Array) key = Number(key);
 
 
         // inform listeners
@@ -2565,12 +2604,12 @@ export class Pointer<T = any> extends Value<T> {
 
 
     handleAdd(value:any) {
-        if(!this.val) return;
+        if(!this.current_val) return;
 
         // convert value to datex conform value
         value = this.proxifyChild(undefined, value);
 
-        const obj = this.val;
+        const obj = this.current_val;
 
         let index:number;
 
@@ -2597,7 +2636,7 @@ export class Pointer<T = any> extends Value<T> {
         // inform listeners
         if (Pointer.pointer_property_add_listeners.size) {
             setTimeout(()=>{
-                index = index ?? (<any[]>Runtime.serializeValue(this.val))?.indexOf(value) // array: use index, Set: first serialize to array and get index
+                index = index ?? (<any[]>Runtime.serializeValue(this.current_val))?.indexOf(value) // array: use index, Set: first serialize to array and get index
                 for (const l of Pointer.pointer_property_add_listeners) l(this, index, value)
             }, 0);
         }
@@ -2610,7 +2649,7 @@ export class Pointer<T = any> extends Value<T> {
 
     private streaming = []; // use array because DatexPointer is sealed
     startStreamOut() {
-        const obj = this.val;
+        const obj = this.current_val;
 
         // only if this.value is a DatexStream
         if (!obj || !(obj instanceof Stream)) return;
@@ -2630,15 +2669,15 @@ export class Pointer<T = any> extends Value<T> {
     // TODO better way than streaming individually to every new subscriber?
     startStreamOutForEndpoint(endpoint:Endpoint) {
         logger.info("streaming to new subscriber " + endpoint);
-        this.handleDatexUpdate(null, '? << ?'/*DatexRuntime.PRECOMPILED_DXB.STREAM*/, [this, this.val], endpoint)
+        this.handleDatexUpdate(null, '? << ?'/*DatexRuntime.PRECOMPILED_DXB.STREAM*/, [this, this.current_val], endpoint)
     }
     
 
     /** all values are removed */
     handleClear() {
-        if(!this.val) return;
+        if(!this.current_val) return;
 
-        let obj = this.val;
+        let obj = this.current_val;
 
         // get keys before clear (array indices as numbers, not integers)
         const keys = this.getKeys(true);
@@ -2676,11 +2715,11 @@ export class Pointer<T = any> extends Value<T> {
 
     /** all values are removed */
     handleSplice(start_index:number, deleteCount:number, replace:Array<bigint>) {
-        if(!this.val) return;
+        if(!this.current_val) return;
 
         if (deleteCount == 0 && !replace.length) return; // nothing changes
 
-        const obj = this.val;
+        const obj = this.current_val;
 
         
         const start = BigInt(start_index);
@@ -2725,9 +2764,9 @@ export class Pointer<T = any> extends Value<T> {
 
     /** value is removed (by key)*/
     handleDelete(key:any) {
-        if(!this.val) return;
+        if(!this.current_val) return;
 
-        const obj = this.val;
+        const obj = this.current_val;
 
         // does property exist in DATEX?
         if (!this.type.isPropertyAllowed(key)) {
@@ -2767,9 +2806,9 @@ export class Pointer<T = any> extends Value<T> {
 
     /** value is removed */
     handleRemove(value:any) {
-        if(!this.val) return;
+        if(!this.current_val) return;
 
-        let obj = this.val;
+        let obj = this.current_val;
 
    
         // try set on custom pseudo class
@@ -2896,7 +2935,7 @@ export class Pointer<T = any> extends Value<T> {
         // observe specific property
         else {
             // make sure the array index is a number
-            if (this.val instanceof Array) key = <K><unknown>Number(key);
+            if (this.current_val instanceof Array) key = <K><unknown>Number(key);
 
             if (bound_object) {
                 if (!this.bound_change_observers.has(bound_object)) this.bound_change_observers.set(bound_object, new Map());

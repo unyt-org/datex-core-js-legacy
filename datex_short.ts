@@ -353,7 +353,7 @@ export function pow(...args:any[]) {
 }
 
 
-export function always<T,V extends TransformFunctionInputs>(transform:SmartTransformFunction<T>): CollapsedValueAdvanced<Pointer<T>, false, false, CollapsedValue<Pointer<T>>> // return signature from Value.collapseValue(Pointer.smartTransform())
+export function always<const T,V extends TransformFunctionInputs>(transform:SmartTransformFunction<T>): CollapsedValueAdvanced<Pointer<T>, false, false, CollapsedValue<Pointer<T>>> // return signature from Value.collapseValue(Pointer.smartTransform())
 /**
  * Shortcut for datex `always (...)`
  * @param script 
@@ -369,7 +369,8 @@ export function always(scriptOrJSTransform:TemplateStringsArray|SmartTransformFu
 
 (async ()=>{
     const y = await always<string> `1+2`;
-    const z = always(()=>($$(1) as Pointer<number>&number) + 2)
+    const a = $$(1);
+    const z = always(()=>y+"23")
 })
 
 // generate a static pointer for an object
