@@ -11,5 +11,8 @@
 		"jsx": "react-jsx",
 		"jsxImportSource": "uix",
 		"lib": ["deno.window", "dom"]
+	},
+	"tasks": {
+		"generate-api-docs": "deno run -Aqr --import-map importmap.dev.json https://dev.cdn.unyt.org/doc-generator/run.ts --import-map importmap.dev.json --base ./ -m ./datex.ts --out ./docs/api"
 	}
 }
