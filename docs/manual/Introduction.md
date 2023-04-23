@@ -131,7 +131,7 @@ refObject.$.c = $$(100); // update the underlying reference for refObject.c
 To access the `Datex.Pointer` interface of a pointer object, use the `Datex.Pointer.getByValue` function:
 ```ts
 Datex.Pointer.getByValue(refObject)
-	.observe(() => console.log("the value of refObject has changed"))
+    .observe(() => console.log("the value of refObject has changed"))
 ```
 
 
