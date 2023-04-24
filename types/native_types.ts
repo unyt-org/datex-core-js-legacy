@@ -99,6 +99,36 @@ Type.std.Map.setJSInterface({
                 return pointer.handleDelete(el);
             }, writable:false, enumerable:false});
 
+        /**** override getters to trigger handleValueGet(): ****/
+
+        // original getters
+        const getSize = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(value), "size")!.get!.bind(value);
+        const keys = value.keys.bind(value);
+        const values = value.values.bind(value);
+        const entries = value.entries.bind(value);
+
+        Object.defineProperty(value, "size", {get() {
+            pointer.handleValueGet();
+            return getSize();
+        }, enumerable:false});
+
+        Object.defineProperty(value, "values", {value: () => {
+            pointer.handleValueGet();
+            return values()
+        }, writable:false, enumerable:false});
+
+        Object.defineProperty(value, "keys", {value: () => {
+            pointer.handleValueGet();
+            return keys()
+        }, writable:false, enumerable:false});
+
+        Object.defineProperty(value, "entries", {value: () => {
+            pointer.handleValueGet();
+            return entries()
+        }, writable:false, enumerable:false});
+
+        Object.defineProperty(value, Symbol.iterator, {value: value.entries, writable:false, enumerable:false});
+
         return value;
     },
 
@@ -136,7 +166,7 @@ Type.std.Set.setJSInterface({
 
     override_silently(ref, value) {
         Set.prototype.clear.call(ref);
-        for (let entry of value) Set.prototype.add.call(ref, entry)
+        for (const entry of value) Set.prototype.add.call(ref, entry)
     },
 
     create_proxy: (value:Set<any>, pointer:Pointer) => {
@@ -152,6 +182,35 @@ Type.std.Set.setJSInterface({
         Object.defineProperty(value, "delete", {value: el => {
                 return pointer.handleRemove(el);
             }, writable:false, enumerable:false});
+
+        /**** override getters to trigger handleValueGet(): ****/
+
+        // original getters
+        const getSize = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(value), "size")!.get!.bind(value);
+        const values = value.values.bind(value);
+        const entries = value.entries.bind(value);
+
+        Object.defineProperty(value, "size", {get() {
+            pointer.handleValueGet();
+            return getSize();
+        }, enumerable:false});
+
+        Object.defineProperty(value, "values", {value: () => {
+            pointer.handleValueGet();
+            return values()
+        }, writable:false, enumerable:false});
+
+        Object.defineProperty(value, "keys", {value: () => {
+            pointer.handleValueGet();
+            return values()
+        }, writable:false, enumerable:false});
+
+        Object.defineProperty(value, "entries", {value: () => {
+            pointer.handleValueGet();
+            return entries()
+        }, writable:false, enumerable:false});
+
+        Object.defineProperty(value, Symbol.iterator, {value: value.values, writable:false, enumerable:false});
 
         return value;
     },

@@ -43,7 +43,7 @@ export abstract class Value<T = any> {
     }
 
     public get val(): T|undefined {
-        this.valueGetHandler();
+        this.handleValueGet();
         return this.#val;
     }
     public set val(value: T|undefined) {
@@ -314,13 +314,14 @@ export abstract class Value<T = any> {
      * must be called each time the current value of the Value is requested
      * to keeo track of dependencies and update transform
      */
-    protected valueGetHandler() {
+    handleValueGet() {
         // trigger transform update if not live
-        if (this.#transformSource && !this.#liveTransform) this.#transformSource.update();
+        if (this.#transformSource && !this.#liveTransform && !this.#forceLiveTransform) this.#transformSource.update();
         for (const list of Value.capturedGetters.values()) list.add(this);
     }
 
-    #liveTransform:boolean|'force' = false;
+    #liveTransform = false;
+    #forceLiveTransform = false;
     #transformSource?: TransformSource
 
     /**
@@ -341,6 +342,7 @@ export abstract class Value<T = any> {
         this.#observerCount += add;
 
         if (this.#transformSource) {
+            if (this.#forceLiveTransform) return; // keep enabled
             if (this.#observerCount == 0 && this.#liveTransform) this.disableLiveTransforms(); 
             else if (this.#observerCount && !this.#liveTransform) this.enableLiveTransforms();
         }
@@ -350,8 +352,9 @@ export abstract class Value<T = any> {
      * Should be called when live transforms are needed,
      * i.e. when oberservers for this value are active
      */
-    protected enableLiveTransforms(force?:boolean) {
-        this.#liveTransform = force ? 'force' : true;
+    protected enableLiveTransforms() {
+        if (this.#forceLiveTransform) return;
+        this.#liveTransform = true;
         this.#transformSource!.enableLive();
     }
 
@@ -360,11 +363,20 @@ export abstract class Value<T = any> {
      * i.e. when there are no oberservers for this value
      */
     protected disableLiveTransforms() {
-        if (this.#liveTransform == "force") return;
+        if (this.#forceLiveTransform) return;
         this.#liveTransform = false;
         this.#transformSource!.disableLive();
     }
 
+    protected setForcedLiveTransform(forced: boolean) {
+        if (!this.#transformSource) return; // not relevant, no transform source
+        // console.log("forced live:",forced)
+        this.#forceLiveTransform = forced;
+        // always enable if forced
+        if (forced) this.#transformSource.enableLive();
+        // disable if no observers left
+        else if (!this.#observerCount) this.disableLiveTransforms();
+    }
 
 }
 
@@ -413,7 +425,7 @@ export class PointerProperty<T=any> extends Value<T> {
 
     // get current pointer property
     public override get val():T {
-        this.valueGetHandler();
+        this.handleValueGet();
         return this.pointer.getProperty(this.key, this.#leak_js_properties);
     }
 
@@ -1362,6 +1374,9 @@ export class Pointer<T = any> extends Value<T> {
         // if (this.is_anonymous) logger.info("Deleting anoynmous pointer");
         // else logger.error("Deleting pointer " + this.idString());
 
+        // unsubscribe from pointer if remote origin
+        if (!this.is_origin && this.origin) this.unsubscribeFromPointerUpdates();
+
         // delete from maps
         if (this.#loaded && !this.#garbage_collected && this.current_val) {
             Pointer.pointer_value_map.delete(this.current_val);
@@ -1380,8 +1395,6 @@ export class Pointer<T = any> extends Value<T> {
 
         // call remove listeners
         if (!this.is_anonymous) for (const l of Pointer.pointer_remove_listeners) l(this);
-        // unsubscribe from pointer if remote origin
-        if (!this.is_origin && this.origin) this.unsubscribeFromPointerUpdates();
     }
     
 
@@ -1811,6 +1824,8 @@ export class Pointer<T = any> extends Value<T> {
                 if (this.sealed) Object.seal(this.original_value);
             }
 
+            // always use live transforms for non-primitive pointers:
+            this.setForcedLiveTransform(true)
             
         }
 
@@ -1846,6 +1861,12 @@ export class Pointer<T = any> extends Value<T> {
     protected updateValue(v:CompatValue<T>, trigger_observers = true, is_transform?:boolean) {
         const val = <T> Value.collapseValue(v,true,true);
         const newType = Type.ofValue(val);
+
+        // not changed (relevant for primitive values)
+        if (this.current_val === val) {
+            return;
+        }
+
         if (!Type.matchesType(newType, this.type)) throw new ValueError("Invalid value type for pointer "+this.idString()+": " + newType + " - must be " + this.type);
 
         let updatePromise: Promise<any>|void;
@@ -1855,7 +1876,7 @@ export class Pointer<T = any> extends Value<T> {
             updatePromise = super.setVal(val, trigger_observers, is_transform);
         }
         else {
-            this.type.updateValue(this.current_val, val);
+            this.type.updateValue(this.original_value, val);
             if (trigger_observers) updatePromise = this.triggerValueInitEvent(is_transform); // super.value setter is not called, trigger value INIT seperately
         }
 
@@ -1981,7 +2002,6 @@ export class Pointer<T = any> extends Value<T> {
                 }
 
                 if (isLive) {
-                    console.log("get",getters)
                     // observe newly discovered dependencies
                     for (const getter of getters) {
                         if (deps.has(getter)) continue;
@@ -2155,11 +2175,18 @@ export class Pointer<T = any> extends Value<T> {
         this.subscribers.add(subscriber);
         if (this.subscribers.size == 1) this.updateGarbageCollection() // first subscriber
         if (this.streaming.length) setTimeout(()=>this.startStreamOutForEndpoint(subscriber), 1000); // TODO do without timeout?
+        // force enable live mode also if primitive (subscriber is not handled a new observer)
+        if (this.is_js_primitive) this.setForcedLiveTransform(true)
     }
 
     public removeSubscriber(subscriber: Endpoint) {
         this.subscribers.delete(subscriber);
-        if (this.subscribers.size == 0) this.updateGarbageCollection() // no subscribers left
+        // no subscribers left
+        if (this.subscribers.size == 0) {
+            // disable force live mode for primitives (subscriber is not handled a new observer)
+            if (this.is_js_primitive) this.setForcedLiveTransform(false)
+            this.updateGarbageCollection() 
+        }
     }
     
 
@@ -2349,6 +2376,7 @@ export class Pointer<T = any> extends Value<T> {
                         this.handleSet(name, val);
                     },
                     get: () => { 
+                        this.handleValueGet();
                         // important: reference shadow_object, not this.shadow_object here, otherwise it might get garbage collected
                         return Value.collapseValue(shadow_object[name], true, true)
                     }
@@ -2375,6 +2403,7 @@ export class Pointer<T = any> extends Value<T> {
 
 			const proxy = new Proxy(<any>obj, {
                 get: (_target, key) => {
+                    this.handleValueGet();
                     if (key == DX_PTR) return this;
                     if (this.#custom_prop_getter && (!this.shadow_object || !(key in this.shadow_object)) && !(typeof key == "symbol")) return this.#custom_prop_getter(key);
                     const val = Value.collapseValue(this.shadow_object?.[key], true, true);
@@ -2448,7 +2477,7 @@ export class Pointer<T = any> extends Value<T> {
             });
 
             // set right 'this' context for getters / setters
-            for (let name of [...Object.getOwnPropertyNames(obj), ...Object.getOwnPropertyNames(prototype1??{}), ...Object.getOwnPropertyNames(prototype2??{})]) {
+            for (const name of [...Object.getOwnPropertyNames(obj), ...Object.getOwnPropertyNames(prototype1??{}), ...Object.getOwnPropertyNames(prototype2??{})]) {
                 // get descriptor containing getter/setter
                 const property_descriptor = Object.getOwnPropertyDescriptor(obj,name) 
                 ?? Object.getOwnPropertyDescriptor(prototype1,name) 
