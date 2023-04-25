@@ -2194,7 +2194,7 @@ export class Compiler {
                 let val = a[i];
 
                 // ignore in DATEX
-                if (val[DX_IGNORE]) {
+                if (val?.[DX_IGNORE]) {
                     continue;
                 }
             

@@ -127,7 +127,6 @@ export class Supranet {
 
     // only init, don't (re)connect
     public static async init(endpoint?:Endpoint|UnresolvedEndpointProperty|endpoint_name, local_cache = true, sign_keys?:[ArrayBuffer|CryptoKey,ArrayBuffer|CryptoKey], enc_keys?:[ArrayBuffer|CryptoKey,ArrayBuffer|CryptoKey]):Promise<Endpoint>  {
-
         if (typeof endpoint == "string") endpoint = await Endpoint.fromStringAsync(endpoint);
 
         await endpoint_config.load(); // load config from storage/file

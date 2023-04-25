@@ -72,6 +72,7 @@ class EndpointConfig implements EndpointConfigData {
 		else {
 			// get config from cache
 			const serialized = globalThis.localStorage?.getItem("endpoint_config::"+(globalThis.location.origin ?? ''));
+
 			if (serialized) {
 				config = <EndpointConfigData> await Runtime.executeDatexLocally(serialized, undefined, undefined, globalThis.location?.href ? new URL(globalThis.location.href) : undefined)
 			}
@@ -122,7 +123,7 @@ class EndpointConfig implements EndpointConfigData {
 			}			
 		}
 		else if (!globalThis.localStorage) logger.warn("Cannot save endpoint config persistently")
-		else globalThis.localStorage.setItem("endpoint_config::"+(globalThis.location?.href ?? ''), serialized);
+		else globalThis.localStorage.setItem("endpoint_config::"+(globalThis.location?.origin ?? ''), serialized);
 	}
 
 	clear() {
@@ -135,7 +136,7 @@ class EndpointConfig implements EndpointConfigData {
 			const config_file = new URL('./.dx', cache_path);
 			Deno.removeSync(config_file)
 		}
-		else if (globalThis.localStorage) globalThis.localStorage.removeItem("endpoint_config::"+(globalThis.location?.href ?? ''));
+		else if (globalThis.localStorage) globalThis.localStorage.removeItem("endpoint_config::"+(globalThis.location?.origin ?? ''));
 	}
 
 
