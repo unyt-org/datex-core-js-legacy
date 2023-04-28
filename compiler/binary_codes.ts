@@ -11,7 +11,7 @@ export enum BinaryCode {
     CACHE_RESET         = 0x05, // reset dxb scope cache
 
     // primitive / fundamental types 0x10 - 0x2f
-    STD_TYPE_TEXT     = 0x10,
+    STD_TYPE_TEXT       = 0x10,
     STD_TYPE_INT        = 0x11,
     STD_TYPE_FLOAT      = 0x12,
     STD_TYPE_BOOLEAN    = 0x13,

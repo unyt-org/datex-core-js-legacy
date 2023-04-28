@@ -1852,10 +1852,11 @@ export class Runtime {
                 
 
                 case Type.std.Array: {
-                    if (old_value === VOID) new_value = Array()
+                    if (old_value === VOID) new_value = [];
                     else if (old_value instanceof Tuple) new_value = old_value.toArray();
                     else if (old_value instanceof Set) new_value = [...old_value];
                     else if (old_value instanceof Map) new_value = [...old_value.entries()];
+                    else if (old_value instanceof ArrayBuffer) new_value = [...new Uint8Array(old_value)];
                     else new_value = INVALID;
                     break;
                 }        
@@ -2003,6 +2004,22 @@ export class Runtime {
                             DatexObject.setType(new_value, type);
                         }
                         else new_value = INVALID;
+                    }
+
+                    // special arrays
+                    else if (Type.std.Array.matchesType(type)) {
+                        switch (type.variation) {
+                            case "8": new_value = [...new Int8Array(old_value)];break;
+                            case "16": new_value = [...new Int16Array(old_value)];break;
+                            case "32": new_value = [...new Int32Array(old_value)];break;
+                            case "64": new_value = [...new BigInt64Array(old_value)];break;
+                            case "u8": new_value = [...new Uint8Array(old_value)];break;
+                            case "u16": new_value = [...new Uint16Array(old_value)];break;
+                            case "u32": new_value = [...new Uint32Array(old_value)];break;
+                            case "u64": new_value = [...new BigUint64Array(old_value)];break;
+                            default: new_value = INVALID;
+                        }
+                        new_value[DX_TYPE] = type;
                     }
 
                     // handle mime types
@@ -6172,10 +6189,10 @@ export class Runtime {
                 // FLOAT_AS_INT_8
                 case BinaryCode.FLOAT_AS_INT_8: {
                     /** wait for buffer */
-                    if (SCOPE.current_index+Int32Array.BYTES_PER_ELEMENT > SCOPE.buffer_views.uint8.byteLength) return Runtime.runtime_actions.waitForBuffer(SCOPE);
+                    if (SCOPE.current_index+Int8Array.BYTES_PER_ELEMENT > SCOPE.buffer_views.uint8.byteLength) return Runtime.runtime_actions.waitForBuffer(SCOPE);
                     /********************/
                     const float = SCOPE.buffer_views.data_view.getInt8(SCOPE.current_index);
-                    SCOPE.current_index += Int32Array.BYTES_PER_ELEMENT;
+                    SCOPE.current_index += Int8Array.BYTES_PER_ELEMENT;
 
                     await this.runtime_actions.insertToScope(SCOPE, float);
                     break;

@@ -1733,9 +1733,8 @@ export class Compiler {
         addFloat: (f:number, SCOPE:compiler_scope) => {
             // can be saved as Int32 (is an integer within the Int32 bounds and not -0)
             const isInt = Number.isInteger(f) && !Object.is(f, -0);
-            // if (isInt && f<=Compiler.MAX_INT_8 && f>= Compiler.MIN_INT_8) return Compiler.builder.addFloatAsInt8(f, SCOPE); // float as int8
-            // else 
-            if (isInt && f<=Compiler.MAX_INT_32 && f>= Compiler.MIN_INT_32) return Compiler.builder.addFloatAsInt32(f, SCOPE); // float as int32
+            if (isInt && f<=Compiler.MAX_INT_8 && f>= Compiler.MIN_INT_8) return Compiler.builder.addFloatAsInt8(f, SCOPE); // float as int8
+            else if (isInt && f<=Compiler.MAX_INT_32 && f>= Compiler.MIN_INT_32) return Compiler.builder.addFloatAsInt32(f, SCOPE); // float as int32
             else return Compiler.builder.addFloat64(f, SCOPE); // FLOAT_64
         },
 
@@ -2602,7 +2601,7 @@ export class Compiler {
                 SCOPE.inserted_values.set(value, start_index) 
             }
 
-            let type:Type
+            let type:Type|undefined
             const original_value = value;
  
             // exception for functions: convert to Datex.Function & create Pointer reference (proxifyValue required!)
@@ -2812,10 +2811,24 @@ export class Compiler {
 
             // complex objects (with recursion)
             else if (value instanceof Array) { 
-                // add current value to parents list
-                if (!parents) parents = new Set();
-                parents.add(original_value);
-                Compiler.builder.addArray(value, SCOPE, is_root, parents, unassigned_children, start_index);
+
+                // byte array (optimized)
+                if (type?.variation == "8") Compiler.builder.addBuffer(new Uint8Array(new Int8Array(value).buffer), SCOPE);
+                else if (type?.variation == "16") Compiler.builder.addBuffer(new Uint8Array(new Int16Array(value).buffer), SCOPE);
+                else if (type?.variation == "32") Compiler.builder.addBuffer(new Uint8Array(new Int32Array(value).buffer), SCOPE);
+                else if (type?.variation == "64") Compiler.builder.addBuffer(new Uint8Array(new BigInt64Array(value).buffer), SCOPE);
+                else if (type?.variation == "u8") Compiler.builder.addBuffer(new Uint8Array(value), SCOPE);
+                else if (type?.variation == "u16") Compiler.builder.addBuffer(new Uint8Array(new Uint16Array(value).buffer), SCOPE);
+                else if (type?.variation == "u32") Compiler.builder.addBuffer(new Uint8Array(new Uint32Array(value).buffer), SCOPE);
+                else if (type?.variation == "u64") Compiler.builder.addBuffer(new Uint8Array(new BigUint64Array(value).buffer), SCOPE);
+
+                // normal array
+                else {
+                    // add current value to parents list
+                    if (!parents) parents = new Set();
+                    parents.add(original_value);
+                    Compiler.builder.addArray(value, SCOPE, is_root, parents, unassigned_children, start_index);
+                }
             } 
             else if (value instanceof Tuple)  {
                 // add current value to parents list

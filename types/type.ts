@@ -22,6 +22,7 @@ import type { Iterator } from "./iterator.ts";
 import {StorageMap, StorageWeakMap} from "./storage_map.ts"
 import {StorageSet} from "./storage_set.ts"
 
+export type inferDatexType<T extends Type> = T extends Type<infer JST> ? JST : any;
 
 // types with '&|~' combinations
 export type type_clause<T=any> = clause<Type<T>>
@@ -661,6 +662,16 @@ export class Type<T = any> {
         return this.types.has((namespace||"std")+":"+name+"/"+(variation??""));
     }
 
+    /**
+     * Force bind a DATEX Type to a value (should be compatible with the JS type of the value)
+     * @param value the JS value
+     * @param type the new DATEX Type that should be bound to the value
+     * @returns the JS value with the bound DATEX Type (still the same reference)
+     */
+    public static bindType<T>(value:T, type:Type<T>): T {
+        value[DX_TYPE] = type;
+        return value;
+    }
 
     // get datex type from value
     public static ofValue<T=any>(value:CompatValue<T>):Type<T> {
@@ -866,6 +877,15 @@ export class Type<T = any> {
 
         Object: Type.get<object>("std:Object"),
         Array: Type.get<Array<any>>("std:Array"),
+        Array_8: Type.get<Array<number>>("std:Array").getVariation("8"),
+        Array_16: Type.get<Array<number>>("std:Array").getVariation("16"),
+        Array_32: Type.get<Array<number>>("std:Array").getVariation("32"),
+        Array_64: Type.get<Array<bigint>>("std:Array").getVariation("64"),
+        Array_u8: Type.get<Array<number>>("std:Array").getVariation("u8"),
+        Array_u16: Type.get<Array<number>>("std:Array").getVariation("u16"),
+        Array_u32: Type.get<Array<number>>("std:Array").getVariation("u32"),
+        Array_u64: Type.get<Array<bigint>>("std:Array").getVariation("u64"),
+
         Tuple: Type.get<Tuple>("std:Tuple"),
         ExtObject: Type.get<object>("std:ExtObject"),
 
