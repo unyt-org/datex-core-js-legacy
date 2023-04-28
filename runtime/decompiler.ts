@@ -1123,7 +1123,7 @@ export class Decompiler {
 	
 				
 					// FLOAT
-					case BinaryCode.FLOAT_AS_INT: {
+					case BinaryCode.FLOAT_AS_INT_32: {
 						let float = data_view.getInt32(current_index, true);
 						current_index += Int32Array.BYTES_PER_ELEMENT;
 						current_scope.push({type: TOKEN_TYPE.VALUE, string: Runtime.valueToDatexString(float)});

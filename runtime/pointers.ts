@@ -1072,8 +1072,8 @@ export class Pointer<T = any> extends Value<T> {
                         pointer.delete();
                         if (e instanceof NetworkError) {
                             if (!allow_failure) displayFatalError('pointer-unresolvable');
-                            console.log(pointer)
-                            throw new PointerError("Could not get the pointer from the current, the owner, or the requesting endpoint: $"+id_string)
+                            console.log(pointer, e)
+                            throw new PointerError("Could not get the pointer from the current, the owner, or the requesting endpoint: $"+id_string+". The pointer could not be loaded from the network. " +pointer.origin + " is either offline or the requested pointer data could not be sent in a reasonable amount of time.")
                         }
                         else throw e;
                     }

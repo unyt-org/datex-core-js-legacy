@@ -39,6 +39,7 @@ import { Time } from "../types/time.ts";
 
 // WASM
 import wasm_init, {init_runtime as wasm_init_runtime, compile as wasm_compile, decompile as wasm_decompile} from "../wasm/adapter/pkg/datex_wasm.js";
+import { MessageLogger } from "../utils/message_logger.ts";
 
 await wasm_init();
 wasm_init_runtime();
@@ -1700,12 +1701,19 @@ export class Compiler {
             SCOPE.data_view.setFloat64(SCOPE.b_index, f, true);
             SCOPE.b_index+=Float64Array.BYTES_PER_ELEMENT;
         },
-        addFloatAsInt: (f:number, SCOPE:compiler_scope) => {    
+        addFloatAsInt32: (f:number, SCOPE:compiler_scope) => {    
             Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+Int32Array.BYTES_PER_ELEMENT+1, SCOPE);
             Compiler.builder.valueIndex(SCOPE);
-            SCOPE.uint8[SCOPE.b_index++] = BinaryCode.FLOAT_AS_INT;
+            SCOPE.uint8[SCOPE.b_index++] = BinaryCode.FLOAT_AS_INT_32;
             SCOPE.data_view.setInt32(SCOPE.b_index, f, true);
             SCOPE.b_index+=Int32Array.BYTES_PER_ELEMENT;
+        },
+        addFloatAsInt8: (f:number, SCOPE:compiler_scope) => {    
+            Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+Int8Array.BYTES_PER_ELEMENT+1, SCOPE);
+            Compiler.builder.valueIndex(SCOPE);
+            SCOPE.uint8[SCOPE.b_index++] = BinaryCode.FLOAT_AS_INT_8;
+            SCOPE.data_view.setInt8(SCOPE.b_index, f);
+            SCOPE.b_index+=Int8Array.BYTES_PER_ELEMENT;
         },
 
         // get +/- as immediate operators (no space inbetween) before next token
@@ -1724,7 +1732,10 @@ export class Compiler {
 
         addFloat: (f:number, SCOPE:compiler_scope) => {
             // can be saved as Int32 (is an integer within the Int32 bounds and not -0)
-            if (Number.isInteger(f) && !Object.is(f, -0) && f<=Compiler.MAX_INT_32 && f>= Compiler.MIN_INT_32) return Compiler.builder.addFloatAsInt(f, SCOPE); // float as int
+            const isInt = Number.isInteger(f) && !Object.is(f, -0);
+            // if (isInt && f<=Compiler.MAX_INT_8 && f>= Compiler.MIN_INT_8) return Compiler.builder.addFloatAsInt8(f, SCOPE); // float as int8
+            // else 
+            if (isInt && f<=Compiler.MAX_INT_32 && f>= Compiler.MIN_INT_32) return Compiler.builder.addFloatAsInt32(f, SCOPE); // float as int32
             else return Compiler.builder.addFloat64(f, SCOPE); // FLOAT_64
         },
 
@@ -2211,6 +2222,54 @@ export class Compiler {
                 
                 Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+1, SCOPE);
                 SCOPE.uint8[SCOPE.b_index++] = BinaryCode.ELEMENT;  
+
+                // TODO: // compress multiple identical values (at least 4)
+                // if (i+4 < trimmed_length && a[i+1]===val && a[i+2]===val && a[i+3]===val && a[i+4]===val) {
+                //     const start = i;
+                //     let end = i+4;
+                //     for (end; end<trimmed_length; end++) {
+                //         if (a[end] !== val) break;
+                //     }
+                //     i = end;
+                //     // ...(var x = []; iterate (0..10)(x+=0);x)
+                //     /// ...(var x = [];
+                //     SCOPE.uint8[SCOPE.b_index++] = BinaryCode.EXTEND;
+                //     SCOPE.uint8[SCOPE.b_index++] = BinaryCode.SUBSCOPE_START;
+                //     Compiler.builder.insertVariable(SCOPE, SCOPE.internal_var_index++, ACTION_TYPE.SET, undefined, BinaryCode.INTERNAL_VAR);
+                //     SCOPE.uint8[SCOPE.b_index++] = BinaryCode.ARRAY_START;
+                //     SCOPE.uint8[SCOPE.b_index++] = BinaryCode.ARRAY_END;
+                //     SCOPE.uint8[SCOPE.b_index++] = BinaryCode.CLOSE_AND_STORE;
+
+                //     // (#iterator = $$<Iterator>
+                //     SCOPE.uint8[SCOPE.b_index++] = BinaryCode.SUBSCOPE_START;
+                //     Compiler.builder.insertVariable(SCOPE, SCOPE.internal_var_index++, ACTION_TYPE.SET, undefined, BinaryCode.INTERNAL_VAR);
+                //     SCOPE.uint8[SCOPE.b_index++] = BinaryCode.CREATE_POINTER;
+                //     SCOPE.uint8[SCOPE.b_index++] = BinaryCode.STD_TYPE_ITERATOR;
+
+                //     // (start..end);
+                //     SCOPE.uint8[SCOPE.b_index++] = BinaryCode.SUBSCOPE_START;
+                //     SCOPE.uint8[SCOPE.b_index++] = BinaryCode.RANGE;
+                //     Compiler.builder.addInt(BigInt(start), SCOPE);
+                //     Compiler.builder.addInt(BigInt(end), SCOPE);
+                //     SCOPE.uint8[SCOPE.b_index++] = BinaryCode.SUBSCOPE_END;
+                //     SCOPE.uint8[SCOPE.b_index++] = BinaryCode.CLOSE_AND_STORE;
+
+                //     Compiler.builder.addJmp(SCOPE,  BinaryCode.JFA);
+                //     // index-
+                //     SCOPE.uint8[SCOPE.b_index++] = BinaryCode.SUBSCOPE_START;
+                //     SCOPE.uint8[SCOPE.b_index++] = BinaryCode.NEXT;
+                //     Compiler.builder.insertVariable(SCOPE, 'i', ACTION_TYPE.GET, undefined, BinaryCode.INTERNAL_VAR);
+                //     SCOPE.uint8[SCOPE.b_index++] = BinaryCode.SUBSCOPE_END;
+                //     SCOPE.uint8[SCOPE.b_index++] = BinaryCode.CLOSE_AND_STORE;  
+
+                //     SCOPE.uint8[SCOPE.b_index++] = BinaryCode.SUBSCOPE_END;
+
+
+                //     SCOPE.uint8[SCOPE.b_index++] = BinaryCode.SUBSCOPE_END;
+
+                //     console.log("compress",val,start,end)
+                // }
+
                 Compiler.builder.insert(val, SCOPE, false, new Set(parents), unassigned_children); // shallow clone parents set
             }
             Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+1, SCOPE);
@@ -5283,6 +5342,8 @@ export class Compiler {
             i += buffer.byteLength;
         }
 
+        // console.log(MessageLogger.decompile(finalBuffer, false))
+
         // no header
         if (!add_header) return finalBuffer;
 
@@ -5508,7 +5569,7 @@ export class Compiler {
             is_child_scope_block: false,
             add_header: false,
 
-            buffer: new ArrayBuffer(200),
+            buffer: new ArrayBuffer(500),
             uint8: null,
             data_view: null,
 
@@ -5622,20 +5683,38 @@ export class PrecompiledDXB extends Array<ArrayBuffer|number|[number,number]> {
     // custom iterator, also iterate over appended PrecompiledDXB
 
     *[Symbol.iterator](){
+
+        // map data index of multiple combined precompileddxb (assuming the are all in order, eg. `?0 = ?1 + ?2`, `?0 = ?2 * x` => `?0 = ?1 + ?2; ?3 = ?4 * x`)
+        let dataIndexShift = 0;
+        let lastDataIndex = 0;
+        // remember last data index of current section for shift
+        const collectDataIndex = (val:number|[number, number]|ArrayBuffer) => {
+            if (typeof val == "number") lastDataIndex = val;
+            return val;
+        }
+        // add shift if data index
+        const convertIndexShift = (val:number|[number, number]|ArrayBuffer) => {
+            if (typeof val == "number") return collectDataIndex(val + dataIndexShift);
+            return collectDataIndex(val);
+        }
+
         // iterate over this
-        for (let i = 0; i < this.length; i++) yield this[i];
+        for (let i = 0; i < this.length; i++) yield collectDataIndex(this[i]);
+        dataIndexShift = lastDataIndex == 0 ? 0 : lastDataIndex+1;
 
         // iterate over appended PrecompiledDXB
         for (let a = 0; a < this.#appended_pdxb.length; a++) {
             const pdxb = this.#appended_pdxb[a];
             // iterate over self (no infinite recursion)
             if (pdxb == this) {
-                for (let i = 0; i < pdxb.length; i++) yield pdxb[i];
+                for (let i = 0; i < pdxb.length; i++) yield convertIndexShift(pdxb[i]);
             }
-            // iterate over anoother precompiled dxb
+            // iterate over another precompiled dxb
             else {
-                for (const p of pdxb) yield p;
+                // TODO: nested index shift supported?
+                for (const p of pdxb) yield convertIndexShift(p);
             }
+            dataIndexShift = lastDataIndex == 0 ? 0 : lastDataIndex+1;
         }
     }
 }

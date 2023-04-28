@@ -6157,12 +6157,24 @@ export class Runtime {
                 }
 
             
-                // FLOAT
-                case BinaryCode.FLOAT_AS_INT: {
+                // FLOAT_AS_INT_32
+                case BinaryCode.FLOAT_AS_INT_32: {
                     /** wait for buffer */
                     if (SCOPE.current_index+Int32Array.BYTES_PER_ELEMENT > SCOPE.buffer_views.uint8.byteLength) return Runtime.runtime_actions.waitForBuffer(SCOPE);
                     /********************/
-                    let float = SCOPE.buffer_views.data_view.getInt32(SCOPE.current_index, true);
+                    const float = SCOPE.buffer_views.data_view.getInt32(SCOPE.current_index, true);
+                    SCOPE.current_index += Int32Array.BYTES_PER_ELEMENT;
+
+                    await this.runtime_actions.insertToScope(SCOPE, float);
+                    break;
+                }
+
+                // FLOAT_AS_INT_8
+                case BinaryCode.FLOAT_AS_INT_8: {
+                    /** wait for buffer */
+                    if (SCOPE.current_index+Int32Array.BYTES_PER_ELEMENT > SCOPE.buffer_views.uint8.byteLength) return Runtime.runtime_actions.waitForBuffer(SCOPE);
+                    /********************/
+                    const float = SCOPE.buffer_views.data_view.getInt8(SCOPE.current_index);
                     SCOPE.current_index += Int32Array.BYTES_PER_ELEMENT;
 
                     await this.runtime_actions.insertToScope(SCOPE, float);
