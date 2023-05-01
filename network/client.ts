@@ -13,7 +13,7 @@ import { Logger } from "../utils/logger.ts";
 import { Runtime } from "../runtime/runtime.ts";
 
 import { Compiler } from "../compiler/compiler.ts";
-import { Endpoint, Target } from "../types/addressing.ts";
+import { Endpoint, LOCAL_ENDPOINT, Target } from "../types/addressing.ts";
 import { NetworkError } from "../types/errors.ts";
 import type { dxb_header } from "../utils/global_types.ts";
 import { client_type } from "../utils/global_values.ts";
@@ -832,7 +832,7 @@ export class InterfaceManager {
         let addressed_datex = Compiler.updateHeaderReceiver(datex, new Disjunction(to)); // set right receiver
 
         // is self
-        if (to instanceof Endpoint && Runtime.endpoint.equals(to)) {
+        if (to instanceof Endpoint && (Runtime.endpoint.equals(to) || to === LOCAL_ENDPOINT)) {
             await InterfaceManager.datex_in_handler(addressed_datex, Runtime.endpoint);
             return;
         }

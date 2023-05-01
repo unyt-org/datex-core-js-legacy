@@ -316,7 +316,7 @@ export class Endpoint extends Target {
 	
 	// returns (cached) online status
 	public async isOnline(){
-		if (Runtime.endpoint.equals(this) || Runtime.main_node?.equals(this)) return true; // is own endpoint or main node
+		if (Runtime.endpoint.equals(this) || Runtime.main_node?.equals(this) || this === LOCAL_ENDPOINT) return true; // is own endpoint or main node
 		
 		if (this.#online != undefined) return this.#online;
 		

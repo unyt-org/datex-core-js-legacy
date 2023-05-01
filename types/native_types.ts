@@ -161,6 +161,7 @@ Type.std.Set.setJSInterface({
 
     cast: value => {
         if (value instanceof Array) return new Set(value);
+        else if (value instanceof Tuple) return new Set(value.toArray());
         return INVALID;
     },
 

@@ -23,7 +23,7 @@ import { Time } from "../types/time.ts";
 import "../types/native_types.ts"; // getAutoDefault
 import { displayFatalError } from "./display.ts";
 
-export type observe_handler<K=any> = (value:unknown, key?:K, type?:Value.UPDATE_TYPE, transform?:boolean, is_child_update?:boolean)=>void|boolean
+export type observe_handler<K=any, V extends Value = any> = (value:V extends Value<infer T> ? T : V, key?:K, type?:Value.UPDATE_TYPE, transform?:boolean, is_child_update?:boolean)=>void|boolean
 export type observe_options = {types?:Value.UPDATE_TYPE[], ignore_transforms?:boolean, recursive?:boolean}
 
 
@@ -153,7 +153,7 @@ export abstract class Value<T = any> {
    
     // call handler when value changes
     // unobserve if handler returns false
-    public static observe<K=unknown>(value: unknown, handler:observe_handler<K>, bound_object?:object, key?:K, options?:observe_options):void {
+    public static observe<V=unknown, K=unknown>(value: V, handler:observe_handler<K, V>, bound_object?:object, key?:K, options?:observe_options):void {
         const pointer = Pointer.pointerifyValue(value);
         if (pointer instanceof Pointer) pointer.observe(handler, bound_object, key, options);
         else if (pointer instanceof Value) pointer.observe(<observe_handler>handler, bound_object, options);
@@ -163,22 +163,24 @@ export abstract class Value<T = any> {
 
     // same as observe, but also accepts non-reference values
     // always calls the handler once directly (init)
-    public static observeAndInit<K=unknown>(value: unknown, handler:observe_handler<K>, bound_object?:object, key?:K, options?:observe_options):void {
+    public static observeAndInit<V=unknown, K=unknown>(value: V, handler:observe_handler<K, V>, bound_object?:object, key?:K, options?:observe_options):void {
         try {
             this.observe(value, handler, bound_object, key, options);
         } catch {} // throws if value does not have a DATEX reference, can be ignored - in this case no observer is set, only the initial handler call is triggered
         const val = this.collapseValue(value, true, true);
-        handler.call(bound_object, val, undefined, Value.UPDATE_TYPE.INIT);
+        if (handler.call) handler.call(bound_object, val, undefined, Value.UPDATE_TYPE.INIT);
+        else handler(val, undefined, Value.UPDATE_TYPE.INIT);
     }
 
     // call handler when value changes
-    public static unobserve<K=unknown>(value: unknown, handler:observe_handler<K>, bound_object?:object, key?:K):void {
+    public static unobserve<V=unknown, K=unknown>(value: V, handler:observe_handler<K, V>, bound_object?:object, key?:K):void {
         const pointer = Pointer.pointerifyValue(value);
         if (pointer instanceof Pointer) pointer.unobserve(handler, bound_object, key);
         else if (pointer instanceof Value) pointer.unobserve(<observe_handler>handler, <object>bound_object);
         else throw new ValueError("Cannot unobserve this value because it has no pointer")
     }
-    
+
+   
 
     // callback on property value change
     // general handler structure is: (value:any, key?:any, type?:T)=>void 
@@ -407,6 +409,7 @@ export class PointerProperty<T=any> extends Value<T> {
     private constructor(public pointer: Pointer, public key: any, leak_js_properties = false) {
         super();
         this.#leak_js_properties = leak_js_properties;
+        pointer.is_persistant = true; // TODO: make unpersistant when pointer property deleted
         PointerProperty.synced_pairs.get(pointer)!.set(key, this); // save in map
     }
 
@@ -453,7 +456,9 @@ export class PointerProperty<T=any> extends Value<T> {
         const internal_handler = (v:unknown)=>{
             const value_pointer = Pointer.pointerifyValue(v);
             if (value_pointer instanceof Value) value_pointer.observe(handler, bound_object, options); // also update observe for internal value changes
-            handler.call(bound_object, v,undefined,Value.UPDATE_TYPE.INIT)
+            if (handler.call) handler.call(bound_object, v,undefined,Value.UPDATE_TYPE.INIT)
+            // if arrow function
+            else handler(v,undefined,Value.UPDATE_TYPE.INIT)
         };
         this.pointer.observe(internal_handler, bound_object, this.key, options)
 
@@ -1465,6 +1470,16 @@ export class Pointer<T = any> extends Value<T> {
         }
     }
 
+
+    /**
+     * always get the original reference for property, even if hidden in shadow_object
+     */
+    public static getOriginalPropertyRef(val:any, propName:any) {
+        const ptr = this.getByValue(val);
+        if (ptr) return ptr.shadow_object?.[propName] ?? val[propName];
+        else return val[propName]
+    }
+
     /**
      * Changes the id of the pointer to point to the new origin (and also changes the .origin)
      * @param new_owner
@@ -2231,7 +2246,7 @@ export class Pointer<T = any> extends Value<T> {
 
     // proxify a (child) value, use the pointer context
     private proxifyChild(name:any, value:any) {
-        let child = value === NOT_EXISTING ? this.current_val[name] : value;
+        let child = value === NOT_EXISTING ? this.shadow_object[name] : value;
         
         // special native function -> <Function> conversion;
         if (typeof child == "function" && !(child instanceof DatexFunction)) {
@@ -2259,7 +2274,6 @@ export class Pointer<T = any> extends Value<T> {
                 if (value[name] instanceof DatexFunction && this.type?.children_timeouts?.has(name)) {
                     value[name].datex_timeout = this.type.children_timeouts.get(name);
                 }
-
                 // save property to shadow_object
                 this.initShadowObjectProperty(name, this.proxifyChild(name, NOT_EXISTING))
             }
@@ -2946,7 +2960,7 @@ export class Pointer<T = any> extends Value<T> {
     private bound_general_change_observers: Map<object, Map<observe_handler, observe_options|undefined>> = new Map(); // property_update is always true, undefined for other DatexValues / when the actual value is updated
 
     // observe pointer value change (primitive) of change of a key
-    public override observe<K=unknown>(handler:observe_handler<K>, bound_object?:object, key?:K, options?:observe_options):void {
+    public override observe<K=unknown>(handler:observe_handler<K, this>, bound_object?:object, key?:K, options?:observe_options):void {
         if (!handler) throw new ValueError("Missing observer handler")
         
 

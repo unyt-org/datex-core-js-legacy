@@ -155,7 +155,7 @@ export class Decorators {
     static endpoint(value:any, name:context_name, kind:context_kind, is_static:boolean, is_private:boolean, setMetadata:context_meta_setter, getMetadata:context_meta_getter, params:[(target_clause|endpoint_name)?, string?] = []) {
         
             // invalid decorator call
-            if (!is_static && kind != "class") logger.error("Cannot use @scope for non-static field '" + name!.toString() +"'");
+            if (!is_static && kind != "class") logger.error("Cannot use @endpoint for non-static field '" + name!.toString() +"'");
     
             // handle decorator
             else {
@@ -553,19 +553,23 @@ export function initPublicStaticClasses(){
         let targets = metadata[Decorators.SEND_FILTER]?.constructor;
         if (targets == true) targets = Runtime.endpoint; // use own endpoint per default
 
-        const data = getStaticClassData(reg_class);
-        if (!data) throw new Error("Could not get data for static class")
+        let data:any;
 
         // expose if current endpoint matches class endpoint
         if (Logical.matches(Runtime.endpoint, targets, Target)) {
+            data ??= getStaticClassData(reg_class);
+            if (!data) throw new Error("Could not get data for static class")
             exposeStaticClass(reg_class, data);
         }
 
         // also enable remote access if not exactly and only the current endpoint
         if (Runtime.endpoint !== targets) {
+            data ??= getStaticClassData(reg_class, false);
+            if (!data) throw new Error("Could not get data for static class")
             remoteStaticClass(reg_class, data, targets)
         }
 
+        
         DatexObject.seal(data.static_scope);
         initialized_static_scope_classes.set(reg_class, data.static_scope);
     }
@@ -705,7 +709,7 @@ function remoteStaticClass(original_class:Class, data:class_data, targets:target
 }
 
 
-function getStaticClassData(original_class:Class) {
+function getStaticClassData(original_class:Class, staticScope = true) {
     const metadata = (<any>original_class)[METADATA];
     if (!metadata) return;
     const static_scope_name = typeof metadata[Decorators.NAMESPACE]?.constructor == 'string' ? metadata[Decorators.NAMESPACE]?.constructor : original_class.name;
@@ -713,7 +717,7 @@ function getStaticClassData(original_class:Class) {
 
     return {
         metadata,
-        static_scope: new StaticScope(static_scope_name),
+        static_scope: staticScope ? new StaticScope(static_scope_name) : null,
         name: static_scope_name,
         properties: static_properties
     }
@@ -829,7 +833,7 @@ function _old_publicStaticClass(original_class:Class) {
     const send_filter = metadata[Decorators.SEND_FILTER]?.public;
 
 
-    for (let name of static_properties) {
+    for (const name of static_properties) {
 
         const current_value = original_class[name];
         
@@ -1008,7 +1012,7 @@ export function createTemplateClass(original_class:{ new(...args: any[]): any; }
     }
 
     // iterate over all properties TODO different dx_name?
-    for (let [name, dx_name] of Object.entries(original_class.prototype[METADATA]?.[Decorators.PROPERTY]?.public??{})) {
+    for (const [name, dx_name] of Object.entries(original_class.prototype[METADATA]?.[Decorators.PROPERTY]?.public??{})) {
         template[name] = property_types?.[name] ?? Type.std.Any; // add type
         if (allow_filters?.[name]) template[DX_PERMISSIONS][name] = allow_filters[name]; // add filter
     }

@@ -34,8 +34,14 @@ export class Scope<T=any> {
         this.compiled = compiled;
         // decompile
         if (generate_decompiled) {
-            this._decompiled_f = decompile(new Uint8Array(this.compiled), true, false, true);
-            this._decompiled   = decompile(new Uint8Array(this.compiled), false, false, true);
+            try {
+                this._decompiled_f = decompile(new Uint8Array(this.compiled), true, false, true);
+                this._decompiled   = decompile(new Uint8Array(this.compiled), false, false, true);
+            }
+            catch (e) {
+                console.error("could not generated decompiled scope script")
+            }
+            
         }
     }
 

@@ -7,7 +7,11 @@ Includes
  * Unyt default node configurations
 
 ## Documentation
- 1. [Introduction](./docs/manual/Introduction.md)
+ 1. [Introduction](./docs/manual/1%20Introduction.md)
+ 2. [Pointers](./docs/manual/2%20Pointers.md)
+ 1. [Eternal Pointers](./docs/manual/3%20Eternal%20Pointers.md)
+ 4. [Supranet Networking](./docs/manual/4%20Supranet%20Networking.md)
+ 4. [The DATEX API](./docs/manual/5%20The%20DATEX%20API.md)
 
 ## Run Tests
 ```bash

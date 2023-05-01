@@ -378,9 +378,15 @@ export class Storage {
         this.synced_pointers.add(pointer)
 
         // any value change
+        let saving = false;
         pointer.observe((v,k,t)=>{
-            // console.log(v,k,t)
-            this.setPointer(pointer, false, location); // update value and add new dependencies recursively
+            if (saving) return;
+            saving = true;
+            setTimeout(()=>{
+                saving = false;
+                // set pointer (async)
+                this.setPointer(pointer, false, location); // update value and add new dependencies recursively
+            }, 2000);
         }, undefined, undefined, {ignore_transforms:true, recursive:false})
         
     }

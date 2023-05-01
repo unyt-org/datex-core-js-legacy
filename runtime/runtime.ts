@@ -1235,7 +1235,7 @@ export class Runtime {
         // foreign endpoint (if receiver not self or force eating this response) //////////
         // handle result
         // TODO better check for && !routing_info.receivers.equals(Runtime.endpoint)
-        if (routing_info.receivers && !(routing_info.receivers instanceof Disjunction && routing_info.receivers.size == 1 && Runtime.endpoint.equals([...routing_info.receivers][0]))) {
+        if (routing_info.receivers && !(routing_info.receivers instanceof Disjunction && routing_info.receivers.size == 1 && (Runtime.endpoint.equals([...routing_info.receivers][0]) ||[...routing_info.receivers][0] == LOCAL_ENDPOINT))) {
             header.redirect = true;
         }
         ///////////////////////////////////////////////////////////////////
@@ -1277,7 +1277,7 @@ export class Runtime {
     // returns header info and dxb body, or routing information if not directed to own endpoint
     static async parseHeader(dxb:ArrayBuffer, force_sym_enc_key?:CryptoKey, force_only_header_info = false):Promise<[dxb_header, Uint8Array, Uint8Array, Uint8Array]|dxb_header> {
 
-        let res = this.parseHeaderSynchronousPart(dxb);
+        const res = this.parseHeaderSynchronousPart(dxb);
 
         let header: dxb_header,
             data_buffer:Uint8Array, 
@@ -1291,7 +1291,7 @@ export class Runtime {
 
             // save encrypted key?
             if (encrypted_key) {
-                let sym_enc_key = await Crypto.extractEncryptedKey(encrypted_key);
+                const sym_enc_key = await Crypto.extractEncryptedKey(encrypted_key);
                 await this.setScopeSymmetricKeyForSender(header.sid, header.sender, sym_enc_key)
             }
 
@@ -1299,11 +1299,11 @@ export class Runtime {
             if (header.signed) {
                 if (!header.sender) throw [header, new SecurityError("Signed DATEX without a sender")];
                 let j = signature_start;
-                let signature = header_buffer.subarray(j, j + Compiler.signature_size);
-                let content = new Uint8Array(dxb).subarray(j + Compiler.signature_size);
+                const signature = header_buffer.subarray(j, j + Compiler.signature_size);
+                const content = new Uint8Array(dxb).subarray(j + Compiler.signature_size);
                 j += Compiler.signature_size;
                 
-                let valid = await Crypto.verify(content, signature, header.sender);
+                const valid = await Crypto.verify(content, signature, header.sender);
 
                 if (!valid) {
                     logger.error("Invalid signature from " + header.sender);
@@ -3716,7 +3716,7 @@ export class Runtime {
                     el = new Negation(el)
                 }
          
-                else if (typeof el == "boolean") {
+                else if (typeof el == "boolean" || typeof (el = Value.collapseValue(el, true, true)) == "boolean" ) {
                     el = !el;
                 }
                 else throw(new ValueError("Cannot negate this value ("+Runtime.valueToDatexString(el)+")", SCOPE))               

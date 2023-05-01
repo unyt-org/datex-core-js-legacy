@@ -252,6 +252,7 @@ export type compiler_options = {
     inserted_ptrs?: Set<Pointer>
     force_id?: boolean // use endpoint id as sender, also if other identifier available
     collapse_pointers?: boolean // collapse all pointers to their actual values (not pointers injected into a scope)
+    keep_external_pointers?: boolean, // if true and collapse_pointers is true, non-origin pointers are not collapsed
     collapse_injected_pointers?: boolean // collapse pointers injected to a scope 
     collapse_first_inserted?: boolean // collapse outer pointer to actual value
     _first_insert_done?: boolean // set to true after first insert
@@ -1767,16 +1768,11 @@ export class Compiler {
 
             // injected vars
             // collapse injected var pointers only if collapse_bound_pointers is true
-            const _collapse_pointers = SCOPE.options.collapse_pointers;
-            // SCOPE.options.collapse_pointers = SCOPE.options.collapse_injected_pointers;
-            //if (!SCOPE.options.collapse_injected_pointers) { // TODO: workaround, don't inject any values in this case, leads to errors (parentheses problems)
             for (const v of value.internal_vars) {
                 SCOPE.uint8[SCOPE.b_index++] = BinaryCode.SUBSCOPE_START;
                 Compiler.builder.insert(v, SCOPE);
                 SCOPE.uint8[SCOPE.b_index++] = BinaryCode.SUBSCOPE_END;
             }
-            //}
-            // SCOPE.options.collapse_pointers = _collapse_pointers; // reset
 
             Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+1+Uint32Array.BYTES_PER_ELEMENT+(value.compiled?.byteLength??0), SCOPE);
             SCOPE.uint8[SCOPE.b_index++] = BinaryCode.SCOPE_BLOCK;
@@ -2627,7 +2623,8 @@ export class Compiler {
 
             const skip_first_collapse = !SCOPE.options._first_insert_done&&SCOPE.options.collapse_first_inserted;
 
-            const no_proxify = value instanceof Value && (((value instanceof Pointer && value.is_anonymous) || SCOPE.options.collapse_pointers) || skip_first_collapse);
+            const option_collapse = SCOPE.options.collapse_pointers && !(SCOPE.options.keep_external_pointers && value instanceof Pointer && !value.is_origin);
+            const no_proxify = value instanceof Value && (((value instanceof Pointer && value.is_anonymous) || option_collapse) || skip_first_collapse);
 
             // proxify pointer exceptions:
             if (no_proxify) {
@@ -2663,7 +2660,7 @@ export class Compiler {
 
                 value = value.val; // don't proxify anonymous pointers or serialize ptr
                 // add $$ operator, not if no_create_pointers enabled or skip_first_collapse
-                if (SCOPE.options.collapse_pointers && !SCOPE.options.no_create_pointers && !skip_first_collapse) SCOPE.uint8[SCOPE.b_index++] = BinaryCode.CREATE_POINTER;
+                if (option_collapse && !SCOPE.options.no_create_pointers && !skip_first_collapse) SCOPE.uint8[SCOPE.b_index++] = BinaryCode.CREATE_POINTER;
             }
 
             // first value was collapsed (if no_proxify == false, it was still collapsed because it's not a pointer reference)
@@ -5147,6 +5144,20 @@ export class Compiler {
     static async compileAndExport(script_or_url:string|URL, output_name_or_path?:string|URL, file_type: DATEX_FILE_TYPE = FILE_TYPE.DATEX_BINARY, type = ProtocolDataType.DATA, data = []) {
         // compile
         const blob = await this.compileToFile(script_or_url, file_type, type, data);
+        // export
+        return this.export(blob, output_name_or_path, file_type, script_or_url instanceof URL ? script_or_url : undefined)
+    }
+
+    static async exportValue(value: any, output_name_or_path?:string|URL, file_type: DATEX_FILE_TYPE = FILE_TYPE.DATEX_BINARY, collapse_pointers = true, collapse_first_inserted = true, keep_external_pointers = true) {
+        // compile value
+        const buffer = await this.compile("?", [value], {collapse_pointers, collapse_first_inserted, keep_external_pointers, no_create_pointers: false}) as ArrayBuffer;
+        // export
+        return this.export(buffer, output_name_or_path, file_type)
+    }
+
+    protected static async export(dxb_or_datex_script:Blob|ArrayBuffer|string, output_name_or_path?:string|URL, file_type: DATEX_FILE_TYPE = FILE_TYPE.DATEX_BINARY, original_url?:URL) {
+        // compile
+        const blob = dxb_or_datex_script instanceof Blob ? dxb_or_datex_script : new Blob([dxb_or_datex_script], {type:file_type[0]});
 
         // export
         if (client_type == "deno") {
@@ -5154,17 +5165,17 @@ export class Compiler {
             // export url
             if (output_name_or_path instanceof URL) export_path = output_name_or_path;
             // auto infer export url from import url
-            else if (script_or_url instanceof URL) {
+            else if (original_url instanceof URL) {
                 let name:string
                 // name provided
                 if (typeof output_name_or_path == "string") name = output_name_or_path;
                 // default filename (remove extension from current url path)
-                else name = script_or_url.pathname.split('/').pop()!.split('.').slice(0, -1).join('.');
+                else name = original_url.pathname.split('/').pop()!.split('.').slice(0, -1).join('.');
 
                 // normalize file name
                 name = this.normalizeFileName(name, file_type);
 
-                export_path = new URL(name, script_or_url);
+                export_path = new URL(name, original_url);
             }
             // cannot find a url
             else throw new CompilerError("Cannot export file - import or export URL required");

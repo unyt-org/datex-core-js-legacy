@@ -46,23 +46,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "datex-wasm"
-version = "0.1.0"
-dependencies = [
- "datex_cli_core",
- "datex_core",
- "lazy_static",
- "wasm-bindgen",
- "wasm-bindgen-test",
- "web-sys",
-]
-
-[[package]]
-name = "datex_cli_core"
-version = "0.1.0"
-
-[[package]]
-name = "datex_core"
+name = "datex-core"
 version = "0.1.0"
 dependencies = [
  "byteorder",
@@ -78,6 +62,22 @@ dependencies = [
  "strum",
  "wasm-bindgen",
 ]
+
+[[package]]
+name = "datex-wasm"
+version = "0.1.0"
+dependencies = [
+ "datex-core",
+ "datex_cli_core",
+ "lazy_static",
+ "wasm-bindgen",
+ "wasm-bindgen-test",
+ "web-sys",
+]
+
+[[package]]
+name = "datex_cli_core"
+version = "0.1.0"
 
 [[package]]
 name = "default-args"
