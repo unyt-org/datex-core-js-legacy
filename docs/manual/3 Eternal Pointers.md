@@ -25,7 +25,7 @@ To let a pointer exist beyond the lifetime of an endpoint, the `eternal` label c
 const users = eternal ?? $$(new Set<string>());
 
 export function addUser(name: string) {
-	users.add(name)
+    users.add(name)
 }
 ```
 
@@ -43,7 +43,7 @@ The DATEX Script equivalent to creating eternal values is the *init* operator (`
 ref users := Set ();
 
 export function addUser(name: text) (
-	users += name
+    users += name
 )
 ```
 In contrast to the `eternal` label in JS, the init operator can also be used for non-pointer values.
