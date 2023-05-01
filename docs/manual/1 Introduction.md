@@ -75,7 +75,7 @@ console.log(refSum.val) // 10
 This code is equivalent to the DATEX code above. 
 As you can see, the DATEX concepts are adopted in JavaScript in a very straightforward way.
 
-To learn more about DATEX pointers in JavaScript, check out the chapters [Pointers](./Pointers.md).
+To learn more about DATEX pointers in JavaScript, check out the chapters [Pointers](2%20Pointers.md).
 
 ### Persistent data
 
@@ -83,7 +83,7 @@ The DATEX JavaScript API allows you to access data from remote endpoints as norm
 
 With eternal pointers, DATEX-based applications can also access persistent data stored in their local storage in the same way - without the need for any third-party databases or other storage methods.
 
-Check out the chapter [Eternal Pointers](./Eternal%20Pointers.md) to learn more about this feature.
+Check out the chapter [Eternal Pointers](./3%20Eternal%20Pointers.md) to learn more about this feature.
 
 ### Connecting to the Supranet
 
@@ -108,4 +108,4 @@ const refArray = await datex `[1,2,3]`
 
 To execute functions on remote endpoints or do any other network related stuff, you always need to connect to the supranet first.
 
-Read more about the advanced DATEX APIs in the [DATEX API Chapter](./The%20DATEX%20API.md).
+Read more about the advanced DATEX APIs in the [DATEX API Chapter](./5%20The%20DATEX%20API.md).
