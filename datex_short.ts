@@ -478,6 +478,11 @@ export async function loadEternalValues(){
     // console.log("eternal",eternals,Pointer.getByValue(eternals)?.idString())
 }
 
+export async function clearEternalValues() {
+    eternals.clear();
+    await Storage.clearAll();
+}
+
 
 // get a stored eternal value from a caller location
 export function getEternal(info?:ReturnType<typeof getCallerInfo>, customIdentifier?:string, return_not_existing = false) {

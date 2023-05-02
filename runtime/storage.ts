@@ -144,7 +144,13 @@ export class Storage {
         }
     }
 
+    static #exiting = false
+
     static handleExit(){
+        if (this.#exiting) return;
+        this.#exiting = true
+        if (globalThis.Deno) setTimeout(()=>{Deno.exit(1)},20_000)
+        
         this.saveDirtyState();
         for (const [loc,options] of this.#locations) {
             if (options.modes.includes(<any>Storage.Mode.SAVE_ON_EXIT)) Storage.saveCurrentState(loc);
