@@ -149,7 +149,8 @@ export class Storage {
     static handleExit(){
         if (this.#exiting) return;
         this.#exiting = true
-        if (globalThis.Deno) setTimeout(()=>{Deno.exit(1)},20_000)
+        // TODO: add race promise with timeout to return if cache takes too long
+        // if (globalThis.Deno) setTimeout(()=>{Deno.exit(1)},20_000)
         
         this.saveDirtyState();
         for (const [loc,options] of this.#locations) {
