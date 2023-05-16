@@ -808,7 +808,7 @@ export class Pointer<T = any> extends Value<T> {
 
     // unsubscribe from all external pointers
     public static unsubscribeFromAllPointers(){
-        for (const pointer of this.pointers.values()) {
+        for (const pointer of this.getAllPointers()) {
             if (!pointer.is_anonymous && !pointer.is_origin) pointer.unsubscribeFromPointerUpdates()
         }
     }
@@ -819,8 +819,14 @@ export class Pointer<T = any> extends Value<T> {
      */
 
     public static pointers = new Map<string, Pointer>();   // pointer id -> pointer
+    public static primitive_pointers = new Map<string, WeakRef<Pointer>>();   // pointer id -> WeakRef<pointer>
+
     public static pointer_value_map  = new WeakMap<any, Pointer>(); // value -> pointer
     public static pointer_label_map  = new Map<string|number, Pointer>(); // label -> pointer
+
+    public static getAllPointers(): Pointer[] {
+        return [...this.pointers.values(), ...[...this.primitive_pointers.values()].map(r => r.deref()).filter(p=>!!p) as Pointer[]] 
+    }
 
     /**
      * returns a unique pointer hash: HASH + UNIQUE TIME
@@ -963,7 +969,8 @@ export class Pointer<T = any> extends Value<T> {
 
     // get pointer by id, only returns pointer if pointer already exists
     static get(id:Uint8Array|string):Pointer|undefined {
-        return this.pointers.get(Pointer.normalizePointerId(id))
+        id = Pointer.normalizePointerId(id);
+        return this.pointers.get(id) ?? this.primitive_pointers.get(id)?.deref();
     }
 
     static #pointer_sources = new Set<readonly [source:PointerSource, priority:number]>();
@@ -1221,7 +1228,7 @@ export class Pointer<T = any> extends Value<T> {
             if (value instanceof TypedArray) value = <T>Runtime.serializeValue(value); // convert to ArrayBuffer
 
             // id already in use
-            if (typeof id != "symbol" && id && (p = <Pointer<T>> this.pointers.get(this.normalizePointerId(id)))) {
+            if (typeof id != "symbol" && id && (p = <Pointer<T>> this.get(id))) {
                 if (p.is_js_primitive) {
                     if (value!=NOT_EXISTING) p.val = value; // update value of this pointer
                     if (origin) p.origin = origin; // override origin
@@ -1262,7 +1269,7 @@ export class Pointer<T = any> extends Value<T> {
         }
 
         // id already allocated to a pointer
-        else if (typeof id != "symbol" && id && (p = <Pointer<T>> this.pointers.get(this.normalizePointerId(id)))) {
+        else if (typeof id != "symbol" && id && (p = <Pointer<T>> this.get(id))) {
             if (value!=NOT_EXISTING) p.val = <any>value; // set value of this pointer, if not yet set
             if (origin) p.origin = origin; // override origin
             return p;
@@ -1396,6 +1403,7 @@ export class Pointer<T = any> extends Value<T> {
         for (const label of this.labels??[]) Pointer.pointer_label_map.delete(label);
         
         Pointer.pointers.delete(this.#id);
+        Pointer.primitive_pointers.delete(this.#id)
         delete globalThis[this.idString()];
 
         // call remove listeners
@@ -1672,10 +1680,20 @@ export class Pointer<T = any> extends Value<T> {
         this.#pointer_type = this.#id_buffer[0];
 
         // set global
-        if (!this.is_anonymous) Object.defineProperty(globalThis, this.idString(), {get:()=>this.val, set:(value)=>this.val=value, configurable:true})
+        if (!this.is_anonymous) {
+            const id = this.id;
+            Object.defineProperty(globalThis, this.idString(), {
+                get() {return Pointer.get(id)?.val}, 
+                set(value) {Pointer.get(id)!.val=value},
+                configurable:true
+            })
+        }
 
         // add to pointer list
-        if (!this.is_anonymous) Pointer.pointers.set(this.#id, this); 
+        if (!this.is_anonymous) {
+            if (this.is_js_primitive) Pointer.primitive_pointers.set(this.#id, new WeakRef(this)); 
+            else Pointer.pointers.set(this.#id, this); 
+        }
     }
 
     // set value, might return new pointer if placeholder pointer existed or converted to primitive pointer
@@ -1683,6 +1701,7 @@ export class Pointer<T = any> extends Value<T> {
         // primitive value and not yet initialized-> new pointer
         if (!this.value_initialized && (Object(v) !== v || v instanceof ArrayBuffer)) {
             Pointer.pointers.delete(this.id); // force remove previous non-primitive pointer (assume it has not yet been used)
+            Pointer.primitive_pointers.delete(this.id)
             return <any>Pointer.create(this.id, v, this.sealed, this.origin, this.is_persistant, this.is_anonymous, false, this.allowed_access, this.datex_timeout)
         }
         //placeholder replacement
@@ -1842,6 +1861,9 @@ export class Pointer<T = any> extends Value<T> {
             // always use live transforms for non-primitive pointers:
             this.setForcedLiveTransform(true)
             
+            // update registry
+            Pointer.primitive_pointers.delete(this.#id); 
+            Pointer.pointers.set(this.#id, this); 
         }
 
         // init value for JS-primitives value 
@@ -1849,6 +1871,10 @@ export class Pointer<T = any> extends Value<T> {
             this.#is_js_primitive = true;
             this.#loaded = true; // this.value exists
             super.setVal(val, true, is_transform)
+
+            // update registry
+            Pointer.primitive_pointers.set(this.#id, new WeakRef(this)); 
+            Pointer.pointers.delete(this.#id); 
         }
        
     
@@ -1915,7 +1941,14 @@ export class Pointer<T = any> extends Value<T> {
         // custom timeout from type?
         if (this.type.timeout!=undefined && this.datex_timeout==undefined) this.datex_timeout = this.type.timeout
         // set global variable (direct reference does not allow garbage collector to remove the value)
-        if (this.id && !this.is_anonymous) Object.defineProperty(globalThis, this.idString(), {get:()=>this.val, set:(value)=>this.val=value,configurable:true})
+        if (this.id && !this.is_anonymous) {
+            const id = this.id;
+            Object.defineProperty(globalThis, this.idString(), {
+                get() {return Pointer.get(id)?.val}, 
+                set(value) {Pointer.get(id)!.val=value},
+                configurable:true
+            })
+        }
         setTimeout(()=>{for (const l of Pointer.pointer_add_listeners) l(this)},0);
         Object.freeze(this);
     }
@@ -3130,7 +3163,7 @@ export function getProxyStaticValue(name:string, params:{filter?:target_clause, 
 // @ts-ignore devconsole
 globalThis.snapshot = ()=>{
     let x = "";
-    for (const ptr of Pointer.pointers.values()) {
+    for (const ptr of Pointer.getAllPointers()) {
         x += ptr.idString() + " := ";
         try {
             x += Runtime.valueToDatexString(ptr,false,true);
