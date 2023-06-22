@@ -48,6 +48,32 @@ type storage_location_options<L extends Storage.Location> =
         storage_options<Storage.Mode.SAVE_ON_CHANGE|Storage.Mode.SAVE_PERIODICALLY>
 
 
+export namespace Storage {
+    export interface LocationImpl {
+        setItem(key:string, value:unknown, pointer:Pointer|undefined, listen_for_pointer_changes: boolean):boolean
+        removeItem(key:string):void
+        getItemValueDXB(key:string): ArrayBuffer
+
+        initPointer(pointer:Pointer, listen_for_changes: boolean):boolean
+        updatePointer(pointer:Pointer): Set<Pointer>
+        getPointer(pointerId:string, pointerify?:boolean, bind?:unknown):unknown
+        removePointer(pointerId:string):void
+        getPointerValueDXB(pointerId:string): ArrayBuffer
+    }
+
+    export interface AsyncLocationImpl {
+        setItem(key:string, value:unknown, pointer:Pointer|undefined, listen_for_pointer_changes: boolean): Promise<boolean>
+        removeItem(key:string): Promise<void>
+        getItemValueDXB(key:string): Promise<ArrayBuffer>
+
+        initPointer(pointer:Pointer, listen_for_changes: boolean): Promise<boolean>
+        updatePointer(pointer:Pointer): Promise<Set<Pointer>>
+        getPointer(pointerId:string, pointerify?:boolean, bind?:unknown):Promise<unknown>
+        removePointer(pointerId:string):Promise<void>
+        getPointerValueDXB(pointerId:string): Promise<ArrayBuffer>
+    }
+}
+
 export class Storage {
     
     static cache:Map<string,any> = new Map(); // save stored values in a Map, return when calling getItem
@@ -175,8 +201,10 @@ export class Storage {
 
         try {
             // update items
+            let c = 0;
             for (const [key, val] of Storage.cache) {
                 try {
+                    c++;
                     this.setItem(key, val, true, location);
                 } catch (e) {console.error(e)}
             }
@@ -184,18 +212,20 @@ export class Storage {
             // update pointers
             for (const ptr of this.#storage_active_pointers) {
                 try {
+                    c++;
                     this.setPointer(ptr, true, location);
                 } catch (e) {console.error(e)}
             }
             for (const id of this.#storage_active_pointer_ids) {
                 try {
+                    c++;
                     const ptr = Pointer.get(id);
                     if (ptr?.value_initialized) this.setPointer(ptr, true, location);
                 } catch (e) {console.error(e)}
             }
 
             this.updateSaveTime(location); // last full backup to this storage location
-            logger.debug(`current state saved to ${Storage.Location[location]}`);
+            logger.debug(`current state saved to ${Storage.Location[location]} (${c} transactions)`);
         }
         catch (e) {
             console.error(e)
@@ -392,6 +422,7 @@ export class Storage {
             setTimeout(()=>{
                 saving = false;
                 // set pointer (async)
+                logger.debug("Update " + pointer.idString() + " in storage");
                 this.setPointer(pointer, false, location); // update value and add new dependencies recursively
             }, 2000);
         }, undefined, undefined, {ignore_transforms:true, recursive:false})
@@ -910,8 +941,11 @@ Pointer.registerPointerSource(new DatexStoragePointerSource());
 
 // @ts-ignore NO_INIT
 if (!globalThis.NO_INIT) {
+    const modes:(Storage.Mode.SAVE_ON_CHANGE|Storage.Mode.SAVE_PERIODICALLY)[] = [Storage.Mode.SAVE_ON_CHANGE];
+    if (client_type == "browser") modes.push(Storage.Mode.SAVE_PERIODICALLY);
+
     await Storage.addLocation(Storage.Location.INDEXED_DB, {
-        modes: [Storage.Mode.SAVE_ON_CHANGE, Storage.Mode.SAVE_PERIODICALLY],
+        modes,
         primary: true
     })
     

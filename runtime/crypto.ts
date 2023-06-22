@@ -42,26 +42,26 @@ export class Crypto {
 
 
     // used for signing/verifying with a sign/verify key
-    private static readonly sign_key_options = {
+    public static readonly sign_key_options = {
         name: "ECDSA",
         hash: {name: "SHA-384"},
     }
 
     // used to create a new sign/verify key pair
-    private static readonly sign_key_generator = {
+    public static readonly sign_key_generator = {
         name: "ECDSA",
         namedCurve: "P-384"
     }
 
     // used for encryption/decryption keys
-    private static readonly enc_key_options = {
+    public static readonly enc_key_options = {
         name: "RSA-OAEP",
         modulusLength: 4096,
         publicExponent: new Uint8Array([1, 0, 1]),
         hash: "SHA-256"
     }
     // used for import
-    private static readonly enc_key_import = {
+    public static readonly enc_key_import = {
         name: "RSA-OAEP",
         hash: "SHA-256"
     }

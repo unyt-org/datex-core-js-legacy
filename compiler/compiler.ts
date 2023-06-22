@@ -5127,8 +5127,8 @@ export class Compiler {
     }
 
     /** create compiled dxb (stored as a string) from a DATEX Script string */
-    static async datexScriptToBase64DXB(dx:string, type = ProtocolDataType.DATA, data = []):Promise<string> {
-        const dxb = <ArrayBuffer> await Compiler.compile(dx, data, {sign:false, encrypt: false, type})
+    static async datexScriptToBase64DXB(dx:string, type = ProtocolDataType.DATA, data = [], options:compiler_options={}):Promise<string> {
+        const dxb = <ArrayBuffer> await Compiler.compile(dx, data, {sign:false, encrypt: false, type, ...options})
         return arrayBufferToBase64(dxb);
     }
 
@@ -5151,8 +5151,15 @@ export class Compiler {
     static async exportValue(value: any, output_name_or_path?:string|URL, file_type: DATEX_FILE_TYPE = FILE_TYPE.DATEX_BINARY, collapse_pointers = true, collapse_first_inserted = true, keep_external_pointers = true) {
         // compile value
         const buffer = await this.compile("?", [value], {collapse_pointers, collapse_first_inserted, keep_external_pointers, no_create_pointers: false}) as ArrayBuffer;
-        // export
-        return this.export(buffer, output_name_or_path, file_type)
+
+        if (file_type[0] == "application/datex") {
+            // export
+            return this.export(buffer, output_name_or_path, file_type)
+        }
+        else {
+            return this.export(MessageLogger.decompile(buffer, true, false), output_name_or_path, file_type)
+        }
+
     }
 
     protected static async export(dxb_or_datex_script:Blob|ArrayBuffer|string, output_name_or_path?:string|URL, file_type: DATEX_FILE_TYPE = FILE_TYPE.DATEX_BINARY, original_url?:URL) {

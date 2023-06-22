@@ -73,11 +73,15 @@ export class Unyt {
         let content = "";
 
         const endpoint = info.endpoint ? await this.formatEndpoint(info.endpoint) : undefined;
-        const backend = info.app?.backend ? await this.formatEndpoint(info.app?.backend) : undefined;
+        const endpointURL = info.app?.backend || info.endpoint ? await this.formatEndpointURL(info.app?.backend || info.endpoint) : undefined;
+
+        const backend = info.app?.backend ? await this.formatEndpoint(info.app.backend) : undefined;
 
         if (info.app?.name) content += `${ESCAPE_SEQUENCES.UNYT_GREY}APP${ESCAPE_SEQUENCES.UNYT_CYAN}           ${info.app.name}${ESCAPE_SEQUENCES.RESET}\n`
         if (endpoint) content += `${ESCAPE_SEQUENCES.UNYT_GREY}ENDPOINT${ESCAPE_SEQUENCES.COLOR_DEFAULT}      ${endpoint}${ESCAPE_SEQUENCES.RESET}\n`
+        if (endpointURL) content += `${ESCAPE_SEQUENCES.UNYT_GREY}APP URL${ESCAPE_SEQUENCES.COLOR_DEFAULT}       ${endpointURL}\n`
         if (backend) content += `${ESCAPE_SEQUENCES.UNYT_GREY}BACKEND${ESCAPE_SEQUENCES.COLOR_DEFAULT}       ${backend}\n`
+
         if (info.app?.version) content += `${ESCAPE_SEQUENCES.UNYT_GREY}VERSION${ESCAPE_SEQUENCES.COLOR_DEFAULT}       ${info.app.version}\n`
         if (info.app?.stage) content += `${ESCAPE_SEQUENCES.UNYT_GREY}STAGE${ESCAPE_SEQUENCES.COLOR_DEFAULT}         ${info.app.stage}\n`
         content += `\n`
@@ -115,4 +119,10 @@ ${content}
         return Runtime.valueToDatexStringExperimental(endpoint,false,true);
     }
 
+    private static formatEndpointURL(endpoint:Endpoint) {
+        const endpointName = endpoint.toString();
+        if (endpointName.startsWith("@+")) return `https://${endpointName.replace("@+","")}.unyt.app`
+        else if (endpointName.startsWith("@@")) return `https://${endpointName.replace("@@","")}.unyt.app`
+        else if (endpointName.startsWith("@")) return `https://${endpointName.replace("@@","")}.unyt.me`
+    }
 }
