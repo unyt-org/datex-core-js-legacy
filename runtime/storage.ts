@@ -2,20 +2,19 @@
 import { Runtime } from "../runtime/runtime.ts";
 
 import type { PointerSource } from "../utils/global_types.ts";
-import { client_type, logger } from "../utils/global_values.ts";
-import { Compiler } from "../compiler/compiler.ts";
+import { logger } from "../utils/global_values.ts";
 import { NOT_EXISTING } from "./constants.ts";
 import { Pointer, type MinimalJSRef } from "./pointers.ts";
-import { base64ToArrayBuffer } from "../utils/utils.ts";
-import { localStorage } from "./local_storage.ts";
+import { localStorage } from "./storage-locations/local-storage-compat.ts";
 import { MessageLogger } from "../utils/message_logger.ts";
 import { displayFatalError, displayInit} from "./display.ts"
 import { Type } from "../types/type.ts";
 
+
 displayInit();
 
 /***** imports and definitions with top-level await - node.js / browser interoperability *******************************/
-const site_suffix = (()=>{
+export const site_suffix = (()=>{
     // remove hash from url
     if (globalThis.location?.origin) {
         // const url = new URL(globalThis.location.href)
@@ -28,13 +27,87 @@ const site_suffix = (()=>{
 
 
 
-if (client_type === "deno") await import ("./deno_indexeddb.ts");
+export interface StorageLocation<SupportedModes extends Storage.Mode = Storage.Mode> {
+    name: string
+    isAsync: boolean
 
-// db based storage for DATEX value caching (IndexDB in the browser)
-const localforage = (await import("../lib/localforage/localforage.js")).default;
-const datex_item_storage = <globalThis.Storage><unknown> localforage.createInstance({name: "dxitem::"+site_suffix});
-const datex_pointer_storage = <globalThis.Storage><unknown> localforage.createInstance({name: "dxptr::"+site_suffix});
+    isSupported(): boolean
+    onAfterExit?(): void
 
+    setItem(key:string, value:unknown): Promise<boolean>|boolean
+    getItem(key:string): Promise<unknown>|unknown
+    hasItem(key:string):Promise<boolean>|boolean
+    removeItem(key:string): Promise<void>|void
+    getItemValueDXB(key:string): Promise<ArrayBuffer|null>|ArrayBuffer|null
+    setItemValueDXB(key:string, value: ArrayBuffer):Promise<void>|void
+    getItemKeys(): Promise<Generator<string, void, unknown>> | Generator<string, void, unknown>
+
+    setPointer(pointer:Pointer): Promise<Set<Pointer>>|Set<Pointer>
+    getPointerValue(pointerId:string, outer_serialized:boolean):Promise<unknown>|unknown
+    removePointer(pointerId:string):Promise<void>|void
+    hasPointer(pointerId:string):Promise<boolean>|boolean
+    getPointerIds(): Promise<Generator<string, void, unknown>> | Generator<string, void, unknown>
+    getPointerValueDXB(pointerId:string): Promise<ArrayBuffer|null>|ArrayBuffer|null
+    setPointerValueDXB(pointerId:string, value: ArrayBuffer):Promise<void>|void
+    clear(): Promise<void>|void
+    
+}
+export abstract class SyncStorageLocation implements StorageLocation<Storage.Mode.SAVE_ON_CHANGE|Storage.Mode.SAVE_PERIODICALLY|Storage.Mode.SAVE_ON_EXIT> {
+
+    abstract name: string;
+    readonly isAsync = false;
+
+    abstract isSupported(): boolean
+    onAfterExit() {}
+
+    abstract setItem(key: string,value: unknown): boolean
+    abstract getItem(key:string): Promise<unknown>|unknown
+    abstract hasItem(key:string): boolean
+    abstract getItemKeys(): Generator<string, void, unknown>
+
+    abstract removeItem(key: string): void
+    abstract getItemValueDXB(key: string): ArrayBuffer|null
+    abstract setItemValueDXB(key:string, value: ArrayBuffer):void
+
+    abstract setPointer(pointer: Pointer<any>): Set<Pointer<any>>
+    abstract getPointerValue(pointerId: string, outer_serialized:boolean): unknown
+    abstract getPointerIds(): Generator<string, void, unknown>
+
+    abstract removePointer(pointerId: string): void
+    abstract getPointerValueDXB(pointerId: string): ArrayBuffer|null
+    abstract setPointerValueDXB(pointerId:string, value: ArrayBuffer):void
+    abstract hasPointer(pointerId: string): boolean
+
+    abstract clear(): void
+}
+
+export abstract class AsyncStorageLocation implements StorageLocation<Storage.Mode.SAVE_ON_CHANGE|Storage.Mode.SAVE_PERIODICALLY> {
+    abstract name: string;
+    readonly isAsync = true;
+
+    abstract isSupported(): boolean
+    onAfterExit() {}
+
+    abstract setItem(key: string,value: unknown): Promise<boolean>
+    abstract getItem(key:string): Promise<unknown>
+    abstract hasItem(key:string): Promise<boolean>
+    abstract getItemKeys(): Promise<Generator<string, void, unknown>>
+
+    abstract removeItem(key: string): Promise<void>
+    abstract getItemValueDXB(key: string): Promise<ArrayBuffer|null> 
+    abstract setItemValueDXB(key:string, value: ArrayBuffer):Promise<void>
+
+    abstract setPointer(pointer: Pointer<any>): Promise<Set<Pointer<any>>>
+    abstract getPointerValue(pointerId: string, outer_serialized:boolean): Promise<unknown>
+    abstract getPointerIds(): Promise<Generator<string, void, unknown>>
+
+    abstract removePointer(pointerId: string): Promise<void>
+    abstract getPointerValueDXB(pointerId: string): Promise<ArrayBuffer|null>
+    abstract setPointerValueDXB(pointerId:string, value: ArrayBuffer):Promise<void>
+    abstract hasPointer(pointerId: string): Promise<boolean>
+
+    abstract clear(): Promise<void>
+}
 
 type storage_options<M extends Storage.Mode> = {
     modes: M[]
@@ -42,37 +115,9 @@ type storage_options<M extends Storage.Mode> = {
     interval?: number
 }
 
-type storage_location_options<L extends Storage.Location> = 
-    L extends Storage.Location.FILESYSTEM_OR_LOCALSTORAGE ? 
-        storage_options<Storage.Mode.SAVE_ON_CHANGE|Storage.Mode.SAVE_PERIODICALLY|Storage.Mode.SAVE_ON_EXIT> : 
-        storage_options<Storage.Mode.SAVE_ON_CHANGE|Storage.Mode.SAVE_PERIODICALLY>
+type storage_location_options<L extends StorageLocation> = 
+    L extends StorageLocation<infer T> ? storage_options<T> : never
 
-
-export namespace Storage {
-    export interface LocationImpl {
-        setItem(key:string, value:unknown, pointer:Pointer|undefined, listen_for_pointer_changes: boolean):boolean
-        removeItem(key:string):void
-        getItemValueDXB(key:string): ArrayBuffer
-
-        initPointer(pointer:Pointer, listen_for_changes: boolean):boolean
-        updatePointer(pointer:Pointer): Set<Pointer>
-        getPointer(pointerId:string, pointerify?:boolean, bind?:unknown):unknown
-        removePointer(pointerId:string):void
-        getPointerValueDXB(pointerId:string): ArrayBuffer
-    }
-
-    export interface AsyncLocationImpl {
-        setItem(key:string, value:unknown, pointer:Pointer|undefined, listen_for_pointer_changes: boolean): Promise<boolean>
-        removeItem(key:string): Promise<void>
-        getItemValueDXB(key:string): Promise<ArrayBuffer>
-
-        initPointer(pointer:Pointer, listen_for_changes: boolean): Promise<boolean>
-        updatePointer(pointer:Pointer): Promise<Set<Pointer>>
-        getPointer(pointerId:string, pointerify?:boolean, bind?:unknown):Promise<unknown>
-        removePointer(pointerId:string):Promise<void>
-        getPointerValueDXB(pointerId:string): Promise<ArrayBuffer>
-    }
-}
 
 export class Storage {
     
@@ -92,31 +137,31 @@ export class Storage {
 
     static DEFAULT_INTERVAL = 60; // 60s
 
-    static #primary_location?: Storage.Location;
-    static #trusted_location?: Storage.Location;
+    static #primary_location?: StorageLocation;
+    static #trusted_location?: StorageLocation;
     static #trusted_pointers = new Set<string>()
 
     // location which did that last complete backup in the last session, if none found, use the current primary location
-    static set trusted_location(location: Storage.Location | undefined) {
+    static set trusted_location(location: StorageLocation | undefined) {
         this.#trusted_location = location;
         if (location != undefined) {
-            logger.debug `trusted storage location: #bold${Storage.Location[location]}`
+            logger.debug `trusted storage location: #bold${location.name}`
         }
     }
     static get trusted_location () {return this.#trusted_location}
 
     // default location for saving pointers/items
-    static set primary_location(location: Storage.Location | undefined) {
+    static set primary_location(location: StorageLocation | undefined) {
         this.#primary_location = location;
         if (this.#trusted_location == undefined) this.trusted_location = this.#primary_location; // use as trusted location
     }
     static get primary_location () {return this.#primary_location}
 
-    static #locations = new Map<Storage.Location, storage_location_options<Storage.Location.FILESYSTEM_OR_LOCALSTORAGE>|storage_location_options<Storage.Location.INDEXED_DB>>()
+    static #locations = new Map<StorageLocation, storage_location_options<StorageLocation>>()
     static #auto_sync_enabled = false;
 
     // set options for storage location and enable
-    public static addLocation<L extends Storage.Location>(location:L, options:storage_location_options<L>) {
+    public static addLocation<L extends StorageLocation>(location:L, options:storage_location_options<L>) {
         this.#locations.set(location, options);
 
         if (options.interval && !options.modes.includes(Storage.Mode.SAVE_PERIODICALLY)) {
@@ -125,9 +170,11 @@ export class Storage {
 
         for (const mode of options.modes) {
             // asynchronous saving on exit not possible
-            if (mode == Storage.Mode.SAVE_ON_EXIT && location == Storage.Location.INDEXED_DB) throw new Error("Invalid DATEX Storage location: INDEXED_DB is not compatible with SAVE_ON_EXIT mode");
-            // localStorage undefined (e.g. in web worker)
-            if (location == Storage.Location.FILESYSTEM_OR_LOCALSTORAGE && !localStorage) throw new Error("Invalid DATEX Storage location: FILESYSTEM_OR_LOCALSTORAGE, localStorage not available");
+            if (mode == Storage.Mode.SAVE_ON_EXIT && location.isAsync) throw new Error("Invalid DATEX Storage location: "+location.name+" is async and not compatible with SAVE_ON_EXIT mode");
+            // supported? e.g. localStorage undefined in web worker
+            if (!location.isSupported()) {
+                throw new Error("Invalid DATEX Storage location: "+location.name+", not supported in this context");
+            }
         
             if (mode == Storage.Mode.SAVE_PERIODICALLY) {
                 this.addSaveInterval(location, options.interval ?? this.DEFAULT_INTERVAL)
@@ -140,7 +187,7 @@ export class Storage {
             if (options.modes.includes(Storage.Mode.SAVE_ON_CHANGE)) this.#auto_sync_enabled = true;
         }
 
-        logger.debug `using ${options.primary?'primary':'secondary'} storage location #bold${Storage.Location[location]}:#color(grey) ${options.modes.map(m=>Storage.Mode[m]).join(', ')}`
+        logger.debug `using ${options.primary?'primary':'secondary'} storage location #bold${location.name}:#color(grey) ${options.modes.map(m=>Storage.Mode[m]).join(', ')}`
 
         if (options.primary) {
             this.primary_location = location;
@@ -150,7 +197,7 @@ export class Storage {
     }
 
     // disable storage location
-    public static removeLocation(location:Storage.Location) {
+    public static removeLocation(location:StorageLocation) {
         const options = this.#locations.get(location);
         this.#locations.delete(location);
         if (options?.primary) this.primary_location = undefined;
@@ -158,12 +205,12 @@ export class Storage {
     }
 
 
-    static #save_interval_refs = new Map<Storage.Location, number>()
+    static #save_interval_refs = new Map<StorageLocation, number>()
 
     /**
      * set the interval (in s) in which the current pointer should be saved in a storage storage
      */
-    private static addSaveInterval(location:Storage.Location, interval:number) {
+    private static addSaveInterval(location:StorageLocation, interval:number) {
         if (this.#save_interval_refs.has(location)) clearInterval(this.#save_interval_refs.get(location))
         if (interval != 0) {
             this.#save_interval_refs.set(location, setInterval(()=>this.saveCurrentState(location), interval * 1000))
@@ -181,7 +228,7 @@ export class Storage {
         this.saveDirtyState();
         for (const [loc,options] of this.#locations) {
             if (options.modes.includes(<any>Storage.Mode.SAVE_ON_EXIT)) Storage.saveCurrentState(loc);
-            if (loc == Storage.Location.FILESYSTEM_OR_LOCALSTORAGE && localStorage.saveFile) localStorage.saveFile(); // deno local storage, save file
+            loc.onAfterExit?.();
         }
         logger.debug("exit - state saved in cache");
     }
@@ -193,7 +240,7 @@ export class Storage {
         this.#exit_without_save = true;
     }
 
-    private static saveCurrentState(location:Storage.Location){
+    private static saveCurrentState(location:StorageLocation){
         if (this.#exit_without_save) {
             console.log(`exiting without save`);
             return;
@@ -225,7 +272,7 @@ export class Storage {
             }
 
             this.updateSaveTime(location); // last full backup to this storage location
-            logger.debug(`current state saved to ${Storage.Location[location]} (${c} transactions)`);
+            logger.debug(`current state saved to ${location.name} (${c} items)`);
         }
         catch (e) {
             console.error(e)
@@ -234,28 +281,28 @@ export class Storage {
     }
     
     // called when a full backup to this storage location was made
-    private static updateSaveTime(location:Storage.Location) {
+    private static updateSaveTime(location:StorageLocation) {
         if (this.#exit_without_save) return; // currently exiting
-        localStorage.setItem(this.meta_prefix+'__saved__' + Storage.Location[location], new Date().getTime().toString());
+        localStorage.setItem(this.meta_prefix+'__saved__' + location.name, new Date().getTime().toString());
     }
 
-    private static deleteSaveTime(location:Storage.Location) {
-        localStorage.removeItem(this.meta_prefix+'__saved__' + Storage.Location[location]);
+    private static deleteSaveTime(location:StorageLocation) {
+        localStorage.removeItem(this.meta_prefix+'__saved__' + location.name);
     }
 
-    static #dirty_locations = new Set<Storage.Location>()
+    static #dirty_locations = new Set<StorageLocation>()
 
     // handle dirty states for async storage operations:
 
     // called when a full backup to this storage location was made
-    private static setDirty(location:Storage.Location, dirty = true) {
+    public static setDirty(location:StorageLocation, dirty = true) {
         if (dirty) this.#dirty_locations.add(location);
         else this.#dirty_locations.delete(location);
     }
 
     static #dirty = false;
-    private static isInDirtyState(location:Storage.Location) {
-        this.#dirty = !!localStorage.getItem(this.meta_prefix+'__dirty__' + Storage.Location[location])
+    private static isInDirtyState(location:StorageLocation) {
+        this.#dirty = !!localStorage.getItem(this.meta_prefix+'__dirty__' + location.name)
         return this.#dirty;
     }
 
@@ -265,143 +312,140 @@ export class Storage {
     private static saveDirtyState(){
         if (this.#exit_without_save) return; // currently exiting
         for (const location of this.#dirty_locations) {
-            localStorage.setItem(this.meta_prefix+'__dirty__' + Storage.Location[location], new Date().getTime().toString());
+            localStorage.setItem(this.meta_prefix+'__dirty__' + location.name, new Date().getTime().toString());
         }
     }
 
     /**
      * clear the dirty state in localstorage
      */
-    private static clearDirtyState(location: Storage.Location){
-        localStorage.removeItem(this.meta_prefix+'__dirty__' + Storage.Location[location]);
+    private static clearDirtyState(location: StorageLocation){
+        localStorage.removeItem(this.meta_prefix+'__dirty__' + location.name);
     }
     
 
-    private static getLastUpdatedStorage() {
-        let last:Storage.Location|undefined;
+    private static getLastUpdatedStorage(fromLocations: StorageLocation[]) {
+        let last:StorageLocation|undefined;
         let last_time = 0;
-        for (const _loc in Storage.Location) {
-            const location = <Storage.Location> Number(_loc)
-            if (!isNaN(location)) {
-                const time = Number(localStorage.getItem(this.meta_prefix+'__saved__' + Storage.Location[location]));
-                if (time > last_time) {
-                    last_time = time;
-                    last = location
-                }
-                this.deleteSaveTime(location); // no longer valid after this session
-            }
+        for (const location of fromLocations) {
+			const time = Number(localStorage.getItem(this.meta_prefix+'__saved__' + location.name));
+			if (time > last_time) {
+				last_time = time;
+				last = location
+			}
+			this.deleteSaveTime(location); // no longer valid after this session
         }
         return last;
     }
 
-    static determineTrustedLocation(){
-        this.trusted_location = this.getLastUpdatedStorage() ?? this.primary_location;
+    static determineTrustedLocation(fromLocations: StorageLocation[]){
+        this.trusted_location = this.getLastUpdatedStorage(fromLocations) ?? this.primary_location;
     }
 
-    static setItem(key:string, value:any, listen_for_pointer_changes = true, location:Storage.Location|null|undefined = this.#primary_location):Promise<boolean>|boolean {
+    static setItem(key:string, value:any, listen_for_pointer_changes = true, location:StorageLocation|null|undefined = this.#primary_location):Promise<boolean>|boolean {
         Storage.cache.set(key, value); // save in cache
         // cache deletion does not work, problems with storage item backup
         // setTimeout(()=>Storage.cache.delete(key), 10000);
         const pointer = value instanceof Pointer ? value : Pointer.getByValue(value);
 
-        if (location==undefined || location == Storage.Location.INDEXED_DB) return this.setItemDB(key, value, pointer, listen_for_pointer_changes);
-        if (location==undefined || location == Storage.Location.FILESYSTEM_OR_LOCALSTORAGE) return this.setItemLocalStorage(key, value, pointer, listen_for_pointer_changes);
+		if (location)  {
+			if (location.isAsync) return this.setItemAsync(location as AsyncStorageLocation, key, value, pointer, listen_for_pointer_changes);
+			else return this.setItemSync(location as SyncStorageLocation, key, value, pointer, listen_for_pointer_changes);
+		}
         else return false;
     }
 
-    private static setItemLocalStorage(key:string, value:any, pointer?:Pointer, listen_for_pointer_changes = true):boolean {
+	static async setItemAsync(location:AsyncStorageLocation, key: string,value: unknown,pointer: Pointer<any>|undefined,listen_for_pointer_changes: boolean): Promise<boolean> {
+		this.setDirty(location, true)
         // also store pointer
         if (pointer) {
-            const res = this.setPointer(pointer, listen_for_pointer_changes, Storage.Location.FILESYSTEM_OR_LOCALSTORAGE);
+            const res = await Storage.setPointer(pointer, listen_for_pointer_changes, location);
             if (!res) return false;
         }
-
-        localStorage.setItem(this.item_prefix+key, Compiler.encodeValueBase64(value))
-        return true;
-    }
-
-    private static async setItemDB(key:string, value:any, pointer?:Pointer, listen_for_pointer_changes = true):Promise<boolean> {
-        this.setDirty(Storage.Location.INDEXED_DB)
-        // also store pointer
-        if (pointer) {
-            const res = await this.setPointer(pointer, listen_for_pointer_changes, Storage.Location.INDEXED_DB);
-            if (!res) return false;
-        }
-        this.setDirty(Storage.Location.INDEXED_DB, true)
+        this.setDirty(location, true)
         // store value (might be pointer reference)
-        await datex_item_storage.setItem(key, <any>Compiler.encodeValue(value));  // value to buffer (no header)
-        this.setDirty(Storage.Location.INDEXED_DB, false)
-        return true;
-    }
+        const res = await location.setItem(key, value);
+        this.setDirty(location, false)
+        return res;
+	}
 
-    private static setPointer(pointer:Pointer, listen_for_changes = true, location:Storage.Location|undefined = this.#primary_location): Promise<boolean>|boolean {
+	static setItemSync(location:SyncStorageLocation, key: string,value: unknown,pointer: Pointer<any>|undefined,listen_for_pointer_changes: boolean): boolean {
+		// also store pointer
+        if (pointer) {
+            const res = Storage.setPointer(pointer, listen_for_pointer_changes, location);
+            if (!res) return false;
+        }
+
+        return location.setItem(key, value);
+	}
+
+    public static setPointer(pointer:Pointer, listen_for_changes = true, location:StorageLocation|undefined = this.#primary_location): Promise<boolean>|boolean {
 
         if (!pointer.value_initialized) {
             logger.warn("pointer value " + pointer.idString() + " not available, cannot save in storage");
             return false
         }
         
-        if (location==undefined || location == Storage.Location.INDEXED_DB) return this.initPointerDB(pointer, listen_for_changes);
-        if (location==undefined || location == Storage.Location.FILESYSTEM_OR_LOCALSTORAGE) return this.initPointerLocalStorage(pointer, listen_for_changes);
-        return false;
+		if (location)  {
+			if (location.isAsync) return this.initPointerAsync(location as AsyncStorageLocation, pointer, listen_for_changes);
+			else return this.initPointerSync(location as SyncStorageLocation, pointer, listen_for_changes);
+		}
+		else return false;
     }
 
-    private static initPointerLocalStorage(pointer:Pointer, listen_for_changes = true):boolean {
+    private static initPointerSync(location: SyncStorageLocation, pointer:Pointer, listen_for_changes = true):boolean {
         // if (pointer.transform_scope && this.hasPointer(pointer)) return true; // ignore transform pointer, initial transform scope already stored, does not change
 
-        const dependencies = this.updatePointerLocalStorage(pointer);
+        const dependencies = this.updatePointerSync(location, pointer);
 
         // add required pointers for this pointer (only same-origin pointers)
         for (const ptr of dependencies) {
             // add if not yet in storage
-            if (ptr != pointer && /*ptr.is_origin &&*/ !localStorage.getItem(this.pointer_prefix+ptr.id)) this.setPointer(ptr, listen_for_changes, Storage.Location.FILESYSTEM_OR_LOCALSTORAGE)
+            if (ptr != pointer && /*ptr.is_origin &&*/ !localStorage.getItem(this.pointer_prefix+ptr.id)) this.setPointer(ptr, listen_for_changes, location)
         }
 
         // listen for changes
-        if (listen_for_changes) this.syncPointer(pointer, Storage.Location.INDEXED_DB);
+        if (listen_for_changes) this.syncPointer(pointer, location);
 
         this.#storage_active_pointers.add(pointer);
     
         return true;
     }
 
-    private static updatePointerLocalStorage(pointer:Pointer): Set<Pointer>{
-        const inserted_ptrs = new Set<Pointer>();
-        localStorage.setItem(this.pointer_prefix+pointer.id, Compiler.encodeValueBase64(pointer, inserted_ptrs, true, false, true));  // serialized pointer
-        return inserted_ptrs;
+    private static updatePointerSync(location: SyncStorageLocation, pointer:Pointer): Set<Pointer>{
+		return location.setPointer(pointer);
     }
 
-    private static async initPointerDB(pointer:Pointer, listen_for_changes = true):Promise<boolean>{
+    private static async initPointerAsync(location: AsyncStorageLocation, pointer:Pointer, listen_for_changes = true):Promise<boolean>{
         // if (pointer.transform_scope && await this.hasPointer(pointer)) return true; // ignore transform pointer, initial transform scope already stored, does not change
 
-        const dependencies = await this.updatePointerDB(pointer);
+        const dependencies = await this.updatePointerAsync(location, pointer);
 
         // add required pointers for this pointer (only same-origin pointers)
         for (const ptr of dependencies) {
             // add if not yet in storage
-            if (ptr != pointer && /*ptr.is_origin &&*/ !await this.hasPointer(ptr)) await this.setPointer(ptr, listen_for_changes, Storage.Location.INDEXED_DB)
+            if (ptr != pointer && /*ptr.is_origin &&*/ !await this.hasPointer(ptr)) await this.setPointer(ptr, listen_for_changes, location)
         }
 
         // listen for changes
-        if (listen_for_changes) this.syncPointer(pointer, Storage.Location.INDEXED_DB);
+        if (listen_for_changes) this.syncPointer(pointer, location);
 
         this.#storage_active_pointers.add(pointer);
 
         return true;
     }
 
-    private static async updatePointerDB(pointer:Pointer): Promise<Set<Pointer>> {
-        this.setDirty(Storage.Location.INDEXED_DB)
-        const inserted_ptrs = new Set<Pointer>();
-        await datex_pointer_storage.setItem(pointer.id, <any>Compiler.encodeValue(pointer, inserted_ptrs, true, false, true));
-        this.setDirty(Storage.Location.INDEXED_DB, false)
-        return inserted_ptrs;
+    private static async updatePointerAsync(location: AsyncStorageLocation, pointer:Pointer): Promise<Set<Pointer>> {
+        this.setDirty(location, true)
+		const res = await location.setPointer(pointer);
+		this.setDirty(location, false)
+		return res;
     }
 
 
     private static synced_pointers = new Set<Pointer>();
 
-    static syncPointer(pointer: Pointer, location?: Storage.Location) {
+    static syncPointer(pointer: Pointer, location?: StorageLocation) {
         if (!this.#auto_sync_enabled) return;
 
 
@@ -416,7 +460,7 @@ export class Storage {
 
         // any value change
         let saving = false;
-        pointer.observe((v,k,t)=>{
+        pointer.observe(()=>{
             if (saving) return;
             saving = true;
             setTimeout(()=>{
@@ -429,10 +473,11 @@ export class Storage {
         
     }
 
-    public static async hasPointer(pointer:Pointer, location:Storage.Location|undefined = this.#trusted_location) {
-        if (location == undefined || location == Storage.Location.INDEXED_DB && (await datex_pointer_storage.getItem(pointer.id)) !== null) return true;
-        if (location == undefined || location == Storage.Location.FILESYSTEM_OR_LOCALSTORAGE && localStorage.getItem(this.pointer_prefix+pointer.id)) return true;
-        return false;
+    public static hasPointer(pointer:Pointer, location:StorageLocation|undefined = this.#trusted_location) {
+		if (location)  {
+			return location.hasPointer(pointer.id);
+		}
+		else return false;
     }
 
     private static getLocationPriorityOrder(pointer_id:string) {
@@ -440,7 +485,7 @@ export class Storage {
         else return [this.#trusted_location, this.#primary_location] // first try to get from trusted location
     }
 
-    private static initPrimaryFromTrustedLocation(pointer_id:string, maybe_trusted_location:Storage.Location) {
+    private static initPrimaryFromTrustedLocation(pointer_id:string, maybe_trusted_location:StorageLocation) {
         if (this.#primary_location == undefined) return;
         if (this.#primary_location == this.#trusted_location) return;
 
@@ -463,7 +508,7 @@ export class Storage {
     private static async restoreDirtyState(){
         if (this.#primary_location != undefined && this.isInDirtyState(this.#primary_location) && this.#trusted_location != undefined && this.#trusted_location!=this.#primary_location) {
             await this.copyStorage(this.#trusted_location, this.#primary_location)
-            logger.warn `restored dirty state of ${Storage.Location[this.#primary_location]} from trusted location ${Storage.Location[this.#trusted_location]}`
+            logger.warn `restored dirty state of ${this.#primary_location.name} from trusted location ${this.#trusted_location.name}`
             this.setDirty(this.#primary_location, false) // remove from dirty set
             this.clearDirtyState(this.#primary_location) // remove from localstorage
             this.#dirty = false;
@@ -479,11 +524,11 @@ export class Storage {
      * @param outer_serialized if true, the outer value type is not evaluated and only the serialized value is returned
      * @returns value from pointer storage
      */
-    public static async getPointer(pointer_id:string, pointerify?:boolean, bind?:any, location?:Storage.Location):Promise<any> {
+    public static async getPointer(pointer_id:string, pointerify?:boolean, bind?:any, location?:StorageLocation):Promise<any> {
 
         if (this.#dirty) {
             displayFatalError('storage-unrecoverable');
-            throw new Error(`cannot restore dirty state of ${Storage.Location[this.#primary_location!]}, no trusted secondary storage location found`)
+            throw new Error(`cannot restore dirty state of ${this.#primary_location!.name}, no trusted secondary storage location found`)
         }
 
         // try to find pointer at a storage location
@@ -496,78 +541,24 @@ export class Storage {
         return NOT_EXISTING
     }
 
-    private static async getPointerFromLocation(pointer_id:string, pointerify: boolean|undefined, bind:any|undefined, location:Storage.Location) {
-        if (location == Storage.Location.INDEXED_DB) {
-            const val = await this.getPointerDB(pointer_id, pointerify, bind);
-            if (val !== NOT_EXISTING){ 
-                await this.initPrimaryFromTrustedLocation(pointer_id, Storage.Location.INDEXED_DB)
-                return val;
-            }
-        }
-
-        else if (location == Storage.Location.FILESYSTEM_OR_LOCALSTORAGE) {
-            const val = await this.getPointerLocalStorage(pointer_id, pointerify, bind);
-            if (val !== NOT_EXISTING){
-                await this.initPrimaryFromTrustedLocation(pointer_id, Storage.Location.FILESYSTEM_OR_LOCALSTORAGE)
-                return val;
-            }
-        }
-        return NOT_EXISTING
+    private static async getPointerFromLocation(pointer_id:string, pointerify: boolean|undefined, bind:any|undefined, location:StorageLocation) {
+        const val = await this.getPointerAsync(location, pointer_id, pointerify, bind);
+		if (val == NOT_EXISTING) return NOT_EXISTING;
+        
+		await this.initPrimaryFromTrustedLocation(pointer_id, location)
+        return val;
     }
 
-    private static async getPointerLocalStorage(pointer_id:string, pointerify?:boolean, bind?:any) {
+    private static async getPointerAsync(location:StorageLocation, pointer_id:string, pointerify?:boolean, bind?:any) {
 
         let pointer:Pointer|undefined;
-        if (pointerify && (pointer = Pointer.get(pointer_id))?.value_initialized) {
+		if (pointerify && (pointer = Pointer.get(pointer_id))?.value_initialized) {
             return pointer.val; // pointer still exists in runtime
         }
 
         // load from storage
-        const base64 = localStorage.getItem(this.pointer_prefix+pointer_id);
-        if (base64 == null) return NOT_EXISTING;
-
-        let val = await Runtime.decodeValueBase64(base64, !!bind);
-
-        // bind serialized val to existing value
-        if (bind) {
-            Type.ofValue(bind).updateValue(bind, val);
-            val = bind;
-        }
-        
-        // create pointer with saved id and value + start syncing, if pointer not already created in DATEX
-        if (pointerify) {
-            let pointer:Pointer;
-
-            // if the value is a pointer with a tranform scope, copy the transform, not the value (TODO still just a workaround to preserve transforms in storage, maybe better solution?)
-            if (val instanceof Pointer && val.transform_scope) {
-                pointer = await Pointer.createTransformAsync(val.transform_scope.internal_vars, val.transform_scope);
-            }
-            // normal pointer from value
-            else pointer = Pointer.create(pointer_id, val, false, Runtime.endpoint);
-            
-            this.syncPointer(pointer);
-            this.#storage_active_pointers.add(pointer);
-            if (pointer.is_js_primitive) return pointer;
-            else return pointer.val;
-        }
-
-        else {
-            this.#storage_active_pointer_ids.add(pointer_id);
-            return val;
-        }
-
-    }
-
-    private static async getPointerDB(pointer_id:string, pointerify?:boolean, bind?:any) {
-
-        let pointer:Pointer|undefined;
-        if (pointerify && (pointer = Pointer.get(pointer_id))) return pointer.val; // pointer still exists in runtime
-
-        // load from storage
-        const buffer = <ArrayBuffer><any>await datex_pointer_storage.getItem(pointer_id);
-        if (buffer == null) return NOT_EXISTING;
-
-        let val = await Runtime.decodeValue(buffer, !!bind);
+		let val = location.getPointerValue(pointer_id, !!bind);
+		if (val == NOT_EXISTING) return NOT_EXISTING;
 
         // bind serialized val to existing value
         if (bind) {
@@ -599,18 +590,19 @@ export class Storage {
         }
     }
 
+    private static async removePointer(pointer_id:string, location?:StorageLocation) {
+		// remove from specific location
+		if (location) return location.removePointer(pointer_id);
+		// remove from all
+		else {
 
-    private static async removePointer(pointer_id:string) {
-        if (this.#primary_location == Storage.Location.INDEXED_DB) { 
-            await datex_pointer_storage.removeItem(pointer_id);
-        }
-
-        else if (this.#primary_location == Storage.Location.FILESYSTEM_OR_LOCALSTORAGE) { 
-            localStorage.removeItem(this.pointer_prefix+pointer_id);
-        }
+			for (const location of this.#locations.keys()) {
+				await location.removePointer(pointer_id);
+			}
+		}
     }
 
-    public static async getPointerDecompiled(pointer_id:string, colorized = false, location?:Storage.Location):Promise<string|undefined|typeof NOT_EXISTING> {
+    public static async getPointerDecompiled(pointer_id:string, colorized = false, location?:StorageLocation):Promise<string|undefined|typeof NOT_EXISTING> {
         // try to find pointer at a storage location
         for (const loc of (location!=undefined ? [location] : this.getLocationPriorityOrder(pointer_id))) {
             if (loc==undefined) continue;
@@ -621,24 +613,13 @@ export class Storage {
     }
 
 
-    private static async getPointerDecompiledFromLocation(pointer_id:string, colorized = false, location:Storage.Location) {
-
-        // get from datex_storage
-        if (location == Storage.Location.INDEXED_DB) { 
-            const buffer = <ArrayBuffer><any>await datex_pointer_storage.getItem(pointer_id);
-            if (buffer != null) return MessageLogger.decompile(buffer, false, colorized);
-        }
-
-        // get from local storage
-        else if (location == Storage.Location.FILESYSTEM_OR_LOCALSTORAGE) { 
-            const base64 = localStorage.getItem(this.pointer_prefix+pointer_id);
-            if (base64!=null) return MessageLogger.decompile(base64ToArrayBuffer(base64), false, colorized);
-        }
-
+    private static async getPointerDecompiledFromLocation(pointer_id:string, colorized = false, location:StorageLocation) {
+		const buffer = await location.getPointerValueDXB(pointer_id);
+		if (buffer != null) return MessageLogger.decompile(buffer, false, colorized);
         return NOT_EXISTING;
     }
 
-    public static async getItemDecompiled(key:string, colorized = false, location?:Storage.Location) {
+    public static async getItemDecompiled(key:string, colorized = false, location?:StorageLocation) {
         // try to find pointer at a storage location
         for (const loc of (location!=undefined ? [location] : this.getLocationPriorityOrder(key))) {
             if (loc==undefined) continue;
@@ -648,54 +629,39 @@ export class Storage {
         return NOT_EXISTING;
     }
 
-    public static async getItemDecompiledFromLocation(key:string, colorized = false, location:Storage.Location) {
-        // get from datex_storage
-        if (location == Storage.Location.INDEXED_DB) { 
-            const buffer = <ArrayBuffer><any>await datex_item_storage.getItem(key);
-            if (buffer != null) return MessageLogger.decompile(buffer, false, colorized);
-        }
-
-        // get from local storage
-        else if (location == Storage.Location.FILESYSTEM_OR_LOCALSTORAGE) { 
-            const base64 = localStorage.getItem(this.item_prefix+key);
-            if (base64!=null) return MessageLogger.decompile(base64ToArrayBuffer(base64), false, colorized);
-        }
+    public static async getItemDecompiledFromLocation(key:string, colorized = false, location:StorageLocation) {
+		const buffer = await location.getItemValueDXB(key);
+		if (buffer != null) return MessageLogger.decompile(buffer, false, colorized);
         return NOT_EXISTING;
     }
 
-    public static async getItemKeys(location?:Storage.Location){
+    public static async getItemKeys(location?:StorageLocation){
 
-        const indexedDBKeys = (location == undefined || location == Storage.Location.INDEXED_DB) ? await datex_item_storage.keys() : null;
+		// for specific location
+		if (location) return location.getItemKeys();
+
+		// ... iterate over keys from all locations
+
+		const generators = [];
+		for (const location of this.#locations.keys()) {
+			generators.push(await location.getItemKeys())
+		}
 
         return (function*(){
             const used = new Set<string>();
-        
-            // INDEXED_DB
-            if (location == undefined || location == Storage.Location.INDEXED_DB) {
-                for (const key of indexedDBKeys!) {
+
+			for (const generator of generators) {
+				for (const key of generator) {
                     if (used.has(key)) continue;
                     used.add(key);
                     yield key;
                 } 
-            }
-    
-            // FILESYSTEM_OR_LOCALSTORAGE
-            if (location == undefined || location == Storage.Location.FILESYSTEM_OR_LOCALSTORAGE) {
-                for (const _key of Object.keys(localStorage)) {
-                    if (_key.startsWith(Storage.item_prefix)) {
-                        const key = _key.replace(Storage.item_prefix,"");
-                        if (used.has(key)) continue;
-                        used.add(key);
-                        yield key;
-                    }
-                }
-            }
-        
+			}
         })()
     }
 
 
-    public static async getItemKeysStartingWith(prefix:string, location?:Storage.Location) {
+    public static async getItemKeysStartingWith(prefix:string, location?:StorageLocation) {
         const keyIterator = await Storage.getItemKeys(location);
         return (function*(){
             for (const key of keyIterator) {
@@ -704,55 +670,57 @@ export class Storage {
         })()
     }
 
-    public static async getPointerKeys(location?:Storage.Location){
+    public static async getPointerKeys(location?:StorageLocation){
 
-        // TODO: return which keys, if location undefined?
-        if (location == undefined || location == Storage.Location.INDEXED_DB) return await datex_pointer_storage.keys();
+		// for specific location
+		if (location) return location.getPointerIds();
 
-        if (location == Storage.Location.FILESYSTEM_OR_LOCALSTORAGE) { 
-            const keys = []
-            for (const key of Object.keys(localStorage)) {
-                if (key.startsWith(this.pointer_prefix)) keys.push(key.replace(this.pointer_prefix,""))
-            }
-            return keys;
-        }
-         
+		// ... iterate over keys from all locations
+
+		const generators = [];
+		for (const location of this.#locations.keys()) {
+			generators.push(await location.getPointerIds())
+		}
+
+        return (function*(){
+            const used = new Set<string>();
+
+			for (const generator of generators) {
+				for (const id of generator) {
+                    if (used.has(id)) continue;
+                    used.add(id);
+                    yield id;
+                } 
+			}
+        })()         
     }
 
-    private static async copyStorage(from:Storage.Location, to:Storage.Location) {
+    private static async copyStorage(from:StorageLocation, to:StorageLocation) {
 
         await this.clear(to);
 
         const promises = [];
         
         for (const pointer_id of await this.getPointerKeys(from)) {
-            if (from == Storage.Location.FILESYSTEM_OR_LOCALSTORAGE && to == Storage.Location.INDEXED_DB) {
-                const base64 = <string>localStorage.getItem(this.pointer_prefix+pointer_id);
-                promises.push(datex_pointer_storage.setItem(pointer_id, <any>base64ToArrayBuffer(base64)))
-            }
-            else {
-                logger.error("TODO storage copy")
-            }
+			const buffer = await from.getPointerValueDXB(pointer_id);
+			if (!buffer) logger.error("could not copy empty pointer value: " + pointer_id)
+			else promises.push(to.setPointerValueDXB(pointer_id, buffer))
         }
 
         for (const key of await this.getItemKeys(from)) {
-            if (from == Storage.Location.FILESYSTEM_OR_LOCALSTORAGE && to == Storage.Location.INDEXED_DB) {
-                const base64 = <string>localStorage.getItem(this.item_prefix+key);
-                promises.push(datex_item_storage.setItem(key, <any>base64ToArrayBuffer(base64)))
-            }
-            else {
-                logger.error("TODO storage copy")
-            }
+            const buffer = await from.getItemValueDXB(key);
+			if (!buffer) logger.error("could not copy empty item value: " + key)
+			else promises.push(to.setItemValueDXB(key, buffer))
         }
 
         await Promise.all(promises);
     }
 
-    public static async getItem(key:string, location?:Storage.Location|undefined/* = this.#primary_location*/):Promise<any> {
+    public static async getItem(key:string, location?:StorageLocation|undefined/* = this.#primary_location*/):Promise<any> {
 
         if (this.#dirty) {
             displayFatalError('storage-unrecoverable');
-            throw new Error(`cannot restore dirty state of ${Storage.Location[this.#primary_location!]}, no trusted secondary storage location found`)
+            throw new Error(`cannot restore dirty state of ${this.#primary_location!.name}, no trusted secondary storage location found`)
         }
 
         // get from cache
@@ -769,35 +737,18 @@ export class Storage {
     }
 
 
-    public static async getItemFromLocation(key:string, location:Storage.Location/* = this.#primary_location*/):Promise<any> {
+    public static async getItemFromLocation(key:string, location:StorageLocation/* = this.#primary_location*/):Promise<any> {
 
-        // get from db storage
-        if (location == Storage.Location.INDEXED_DB) { 
-            const buffer = <ArrayBuffer><any>await datex_item_storage.getItem(key);
-            if (buffer != null) {
-                const val = await Runtime.decodeValue(buffer);
-                Storage.cache.set(key, val);
-                await this.initPrimaryFromTrustedLocation(key, Storage.Location.INDEXED_DB)
-                return val;
-            }
-        }
+		const val = await location.getItem(key);
+		if (val == NOT_EXISTING) return NOT_EXISTING;
 
-        // get from local storage
-        else if (location == Storage.Location.FILESYSTEM_OR_LOCALSTORAGE) { 
-            const base64 = localStorage.getItem(this.item_prefix+key);
-            if (base64!=null) {
-                const val = await Runtime.decodeValueBase64(base64);
-                Storage.cache.set(key, val);
-                await this.initPrimaryFromTrustedLocation(key, Storage.Location.INDEXED_DB)
-                return val;
-            }
-        }
-
-        return NOT_EXISTING;
+		Storage.cache.set(key, val);
+		await this.initPrimaryFromTrustedLocation(key, location)
+		return val;
     }
 
     
-    public static async hasItem(key:string, location?:Storage.Location):Promise<boolean> {
+    public static async hasItem(key:string, location?:StorageLocation):Promise<boolean> {
 
         if (Storage.cache.has(key)) return true; // get from cache
  
@@ -811,31 +762,24 @@ export class Storage {
         return false;
     }
 
-    public static async hasItemFromLocation(key:string, location:Storage.Location):Promise<boolean> {
-        // get from datex_storage
-        if (location == Storage.Location.INDEXED_DB) { 
-            return (await datex_item_storage.getItem(key) != null)
-        }
-
-        // get from local storage
-        else if (location == Storage.Location.FILESYSTEM_OR_LOCALSTORAGE) { 
-            return localStorage.getItem(this.item_prefix+key) != null
-        }
-
-        return false;
+    public static hasItemFromLocation(key:string, location:StorageLocation):Promise<boolean>|boolean {
+		if (location)  {
+			return location.hasItem(key);
+		}
+		else return false;
     }
 
-    public static async removeItem(key:string, location?:Storage.Location):Promise<void> {
+    public static async removeItem(key:string, location?:StorageLocation):Promise<void> {
         if (Storage.cache.has(key)) Storage.cache.delete(key); // delete from cache
 
-        if (location == undefined || location == Storage.Location.INDEXED_DB) { 
-            await datex_item_storage.removeItem(key) // delete from db storage
-        }
-
-        if (location == undefined || location == Storage.Location.FILESYSTEM_OR_LOCALSTORAGE) { 
-            await localStorage.removeItem(this.item_prefix+key) // delete from local storage
-        }
-        
+		// remove from specific location
+		if (location) return location.removeItem(key);
+		// remove from all
+		else {
+			for (const location of this.#locations.keys()) {
+				await location.removeItem(key);
+			}
+		}
     }
 
     public static clearAll(){
@@ -843,22 +787,15 @@ export class Storage {
     }
 
     // clear all storages
-    public static async clear(location?:Storage.Location):Promise<void> {
+    public static async clear(onlyLocation?:StorageLocation):Promise<void> {
 
-        if (location == undefined || location == Storage.Location.INDEXED_DB) {
-            this.deleteSaveTime(Storage.Location.INDEXED_DB);
-            this.clearDirtyState(Storage.Location.INDEXED_DB)
-            await datex_item_storage?.clear();
-            await datex_pointer_storage?.clear();
-        }
-
-        if (location == undefined || location == Storage.Location.FILESYSTEM_OR_LOCALSTORAGE) { 
-            this.deleteSaveTime(Storage.Location.FILESYSTEM_OR_LOCALSTORAGE);
-            this.clearDirtyState(Storage.Location.FILESYSTEM_OR_LOCALSTORAGE)
-            for (const key of Object.keys(localStorage)) {
-                if (key.startsWith(this.item_prefix) || key.startsWith(this.pointer_prefix)) localStorage.removeItem(key);
-            }
-        }
+		for (const location of this.#locations.keys()) {
+			if (location == undefined || location === onlyLocation) {
+				this.deleteSaveTime(location);
+				this.clearDirtyState(location)
+				await location.clear()
+			}
+		}
 
     }
 
@@ -893,22 +830,19 @@ export class Storage {
 }
 
 export namespace Storage {
-    export enum Mode {
+
+	export enum Mode {
         SAVE_ON_EXIT, // save pointers on program exit / tab close
         SAVE_ON_CHANGE, // save a pointer immediately when the value changes
         SAVE_PERIODICALLY // save in fix interval
     }
-
-    export enum Location {
-        INDEXED_DB, // use IndexedDb, async
-        FILESYSTEM_OR_LOCALSTORAGE // use localStorage, filesystem, sync
-    }
 }
+
 
 // TODO: convert to static block (saFrari) --------------------------------------
 // @ts-ignore NO_INIT
 if (!globalThis.NO_INIT) {
-    Storage.determineTrustedLocation();
+    Storage.determineTrustedLocation([]);
 }
 
 addEventListener("unload", ()=>Storage.handleExit(), {capture: true});
@@ -935,21 +869,3 @@ class DatexStoragePointerSource implements PointerSource {
 
 // register DatexStorage as pointer source
 Pointer.registerPointerSource(new DatexStoragePointerSource());
-
-
-// default storage config:
-
-// @ts-ignore NO_INIT
-if (!globalThis.NO_INIT) {
-    const modes:(Storage.Mode.SAVE_ON_CHANGE|Storage.Mode.SAVE_PERIODICALLY)[] = [Storage.Mode.SAVE_ON_CHANGE];
-    if (client_type == "browser") modes.push(Storage.Mode.SAVE_PERIODICALLY);
-
-    await Storage.addLocation(Storage.Location.INDEXED_DB, {
-        modes,
-        primary: true
-    })
-    
-    await Storage.addLocation(Storage.Location.FILESYSTEM_OR_LOCALSTORAGE, {
-        modes: [Storage.Mode.SAVE_ON_EXIT],
-    })
-}
