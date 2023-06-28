@@ -64,6 +64,9 @@ import { Logger } from "../utils/logger.ts";
 import { Debugger } from "./debugger.ts";
 import {decompile as wasm_decompile} from "../wasm/adapter/pkg/datex_wasm.js";
 
+import { IndexedDBStorageLocation } from "./storage-locations/indexed-db.ts";
+import { LocalStorageLocation } from "./storage-locations/local-storage.ts";
+
 import "../types/native_types.ts"; // load prototype overrides
 import { Time } from "../types/time.ts";
 import { initPublicStaticClasses } from "../js_adapter/js_class_adapter.ts";
@@ -6718,6 +6721,30 @@ if (!globalThis.NO_INIT) {
     // @ts-ignore
     globalThis.printn = Runtime.STD_STATIC_SCOPE.printn
 }
+
+// default storage config:
+
+// @ts-ignore NO_INIT
+if (!globalThis.NO_INIT) {
+    if (client_type == "browser") {
+		await Storage.addLocation(new IndexedDBStorageLocation(), {
+			modes: [Storage.Mode.SAVE_ON_CHANGE, Storage.Mode.SAVE_PERIODICALLY],
+			primary: true
+		})
+	}    
+	// else {
+	// 	await Datex.Storage.addLocation(new DenoKVStorageLocation(), {
+	// 		modes: [Datex.Storage.Mode.SAVE_ON_CHANGE, Datex.Storage.Mode.SAVE_PERIODICALLY],
+	// 		primary: true
+	// 	})
+	// }
+    
+    await Storage.addLocation(new LocalStorageLocation(), {
+        modes: [Storage.Mode.SAVE_ON_EXIT],
+		primary: client_type == "deno"
+    })
+}
+
 
 
 

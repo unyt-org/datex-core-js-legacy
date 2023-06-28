@@ -790,7 +790,7 @@ export class Storage {
     public static async clear(onlyLocation?:StorageLocation):Promise<void> {
 
 		for (const location of this.#locations.keys()) {
-			if (location == undefined || location === onlyLocation) {
+			if (onlyLocation == undefined || location === onlyLocation) {
 				this.deleteSaveTime(location);
 				this.clearDirtyState(location)
 				await location.clear()

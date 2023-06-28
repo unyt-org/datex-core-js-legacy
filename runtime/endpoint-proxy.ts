@@ -1,4 +1,3 @@
-import { Datex } from "../datex.ts";
 import { IframeCommunicationInterface } from "./iframe-communication-interface.ts";
 const AUTH_ORIGIN = 'https://authdev2.unyt.app/endpoint-proxy';
 

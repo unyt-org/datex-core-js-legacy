@@ -1,9 +1,5 @@
 // all Datex.*
 import * as Datex from "./datex_all.ts";
-import { client_type } from "./datex_all.ts";
-import { DenoKVStorageLocation } from "./runtime/storage-locations/deno-kv.ts";
-import { IndexedDBStorageLocation } from "./runtime/storage-locations/indexed-db.ts";
-import { LocalStorageLocation } from "./runtime/storage-locations/local-storage.ts";
 export {Datex};
 
 // @ts-ignore
@@ -15,30 +11,6 @@ export * from "./js_adapter/legacy_decorators.ts";
 
 // shortcut methods ($$, string, int, ...)
 export * from "./datex_short.ts";
-
-
-// default storage config:
-
-// @ts-ignore NO_INIT
-if (!globalThis.NO_INIT) {
-    if (client_type == "browser") {
-		await Datex.Storage.addLocation(new IndexedDBStorageLocation(), {
-			modes: [Datex.Storage.Mode.SAVE_ON_CHANGE, Datex.Storage.Mode.SAVE_PERIODICALLY],
-			primary: true
-		})
-	}    
-	// else {
-	// 	await Datex.Storage.addLocation(new DenoKVStorageLocation(), {
-	// 		modes: [Datex.Storage.Mode.SAVE_ON_CHANGE, Datex.Storage.Mode.SAVE_PERIODICALLY],
-	// 		primary: true
-	// 	})
-	// }
-    
-    await Datex.Storage.addLocation(new LocalStorageLocation(), {
-        modes: [Datex.Storage.Mode.SAVE_ON_EXIT],
-		primary: client_type == "deno"
-    })
-}
 
 
 
