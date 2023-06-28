@@ -136,15 +136,16 @@ try {
 
 // handles console.log/error/debug
 
+const actualConsole = globalThis.Deno ? console : console_ansi;
+
 function console_log(log_data:any[], log_level:LOG_LEVEL=LOG_LEVEL.DEFAULT) {
     switch (log_level) {
-        case LOG_LEVEL.ERROR: console_ansi.error(...log_data);break;
-        case LOG_LEVEL.WARNING: console_ansi.warn(...log_data);break;
-        case LOG_LEVEL.VERBOSE: console_ansi.debug(...log_data);break;
-        default: console_ansi.log(...log_data);break;
+        case LOG_LEVEL.ERROR: actualConsole.error(...log_data);break;
+        case LOG_LEVEL.WARNING: actualConsole.warn(...log_data);break;
+        case LOG_LEVEL.VERBOSE: actualConsole.debug(...log_data);break;
+        default: actualConsole.log(...log_data);break;
     }
 }
-
 
 
 function rgbToHsl(r:number, g:number, b:number):[number, number, number] {
@@ -494,7 +495,6 @@ export class Logger {
     private generateLogString(color:COLOR, text:string, data:any[], add_tag = true): string {
 
         const color_esc = this.getFormattingColor(color);
-
 
         const message = Logger.applyLogFormatters(Logger.formatEscapeSequences(text, color_esc), data, color_esc, this.formatting)
             .replace(/\n/g, '\r\n');
