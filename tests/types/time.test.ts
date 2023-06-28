@@ -1,6 +1,7 @@
-import { Test } from "../../../unyt_tests/testing/test.ts";
+import { Assert } from "unyt_tests/testing/assertions.ts";
+import { Test } from "unyt_tests/testing/test.ts"
 
-@Test class TimeTests {
+@Test export class TimeTests {
 	
 	@Test timeValuesAreInitializedCorrectly(){
 		

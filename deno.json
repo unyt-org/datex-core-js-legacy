@@ -1,4 +1,5 @@
 {
+	"importMap": "importmap.dev.json",
 	"compilerOptions": {
 		"module": "esnext",
 		"target": "es2022",
@@ -13,6 +14,8 @@
 		"lib": ["deno.window", "dom"]
 	},
 	"tasks": {
-		"generate-api-docs": "deno run -Aqr --import-map importmap.dev.json https://dev.cdn.unyt.org/doc-generator/run.ts --import-map importmap.dev.json --base ./ -m ./datex.ts --out ./docs/api"
+		"generate-api-docs": "deno run -Aqr --import-map importmap.dev.json https://dev.cdn.unyt.org/doc-generator/run.ts --import-map importmap.dev.json --base ./ -m ./datex.ts --out ./docs/api",
+		"test": "deno run -Aq --import-map importmap.dev.json https://dev.cdn.unyt.org/unyt_tests/run.ts tests/",
+		"test-sql": "deno run -Aq --import-map importmap.dev.json https://dev.cdn.unyt.org/unyt_tests/run.ts tests/sql-storage.test.ts"
 	}
 }

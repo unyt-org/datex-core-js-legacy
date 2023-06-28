@@ -55,10 +55,10 @@ class EndpointConfig implements EndpointConfigData {
 			catch {
 				if (!path) path = new URL('./'+this.DX_FILE_NAME, cwdURL)
 				config_file = path;
-				console.log("using endpoint config: " + config_file);
 			}
 			try {
 				config = await datex.get(config_file);
+				console.log("using endpoint config: " + config_file);
 			}
 			catch (e){
 				// ignore if no .dx file found

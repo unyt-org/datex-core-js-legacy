@@ -1,5 +1,5 @@
-import { Assert } from "../../unyt_tests/testing/assertions.ts";
-import {Test, Timeout} from "../../unyt_tests/testing/test.ts"
+import { Assert } from "unyt_tests/testing/assertions.ts";
+import { Test } from "unyt_tests/testing/test.ts"
 import { Datex } from "../datex.ts";
 import { $$ } from "../datex_short.ts"
 
@@ -22,7 +22,7 @@ const a = {
 }
 
 
-@Test class DatexJSONObjects {
+@Test export class DatexJSONObjects {
 
 
 	@Test objectsAreInitializedCorrectly(){

@@ -1,5 +1,5 @@
-import {Test} from "../../../unyt_tests/testing/test.ts"
-import {Assert} from "../../../unyt_tests/testing/assertions.ts"
+import { Assert } from "unyt_tests/testing/assertions.ts";
+import { Test } from "unyt_tests/testing/test.ts"
 import { Quantity } from "../../datex_all.ts"
 
 /**
@@ -13,7 +13,7 @@ const m3:Quantity.METRE = new Quantity('1/3','m');
 const s1:Quantity.SECOND = new Quantity(60,'s');
 
 
-@Test class QuantityTests {
+@Test export class QuantityTests {
 
 	@Test unitsAreInitializedCorrectly(){
 		// right base units
