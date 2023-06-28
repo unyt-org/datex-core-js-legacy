@@ -1,5 +1,4 @@
-import { Assert } from "unyt_tests/testing/assertions.ts";
-import { Test } from "unyt_tests/testing/test.ts"
+import { Assert, Test } from "unyt_tests/testing/test.ts"
 import { Datex } from "../datex.ts";
 import { $$ } from "../datex_short.ts"
 

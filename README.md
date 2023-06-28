@@ -15,7 +15,7 @@ Includes
 
 ## Run Tests
 ```bash
-clear && node ../unyt_tests/run.js tests/
+deno task test
 ```
 
 ## CD
