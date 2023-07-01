@@ -71,8 +71,8 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 	}
 
 	async setPointer(pointer: Pointer<any>): Promise<Set<Pointer<any>>> {
-		this.#connect()
-		console.log("setpointer....",pointer.idString())
+		this.#connect();
+		console.log("setpointer....", pointer.type.template)
 		return new Set();
 	}
 	async getPointerValue(pointerId: string, outer_serialized: boolean): Promise<unknown> {
