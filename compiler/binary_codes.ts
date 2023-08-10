@@ -249,7 +249,7 @@ export enum BinaryCode {
 
     EXTEND              = 0xf4, // ...
 
-    YEET         = 0xf5,  // !
+    YEET                = 0xf5,  // !
 
     REMOTE              = 0xf6, // ::
 

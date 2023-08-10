@@ -32,7 +32,7 @@ export class Stream<T = ArrayBuffer> implements StreamConsumer<T> {
             this.started_ptr_stream = true;
             const ptr = Pointer.getByValue(this);
             if (ptr instanceof Pointer) {
-                logger.debug("Start stream out for " + ptr.idString());
+                logger.info("Start stream out for " + ptr.idString());
                 ptr.startStreamOut(); // stream to all subscribers or origin
             }
         }

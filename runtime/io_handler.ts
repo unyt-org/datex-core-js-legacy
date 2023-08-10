@@ -81,7 +81,7 @@ export class IOHandler {
         else if (this.std_outf) await this.std_outf(params);
     }
     public static stdOut(params:any[], endpoint:Target){
-        for (let i=0;i<params.length;i++) params[i] = Datex.Value.collapseValue(params[i],true,true);
+        for (let i=0;i<params.length;i++) params[i] = Datex.Ref.collapseValue(params[i],true,true);
         if(this.e_std_outs.has(endpoint)) this.e_std_outs.get(endpoint)(params);
         else if (this.std_out) this.std_out(params);
     }

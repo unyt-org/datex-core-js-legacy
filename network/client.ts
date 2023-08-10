@@ -22,28 +22,6 @@ import { Pointer } from "../runtime/pointers.ts";
 
 
 
-// signaling for WebRTC connections (used by WebRTCClientInterface)
-// TODO import withouts datex.ts"
-// @scope("webrtc") class _WebRTCSignaling {
-
-//     @meta(1)
-//     @remote @expose static offer(data:any, meta?:datex_meta) {
-//         InterfaceManager.connect("webrtc", meta.sender, [data]);
-//     }
-
-//     @meta(1)
-//     @remote @expose static accept(data:any, meta?:datex_meta) {
-//         WebRTCClientInterface.waiting_interfaces_by_endpoint.get(meta.sender)?.setRemoteDescription(data);
-//     }  
-
-//     @meta(1)
-//     @remote @expose static candidate(data:any, meta?:datex_meta) {
-//         WebRTCClientInterface.waiting_interfaces_by_endpoint.get(meta.sender)?.addICECandidate(data);
-//     }  
-// }
-// const WebRTCSignaling = datex_advanced(_WebRTCSignaling);
-
-
 
 // general interface for all "datex interfaces" (client or server/router)
 export interface ComInterface {
@@ -154,13 +132,13 @@ export abstract class CommonInterface implements ComInterface {
     }
 
     // initialize
-    async init(...args):Promise<boolean> {
+    async init(...args:any[]):Promise<boolean> {
         this.initial_arguments = args;
 
         this.connected = await this.connect();
         if (this.connected && this.endpoint) {
-        if (this.virtual) CommonInterface.addVirtualInterfaceForEndpoint(this.endpoint, this);
-        else CommonInterface.addInterfaceForEndpoint(this.endpoint, this);
+            if (this.virtual) CommonInterface.addVirtualInterfaceForEndpoint(this.endpoint, this);
+            else CommonInterface.addInterfaceForEndpoint(this.endpoint, this);
         }
         return this.connected;
     }
@@ -365,113 +343,7 @@ export class SerialClientInterface extends CommonInterface {
     }
 }
 
-/** 'Relayed' interface */
-export class WebRTCClientInterface extends CommonInterface {
 
-    override type = "webrtc"
-
-    connection: RTCPeerConnection
-    data_channel_out: RTCDataChannel
-    data_channel_in: RTCDataChannel
-
-    override in = true
-    override out = true
-    override global = false
-    
-    static waiting_interfaces_by_endpoint:Map<Target, WebRTCClientInterface> = new Map()
-
-    constructor(endpoint: Endpoint){
-        super(endpoint);
-        if (client_type != "browser") return;
-        WebRTCClientInterface.waiting_interfaces_by_endpoint.set(endpoint, this);
-    }
-
-    public override disconnect(){
-        super.disconnect();
-        this.connection.close()
-    }
-    
-    async connect() {
-        let description:RTCSessionDescription = this.initial_arguments[0];
-
-        return new Promise<boolean>(async resolve=>{
-
-            // try to establish a WebRTC connection, exchange keys first
-            this.connection = new RTCPeerConnection({
-                iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
-            });
-
-            // listeners
-            this.connection.onicecandidate = (e) => {
-                if (e.candidate) WebRTCSignaling.to(this.endpoint).candidate(e.candidate.toJSON())
-            };
-
-            // connected
-            this.connection.addEventListener('connectionstatechange', event => {
-                switch(this.connection.connectionState) {
-                    case "connected": 
-                        WebRTCClientInterface.waiting_interfaces_by_endpoint.delete(this.endpoint);
-                        resolve(true);
-                        break;
-                    case "disconnected": this.connected = false;
-                    case "closed": this.connected = false;
-                    case "failed":
-                        resolve(false);
-                }              
-            });
-
-            // received data channel 
-            this.connection.ondatachannel = (event) => {
-                this.data_channel_in = event.channel;
-                this.logger.success("received data channel", this.data_channel_in);
-                this.data_channel_in.onmessage = (event)=>{
-                    InterfaceManager.handleReceiveBlock(event.data, this.endpoint);
-                }
-                this.connected = true;
-            };
-
-            // create an offer
-            if (!description) {
-                this.logger.success("initializing a WebRTC connection ...", this.connection);
-                
-                this.data_channel_out = this.connection.createDataChannel("datex");
-
-                this.data_channel_out.addEventListener('onopen', e => console.warn('local data chann opened', e));
-                this.data_channel_out.addEventListener('onclose', e => console.warn('local data channel closed'));
-
-                let offer = await this.connection.createOffer();
-                await this.connection.setLocalDescription(offer);
-                WebRTCSignaling.to(this.endpoint).offer(this.connection.localDescription.toJSON())
-            }
-
-            // accept offer
-            else {
-                this.logger.success("accepting a WebRTC connection request ...");
-
-                this.data_channel_out = this.connection.createDataChannel("datex");
-
-                await this.connection.setRemoteDescription(description)
-                let answer = await this.connection.createAnswer();
-                await this.connection.setLocalDescription(answer);
-
-                WebRTCSignaling.to(this.endpoint).accept(this.connection.localDescription.toJSON())
-            }
-        })
-
-    }
-
-    async setRemoteDescription(description:any) {
-        await this.connection?.setRemoteDescription(description)
-    }
-
-    async addICECandidate(candidate:object) {
-        await this.connection?.addIceCandidate(new RTCIceCandidate(candidate));
-    }
-
-    async sendBlock(datex:ArrayBuffer){
-        this.data_channel_out?.send(datex)
-    }
-}
 
 
 /** Websocket stream interface */
@@ -768,7 +640,7 @@ export class InterfaceManager {
     CommonInterface.default_interface = null;
     CommonInterface.resetEndpointConnectionPoints();
 
-    for (let interf of this.active_interfaces || []) {
+    for (const interf of this.active_interfaces || []) {
         await interf.disconnect()
         this.active_interfaces.delete(interf);
     } 
@@ -776,17 +648,17 @@ export class InterfaceManager {
 
     // create a new connection with a interface type (e.g. websocket, relayed...)
     static async connect(channel_type:string, endpoint?:Endpoint, init_args?:any[], set_as_default_interface = true):Promise<boolean> {
-        this.logger.info("connecting via interface: " + channel_type);
+        this.logger.debug("connecting via interface: " + channel_type);
 
         await this.init();
 
         // get requested interface
         const interface_class = (<any>InterfaceManager.interfaces.get(channel_type));
         if (!interface_class) throw "Channel type not found: " + channel_type;
-        let c_interface:CommonInterface = new interface_class(endpoint);
+        const c_interface:CommonInterface = new interface_class(endpoint);
         // this.logger.success("new interface: " + channel_type)
         // init requested interface
-        let res = await c_interface.init(...(init_args||[]));
+        const res = await c_interface.init(...(init_args||[]));
         if (res) this.addInterface(c_interface);
 
         // set as new default interface? - local or relayed create a feedback loop, dont use webrtc as default interface
@@ -893,7 +765,6 @@ InterfaceManager.registerInterface("websocketstream", WebsocketStreamClientInter
 InterfaceManager.registerInterface("websocket", WebsocketClientInterface);
 InterfaceManager.registerInterface("local", LocalClientInterface);
 InterfaceManager.registerInterface("relayed", RelayedClientInterface);
-InterfaceManager.registerInterface("webrtc", WebRTCClientInterface);
 InterfaceManager.registerInterface("bluetooth", BluetoothClientInterface);
 InterfaceManager.registerInterface("serial", SerialClientInterface);
 

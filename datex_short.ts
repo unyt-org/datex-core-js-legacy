@@ -1,11 +1,12 @@
 
 // shortcut functions
 // import { Datex } from "./datex.ts";
-import { baseURL, Runtime, PrecompiledDXB, Type, Pointer, Value, PointerProperty, primitive, any_class, Target, IdEndpoint, TransformFunctionInputs, AsyncTransformFunction, TransformFunction, TextRef, Markdown, DecimalRef, BooleanRef, IntegerRef, MinimalJSRef, CompatValue, CompatPartial, datex_meta, ObjectWithDatexValues, Compiler, endpoint_by_endpoint_name, endpoint_name, Storage, compiler_scope, datex_scope, DatexResponse, target_clause, ValueError, logger, Class, getDefaultLocalMeta, Endpoint, INSERT_MARK, CollapsedValueAdvanced, CollapsedValue, SmartTransformFunction } from "./datex_all.ts";
+import { baseURL, Runtime, PrecompiledDXB, Type, Pointer, Ref, PointerProperty, primitive, any_class, Target, IdEndpoint, TransformFunctionInputs, AsyncTransformFunction, TransformFunction, TextRef, Markdown, DecimalRef, BooleanRef, IntegerRef, MinimalJSRef, RefOrValue, CompatPartial, datex_meta, ObjectWithDatexValues, Compiler, endpoint_by_endpoint_name, endpoint_name, Storage, compiler_scope, datex_scope, DatexResponse, target_clause, ValueError, logger, Class, getDefaultLocalMeta, Endpoint, INSERT_MARK, CollapsedValueAdvanced, CollapsedValue, SmartTransformFunction, compiler_options, activePlugins } from "./datex_all.ts";
 
 /** make decorators global */
 import {property as _property, sync as _sync, endpoint as _endpoint, template as _template, jsdoc as _jsdoc} from "./datex_all.ts";
 import { NOT_EXISTING, DX_SLOTS, SLOT_GET, SLOT_SET } from "./runtime/constants.ts";
+import { StaticScope } from "./runtime/runtime.ts";
 import { AssertionError } from "./types/errors.ts";
 import { getCallerFile, getCallerInfo, getMeta } from "./utils/caller_metadata.ts";
 
@@ -29,7 +30,7 @@ globalThis.template = _template;
 globalThis.jsdoc = _jsdoc;
 
 // can be used instead of import(), calls a DATEX get instruction, works for urls, endpoint, ...
-export async function get<T=unknown>(dx:string|URL|Endpoint, assert_type?:Type<T> | Class<T> | string, context_location?:URL|string):Promise<T> {
+export async function get<T=unknown>(dx:string|URL|Endpoint, assert_type?:Type<T> | Class<T> | string, context_location?:URL|string, plugins?:string[]):Promise<T> {
     // auto retrieve location from stack
     context_location ??= getCallerFile();
     // TODO:just a workaournd, how to do this better
@@ -41,7 +42,14 @@ export async function get<T=unknown>(dx:string|URL|Endpoint, assert_type?:Type<T
         else dx = "." + dx;
     }
 
-    const res = <T> await _datex('get (' + dx + ' )', undefined, undefined, undefined, undefined, context_location);
+    // TODO: activePlugins only workaround
+    if (plugins) {
+        activePlugins.push(...plugins);
+        // TODO: only workaround, delete url cache for dx file, make sure content is fetched again with active plugins (only works if dx is an url)
+        Runtime.deleteURLCache(dx.toString())
+    }
+    const res = <T> await _datex('get (' + dx + ' )', undefined, undefined, undefined, undefined, context_location, plugins);
+    if (plugins) activePlugins.splice(0, activePlugins.length);
 
     if (typeof assert_type == "string") assert_type = Type.get(assert_type);
 
@@ -61,8 +69,8 @@ export async function get<T=unknown>(dx:string|URL|Endpoint, assert_type?:Type<T
 // sign per default if not local endpoint
 // do not encrypt per default
 function _datex<T=unknown>(dx:TemplateStringsArray, ...args:any[]):Promise<T>
-function _datex<T=unknown>(dx:string|PrecompiledDXB, data?:unknown[], to?:Target|target_clause|endpoint_name, sign?:boolean, encrypt?:boolean, context_location?:URL|string):Promise<T>
-function _datex(dx:string|TemplateStringsArray|PrecompiledDXB, data?:unknown[], to?:Target|target_clause|endpoint_name, sign?:boolean, encrypt?:boolean, context_location?:URL|string) {
+function _datex<T=unknown>(dx:string|PrecompiledDXB, data?:unknown[], to?:Target|target_clause|endpoint_name, sign?:boolean, encrypt?:boolean, context_location?:URL|string, plugins?:string[]):Promise<T>
+function _datex(dx:string|TemplateStringsArray|PrecompiledDXB, data?:unknown[], to?:Target|target_clause|endpoint_name, sign?:boolean, encrypt?:boolean, context_location?:URL|string, plugins?:string[]) {
 
     // auto retrieve location from stack
     if (!context_location) {
@@ -90,9 +98,9 @@ function _datex(dx:string|TemplateStringsArray|PrecompiledDXB, data?:unknown[], 
     }
 
     // local execution
-    if (to === Runtime.endpoint) return Runtime.executeDatexLocally(dx, data, {sign, encrypt}, context_location ? new URL(context_location.toString()) : undefined); 
+    if (to === Runtime.endpoint) return Runtime.executeDatexLocally(dx, data, {plugins, sign, encrypt}, context_location ? new URL(context_location.toString()) : undefined); 
     // remote execution
-    else return Runtime.datexOut([dx, data, {sign, encrypt, context_location: context_location ? new URL(context_location.toString()) : undefined}], typeof to == "string" ? f(<endpoint_name>to) : to);
+    else return Runtime.datexOut([dx, data, {plugins, sign, encrypt, context_location: context_location ? new URL(context_location.toString()) : undefined}], typeof to == "string" ? f(<endpoint_name>to) : to);
     
 }
 
@@ -103,7 +111,7 @@ Object.defineProperty(_datex, 'meta', {get:()=>{
     return meta;
 }, set:()=>{}, configurable:false})
 // add datex.get
-Object.defineProperty(_datex, 'get', {value:(res:string, type:Class|Type)=>get(res,type,getCallerFile()), configurable:false})
+Object.defineProperty(_datex, 'get', {value:(res:string, type?:Class|Type, location?:URL, plugins?:string[])=>get(res,type,location ?? getCallerFile(),plugins), configurable:false})
 Object.defineProperty(_datex, 'localMeta', {get:()=>getDefaultLocalMeta(), configurable:false})
 
 // add globalThis.meta
@@ -203,7 +211,7 @@ export function instance<T>(fromClassOrType:{new(...params:any[]):T}|Type<T>, pr
 
 
 // generate a pointer for an object and returns the proxified object or the primitive pointer
-export function pointer<T>(value:CompatValue<T>): MinimalJSRef<T> {
+export function pointer<T>(value:RefOrValue<T>): MinimalJSRef<T> {
 
     const pointer = <any> Pointer.createOrGet(value).js_value;
     // store as eternal?
@@ -230,37 +238,47 @@ export function pointer<T>(value:CompatValue<T>): MinimalJSRef<T> {
 
 export const $$ = pointer;
 
+/**
+ * val shortcut function, collapses all ref value (pointers, pointer properties)
+ * @param val 
+ * @returns 
+ */
+export function val<T>(val: RefOrValue<T>):T  { // TODO: return inferred type instead of T (ts resolution error, too deep)
+    return Ref.collapseValue(val, true, true)
+}
+
+
 // generate primitive pointers
-export function decimal(value:CompatValue<number|bigint|string> = 0): DecimalRef {
-    if (value instanceof Value) value = value.val; // collapse
+export function decimal(value:RefOrValue<number|bigint|string> = 0): DecimalRef {
+    if (value instanceof Ref) value = value.val; // collapse
     return Pointer.create(undefined, Number(value)) // adds pointer or returns existing pointer
 }
-export function integer(value:CompatValue<bigint|number|string> = 0n): IntegerRef {
-    if (value instanceof Value) value = value.val; // collapse
+export function integer(value:RefOrValue<bigint|number|string> = 0n): IntegerRef {
+    if (value instanceof Ref) value = value.val; // collapse
     return Pointer.create(undefined, BigInt(Math.floor(Number(value)))) // adds pointer or returns existing pointer
 }
 export function text(string:TemplateStringsArray, ...vars:any[]):Promise<TextRef>
-export function text(value?:CompatValue<any>): TextRef
-export function text(value:CompatValue<string>|TemplateStringsArray = "", ...vars:any[]): TextRef|Promise<TextRef> {
-    if (value instanceof Value) value = value.val; // collapse
+export function text(value?:RefOrValue<any>): TextRef
+export function text(value:RefOrValue<string>|TemplateStringsArray = "", ...vars:any[]): TextRef|Promise<TextRef> {
+    if (value instanceof Ref) value = value.val; // collapse
     // template transform
     if (value instanceof Array) {
         return <Promise<TextRef<string>>>_datex(`always '${value.raw.map(s=>s.replace(/\(/g, '\\(').replace(/\'/g, "\\'")).join(INSERT_MARK)}'`, vars)
     }
     else return Pointer.create(undefined, String(value)) // adds pointer or returns existing pointer
 }
-export function boolean(value:CompatValue<boolean> = false): BooleanRef {
-    if (value instanceof Value) value = value.val; // collapse
+export function boolean(value:RefOrValue<boolean> = false): BooleanRef {
+    if (value instanceof Ref) value = value.val; // collapse
     return Pointer.create(undefined, Boolean(value)) // adds pointer or returns existing pointer
 }
 
 
 // Markdown
 export function md(string:TemplateStringsArray, ...vars:any[]):Promise<Markdown>
-export function md(value?:CompatValue<string>): Markdown
-export function md(value:CompatValue<string>|TemplateStringsArray = "", ...vars:any[]): Markdown|Promise<Markdown> {
+export function md(value?:RefOrValue<string>): Markdown
+export function md(value:RefOrValue<string>|TemplateStringsArray = "", ...vars:any[]): Markdown|Promise<Markdown> {
     // transform string reference
-    if (value instanceof Value) return <Promise<Markdown>> _datex `always <text/markdown> ${value}`
+    if (value instanceof Ref) return <Promise<Markdown>> _datex `always <text/markdown> ${value}`
     // template transform
     else if (value instanceof Array) return <Promise<Markdown>>_datex(`always <text/markdown>'${value.raw.map(s=>s.replace(/\(/g, '\\(').replace(/\'/g, "\\'")).join(INSERT_MARK)}'`, vars)
     // pointer from string
@@ -280,22 +298,22 @@ export function local_text(local_map: { [lang: string]: string; }) {
 
 
 export function transform<T,V extends TransformFunctionInputs>(observe_values:V, transform:TransformFunction<V,T>, persistent_datex_transform?:string) {
-    return Value.collapseValue(Pointer.createTransform(observe_values, transform, persistent_datex_transform));
+    return Ref.collapseValue(Pointer.createTransform(observe_values, transform, persistent_datex_transform));
 }
 export async function transformAsync<T,V extends TransformFunctionInputs>(observe_values:V, transform:AsyncTransformFunction<V,T>, persistent_datex_transform?:string) {
-    return Value.collapseValue(await Pointer.createTransformAsync(observe_values, transform, persistent_datex_transform));
+    return Ref.collapseValue(await Pointer.createTransformAsync(observe_values, transform, persistent_datex_transform));
 }
 
 
 // map boolean to two values
-export function map<K extends string|number, V>(value:CompatValue<K>, map:Record<K, V>):MinimalJSRef<V> {
+export function map<K extends string|number, V>(value:RefOrValue<K>, map:Record<K, V>):MinimalJSRef<V> {
     return <MinimalJSRef<V>> transform([value], (v)=><any>map[<K>v]);
 }
 
 // map boolean to two values
-export function select<T extends primitive>(value:CompatValue<boolean>, if_true:T, if_false:T):MinimalJSRef<T>
-export function select<T>(value:CompatValue<boolean>, if_true:T, if_false:T):MinimalJSRef<T>
-export function select<T>(value:CompatValue<boolean>, if_true:T, if_false:T) {
+export function select<T extends primitive>(value:RefOrValue<boolean>, if_true:T, if_false:T):MinimalJSRef<T>
+export function select<T>(value:RefOrValue<boolean>, if_true:T, if_false:T):MinimalJSRef<T>
+export function select<T>(value:RefOrValue<boolean>, if_true:T, if_false:T) {
     return transform([value], v=>v?<any>if_true:<any>if_false, `
     always (
         if (${Runtime.valueToDatexString(value)}) (${Runtime.valueToDatexString(if_true)}) 
@@ -305,10 +323,10 @@ export function select<T>(value:CompatValue<boolean>, if_true:T, if_false:T) {
 
 
 // boolean shortcut transforms
-export function not(value:CompatValue<boolean>): BooleanRef {
+export function not(value:RefOrValue<boolean>): BooleanRef {
     return transform([value], v=>!v);
 }
-export function and(...values:CompatValue<boolean>[]): BooleanRef {
+export function and(...values:RefOrValue<boolean>[]): BooleanRef {
     return transform(values, (...values)=>{
         for (const v of values) {
             if (!v) return false;
@@ -316,7 +334,7 @@ export function and(...values:CompatValue<boolean>[]): BooleanRef {
         return true;
     });
 }
-export function or(...values:CompatValue<boolean>[]): BooleanRef {
+export function or(...values:RefOrValue<boolean>[]): BooleanRef {
     return transform(values, (...values)=>{
         for (const v of values) {
             if (v) return true;
@@ -327,27 +345,27 @@ export function or(...values:CompatValue<boolean>[]): BooleanRef {
 
 
 // math operations
-export function add<T>(...values:CompatValue<T>[]): MinimalJSRef<T>
+export function add<T>(...values:RefOrValue<T>[]): MinimalJSRef<T>
 export function add(...args:any[]) {
     return transform([...args], (...args) => args.reduce((a, b) => a + b, 0));
 }
-export function sub(...numbers:CompatValue<bigint>[]): MinimalJSRef<bigint>
-export function sub(...numbers:CompatValue<number>[]): MinimalJSRef<number>
+export function sub(...numbers:RefOrValue<bigint>[]): MinimalJSRef<bigint>
+export function sub(...numbers:RefOrValue<number>[]): MinimalJSRef<number>
 export function sub(...args:any[]) {
     return transform([...args], (...args) => args.slice(1).reduce((a, b) => a - b, args[0]));
 }
-export function mul(...numbers:CompatValue<bigint>[]): MinimalJSRef<bigint>
-export function mul(...numbers:CompatValue<number>[]): MinimalJSRef<number>
+export function mul(...numbers:RefOrValue<bigint>[]): MinimalJSRef<bigint>
+export function mul(...numbers:RefOrValue<number>[]): MinimalJSRef<number>
 export function mul(...args:any[]) {
     return transform([...args], (...args) => args.reduce((a, b) => a * b, 1));
 }
-export function div(...numbers:CompatValue<bigint>[]): MinimalJSRef<bigint>
-export function div(...numbers:CompatValue<number>[]): MinimalJSRef<number>
+export function div(...numbers:RefOrValue<bigint>[]): MinimalJSRef<bigint>
+export function div(...numbers:RefOrValue<number>[]): MinimalJSRef<number>
 export function div(...args:any[]) {
     return transform([...args], (...args) => args.slice(1).reduce((a, b) => a / b, args[0]));
 }
-export function pow(...numbers:CompatValue<bigint>[]): MinimalJSRef<bigint>
-export function pow(...numbers:CompatValue<number>[]): MinimalJSRef<number>
+export function pow(...numbers:RefOrValue<bigint>[]): MinimalJSRef<bigint>
+export function pow(...numbers:RefOrValue<number>[]): MinimalJSRef<number>
 export function pow(...args:any[]) {
     return transform([...args], (...args) => args.slice(1).reduce((a, b) => a ** b, args[0]));
 }
@@ -362,9 +380,9 @@ export function always<const T,V extends TransformFunctionInputs>(transform:Smar
 export function always<T=unknown>(script:TemplateStringsArray, ...vars:any[]): Promise<MinimalJSRef<T>>
 export function always(scriptOrJSTransform:TemplateStringsArray|SmartTransformFunction<any>, ...vars:any[]) {
     // js function
-    if (typeof scriptOrJSTransform == "function") return Value.collapseValue(Pointer.createSmartTransform(scriptOrJSTransform));
+    if (typeof scriptOrJSTransform == "function") return Ref.collapseValue(Pointer.createSmartTransform(scriptOrJSTransform));
     // datex script
-    else return (async ()=>Value.collapseValue(await _datex(`always (${scriptOrJSTransform.raw.join(INSERT_MARK)})`, vars)))()
+    else return (async ()=>Ref.collapseValue(await _datex(`always (${scriptOrJSTransform.raw.join(INSERT_MARK)})`, vars)))()
 }
 
 (async ()=>{
@@ -374,15 +392,15 @@ export function always(scriptOrJSTransform:TemplateStringsArray|SmartTransformFu
 })
 
 // generate a static pointer for an object
-export function static_pointer<T>(value:CompatValue<T>, endpoint:IdEndpoint, unique_id:number, label?:string|number) {
+export function static_pointer<T>(value:RefOrValue<T>, endpoint:IdEndpoint, unique_id:number, label?:string|number) {
     const static_id = Pointer.getStaticPointerId(endpoint, unique_id);
     const pointer = Pointer.create(static_id, value)
     if (label) pointer.addLabel(typeof label == "string" ? label.replace(/^\$/, '') : label);
-    return Value.collapseValue(pointer);
+    return Ref.collapseValue(pointer);
 }
 
 // similar to pointer(), but also adds a label
-export function label<T>(label:string|number, value:CompatValue<T>): T {
+export function label<T>(label:string|number, value:RefOrValue<T>): T {
     const pointer = Pointer.createOrGet(value);
     if (pointer instanceof Pointer) pointer.addLabel(typeof label == "string" ? label.replace(/^\$/, '') : label);
     else throw new ValueError("Cannot add label to value, value is not a pointer");
@@ -538,11 +556,12 @@ Object.defineProperty(globalThis, 'eternalVar', {value:(customIdentifier:string)
 Object.defineProperty(globalThis, 'lazyEternalVar', {value:(customIdentifier:string)=>getLazyEternal(getCallerInfo(), customIdentifier), configurable:false})
 
 const _once = once;
-
+type val = typeof val;
 declare global {
     const eternal: undefined
     const lazyEternal: undefined    
     const $$: typeof pointer
+    const val: val
 
     const eternalVar: (customIdentifier:string)=>undefined
     const lazyEternalVar: (customIdentifier:string)=>undefined
@@ -588,7 +607,7 @@ export function syncedValue(parent:any|Pointer, key?:any):PointerProperty {
 // usage: props(someObjectWithPointer).someProperty  -> DatexPointerProperty<typeof someProperty>
 // creates an object from a pointer with all properties as DatexSynced values
 // if strong_parent_bounding is on, the child properties are always DatexPointerPropertys, otherwise a Pointer or other DatexValue might be returned if the property is already a DatexValue
-export function props<T extends object = object>(parent:CompatValue<T>, strong_parent_bounding = true): ObjectWithDatexValues<T> {
+export function props<T extends object = object>(parent:RefOrValue<T>, strong_parent_bounding = true): ObjectWithDatexValues<T> {
     let pointer:Pointer<T>;
     parent = Pointer.pointerifyValue(parent);
     if (parent instanceof PointerProperty) parent = parent.val; // collapse pointer property
@@ -603,7 +622,7 @@ export function props<T extends object = object>(parent:CompatValue<T>, strong_p
             // other DatexValues can also be returned -> check if property already a DatexValue
             if (!strong_parent_bounding) {
                 const property = pointer.getProperty(key);
-                if (property instanceof Value) return property;
+                if (property instanceof Ref) return property;
             }
             // create a DatexPointerProperty
             return PointerProperty.get(pointer, <keyof Pointer<T>>key);
@@ -692,6 +711,8 @@ globalThis.label = label;
 globalThis.pointer = pointer;
 // @ts-ignore
 globalThis.$$ = $$;
+// @ts-ignore
+globalThis.val = val;
 // @ts-ignore
 globalThis.static_pointer = static_pointer;
 // @ts-ignore

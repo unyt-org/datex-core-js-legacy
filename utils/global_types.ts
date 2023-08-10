@@ -1,5 +1,5 @@
 import type { Type } from "../types/type.ts"
-import type { Pointer, Value } from "../runtime/pointers.ts"
+import type { Pointer, Ref } from "../runtime/pointers.ts"
 import type { BinaryCode } from "../compiler/binary_codes.ts"
 import type { StreamConsumer } from "../types/abstract_types.ts"
 import { ProtocolDataType } from "../compiler/protocol_types.ts"
@@ -58,7 +58,7 @@ export type datex_sub_scope = {
     keys?: boolean, // get keys for next value
     get?: boolean, // get url (next value)
     template?: boolean|Type, // set type template
-    observe?: boolean|Value, // observe value
+    observe?: boolean|Ref, // observe value
     scope_block_for?: BinaryCode, // type of scope block
     scope_block_vars?: any[], // #0, #1, ... for scope block
     wait_await?: boolean, // await

@@ -8,6 +8,7 @@ import { Runtime } from "./runtime.ts";
 import { Tuple } from "../types/tuple.ts";
 import { cache_path } from "./cache_path.ts";
 import { DatexObject } from "../types/object.ts";
+import { Ref } from "./pointers.ts";
 
 
 type channel_type = 'websocket'|'http'
@@ -16,7 +17,7 @@ type node_config = {
 	keys: [ArrayBuffer, ArrayBuffer]
 }
 
-interface EndpointConfigData {
+export interface EndpointConfigData {
 	endpoint?:Endpoint
 	keys?: Crypto.ExportedKeySet
 	connect?:boolean
@@ -29,11 +30,18 @@ class EndpointConfig implements EndpointConfigData {
 	public DX_FILE_NAME = '.dx';
 
 	/* CONFIG VALUES */
-	public endpoint?:Endpoint
+	#endpoint?:Endpoint
 	public keys?: Crypto.ExportedKeySet
 	public connect?:boolean
 	public nodes?: Map<Endpoint, node_config>
 	/*****************/
+
+	public get endpoint() {
+		return Ref.collapseValue(this.#endpoint, true, true)!;
+	}
+	public set endpoint(endpoint: Endpoint) {
+		this.#endpoint = endpoint;
+	}
 
 
 	#nodes_loaded = false;
@@ -58,7 +66,7 @@ class EndpointConfig implements EndpointConfigData {
 			}
 			try {
 				config = await datex.get(config_file);
-				console.log("using endpoint config: " + config_file);
+				logger.debug("using endpoint config: " + config_file);
 			}
 			catch (e){
 				// ignore if no .dx file found
@@ -95,7 +103,7 @@ class EndpointConfig implements EndpointConfigData {
 		}
 
 		if (config!=null) {
-			this.endpoint = DatexObject.get(<any>config, 'endpoint')
+			this.#endpoint = DatexObject.get(<any>config, 'endpoint')
 			this.keys = DatexObject.get(<any>config, 'keys')
 			this.connect = DatexObject.get(<any>config, 'connect')
 			this.nodes = DatexObject.get(<any>config, 'nodes');
@@ -106,7 +114,7 @@ class EndpointConfig implements EndpointConfigData {
    
 
 	save() {
-		const serialized = Runtime.valueToDatexString(new Tuple({endpoint:this.endpoint, connect:this.connect, keys:this.keys, nodes:this.nodes}));
+		const serialized = Runtime.valueToDatexString(new Tuple({endpoint:this.#endpoint, connect:this.connect, keys:this.keys, nodes:this.nodes}));
 
 		if (client_type=="deno") {
 			try {
@@ -127,7 +135,7 @@ class EndpointConfig implements EndpointConfigData {
 	}
 
 	clear() {
-		this.endpoint = undefined;
+		this.#endpoint = undefined;
 		this.connect = undefined;
 		this.keys = undefined;
 		this.nodes = undefined;

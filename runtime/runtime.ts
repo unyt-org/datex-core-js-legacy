@@ -29,7 +29,7 @@ Symbol.prototype.toJSON = function(){return globalThis.String(this)}
 
 /***** imports */
 import { Compiler, compiler_options, PrecompiledDXB, ProtocolDataTypesMap, DatexResponse} from "../compiler/compiler.ts"; // Compiler functions
-import { DecimalRef, IntegerRef, Pointer, PointerProperty, CompatValue, Value, TextRef, BooleanRef, ObjectWithDatexValues, JSValueWith$} from "./pointers.ts";
+import { DecimalRef, IntegerRef, Pointer, PointerProperty, RefOrValue, Ref, TextRef, BooleanRef, ObjectWithDatexValues, JSValueWith$} from "./pointers.ts";
 import { Endpoint, endpoints, LOCAL_ENDPOINT, Target, target_clause, WildcardTarget } from "../types/addressing.ts";
 import { RuntimePerformance } from "./performance_measure.ts";
 import { NetworkError, PermissionError, PointerError, RuntimeError, SecurityError, ValueError, Error as DatexError, CompilerError, TypeError, SyntaxError, AssertionError } from "../types/errors.ts";
@@ -75,14 +75,14 @@ import { getCallerInfo } from "../utils/caller_metadata.ts";
 const mime = globalThis.Deno ? (await import("https://deno.land/x/mimetypes@v1.0.0/mod.ts")).mime : null;
 
 // from datex_short.ts --------------------------------------------
-function $$<T>(value:CompatValue<T>): MinimalJSRef<T> {
+function $$<T>(value:RefOrValue<T>): MinimalJSRef<T> {
     return <any> Pointer.createOrGet(value).js_value;
 }
-function static_pointer<T>(value:CompatValue<T>, endpoint:IdEndpoint, unique_id:number, label?:string|number) {
+function static_pointer<T>(value:RefOrValue<T>, endpoint:IdEndpoint, unique_id:number, label?:string|number) {
     const static_id = Pointer.getStaticPointerId(endpoint, unique_id);
     const pointer = Pointer.create(static_id, value)
     if (label) pointer.addLabel(typeof label == "string" ? label.replace(/^\$/, '') : label);
-    return Value.collapseValue(pointer);
+    return Ref.collapseValue(pointer);
 }
 
 // --------------------------------------------------------------
@@ -220,8 +220,8 @@ export class Runtime {
 
     public static PRECOMPILED_DXB: {[key:string]:PrecompiledDXB}
 
-    static #saved_local_strings = new WeakMap<local_text_map, Map<CompatValue<string>, Pointer<string>>>();
-    static #not_loaded_local_strings = new WeakMap<local_text_map, Set<CompatValue<string>>>();
+    static #saved_local_strings = new WeakMap<local_text_map, Map<RefOrValue<string>, Pointer<string>>>();
+    static #not_loaded_local_strings = new WeakMap<local_text_map, Set<RefOrValue<string>>>();
     
     public static getLocalString(local_map:{[lang:string]:string}):Pointer<string> {
         return Pointer.createTransform([PointerProperty.get(Runtime.ENV, 'LANG')],
@@ -244,20 +244,20 @@ export class Runtime {
         );
     }
 
-    public static getLocalStringFromMap(local_map:local_text_map, key:CompatValue<string>):Pointer<string> {
+    public static getLocalStringFromMap(local_map:local_text_map, key:RefOrValue<string>):Pointer<string> {
         // get cached transform pointer
         let saved_strings = this.#saved_local_strings.get(local_map);
         if (saved_strings && saved_strings.has(key)) return saved_strings.get(key)!;
 
         // create new transform pointer
         else {
-            const keyVal = Value.collapseValue(key, true, true);
+            const keyVal = Ref.collapseValue(key, true, true);
             const value_available = !local_map[Runtime.ENV.LANG] || (keyVal in local_map[Runtime.ENV.LANG]); // in map or auto translate
-            const transformValues:Value<string>[] = [PointerProperty.get(Runtime.ENV, 'LANG')];
-            if (key instanceof Value) transformValues.push(key)
+            const transformValues:Ref<string>[] = [PointerProperty.get(Runtime.ENV, 'LANG')];
+            if (key instanceof Ref) transformValues.push(key)
 
             const string_transform = Pointer.createTransform(transformValues, 
-                (lang:string) => this.transformLangValue(lang, local_map, Value.collapseValue(key, true, true)), // sync js mapping
+                (lang:string) => this.transformLangValue(lang, local_map, Ref.collapseValue(key, true, true)), // sync js mapping
                 value_available ? `
                     var lang = #env->LANG; 
                     var local_map = ${Runtime.valueToDatexString(local_map)};
@@ -297,7 +297,7 @@ export class Runtime {
 
         // force override transform values (currently unknown)
         for (const key of this.#not_loaded_local_strings.get(local_map)??[]) {
-            const keyVal = Value.collapseValue(key, true, true);
+            const keyVal = Ref.collapseValue(key, true, true);
             if (lang in local_map && keyVal in local_map[lang]) {
                 local_strings_map.get(key)!.val = await this.transformLangValue(lang, local_map, keyVal);
                 local_strings_map.get(key)!.setDatexTransform(`
@@ -339,7 +339,7 @@ export class Runtime {
     }
 
     static set endpoint(endpoint: Endpoint){
-        if (endpoint != LOCAL_ENDPOINT) logger.success("using endpoint: " + endpoint);
+        if (endpoint != LOCAL_ENDPOINT) logger.debug("using endpoint: " + endpoint);
         this.#endpoint = endpoint;
 
         Pointer.pointer_prefix = this.endpoint.getPointerPrefix();
@@ -499,6 +499,11 @@ export class Runtime {
     static #url_content_cache = new Map<string,any>();
     static #url_raw_content_cache = new Map<string,any>();
 
+    public static deleteURLCache(url: string|URL) {
+        this.#url_content_cache.delete(url.toString())
+        this.#url_raw_content_cache.delete(url.toString())
+    }
+
     // converts exports from DATEX tuple to normal JS object
     private static normalizeDatexExports(module:any){
         // TODO: fix tuple madness
@@ -531,7 +536,7 @@ export class Runtime {
                 response = await fetch(url);
             }
             if (!response.ok) {
-                throw new RuntimeError("Cannot get content of '"+url_string+"'");
+                throw new RuntimeError("Cannot get content of '"+url_string+"' (" + response.status + ")");
             }
             const type = response.headers.get('content-type');
 
@@ -1450,7 +1455,7 @@ export class Runtime {
     public static async simpleScopeExecution(scope:datex_scope) {
         // run scope, result is saved in 'scope' object
         await this.run(scope);
-        return Value.collapseValue(scope.result);
+        return Ref.collapseValue(scope.result);
     }
 
     /**
@@ -2220,8 +2225,8 @@ export class Runtime {
      */
     public static async equalValues(a:any, b:any) {
         // collapse (primitive) pointers
-        a = Value.collapseValue(a,true,true);
-        b = Value.collapseValue(b,true,true);
+        a = Ref.collapseValue(a,true,true);
+        b = Ref.collapseValue(b,true,true);
 
         // empty Tuple equals void
         if (a === VOID && b instanceof Tuple && Object.keys(b).length == 0) return true;
@@ -2270,7 +2275,7 @@ export class Runtime {
     static valueToDatexStringExperimental(value: unknown, formatted = true, colorized = false, deep_clone = false, collapse_value = false, resolve_slots = true){
         try {
             // extract body (TODO: just temporary, rust impl does not yet support header decompilation)
-            const compiled = new Uint8Array(Compiler.encodeValue(value, undefined, false, deep_clone, collapse_value));
+            const compiled = new Uint8Array(Compiler.encodeValue(value, undefined, false, deep_clone, collapse_value, false, true, false, true));
             return wasm_decompile(compiled, formatted, colorized, resolve_slots).replace(/\r\n$/, '');
         } catch (e) {
             console.log(e);
@@ -2299,7 +2304,7 @@ export class Runtime {
 
         // proxyify pointers
         if (!collapse_pointers && !deep_collapse) value = Pointer.pointerifyValue(value);
-        if (collapse_pointers && value instanceof Value) value = value.val; 
+        if (collapse_pointers && value instanceof Ref) value = value.val; 
         // don't show anonymous pointers as pointers
         if (value instanceof Pointer && value.is_anonymous) value = value.original_value;
 
@@ -2923,7 +2928,7 @@ export class Runtime {
 
             if (parent === undefined) throw new ValueError("void has no properties (trying to read property "+key+")");
 
-            key = Value.collapseValue(key,true,true);
+            key = Ref.collapseValue(key,true,true);
 
             // check read permission (throws an error)
             Runtime.runtime_actions.checkValueReadPermission(SCOPE, parent, key)
@@ -2979,7 +2984,7 @@ export class Runtime {
                 return Iterator.map(parent, (child)=>Runtime.runtime_actions.getProperty(SCOPE, child, key))
             }
 
-            parent = Value.collapseValue(parent,true,true);
+            parent = Ref.collapseValue(parent,true,true);
 
             // custom types get
             let new_obj = JSInterface.handleGetProperty(parent, key) 
@@ -3031,7 +3036,7 @@ export class Runtime {
             let o_parent:Pointer = Pointer.pointerifyValue(parent);
             if (!(o_parent instanceof Pointer)) o_parent = null;
 
-            key = Value.collapseValue(key,true,true);
+            key = Ref.collapseValue(key,true,true);
             
             // check read/write permission (throws an error)
             Runtime.runtime_actions.checkValueUpdatePermission(SCOPE, parent, key)
@@ -3043,7 +3048,7 @@ export class Runtime {
 
             // key is * -  set for all matching keys (recursive)
             if (key === WILDCARD) {
-                parent = Value.collapseValue(parent,true,true);
+                parent = Ref.collapseValue(parent,true,true);
                 // handle custom pseudo class
                 if (JSInterface.hasPseudoClass(parent)) {
                     // void => clear
@@ -3104,8 +3109,8 @@ export class Runtime {
             }
            
 
-            parent = Value.collapseValue(parent,true,true);
-            value = Value.collapseValue(value,true);
+            parent = Ref.collapseValue(parent,true,true);
+            value = Ref.collapseValue(value,true);
 
             // TODO permission handling
             // if (parent[DX_PERMISSIONS]?.[key] && !(<Filter>parent[DX_PERMISSIONS][key]).test(SCOPE.sender)) {
@@ -3197,14 +3202,14 @@ export class Runtime {
             let o_parent:Pointer = Pointer.pointerifyValue(current_val);
             if (!(o_parent instanceof Pointer)) o_parent = null;
 
-            key = Value.collapseValue(key,true,true);
+            key = Ref.collapseValue(key,true,true);
 
             // check read/write permission (throws an error)
             if (parent) Runtime.runtime_actions.checkValueUpdatePermission(SCOPE, parent, key)
 
             // key is * -  add for all matching keys (recursive)
             if (key === WILDCARD) {
-                parent = Value.collapseValue(parent);
+                parent = Ref.collapseValue(parent);
                 let keys:Iterable<any>;
                 // handle custom pseudo class
                 if (JSInterface.hasPseudoClass(parent)) {
@@ -3264,9 +3269,9 @@ export class Runtime {
             
 
 
-            current_val = Value.collapseValue(current_val); // first make sure that current_val is actual value
-            parent = Value.collapseValue(parent);
-            value = Value.collapseValue(value);
+            current_val = Ref.collapseValue(current_val); // first make sure that current_val is actual value
+            parent = Ref.collapseValue(parent);
+            value = Ref.collapseValue(value);
 
             if (SCOPE.header.type==ProtocolDataType.UPDATE) o_parent?.excludeEndpointFromUpdates(SCOPE.sender);
 
@@ -3282,8 +3287,8 @@ export class Runtime {
             else if (assigned == NOT_EXISTING) {
 
                  // DatexPrimitivePointers also collapsed
-                const current_val_prim = Value.collapseValue(current_val,true,true);
-                const value_prim = Value.collapseValue(value,true,true); // DatexPrimitivePointers also collapsed
+                const current_val_prim = Ref.collapseValue(current_val,true,true);
+                const value_prim = Ref.collapseValue(value,true,true); // DatexPrimitivePointers also collapsed
                 try {
 
                     // x.current_val ?= value
@@ -3625,7 +3630,7 @@ export class Runtime {
 
             const INNER_SCOPE = SCOPE.inner_scope;
             // first make sure pointers are collapsed
-            el = Value.collapseValue(el) 
+            el = Ref.collapseValue(el) 
 
             // collapse Maybes (TODO)
             //if (el instanceof Maybe) el = await el.value;
@@ -3719,7 +3724,7 @@ export class Runtime {
                     el = new Negation(el)
                 }
          
-                else if (typeof el == "boolean" || typeof (el = Value.collapseValue(el, true, true)) == "boolean" ) {
+                else if (typeof el == "boolean" || typeof (el = Ref.collapseValue(el, true, true)) == "boolean" ) {
                     el = !el;
                 }
                 else throw(new ValueError("Cannot negate this value ("+Runtime.valueToDatexString(el)+")", SCOPE))               
@@ -3995,7 +4000,7 @@ export class Runtime {
 
                 const pointer = Pointer.pointerifyValue(el);
 
-                if (!(pointer instanceof Value) || (pointer instanceof Pointer && pointer.is_anonymous)) {
+                if (!(pointer instanceof Ref) || (pointer instanceof Pointer && pointer.is_anonymous)) {
                     throw new ValueError("sync expects a reference value", SCOPE);
                 }
 
@@ -4046,9 +4051,9 @@ export class Runtime {
 
                 // convert value to stream (writes to stream everytime the pointer value changes)
                 else if (to instanceof Stream) {
-                    to.write(Value.collapseValue(pointer, true, true)); // current value as initial value
+                    to.write(Ref.collapseValue(pointer, true, true)); // current value as initial value
                     pointer.observe((v,k,t)=>{
-                        if (t == Value.UPDATE_TYPE.INIT) to.write(v);
+                        if (t == Ref.UPDATE_TYPE.INIT) to.write(v);
                     });
                 }
 
@@ -4064,7 +4069,7 @@ export class Runtime {
 
                 let pointer = Pointer.pointerifyValue(el);
 
-                if (!(pointer instanceof Value) || (pointer instanceof Pointer && pointer.is_anonymous)) throw new ValueError("stop sync expects a reference value", SCOPE);
+                if (!(pointer instanceof Ref) || (pointer instanceof Pointer && pointer.is_anonymous)) throw new ValueError("stop sync expects a reference value", SCOPE);
 
                 // is a sync consumer
                 const to = INNER_SCOPE.active_value;
@@ -4271,7 +4276,7 @@ export class Runtime {
 
             // stream
             else if (SCOPE.inner_scope.stream_consumer) {
-                el = Value.collapseValue(el, true, true); // collapse primitive values
+                el = Ref.collapseValue(el, true, true); // collapse primitive values
 
                 // pipe stream
                 if (el instanceof Stream) {
@@ -4291,8 +4296,8 @@ export class Runtime {
 
                 let is_true = false;
 
-                let a = Value.collapseValue(INNER_SCOPE.active_value,true); // only collapse pointer properties, keep primitive pointers
-                let b = Value.collapseValue(el,true);
+                let a = Ref.collapseValue(INNER_SCOPE.active_value,true); // only collapse pointer properties, keep primitive pointers
+                let b = Ref.collapseValue(el,true);
 
                 
                 let compared;
@@ -4355,8 +4360,8 @@ export class Runtime {
             // +
             else if (INNER_SCOPE.operator === BinaryCode.ADD || INNER_SCOPE.operator === BinaryCode.SUBTRACT) {
 
-                el = Value.collapseValue(el, true, true); // collapse primitive values
-                let val = Value.collapseValue(INNER_SCOPE.active_value, true, true);
+                el = Ref.collapseValue(el, true, true); // collapse primitive values
+                let val = Ref.collapseValue(INNER_SCOPE.active_value, true, true);
 
                 // negate for subtract
                 if (INNER_SCOPE.operator === BinaryCode.SUBTRACT && (typeof el == "number" || typeof el == "bigint")) el = -el;
@@ -4394,8 +4399,8 @@ export class Runtime {
             else if (INNER_SCOPE.operator === BinaryCode.AND) {
 
                 // collapse primitive values
-                const val = Value.collapseValue(INNER_SCOPE.active_value, true, true);
-                el = Value.collapseValue(el, true, true); 
+                const val = Ref.collapseValue(INNER_SCOPE.active_value, true, true);
+                el = Ref.collapseValue(el, true, true); 
 
                 // logical
                 if (val instanceof Logical) {
@@ -4445,8 +4450,8 @@ export class Runtime {
             else if (INNER_SCOPE.operator === BinaryCode.OR) {
                 
                 // collapse primitive values
-                let val = Value.collapseValue(INNER_SCOPE.active_value, true, true);
-                el = Value.collapseValue(el, true, true); 
+                let val = Ref.collapseValue(INNER_SCOPE.active_value, true, true);
+                el = Ref.collapseValue(el, true, true); 
 
 
                 // logical
@@ -4480,8 +4485,8 @@ export class Runtime {
             else if (INNER_SCOPE.operator === BinaryCode.MULTIPLY) {
                 
                 // collapse primitive values
-                let val = Value.collapseValue(INNER_SCOPE.active_value, true, true);
-                el = Value.collapseValue(el, true, true); 
+                let val = Ref.collapseValue(INNER_SCOPE.active_value, true, true);
+                el = Ref.collapseValue(el, true, true); 
 
                 if (typeof val == "bigint" && typeof el == "bigint") {
                     INNER_SCOPE.active_value *= el;
@@ -4533,8 +4538,8 @@ export class Runtime {
             else if (INNER_SCOPE.operator === BinaryCode.DIVIDE) {
 
                 // collapse primitive values
-                let val = Value.collapseValue(INNER_SCOPE.active_value, true, true);
-                el = Value.collapseValue(el, true, true); 
+                let val = Ref.collapseValue(INNER_SCOPE.active_value, true, true);
+                el = Ref.collapseValue(el, true, true); 
 
                 if (typeof val == "bigint" && typeof el == "bigint") {
                     if (el === 0n) throw new ValueError("Division by zero", SCOPE);
@@ -4562,8 +4567,8 @@ export class Runtime {
             else if (INNER_SCOPE.operator === BinaryCode.POWER) {
                 
                 // collapse primitive values
-                let val = Value.collapseValue(INNER_SCOPE.active_value, true, true);
-                el = Value.collapseValue(el, true, true); 
+                let val = Ref.collapseValue(INNER_SCOPE.active_value, true, true);
+                el = Ref.collapseValue(el, true, true); 
 
                 if (typeof val == "bigint" && typeof el == "bigint") {
                     if (el < 0) throw new ValueError("Cannot use a negative exponent with an integer")
@@ -4591,8 +4596,8 @@ export class Runtime {
             else if (INNER_SCOPE.operator === BinaryCode.MODULO) {
     
                 // collapse primitive values
-                let val = Value.collapseValue(INNER_SCOPE.active_value, true, true);
-                el = Value.collapseValue(el, true, true); 
+                let val = Ref.collapseValue(INNER_SCOPE.active_value, true, true);
+                el = Ref.collapseValue(el, true, true); 
 
                 if (typeof val == "bigint" && typeof el == "bigint") {
                     INNER_SCOPE.active_value %= el;
@@ -4676,7 +4681,7 @@ export class Runtime {
                 // handle all ValueConsumers (<Function>, <Type> TODO?, ...)
                 if (val instanceof DatexFunction || val instanceof Target /*|| val instanceof Filter*/ || val instanceof Assertion) {
                     // insert <Tuple>el or [el], or [] if el==VOID (call without parameters)                    
-                    if (val.handleApply) INNER_SCOPE.active_value = await val.handleApply(Value.collapseValue(el), SCOPE);
+                    if (val.handleApply) INNER_SCOPE.active_value = await val.handleApply(Ref.collapseValue(el), SCOPE);
                     else throw new ValueError("Cannot apply values to this value", SCOPE);
                 }
 
@@ -5346,7 +5351,7 @@ export class Runtime {
                         INNER_SCOPE.scope_block_for = null;
                         await this.runtime_actions.insertToScope(
                             SCOPE,
-                            Value.collapseValue(await Pointer.createTransformAsync(INNER_SCOPE.scope_block_vars, code_block))
+                            Ref.collapseValue(await Pointer.createTransformAsync(INNER_SCOPE.scope_block_vars, code_block))
                         )
                     }
 
