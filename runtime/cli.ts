@@ -21,6 +21,6 @@ export async function enableCLI() {
 		}
 	}
 	catch {
-		console.log("[cannot start CLI]")
+		// console.log("[cannot start CLI]")
 	}
 }

@@ -12,7 +12,7 @@ import { Quantity } from "./quantity.ts";
 import { Function as DatexFunction } from "./function.ts";
 import { logger, TypedArray } from "../utils/global_values.ts";
 import { BinaryCode } from "../compiler/binary_codes.ts"
-import { CompatValue, Pointer, Value } from "../runtime/pointers.ts";
+import { RefOrValue, Pointer, Ref } from "../runtime/pointers.ts";
 import { clause, Conjunction, Disjunction, Logical, Negation } from "./logic.ts";
 import { Debugger } from "../runtime/debugger.ts";
 import { Time } from "./time.ts";
@@ -364,7 +364,7 @@ export class Type<T = any> {
     public matchesType(type:type_clause){
         return Type.matchesType(type, this);
     }
-    public matches(value:CompatValue<any>): value is T  {
+    public matches(value:RefOrValue<any>): value is T  {
         return Type.matches(value, this);
     }
 
@@ -398,9 +398,10 @@ export class Type<T = any> {
     // operators and other type specific runtime behaviour
 
     public updateValue(ref:T, value:T) {
-        // console.log("update",ref,value,this.interface_config)
 
-        if (Type.ofValue(ref)!==this) throw new ValueError("Cannot update value, reference has wrong type")
+        if (Type.ofValue(ref)!==this) {
+            throw new ValueError("Cannot update value, reference has wrong type")
+        }
 
         if (this.interface_config?.override_silently instanceof Function) {
             this.interface_config.override_silently(ref, value)
@@ -622,8 +623,8 @@ export class Type<T = any> {
     }
 
     // check if root type of value matches exactly
-    public static matches<T extends Type>(value:CompatValue<any>, type:type_clause): value is (T extends Type<infer TT> ? TT : any)  {
-        value = Value.collapseValue(value, true, true);
+    public static matches<T extends Type>(value:RefOrValue<any>, type:type_clause): value is (T extends Type<infer TT> ? TT : any)  {
+        value = Ref.collapseValue(value, true, true);
         // value has a matching DX_TEMPLATE
         if (type instanceof Type && type.template && value[DX_TEMPLATE] && this.matchesTemplate(value[DX_TEMPLATE], type.template)) return true;
         // compare types
@@ -674,13 +675,13 @@ export class Type<T = any> {
     }
 
     // get datex type from value
-    public static ofValue<T=any>(value:CompatValue<T>):Type<T> {
+    public static ofValue<T=any>(value:RefOrValue<T>):Type<T> {
 
         if (value instanceof Pointer) {
             return value.type ?? Type.std.void;
         }
 
-        value = Value.collapseValue(value,true,true)
+        value = Ref.collapseValue(value,true,true)
 
         // // should not happen
         // else if (value instanceof Pointer) {

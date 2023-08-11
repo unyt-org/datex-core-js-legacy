@@ -13,9 +13,9 @@
 import { Logger } from "../utils/logger.ts";
 const logger = new Logger("datex compiler");
 
-import { ReadableStream, Runtime} from "../runtime/runtime.ts";
+import { ReadableStream, Runtime, StaticScope} from "../runtime/runtime.ts";
 import { Endpoint, IdEndpoint, Target, WildcardTarget, Institution, Person, BROADCAST, target_clause, endpoints } from "../types/addressing.ts";
-import { Pointer, PointerProperty, Value } from "../runtime/pointers.ts";
+import { Pointer, PointerProperty, Ref } from "../runtime/pointers.ts";
 import { CompilerError, RuntimeError, Error as DatexError, ValueError } from "../types/errors.ts";
 import { Function as DatexFunction } from "../types/function.ts";
 
@@ -44,6 +44,7 @@ import { MessageLogger } from "../utils/message_logger.ts";
 await wasm_init();
 wasm_init_runtime();
 
+export const activePlugins:string[] = [];
 
 // for actions on variables, pointers, ...
 enum ACTION_TYPE {
@@ -261,6 +262,7 @@ export type compiler_options = {
     parent_scope?: compiler_scope, // reference to parent scope, required for val var ref
     pseudo_parent?: boolean, // if true, handle variables from parent_scope like normal variables (no reindexing), required for init blocks, ...
     only_leak_inserts?: boolean, // only __insert__ placeholder variables from parent scope are accessible
+    no_duplicate_value_optimization?: boolean, // dont collapse multiple identical primitive ´´ values to a single reference (only relevant for rendering as datex script, mostly for strings)
 
     preemptive_pointer_init?: boolean, // directly sent the pointer values for owned pointers
     init_scope?: boolean, // is not a real subscope, only a init block
@@ -1377,7 +1379,7 @@ export class Compiler {
             // variable not found
             if (index == -1) {
                 // readonly - #std variable? (#std.name)
-                if (action_type == ACTION_TYPE.GET && name in Runtime.STD_STATIC_SCOPE) {
+                if (action_type == ACTION_TYPE.GET && Runtime.STD_STATIC_SCOPE && name in Runtime.STD_STATIC_SCOPE) {
                     Compiler.builder.insertVariable(SCOPE, undefined, ACTION_TYPE.GET, undefined, BinaryCode.VAR_STD, undefined);
                     Compiler.builder.handleRequiredBufferSize(SCOPE.b_index, SCOPE);
                     SCOPE.uint8[SCOPE.b_index++] = BinaryCode.CHILD_GET;
@@ -2567,10 +2569,14 @@ export class Compiler {
 
             // make sure normal pointers are collapsed (ignore error if uninitialized pointer is passed in)
             try {
-                value = Value.collapseValue(value);
+                value = Ref.collapseValue(value);
             }
             catch {}
 
+
+            // handle <Stream> and ReadableStream, if streaming (<<)
+            if ((value instanceof Stream || value instanceof ReadableStream) && SCOPE.uint8[SCOPE.b_index-1] == BinaryCode.STREAM) return Compiler.builder.handleStream(value, SCOPE); 
+ 
             // same value already inserted -> refer to the value with an internal variable
             if (add_insert_index && SCOPE.inserted_values?.has(value)) {
                 // get variable for the already-existing value
@@ -2581,15 +2587,12 @@ export class Compiler {
                 SCOPE.options._first_insert_done = true;
                 return;
             }
-
-            // handle <Stream> and ReadableStream, if streaming (<<)
-            if ((value instanceof Stream || value instanceof ReadableStream) && SCOPE.uint8[SCOPE.b_index-1] == BinaryCode.STREAM) return Compiler.builder.handleStream(value, SCOPE); 
- 
+    
             // get dynamic index for start of value
             const start_index = Compiler.builder.getDynamicIndex(SCOPE.b_index, SCOPE);
 
             // add original value to inserted values map (only if useful, exclude short values like boolean and null)
-            if (value!==VOID && 
+            if (!(SCOPE.options.no_duplicate_value_optimization && (typeof value == "bigint" || typeof value == "number" || typeof value == "string")) && value!==VOID && 
                 value !==null && 
                 typeof value != "boolean" &&
                 !((typeof value == "bigint" || typeof value == "number") && value<=Compiler.MAX_INT_32 && value>=Compiler.MIN_INT_32)
@@ -2624,7 +2627,7 @@ export class Compiler {
             const skip_first_collapse = !SCOPE.options._first_insert_done&&SCOPE.options.collapse_first_inserted;
 
             const option_collapse = SCOPE.options.collapse_pointers && !(SCOPE.options.keep_external_pointers && value instanceof Pointer && !value.is_origin);
-            const no_proxify = value instanceof Value && (((value instanceof Pointer && value.is_anonymous) || option_collapse) || skip_first_collapse);
+            const no_proxify = value instanceof Ref && (((value instanceof Pointer && value.is_anonymous) || option_collapse) || skip_first_collapse);
 
             // proxify pointer exceptions:
             if (no_proxify) {
@@ -2894,7 +2897,7 @@ export class Compiler {
         }
 
         // INSERT data (?)
-        else if (m = SCOPE.datex.match(Regex.INSERT)) {                
+        else if (m = SCOPE.datex.match(Regex.INSERT)) {     
             SCOPE.datex = SCOPE.datex.substring(m[0].length); 
 
             if (SCOPE.current_data_index == undefined) SCOPE.current_data_index = 0;
@@ -2914,7 +2917,7 @@ export class Compiler {
                 const d = SCOPE.data?.[d_index];
 
                 // special exception: insert raw datex script (dxb Scope can be inserted normally (synchronous))
-                if (d instanceof DatexResponse && !(d.datex instanceof Scope))await Compiler.builder.compilerInsert(SCOPE, d);
+                if (d instanceof DatexResponse && !(d.datex instanceof Scope)) await Compiler.builder.compilerInsert(SCOPE, d);
                 else Compiler.builder.insert(d, SCOPE);
             }
             isEffectiveValue = true;
@@ -4282,7 +4285,7 @@ export class Compiler {
 
             
             // plugin enabled?
-            if (SCOPE.options.plugins?.includes(name) || SCOPE.options.required_plugins?.includes(name)) {
+            if (SCOPE.options.plugins?.includes(name) || activePlugins.includes(name) || SCOPE.options.required_plugins?.includes(name)) {
                 SCOPE.unused_plugins?.delete(name);
                 SCOPE.datex = `export const ${name} = (` + SCOPE.datex;
             }
@@ -5307,9 +5310,9 @@ export class Compiler {
     }
 
     /** does not create a full DXB block, only a buffer containing a dxb encoded value */
-    static encodeValue(value:any, inserted_ptrs?:Set<Pointer>, add_command_end = true, deep_clone = false, collapse_first_inserted = false, no_create_pointers = false, keep_first_transform = true, collapse_injected_pointers = false):ArrayBuffer {
+    static encodeValue(value:any, inserted_ptrs?:Set<Pointer>, add_command_end = true, deep_clone = false, collapse_first_inserted = false, no_create_pointers = false, keep_first_transform = true, collapse_injected_pointers = false, no_duplicate_value_optimization = false):ArrayBuffer {
         // add_command_end -> end_of_scope -> add ; at the end
-        return this.compileValue(value, {inserted_ptrs, collapse_pointers:deep_clone, collapse_injected_pointers:collapse_injected_pointers, collapse_first_inserted:collapse_first_inserted, no_create_pointers:no_create_pointers, keep_first_transform:keep_first_transform}, add_command_end)
+        return this.compileValue(value, {inserted_ptrs, collapse_pointers:deep_clone, collapse_injected_pointers:collapse_injected_pointers, collapse_first_inserted:collapse_first_inserted, no_create_pointers:no_create_pointers, keep_first_transform:keep_first_transform, no_duplicate_value_optimization}, add_command_end)
     }
 
     static encodeValueBase64(value:any, inserted_ptrs?:Set<Pointer>, add_command_end = true, deep_clone = false, collapse_first_inserted = false, no_create_pointers = false, keep_first_transform = true, collapse_injected_pointers = false):string {
