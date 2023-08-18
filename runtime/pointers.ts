@@ -1753,9 +1753,11 @@ export class Pointer<T = any> extends Ref<T> {
         // return the value directly
         else return super.val;
     }
+
     override set val(v:T) {
         // TODO: fixme, check this.#loaded && this.original_value!==undefined?
-        if (this.#loaded) this.updateValue(v);
+        const valueExists = this.#loaded && (this.original_value!==undefined || this.is_js_primitive);
+        if (valueExists) this.updateValue(v);
         else this.initializeValue(v);
     }
 
@@ -1784,7 +1786,8 @@ export class Pointer<T = any> extends Ref<T> {
     // same as val setter, but can be awaited - don't confuse with Pointer.setValue (TODO: rename?)
     override setVal(v:T, trigger_observers = true, is_transform?:boolean) {
         // TODO: fixme, check this.#loaded && this.original_value!==undefined?
-        if (this.#loaded) return this.updateValue(v, trigger_observers, is_transform);
+        const valueExists = this.#loaded && (this.original_value!==undefined || this.is_js_primitive);
+        if (valueExists) return this.updateValue(v, trigger_observers, is_transform);
         else return this.initializeValue(v, is_transform); // observers not relevant for init
     }
 
