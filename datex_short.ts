@@ -1,10 +1,11 @@
 
 // shortcut functions
 // import { Datex } from "./datex.ts";
-import { baseURL, Runtime, PrecompiledDXB, Type, Pointer, Ref, PointerProperty, primitive, any_class, Target, IdEndpoint, TransformFunctionInputs, AsyncTransformFunction, TransformFunction, TextRef, Markdown, DecimalRef, BooleanRef, IntegerRef, MinimalJSRef, RefOrValue, CompatPartial, datex_meta, ObjectWithDatexValues, Compiler, endpoint_by_endpoint_name, endpoint_name, Storage, compiler_scope, datex_scope, DatexResponse, target_clause, ValueError, logger, Class, getDefaultLocalMeta, Endpoint, INSERT_MARK, CollapsedValueAdvanced, CollapsedValue, SmartTransformFunction, compiler_options, activePlugins } from "./datex_all.ts";
+import { baseURL, Runtime, PrecompiledDXB, Type, Pointer, Ref, PointerProperty, primitive, any_class, Target, IdEndpoint, TransformFunctionInputs, AsyncTransformFunction, TransformFunction, TextRef, Markdown, DecimalRef, BooleanRef, IntegerRef, MinimalJSRef, RefOrValue, CompatPartial, datex_meta, ObjectWithDatexValues, Compiler, endpoint_by_endpoint_name, endpoint_name, Storage, compiler_scope, datex_scope, DatexResponse, target_clause, ValueError, logger, Class, getDefaultLocalMeta, Endpoint, INSERT_MARK, CollapsedValueAdvanced, CollapsedValue, SmartTransformFunction, compiler_options, activePlugins, METADATA, handleDecoratorArgs } from "./datex_all.ts";
 
 /** make decorators global */
 import {property as _property, sync as _sync, endpoint as _endpoint, template as _template, jsdoc as _jsdoc} from "./datex_all.ts";
+import { Decorators } from "./js_adapter/js_class_adapter.ts";
 import { NOT_EXISTING, DX_SLOTS, SLOT_GET, SLOT_SET } from "./runtime/constants.ts";
 import { StaticScope } from "./runtime/runtime.ts";
 import { AssertionError } from "./types/errors.ts";
@@ -371,6 +372,19 @@ export function pow(...args:any[]) {
 }
 
 
+/**
+ * "always" transform function, creates a new pointer containing the result of the callback function.
+ * At any point in time, the pointer is the result of the callback function. 
+ * If the function has pointers as parameters, as soon as a value of one of the parameters changes,
+ * the transformed pointer value is also updated:
+ * ```ts
+ * const x = $$(10);
+ * const y = always (() => x * 2);
+ * y.val // 20
+ * x.val = 5;
+ * y.val // 10
+ * ```
+ */
 export function always<const T,V extends TransformFunctionInputs>(transform:SmartTransformFunction<T>): CollapsedValueAdvanced<Pointer<T>, false, false, CollapsedValue<Pointer<T>>> // return signature from Value.collapseValue(Pointer.smartTransform())
 /**
  * Shortcut for datex `always (...)`
@@ -378,18 +392,29 @@ export function always<const T,V extends TransformFunctionInputs>(transform:Smar
  * @param vars 
  */
 export function always<T=unknown>(script:TemplateStringsArray, ...vars:any[]): Promise<MinimalJSRef<T>>
+/**
+ * always decorator
+ * @param target
+ * @param name
+ */
+export function always(target: any, name?: string):any
 export function always(scriptOrJSTransform:TemplateStringsArray|SmartTransformFunction<any>, ...vars:any[]) {
+    // @always getter decorator
+    if (scriptOrJSTransform[METADATA]) {
+        console.log("dec",scriptOrJSTransform,vars[0])
+        handleDecoratorArgs([scriptOrJSTransform, ...vars], (...args)=>{
+            const setMetadata = args[5]
+            Decorators.property(...args)
+            setMetadata(Decorators.ALWAYS_GETTER, true)
+        } );
+    }
     // js function
-    if (typeof scriptOrJSTransform == "function") return Ref.collapseValue(Pointer.createSmartTransform(scriptOrJSTransform));
+    else if (typeof scriptOrJSTransform == "function") return Ref.collapseValue(Pointer.createSmartTransform(scriptOrJSTransform));
     // datex script
     else return (async ()=>Ref.collapseValue(await _datex(`always (${scriptOrJSTransform.raw.join(INSERT_MARK)})`, vars)))()
 }
 
-(async ()=>{
-    const y = await always<string> `1+2`;
-    const a = $$(1);
-    const z = always(()=>y+"23")
-})
+
 
 // generate a static pointer for an object
 export function static_pointer<T>(value:RefOrValue<T>, endpoint:IdEndpoint, unique_id:number, label?:string|number) {

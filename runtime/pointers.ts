@@ -22,6 +22,7 @@ import { Time } from "../types/time.ts";
 
 import "../types/native_types.ts"; // getAutoDefault
 import { displayFatalError } from "./display.ts";
+import { Decorators, METADATA } from "../js_adapter/js_class_adapter.ts";
 
 export type observe_handler<K=any, V extends Ref = any> = (value:V extends Ref<infer T> ? T : V, key?:K, type?:Ref.UPDATE_TYPE, transform?:boolean, is_child_update?:boolean)=>void|boolean
 export type observe_options = {types?:Ref.UPDATE_TYPE[], ignore_transforms?:boolean, recursive?:boolean}
@@ -1753,8 +1754,8 @@ export class Pointer<T = any> extends Ref<T> {
         else return super.val;
     }
     override set val(v:T) {
-        // TODO: fixme, only this.#loaded should have to be checked
-        if (this.#loaded && this.original_value!==undefined) this.updateValue(v);
+        // TODO: fixme, check this.#loaded && this.original_value!==undefined?
+        if (this.#loaded) this.updateValue(v);
         else this.initializeValue(v);
     }
 
@@ -1782,8 +1783,8 @@ export class Pointer<T = any> extends Ref<T> {
 
     // same as val setter, but can be awaited - don't confuse with Pointer.setValue (TODO: rename?)
     override setVal(v:T, trigger_observers = true, is_transform?:boolean) {
-        // TODO: fixme, only this.#loaded should have to be checked
-        if (this.#loaded && this.original_value!==undefined) return this.updateValue(v, trigger_observers, is_transform);
+        // TODO: fixme, check this.#loaded && this.original_value!==undefined?
+        if (this.#loaded) return this.updateValue(v, trigger_observers, is_transform);
         else return this.initializeValue(v, is_transform); // observers not relevant for init
     }
 
@@ -1922,7 +1923,7 @@ export class Pointer<T = any> extends Ref<T> {
     protected updateValue(v:RefOrValue<T>, trigger_observers = true, is_transform?:boolean) {
         const val = <T> Ref.collapseValue(v,true,true);
         const newType = Type.ofValue(val);
-
+        
         // not changed (relevant for primitive values)
         if (this.current_val === val) {
             return;
@@ -2415,6 +2416,7 @@ export class Pointer<T = any> extends Ref<T> {
             const shadow_object = {[DX_PTR]:this};
             this.#shadow_object = new WeakRef(shadow_object);
 
+            const alwaysGetterProps = Object.getPrototypeOf(obj)[METADATA]?.[Decorators.ALWAYS_GETTER]?.public ?? {}
 
             for (const name of this.visible_children) {
 
@@ -2426,14 +2428,30 @@ export class Pointer<T = any> extends Ref<T> {
 
                 // add original getters/setters to shadow_object if they exist (and call with right 'this' context)
                 if (property_descriptor?.set || property_descriptor?.get) {
-                    const descriptor:PropertyDescriptor = {};
-                    if (property_descriptor.set) descriptor.set = val => property_descriptor.set?.call(obj,val);
-                    if (property_descriptor.get) descriptor.get = () =>  property_descriptor.get?.call(obj)
-
-                    Object.defineProperty(shadow_object, name, descriptor);
+                    
+                    // @always: set pointer as property instead of getter
+                    if (alwaysGetterProps[name] && property_descriptor.get) {
+                        if (property_descriptor?.set) {
+                            throw new Error(obj.constructor.name + ": @always can only be used in combination with a getter, but a setter for '"+name+"' was found")
+                        }
+                        // copied from always in datex_short
+                        const transformRef = Pointer.createSmartTransform(property_descriptor.get.bind(obj));
+                        Object.defineProperty(shadow_object, name, {value:transformRef})
+                    }
+                    // bind default getters and setters
+                    else {
+                        const descriptor:PropertyDescriptor = {};
+                        if (property_descriptor.set) descriptor.set = val => property_descriptor.set?.call(obj,val);
+                        if (property_descriptor.get) descriptor.get = () =>  property_descriptor.get?.call(obj)
+    
+                        Object.defineProperty(shadow_object, name, descriptor);
+                    }
+                   
                 }
                 // no original getter/setter
                 else shadow_object[name] = obj[name];
+
+               
 
                 // new getter + setter
                 Object.defineProperty(obj, name, {
@@ -2448,6 +2466,7 @@ export class Pointer<T = any> extends Ref<T> {
                         return Ref.collapseValue(shadow_object[name], true, true)
                     }
                 });
+            
               
             }
             return obj;
