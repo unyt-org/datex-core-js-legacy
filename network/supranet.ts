@@ -234,15 +234,18 @@ export class Supranet {
         if (!endpoint_config.endpoint) endpoint = await this.createAndSaveNewEndpoint();
         // existing endpoint already in cache
         else {
-            try {endpoint = endpoint_config.endpoint;}
+            try {endpoint = val(endpoint_config.endpoint);}
             catch {
                 logger.error("Error getting Config Value 'endpoint'");
                 endpoint = await this.createAndSaveNewEndpoint();
             }
         }
 
+        // implicitly create new anonymous endpoint, if set to @@local
+        if (endpoint == Datex.LOCAL_ENDPOINT) endpoint = undefined;
+
         if (!(endpoint instanceof Endpoint || endpoint instanceof UnresolvedEndpointProperty)) {
-            logger.error("Config Value 'endpoint' is not of type <Endpoint>");
+            if (endpoint !== undefined) logger.error("Config Value 'endpoint' is not of type <Endpoint>", endpoint);
             endpoint = await this.createAndSaveNewEndpoint();
         } 
    

@@ -1,13 +1,8 @@
 {
 	"importMap": "importmap.dev.json",
 	"compilerOptions": {
-		"module": "esnext",
-		"target": "es2022",
-		"noImplicitOverride":true,
+ 		"noImplicitOverride":true,
 		"removeComments": true,
-		"preserveConstEnums": true,
-		"esModuleInterop": true,
-		"experimentalDecorators": true,
 		"emitDecoratorMetadata": true,
 		"jsx": "react-jsx",
 		"jsxImportSource": "uix",
@@ -15,7 +10,6 @@
 	},
 	"tasks": {
 		"generate-api-docs": "deno run -Aqr --import-map importmap.dev.json https://dev.cdn.unyt.org/doc-generator/run.ts --import-map importmap.dev.json --base ./ -m ./datex.ts --out ./docs/api",
-		"test": "deno run -Aq --import-map importmap.dev.json https://dev.cdn.unyt.org/unyt_tests/run.ts tests/",
-		"test-sql": "deno run -Aq --import-map importmap.dev.json https://dev.cdn.unyt.org/unyt_tests/run.ts tests/sql-storage.test.ts"
+		"test": "deno run -Aq --import-map importmap.dev.json https://dev.cdn.unyt.org/unyt_tests/run.ts"
 	}
 }

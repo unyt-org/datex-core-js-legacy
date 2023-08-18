@@ -8,4 +8,4 @@ catch {
     ({CommandLineOptions} = <any> await import("./_command_line_options.ts"));
 }
 
-export const commandLineOptions = new CommandLineOptions("DATEX Core", "DATEX Runtime for JavaScript/TypeScript");
+export const commandLineOptions = new CommandLineOptions("DATEX Core", "DATEX Runtime for JavaScript/TypeScript.\nVisit https://unyt.org/datex for more information");

@@ -32,7 +32,7 @@ export interface ComInterface {
     in: boolean // can receive data
     out: boolean // can send data
     global?: boolean // has a connection to the global network, use as a default interface if possible
-    send: (datex:ArrayBuffer, to?: Target)=>Promise<void>
+    send: (datex:ArrayBuffer, to?: Target)=>Promise<void>|void
     disconnect: ()=>void|Promise<void>
 }
 

@@ -15,6 +15,7 @@ import { ComInterface, CommonInterface } from "./client.ts";
 import { Runtime } from "../runtime/runtime.ts";
 import { Supranet } from "./supranet.ts";
 import { Endpoint } from "../types/addressing.ts";
+import { client_type } from "../datex_all.ts";
 
 const logger = new Logger("unyt");
 
@@ -70,7 +71,8 @@ export class Unyt {
 
     public static endpointDomains() {
         const info = this.endpoint_info;
-        const endpointURLs = info.app?.backend || info.endpoint ? [this.formatEndpointURL((info.app?.backend || info.endpoint)!)] : [];
+        const urlEndpoint = (client_type == "browser" ? info.app?.backend : info.endpoint);
+        const endpointURLs = urlEndpoint ? [this.formatEndpointURL(urlEndpoint)] : [];
         if (info.app?.domains) endpointURLs.unshift(...info.app.domains.map(d=>'https://'+d))
         return [...new Set(endpointURLs)];
     }
@@ -83,6 +85,7 @@ export class Unyt {
 
         const endpoint = info.endpoint ? await this.formatEndpoint(info.endpoint) : undefined;
         const endpointURLs = await this.endpointDomains();
+        const host = info.app?.host ? await this.formatEndpoint(info.app.host) : undefined;
 
         const backend = info.app?.backend ? await this.formatEndpoint(info.app.backend) : undefined;
 
@@ -95,7 +98,7 @@ export class Unyt {
 
         if (info.app?.version) content += `${ESCAPE_SEQUENCES.UNYT_GREY}VERSION${ESCAPE_SEQUENCES.COLOR_DEFAULT}       ${info.app.version}\n`
         if (info.app?.stage) content += `${ESCAPE_SEQUENCES.UNYT_GREY}STAGE${ESCAPE_SEQUENCES.COLOR_DEFAULT}         ${info.app.stage}\n`
-        if (info.app?.host) content += `${ESCAPE_SEQUENCES.UNYT_GREY}HOST${ESCAPE_SEQUENCES.COLOR_DEFAULT}          ${info.app.host}\n`
+        if (host) content += `${ESCAPE_SEQUENCES.UNYT_GREY}HOST${ESCAPE_SEQUENCES.COLOR_DEFAULT}          ${host}\n`
 
         content += `\n`
 
