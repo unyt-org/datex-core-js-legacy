@@ -4,34 +4,49 @@ import { Pointer } from "../../runtime/pointers.ts";
 
 import { NOT_EXISTING } from "../constants.ts";
 import { AsyncStorageLocation } from "../storage.ts";
+import { ptr_cache_path } from "../cache_path.ts";
 
-const pointerDB = globalThis.Deno.openKv ? await Deno.openKv() : null;
-const itemDB = globalThis.Deno.openKv ? await Deno.openKv() : null;
+const denoKvDir = new URL("./deno-kv/", ptr_cache_path);
+// @ts-ignore global Deno
+if (globalThis.Deno) Deno.mkdirSync(denoKvDir.pathname, {recursive: true});
+
+let pointerDB: Deno.Kv|null = null
+let itemDB: Deno.Kv|null = null
+
+async function initKv() {
+	if (globalThis.Deno?.openKv as any) {
+		pointerDB = await Deno.openKv(new URL("./pointers", denoKvDir).pathname);
+		itemDB =  await Deno.openKv(new URL("./items", denoKvDir).pathname);
+	}
+}
+
+await initKv();
 
 export class DenoKVStorageLocation extends AsyncStorageLocation {
 	name = "DENO_KV"
+
+	private MAX_SIZE = 65_500; // 65_536
 
 	isSupported() {
 		return !!globalThis.Deno.openKv;
 	}
 
-	async setItem(key: string,value: unknown): Promise<boolean> {
-		await itemDB.set([key], <any>Compiler.encodeValue(value));
+	async setItem(key: string, value: unknown): Promise<boolean> {
+		await this.set(itemDB!, key, Compiler.encodeValue(value));
 		return true;
 	}
 	async getItem(key: string): Promise<unknown> {
-		const result = await itemDB.get([key]);
-		if (result.versionstamp == null) return NOT_EXISTING;
-		else return Runtime.decodeValue(result.value);
+		const result = await this.get(itemDB!, key);
+		if (result == null) return NOT_EXISTING;
+		else return Runtime.decodeValue(result);
 	}
 
-	async hasItem(key:string) {
-		const result = await itemDB.get([key]);
-		return (result.versionstamp != null)
+	hasItem(key:string) {
+		return this.has(itemDB!, key)
 	}
 
 	async getItemKeys() {
-		const entries = itemDB.list();
+		const entries = itemDB!.list({prefix: []});
 		const keys = [];
 		for await (const entry of entries) {
 			keys.push(entry.value);
@@ -40,7 +55,7 @@ export class DenoKVStorageLocation extends AsyncStorageLocation {
 	}
 
 	async getPointerIds(): Promise<Generator<string,void,unknown>> {
-		const entries = pointerDB.list();
+		const entries = pointerDB!.list({prefix: []});
 		const keys = [];
 		for await (const entry of entries) {
 			keys.push(entry.value);
@@ -49,46 +64,123 @@ export class DenoKVStorageLocation extends AsyncStorageLocation {
 	}
 
 	async removeItem(key: string): Promise<void> {
-		await itemDB.delete([key]);
+		await itemDB!.delete([key]);
 	}
 	async getItemValueDXB(key: string): Promise<ArrayBuffer|null> {
-		const result = await itemDB.get([key]);
-		if (result.versionstamp == null) return null;
-		else return result.value;
+		const result = await this.get(itemDB!, key);
+		return result;
 	}
 	async setItemValueDXB(key: string, value: ArrayBuffer) {
-		await itemDB.set([key], value);
+		await this.set(itemDB!, key, value);
 	}
 
 	async setPointer(pointer: Pointer<any>): Promise<Set<Pointer<any>>> {
 		const inserted_ptrs = new Set<Pointer>();
-		await pointerDB.set([pointer.id], Compiler.encodeValue(pointer, inserted_ptrs, true, false, true));
+		await this.set(pointerDB!, pointer.id, Compiler.encodeValue(pointer, inserted_ptrs, true, false, true));
         return inserted_ptrs;
 	}
 	async getPointerValue(pointerId: string, outer_serialized: boolean): Promise<unknown> {
-		const result = await pointerDB.get([pointerId]);
-		if (result.versionstamp == null) return NOT_EXISTING;
-		else return Runtime.decodeValue(result.value, outer_serialized);
+		const result = await this.get(pointerDB!, pointerId);
+		if (result == null) return NOT_EXISTING;
+		else return Runtime.decodeValue(result, outer_serialized);
 	}
 	async removePointer(pointerId: string): Promise<void> {
-		await pointerDB.delete([pointerId]);
+		await pointerDB!.delete([pointerId]);
 	}
 	async getPointerValueDXB(pointerId: string): Promise<ArrayBuffer|null> {
-		const result = await pointerDB.get([pointerId]);
-		if (result.versionstamp == null) return null;
-		else return result.value;
+		const result = await this.get(pointerDB!, pointerId);
+		return result;
 	}
 	async setPointerValueDXB(pointerId: string, value: ArrayBuffer) {
-		await pointerDB.set([pointerId], value);
+		await this.set(pointerDB!, pointerId, value);
 	}
 
-	async hasPointer(pointerId: string): Promise<boolean> {
-		const result = await pointerDB.get([pointerId]);
-		return (result.versionstamp != null)
+	hasPointer(pointerId: string): Promise<boolean> {
+		return this.has(pointerDB!, pointerId);
 	}
 
 	async clear() {
-		// TODO!
+		await Deno.remove(denoKvDir.pathname, {recursive: true});
+		await initKv()
 	}
+
+
+	async set(kv: Deno.Kv, key: string, value: ArrayBuffer) {
+		// single value
+		if (value.byteLength <= this.MAX_SIZE) await kv.set([key], value);
+		// chunked value
+		else {
+			// first delete all previous chunks
+			await this.delete(kv, key);
+			const promises = [];
+			const chunks = this.makeChunks(value);
+			promises.push(kv.set([key], chunks.length));
+			for (let i=0; i<chunks.length; i++) {
+				promises.push(kv.set([key, i], chunks[i]));
+			}
+			await Promise.all(promises)
+		}
+	}
+
+	async get(kv: Deno.Kv, key: string) {
+		const data = await kv.get<number|ArrayBuffer>([key]);
+		if (data.versionstamp == null) return null;
+
+		// chunked value
+		if (typeof data.value == "number") {
+			const chunksCount = data.value;
+			const chunks:Promise<Deno.KvEntryMaybe<ArrayBuffer>>[] = []
+			for (let i=0; i<chunksCount; i++) {
+				chunks.push(kv.get<ArrayBuffer>([key, i]));
+			}
+			return this.concatArrayBuffers((await Promise.all(chunks)).map(v=>{
+				if (!v.value) throw "missing chunk for " + key
+				else return v.value;
+			}))
+		}
+		else return data.value;
+	}
+
+	async has(kv: Deno.Kv, key: string) {
+		const result = await kv.get<number|ArrayBuffer>([key]);
+		return (result.versionstamp != null)
+	}
+
+	async delete(kv: Deno.Kv, key: string) {
+		const entries = kv.list({prefix:[key]})
+		for await (const entry of entries) {
+			kv.delete(entry.key)
+		}
+	}
+
+	/**
+	 * Convert an ArrayBuffer into chunks of MAX_SIZE or smaller
+	 * @param buffer
+	 * @returns 
+	 */
+	makeChunks(buffer: ArrayBuffer) {
+		const chunkSize = this.MAX_SIZE;
+		const chunks = []
+		for (let i = 0; i < buffer.byteLength; i += chunkSize) {
+			chunks.push(buffer.slice(i, i + chunkSize));
+		}
+		return chunks;
+	}
+
+	concatArrayBuffers(arrayOfBuffers: ArrayBuffer[]) {
+		const totalLength = arrayOfBuffers.reduce((total, buffer) => total + buffer.byteLength, 0);
+	  	const combinedBuffer = new ArrayBuffer(totalLength);
+	  	const combinedView = new Uint8Array(combinedBuffer);
+	  
+		let offset = 0;
+	  
+		// Copy data from each buffer into the combined buffer
+		for (const buffer of arrayOfBuffers) {
+		  	combinedView.set(new Uint8Array(buffer), offset);
+		  	offset += buffer.byteLength;
+		}
+	  
+		return combinedBuffer;
+	  }
 
 }

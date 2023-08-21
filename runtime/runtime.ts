@@ -29,8 +29,8 @@ Symbol.prototype.toJSON = function(){return globalThis.String(this)}
 
 /***** imports */
 import { Compiler, compiler_options, PrecompiledDXB, ProtocolDataTypesMap, DatexResponse} from "../compiler/compiler.ts"; // Compiler functions
-import { DecimalRef, IntegerRef, Pointer, PointerProperty, RefOrValue, Ref, TextRef, BooleanRef, ObjectWithDatexValues, JSValueWith$} from "./pointers.ts";
-import { Endpoint, endpoints, LOCAL_ENDPOINT, Target, target_clause, WildcardTarget } from "../types/addressing.ts";
+import { DecimalRef, IntegerRef, Pointer, PointerProperty, RefOrValue, Ref, TextRef, BooleanRef, ObjectWithDatexValues, JSValueWith$, MinimalJSRef} from "./pointers.ts";
+import { Endpoint, endpoints, IdEndpoint, LOCAL_ENDPOINT, Target, target_clause, WildcardTarget } from "../types/addressing.ts";
 import { RuntimePerformance } from "./performance_measure.ts";
 import { NetworkError, PermissionError, PointerError, RuntimeError, SecurityError, ValueError, Error as DatexError, CompilerError, TypeError, SyntaxError, AssertionError } from "../types/errors.ts";
 import { Function as DatexFunction } from "../types/function.ts";
@@ -59,18 +59,18 @@ import { Assertion } from "../types/assertion.ts";
 import { Deferred } from "../types/deferred.ts";
 import { Task } from "../types/task.ts";
 import { DATEX_ERROR } from "../types/error_codes.ts";
-import { cnf, Conjunction, Disjunction, Logical, Negation } from "../types/logic.ts";
+import { Conjunction, Disjunction, Logical, Negation } from "../types/logic.ts";
 import { Logger } from "../utils/logger.ts";
 import { Debugger } from "./debugger.ts";
 import {decompile as wasm_decompile} from "../wasm/adapter/pkg/datex_wasm.js";
 
 import { IndexedDBStorageLocation } from "./storage-locations/indexed-db.ts";
 import { LocalStorageLocation } from "./storage-locations/local-storage.ts";
+import { DenoKVStorageLocation } from "./storage-locations/deno-kv.ts";
 
 import "../types/native_types.ts"; // load prototype overrides
 import { Time } from "../types/time.ts";
 import { initPublicStaticClasses } from "../js_adapter/js_class_adapter.ts";
-import { getCallerInfo } from "../utils/caller_metadata.ts";
 
 const mime = globalThis.Deno ? (await import("https://deno.land/x/mimetypes@v1.0.0/mod.ts")).mime : null;
 
@@ -6498,18 +6498,52 @@ Runtime.endpoint = LOCAL_ENDPOINT;
 Runtime.onEndpointChanged(initPublicStaticClasses)
 
 
-// set Runtime ENV
-Runtime.ENV = await Storage.loadOrCreate("Datex.Runtime.ENV", ()=>{
+// default storage config:
+
+// @ts-ignore NO_INIT
+if (!globalThis.NO_INIT) {
+    if (client_type == "browser") {
+		await Storage.addLocation(new IndexedDBStorageLocation(), {
+			modes: [Storage.Mode.SAVE_ON_CHANGE, Storage.Mode.SAVE_PERIODICALLY],
+			primary: true
+		})
+        await Storage.addLocation(new LocalStorageLocation(), {
+            modes: [Storage.Mode.SAVE_ON_EXIT],
+            primary: false
+        })
+	}
+	else {
+        const denoKV = new DenoKVStorageLocation();
+        if (denoKV.isSupported()) {
+            console.log("Using DenoKV as primary storage location (experimental)")
+            await Storage.addLocation(denoKV, {
+                modes: [Storage.Mode.SAVE_ON_CHANGE],
+                primary: true
+            })
+        }
+        await Storage.addLocation(new LocalStorageLocation(), {
+            modes: [Storage.Mode.SAVE_ON_EXIT, Storage.Mode.SAVE_PERIODICALLY],
+            primary: denoKV.isSupported() ? false : true
+        })
+	}
+    
+}
+
+function getDefaultEnv() {
     return {
         LANG: globalThis.localStorage?.lang ?? globalThis?.navigator?.language?.split("-")[0]?.split("_")[0] ?? 'en',
         DATEX_VERSION: null
     }
-});
+}
+
+
+// set Runtime ENV (not persistent if globalThis.NO_INIT)
+Runtime.ENV = globalThis.NO_INIT ? getDefaultEnv() : await Storage.loadOrCreate("Datex.Runtime.ENV", getDefaultEnv);
 
 // workaround, should never happen
 if (!Runtime.ENV) {
     logger.error("Runtime ENV is undefined");
-    Runtime.ENV = {LANG: globalThis.localStorage?.lang ?? globalThis?.navigator?.language?.split("-")[0]?.split("_")[0] ?? 'en', DATEX_VERSION: null}
+    Runtime.ENV = getDefaultEnv()
 }
 
 // add environment variables to #env (might override existing env settings (LANG))
@@ -6725,29 +6759,6 @@ if (!globalThis.NO_INIT) {
     globalThis.printf = Runtime.STD_STATIC_SCOPE.printf
     // @ts-ignore
     globalThis.printn = Runtime.STD_STATIC_SCOPE.printn
-}
-
-// default storage config:
-
-// @ts-ignore NO_INIT
-if (!globalThis.NO_INIT) {
-    if (client_type == "browser") {
-		await Storage.addLocation(new IndexedDBStorageLocation(), {
-			modes: [Storage.Mode.SAVE_ON_CHANGE, Storage.Mode.SAVE_PERIODICALLY],
-			primary: true
-		})
-	}    
-	// else {
-	// 	await Datex.Storage.addLocation(new DenoKVStorageLocation(), {
-	// 		modes: [Datex.Storage.Mode.SAVE_ON_CHANGE, Datex.Storage.Mode.SAVE_PERIODICALLY],
-	// 		primary: true
-	// 	})
-	// }
-    
-    await Storage.addLocation(new LocalStorageLocation(), {
-        modes: [Storage.Mode.SAVE_ON_EXIT],
-		primary: client_type == "deno"
-    })
 }
 
 

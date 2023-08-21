@@ -10,15 +10,17 @@ import { localStorage } from "./local-storage-compat.ts";
 export class LocalStorageLocation extends SyncStorageLocation {
 	name = "LOCAL_STORAGE"
 
+
 	isSupported() {
 		return !!localStorage;
 	}
 
-	override onAfterExit() {
-		if (localStorage.saveFile) localStorage.saveFile(); // deno local storage, save file
+	onAfterSnapshot(isExit: boolean) {
+		// exit snapshot is always saved independantly
+		if (!isExit && localStorage.saveFile) localStorage.saveFile(); // deno local storage, save file afer save on exit or interval
 	}
 
-	setItem(key: string,value: unknown): boolean {
+	setItem(key: string, value: unknown): boolean {
         localStorage.setItem(Storage.item_prefix+key, Compiler.encodeValueBase64(value))
         return true;
 	}

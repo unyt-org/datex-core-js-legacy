@@ -10,10 +10,10 @@ export class Error extends globalThis.Error {
     type = "";
     code?:bigint
 
-    constructor(message:string|number|bigint)
-    constructor(message:string|number|bigint, scope?:datex_scope)
-    constructor(message:string|number|bigint, stack:[Endpoint, string?][])
-    constructor(message:string|number|bigint = '', stack:datex_scope|[Endpoint, string?][] = [[Runtime.endpoint]]) {
+    constructor(message?:string|number|bigint|null)
+    constructor(message?:string|number|bigint|null, scope?:datex_scope|null)
+    constructor(message?:string|number|bigint, stack?:[Endpoint, string?][]|null)
+    constructor(message:string|number|bigint|null = '', stack:datex_scope|null|[Endpoint, string?][] = [[Runtime.endpoint]]) {
         super();
 
         // extract name from class name

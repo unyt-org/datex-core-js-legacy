@@ -32,7 +32,8 @@ export interface StorageLocation<SupportedModes extends Storage.Mode = Storage.M
     isAsync: boolean
 
     isSupported(): boolean
-    onAfterExit?(): void
+    onAfterExit?(): void // called when deno process exits
+    onAfterSnapshot?(isExit: boolean): void // called after a snapshot was saved to the storage (e.g. triggered by interval or exit event)
 
     setItem(key:string, value:unknown): Promise<boolean>|boolean
     getItem(key:string): Promise<unknown>|unknown
@@ -227,10 +228,14 @@ export class Storage {
         
         this.saveDirtyState();
         for (const [loc,options] of this.#locations) {
-            if (options.modes.includes(<any>Storage.Mode.SAVE_ON_EXIT)) Storage.saveCurrentState(loc);
+            if (options.modes.includes(<any>Storage.Mode.SAVE_ON_EXIT)) Storage.saveCurrentState(loc, true);
             loc.onAfterExit?.();
         }
-        logger.debug("exit - state saved in cache");
+
+        // also save deno localstorage file, also if no local storage location set, metadata must stil be stored
+        if (localStorage.saveFile) localStorage.saveFile();
+
+        console.log("\nexit - state saved in cache");
     }
 
 
@@ -240,7 +245,7 @@ export class Storage {
         this.#exit_without_save = true;
     }
 
-    private static saveCurrentState(location:StorageLocation){
+    private static saveCurrentState(location:StorageLocation, isExit = false){
         if (this.#exit_without_save) {
             console.log(`exiting without save`);
             return;
@@ -273,6 +278,7 @@ export class Storage {
 
             this.updateSaveTime(location); // last full backup to this storage location
             logger.debug(`current state saved to ${location.name} (${c} items)`);
+            location.onAfterSnapshot?.(isExit);
         }
         catch (e) {
             console.error(e)
@@ -845,13 +851,18 @@ if (!globalThis.NO_INIT) {
     Storage.determineTrustedLocation([]);
 }
 
-addEventListener("unload", ()=>Storage.handleExit(), {capture: true});
-// @ts-ignore document
-if (globalThis.document) addEventListener("visibilitychange", ()=>{
+// @ts-ignore NO_INIT
+if (!globalThis.NO_INIT) {
+    addEventListener("unload", ()=>Storage.handleExit(), {capture: true});
     // @ts-ignore document
-    if (document.visibilityState === 'hidden') Storage.handleExit()
-});
-if (globalThis.Deno) Deno.addSignalListener("SIGINT", ()=>Deno.exit())
+    if (globalThis.document) addEventListener("visibilitychange", ()=>{
+        // @ts-ignore document
+        if (document.visibilityState === 'hidden') Storage.handleExit()
+    });
+    if (globalThis.Deno) Deno.addSignalListener("SIGINT", ()=>Deno.exit())
+    if (globalThis.Deno) Deno.addSignalListener("SIGTERM", ()=>Deno.exit())
+    if (globalThis.Deno) Deno.addSignalListener("SIGQUIT", ()=>Deno.exit())
+}
 // ------------------------------------------------------------------------------
 
 // @ts-ignore storage reset

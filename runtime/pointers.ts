@@ -2579,10 +2579,16 @@ export class Pointer<T = any> extends Ref<T> {
 
                 // add original getters/setters to shadow_object if they exist (and call with right 'this' context)
                 if (property_descriptor?.set || property_descriptor?.get) {
-                    Object.defineProperty(obj, name, {
-                        set: val => {property_descriptor.set?.call(proxy,val)},
-                        get: () =>  property_descriptor.get?.call(proxy)
-                    });
+                    try {
+                        Object.defineProperty(obj, name, {
+                            set: val => {property_descriptor.set?.call(proxy,val)},
+                            get: () =>  property_descriptor.get?.call(proxy)
+                        });
+                    }
+                    catch (e) {
+                        console.log(obj, name);
+                        console.log(e)
+                    }
                 }
             }
 
