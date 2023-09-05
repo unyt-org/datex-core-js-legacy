@@ -21,6 +21,35 @@ obj.a // 10
 obj.$.a // Datex.Ref<10>
 ```
 
+## Automatic Pointer Binding
+
 Instances of a class marked with `@sync` are also automatically bound to a pointer when created (The value does not have to be explicitly wrapped in `$$()`).
 
+## Getters and setters
+
+When a property getter is decorated with `@property` (todo: currently with `@always`), it behaves like any other bound property at first glance.
+
+But there is one significant difference: The calculated value returned by the getter function is converted to an observable DATEX pointer.
+This has essentially the same effect as usinz the `always()` function. Whenever a pointer value used in the getter function is updated, the pointer value of the property is also updated.
+
+```ts
+@sync class MyObject {
+  @property a = 10
+  @property b = 20
+  @property get sum() {
+    return this.a + this.b
+  }
+}
+
+const obj = new MyObject();
+obj.a // 10
+obj.sum // 30
+obj.$.sum.observe(sum => console.log(`The current sum is ${s}`))
+
+obj.a++; // triggers observer
+obj.b = 15 // triggers observer
+obj.sum // 26
+```
+
+## Using the raw API
 For more customization, you can directly use the [JavaScript interface API]() which allows you to define custom DATEX mapping behaviours for specific JavaScript types.
