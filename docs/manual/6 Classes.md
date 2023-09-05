@@ -2,7 +2,7 @@
 
 Per default, most native JavaScript types (Arrays, Maps, Sets, primitive values, JSON Objects) are compatible with DATEX. This means that they can be converted to an equivalent DATEX representation and shared between endpoints.
 
-Instances of custom classes are mapped to a generic DATEX object representation per default and thus loose their class type and prototypes.
+Instances of custom classes are mapped to a generic DATEX object representation per default and thus lose their class type and prototypes.
 
 With the `@sync` decorator, a class can be bound to a new DATEX type.
 
