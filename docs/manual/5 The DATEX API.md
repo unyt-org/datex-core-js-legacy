@@ -36,5 +36,14 @@ const pointer = await datex.get("$A3627E3737476859492")
 
 ## Getting Caller Metadata with `datex.meta`
 
-Inside function bodies, the `datex.meta` object contains the endpoint that triggered the function call as well as additional meta information:
+Inside function bodies, the [`datex.meta` object](https://github.com/unyt-org/datex-core-js-legacy/blob/e3767c20765f95aace0d8a1bf67672446d9f3f6e/utils/global_types.ts#L140) contains the endpoint that triggered the function call as well as additional meta information:
 
+```ts
+{
+  encrypted?:boolean, // the DATEX request was encrypted 
+  signed?:boolean, // the DATEX request was signed
+  sender:Endpoint, // the endpoint that sent the DATEX request
+  timestamp:Date,
+  type:ProtocolDataType
+}
+```
