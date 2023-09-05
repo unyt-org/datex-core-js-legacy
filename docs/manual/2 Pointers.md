@@ -1,4 +1,4 @@
-# Pointers
+# Pointers and References
 
 ## Creating Pointers
 
@@ -86,3 +86,19 @@ To access the `Datex.Pointer` interface of a pointer object, use the `Datex.Poin
 Datex.Pointer.getByValue(refObject)
     .observe(() => console.log("the value of refObject has changed"))
 ```
+
+## Collapsing References
+
+Non-primitive pointer values are normally always passed in their collapsed form (normal JavaScript object representation). 
+
+In contrast, primitive pointer values and pointer properties are always passed as `Datex.Ref` values and have to be collapsed to get the normal JavaScript represententation (e.g. `Datex.Ref<number>` -> `number`).
+
+For this purpose, the `val()` helper
+function can be used:
+
+```ts
+const refX: Datex.Ref<number> = $$(42);
+const valX: number = val(refX);
+```
+
+If a non-reference value (e.g. a normal `number` or object) is passed to the `val` function, the value is just returned, so that it is guaranteed to always return a normal JavaScript value.
