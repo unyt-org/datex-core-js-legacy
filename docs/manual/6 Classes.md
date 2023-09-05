@@ -21,6 +21,9 @@ obj.a // 10
 obj.$.a // Datex.Ref<10>
 ```
 
+[!NOTE]
+A `@sync` class instance can only be reconstructed correctly on another endpoint or in a later session if the JavaScript class definition is already loaded. Otherwise, the DATEX Runtime can only map the value to a generic object.
+
 ## Automatic Pointer Binding
 
 Instances of a class marked with `@sync` are also automatically bound to a pointer when created (The value does not have to be explicitly wrapped in `$$()`).
