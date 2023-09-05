@@ -96,13 +96,11 @@ Per default, the properties are local and only available in the current JavaScri
 }
 
 const obj = new MyObject();
-obj.a // 10
-obj.$.a // Datex.Ref<10>
 ```
 
 Instances of a class marked with `@sync` are also automatically bound to a pointer when created (The value does not have to be explicitly wrapped in `$$()`).
 
-For more customization, you can directly use the [JavaScript interface API]() which allows you to define custom DATEX mapping behaviours for specific JavaScript types.
+Read more about `@sync` classes [here](./6%20Classes.md).
 
 ### Persistent data
 
