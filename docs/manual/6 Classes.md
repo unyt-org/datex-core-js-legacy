@@ -28,6 +28,8 @@ obj.$.a // Datex.Ref<10>
 
 Instances of a class marked with `@sync` are also automatically bound to a pointer when created (The value does not have to be explicitly wrapped in `$$()`).
 
+All non-primitive properties of an instance (that are decorated with `@property`) are automatically bound to a new pointer if they don't have a pointer yet.
+
 ## Getters and setters
 
 When a property getter is decorated with `@property` (todo: currently with `@always`), it behaves like any other bound property at first glance.
