@@ -1,4 +1,4 @@
-# DATEX-compatible classes
+# DATEX-Compatible Classes
 
 Per default, most native JavaScript types (Arrays, Maps, Sets, primitive values, JSON Objects) are compatible with DATEX. This means that they can be converted to an equivalent DATEX representation and shared between endpoints.
 
@@ -21,7 +21,7 @@ obj.a // 10
 obj.$.a // Datex.Ref<10>
 ```
 
-[!NOTE]
+**Note**
 A `@sync` class instance can only be reconstructed correctly on another endpoint or in a later session if the JavaScript class definition is already loaded. Otherwise, the DATEX Runtime can only map the value to a generic object.
 
 ## Automatic Pointer Binding
