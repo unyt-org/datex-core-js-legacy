@@ -18,3 +18,18 @@ Values passed into the script template string are always escaped to prevent inje
 const val = $$(10);
 const result = await datex `${val} + ${10}` // returns 20
 ```
+
+## Loading Resources with `datex.get()`
+
+The `datex.get()` function is completely comapatible with the native dynamic `import()` function.
+
+Additionally, it supports importing DATEX scripts (.dx and .dxb files), as well as endpoint exports, pointers and other DATEX resources.
+
+Examples:
+
+```ts
+const jsModule = await datex.get("./example.js")
+const dxModule = await datex.get("./example.dx")
+const endpointExports = await datex.get("@example")
+condt pointer = await datex.get("$A3627E3737476859492")
+```
