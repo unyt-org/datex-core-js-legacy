@@ -31,5 +31,10 @@ Examples:
 const jsModule = await datex.get("./example.js")
 const dxModule = await datex.get("./example.dx")
 const endpointExports = await datex.get("@example")
-condt pointer = await datex.get("$A3627E3737476859492")
+const pointer = await datex.get("$A3627E3737476859492")
 ```
+
+## Getting Caller Metadata with `datex.meta`
+
+Inside function bodies, the `datex.meta` object contains the endpoint that triggered the function call as well as additional meta information:
+
