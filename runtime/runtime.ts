@@ -603,8 +603,15 @@ export class Runtime {
             }
             else if (filePath.endsWith('.js') || filePath.endsWith('.ts')  || filePath.endsWith('.tsx') || filePath.endsWith('.jsx') || filePath.endsWith('.mts') || filePath.endsWith('.mjs')) {
                 const content = <string> await getFileContent(url);
-                if (raw) result = [content, "application/json5"];
-                else result = await import(url_string)
+                if (raw) result = [content, "application/javascript"];
+                else {
+                    try {
+                        result = await import(url_string )
+                    } catch (e) {
+                        console.warn(url_string)
+                        console.error(e)
+                    }
+                }
             }
             else {
                 if (!mime) throw Error("Cannot infer type from URL content - missing mime module");

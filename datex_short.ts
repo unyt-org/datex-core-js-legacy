@@ -7,7 +7,6 @@ import { baseURL, Runtime, PrecompiledDXB, Type, Pointer, Ref, PointerProperty, 
 import {property as _property, sync as _sync, endpoint as _endpoint, template as _template, jsdoc as _jsdoc} from "./datex_all.ts";
 import { Decorators } from "./js_adapter/js_class_adapter.ts";
 import { NOT_EXISTING, DX_SLOTS, SLOT_GET, SLOT_SET } from "./runtime/constants.ts";
-import { StaticScope } from "./runtime/runtime.ts";
 import { AssertionError } from "./types/errors.ts";
 import { getCallerFile, getCallerInfo, getMeta } from "./utils/caller_metadata.ts";
 
@@ -297,21 +296,32 @@ export function local_text(local_map: { [lang: string]: string; }) {
     return Runtime.getLocalString(local_map)
 }
 
-
+/**
+ * @deprecated use functions from unyt_core/function.ts
+ */
 export function transform<T,V extends TransformFunctionInputs>(observe_values:V, transform:TransformFunction<V,T>, persistent_datex_transform?:string) {
     return Ref.collapseValue(Pointer.createTransform(observe_values, transform, persistent_datex_transform));
 }
+/**
+ * @deprecated use functions from unyt_core/function.ts
+ */
 export async function transformAsync<T,V extends TransformFunctionInputs>(observe_values:V, transform:AsyncTransformFunction<V,T>, persistent_datex_transform?:string) {
     return Ref.collapseValue(await Pointer.createTransformAsync(observe_values, transform, persistent_datex_transform));
 }
 
 
 // map boolean to two values
+/**
+ * @deprecated use functions from unyt_core/function.ts
+ */
 export function map<K extends string|number, V>(value:RefOrValue<K>, map:Record<K, V>):MinimalJSRef<V> {
     return <MinimalJSRef<V>> transform([value], (v)=><any>map[<K>v]);
 }
 
 // map boolean to two values
+/**
+ * @deprecated use functions from unyt_core/function.ts
+ */
 export function select<T extends primitive>(value:RefOrValue<boolean>, if_true:T, if_false:T):MinimalJSRef<T>
 export function select<T>(value:RefOrValue<boolean>, if_true:T, if_false:T):MinimalJSRef<T>
 export function select<T>(value:RefOrValue<boolean>, if_true:T, if_false:T) {
@@ -324,9 +334,15 @@ export function select<T>(value:RefOrValue<boolean>, if_true:T, if_false:T) {
 
 
 // boolean shortcut transforms
+/**
+ * @deprecated use functions from unyt_core/function.ts
+ */
 export function not(value:RefOrValue<boolean>): BooleanRef {
     return transform([value], v=>!v);
 }
+/**
+ * @deprecated use functions from unyt_core/function.ts
+ */
 export function and(...values:RefOrValue<boolean>[]): BooleanRef {
     return transform(values, (...values)=>{
         for (const v of values) {
@@ -335,6 +351,9 @@ export function and(...values:RefOrValue<boolean>[]): BooleanRef {
         return true;
     });
 }
+/**
+ * @deprecated use functions from unyt_core/function.ts
+ */
 export function or(...values:RefOrValue<boolean>[]): BooleanRef {
     return transform(values, (...values)=>{
         for (const v of values) {
@@ -346,25 +365,44 @@ export function or(...values:RefOrValue<boolean>[]): BooleanRef {
 
 
 // math operations
+
+/**
+ * @deprecated use functions from unyt_core/function.ts
+ */
 export function add<T>(...values:RefOrValue<T>[]): MinimalJSRef<T>
+/**
+ * @deprecated use functions from unyt_core/function.ts
+ */
 export function add(...args:any[]) {
     return transform([...args], (...args) => args.reduce((a, b) => a + b, 0));
 }
+/**
+ * @deprecated use functions from unyt_core/function.ts
+ */
 export function sub(...numbers:RefOrValue<bigint>[]): MinimalJSRef<bigint>
 export function sub(...numbers:RefOrValue<number>[]): MinimalJSRef<number>
 export function sub(...args:any[]) {
     return transform([...args], (...args) => args.slice(1).reduce((a, b) => a - b, args[0]));
 }
+/**
+ * @deprecated use functions from unyt_core/function.ts
+ */
 export function mul(...numbers:RefOrValue<bigint>[]): MinimalJSRef<bigint>
 export function mul(...numbers:RefOrValue<number>[]): MinimalJSRef<number>
 export function mul(...args:any[]) {
     return transform([...args], (...args) => args.reduce((a, b) => a * b, 1));
 }
+/**
+ * @deprecated use functions from unyt_core/function.ts
+ */
 export function div(...numbers:RefOrValue<bigint>[]): MinimalJSRef<bigint>
 export function div(...numbers:RefOrValue<number>[]): MinimalJSRef<number>
 export function div(...args:any[]) {
     return transform([...args], (...args) => args.slice(1).reduce((a, b) => a / b, args[0]));
 }
+/**
+ * @deprecated use functions from unyt_core/function.ts
+ */
 export function pow(...numbers:RefOrValue<bigint>[]): MinimalJSRef<bigint>
 export function pow(...numbers:RefOrValue<number>[]): MinimalJSRef<number>
 export function pow(...args:any[]) {
@@ -373,6 +411,7 @@ export function pow(...args:any[]) {
 
 
 /**
+ * @deprecated use functions from unyt_core/function.ts
  * "always" transform function, creates a new pointer containing the result of the callback function.
  * At any point in time, the pointer is the result of the callback function. 
  * If the function has pointers as parameters, as soon as a value of one of the parameters changes,
@@ -386,18 +425,28 @@ export function pow(...args:any[]) {
  * ```
  */
 export function always<const T,V extends TransformFunctionInputs>(transform:SmartTransformFunction<T>): CollapsedValueAdvanced<Pointer<T>, false, false, CollapsedValue<Pointer<T>>> // return signature from Value.collapseValue(Pointer.smartTransform())
+
 /**
+ * @deprecated use functions from unyt_core/function.ts
+ *
  * Shortcut for datex `always (...)`
  * @param script 
  * @param vars 
  */
 export function always<T=unknown>(script:TemplateStringsArray, ...vars:any[]): Promise<MinimalJSRef<T>>
 /**
+ * @deprecated use functions from unyt_core/function.ts
+ *
  * always decorator
  * @param target
  * @param name
  */
 export function always(target: any, name?: string):any
+/**
+ * @deprecated use functions from unyt_core/function.ts
+ *
+ * 
+ */
 export function always(scriptOrJSTransform:TemplateStringsArray|SmartTransformFunction<any>, ...vars:any[]) {
     // @always getter decorator
     if (scriptOrJSTransform[METADATA]) {
@@ -725,12 +774,6 @@ globalThis.boolean = boolean;
 // @ts-ignore
 globalThis.local_text = local_text;
 // @ts-ignore
-globalThis.transform = transform;
-// @ts-ignore
-globalThis.transformAsync = transformAsync;
-// @ts-ignore
-globalThis.always = always;
-// @ts-ignore
 globalThis.label = label;
 // @ts-ignore
 globalThis.pointer = pointer;
@@ -744,9 +787,3 @@ globalThis.static_pointer = static_pointer;
 globalThis.f = f;
 // @ts-ignore
 globalThis.props = props;
-// @ts-ignore
-globalThis.and = and;
-// @ts-ignore
-globalThis.or = or;
-// @ts-ignore
-globalThis.not = not;
