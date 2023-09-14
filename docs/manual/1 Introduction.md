@@ -77,6 +77,27 @@ As you can see, the DATEX concepts are adopted in JavaScript in a very straightf
 
 To learn more about DATEX pointers in JavaScript, check out the chapters [Pointers](2%20Pointers.md).
 
+### Creating DATEX-compatible classes
+
+With the `@sync` decorator, a class can be bound to a new DATEX type.
+
+All instance properties decorated with `@property` are bound to the DATEX value and also visible when the value is shared between endpoints. 
+Per default, the properties are local and only available in the current JavaScript context.
+
+```ts
+@sync class MyObject {
+  @property a = 10
+  @property b = 20
+  localProp = 4
+}
+
+const obj = new MyObject();
+```
+
+Instances of a class marked with `@sync` are also automatically bound to a pointer when created (The value does not have to be explicitly wrapped in `$$()`).
+
+Read more about `@sync` classes [here](./7%20Classes.md).
+
 ### Persistent data
 
 The DATEX JavaScript API allows you to access data from remote endpoints as normal JavaScript values.
