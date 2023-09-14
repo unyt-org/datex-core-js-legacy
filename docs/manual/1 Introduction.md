@@ -4,10 +4,10 @@ The DATEX JavaScript Library provides a JavaScript interface on top of a [DATEX 
 
 It can be used as a standalone library to get access to DATEX features like reactivity, synchronized network storage and endpoints, or in combination with extension libraries like [UIX](https://docs.unyt.org/manual/uix/getting-started) to develop full-stack web applications.
 
----
-We will use the term "*JavaScript*" throughout in this manual. This should be regarded as interchangable with "*TypeScript*", since this library is designed as a TypeScript library.
 
----
+>  [!NOTE]  
+>  We will use the term "*JavaScript*" throughout in this manual. This should be regarded as 
+>  interchangable with "*TypeScript*", since this library is designed as a TypeScript library.
 
 ## Important DATEX concepts
 

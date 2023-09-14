@@ -13,7 +13,7 @@ refB.val = 5;
 console.log(refSum.val) // 10
 ```
 
-### The `always` Transform Function
+### The `always` transform function
 
 The `always` function automatically determines all dependency values and recalculates when one of the dependencies changes.
 For this reason, this function is very flexible and can be used for simple calculations or more complex functions.
@@ -21,7 +21,7 @@ The `always` function is just one of a group of so-called *Transform functions*.
 
 There exist multiple transform functions that are optimizied for specific use cases like mathematical calculations
 and can be used instead of a generic `always` function.
-Read more about Transform functions in the chapter [Functional Programming](./6%20Functional%20Programming.md).
+Read more about transform functions in the chapter [Functional Programming](./6%20Functional%20Programming.md).
 
 Due to the limitations of the JavaScript language, there are just some pitfalls that you should be aware of:
 
@@ -94,7 +94,7 @@ Datex.Pointer.getByValue(refObject)
     .observe(() => console.log("the value of refObject has changed"))
 ```
 
-## Collapsing References
+## Collapsing references
 
 Non-primitive pointer values are normally always passed in their collapsed form (normal JavaScript object representation). 
 

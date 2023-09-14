@@ -7,9 +7,9 @@ They return a live reference value that gets recalculated when one of the depend
 
 All standard transform functions can be imported from `"unyt_core/functions.ts"`.
 
-## Generic Transform Functions
+## Generic transform functions
 
-### The `always` Transform Function
+### The `always` transform function
 
 The `always` function can be used to define a custom transform:
 
@@ -128,9 +128,9 @@ const urlContent = transformAsync([url], async url => (await fetch(url)).json())
 
 The same restrictions as for `transform` functions apply
 
-## Standard Transform Functions
+## Standard transform functions
 
-The DATEX JS Library provides some standard transform functions for common operations.
+The DATEX JavaSccript Library provides some standard transform functions for common operations.
 
 ### add
 Calculates the sum of multiple number references.
