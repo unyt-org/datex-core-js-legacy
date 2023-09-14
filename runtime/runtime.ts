@@ -29,7 +29,7 @@ Symbol.prototype.toJSON = function(){return globalThis.String(this)}
 
 /***** imports */
 import { Compiler, compiler_options, PrecompiledDXB, ProtocolDataTypesMap, DatexResponse} from "../compiler/compiler.ts"; // Compiler functions
-import { DecimalRef, IntegerRef, Pointer, PointerProperty, RefOrValue, Ref, TextRef, BooleanRef, ObjectWithDatexValues, JSValueWith$, MinimalJSRef} from "./pointers.ts";
+import { DecimalRef, IntegerRef, Pointer, PointerProperty, RefOrValue, Ref, TextRef, BooleanRef, ObjectWithDatexValues, JSValueWith$, MinimalJSRef, ObjectRef} from "./pointers.ts";
 import { Endpoint, endpoints, IdEndpoint, LOCAL_ENDPOINT, Target, target_clause, WildcardTarget } from "../types/addressing.ts";
 import { RuntimePerformance } from "./performance_measure.ts";
 import { NetworkError, PermissionError, PointerError, RuntimeError, SecurityError, ValueError, Error as DatexError, CompilerError, TypeError, SyntaxError, AssertionError } from "../types/errors.ts";
@@ -215,7 +215,7 @@ export class Runtime {
 
     static mime_type_classes = new Map(Object.entries(this.MIME_TYPE_MAPPING).map(x=>[('class' in x[1] && typeof x[1].class == "function") ? x[1].class : x[1], x[0]])) 
 
-    public static ENV: JSValueWith$<{LANG:string, DATEX_VERSION:string, [key:string]:string}>
+    public static ENV: ObjectRef<{LANG:string, DATEX_VERSION:string, [key:string]:string}>
     public static VERSION = "0.0.0";
 
     public static PRECOMPILED_DXB: {[key:string]:PrecompiledDXB}
@@ -605,12 +605,14 @@ export class Runtime {
                 const content = <string> await getFileContent(url);
                 if (raw) result = [content, "application/javascript"];
                 else {
-                    try {
-                        result = await import(url_string )
-                    } catch (e) {
-                        console.warn(url_string)
-                        console.error(e)
-                    }
+                    result = await import(url_string )
+                    // TODO: why try catch?, it should not be used?
+                    // try {
+                        
+                    // } catch (e) {
+                    //     console.warn(url_string)
+                    //     console.error(e)
+                    // }
                 }
             }
             else {

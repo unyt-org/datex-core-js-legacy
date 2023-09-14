@@ -383,6 +383,7 @@ export abstract class Ref<T = any> {
 
 }
 
+
 /**
  * @deprecated use Datex.Ref instead
  */
@@ -447,11 +448,11 @@ export class PointerProperty<T=any> extends Ref<T> {
     }
 
     // update pointer property
-    public override set val(value:T) {
+    public override set val(value: T) {
         this.pointer.handleSet(this.key, Ref.collapseValue(value, true, true));
     }
     // same as val setter, but can be awaited
-    public override setVal(value:T) {
+    public override setVal(value: T) {
         return this.pointer.handleSet(this.key, Ref.collapseValue(value, true, true));
     }
 
@@ -519,7 +520,6 @@ export type GenericValue<T> =
     Pointer<T> |
     PointerProperty<T>;
 
-// DatexValue or normal value
 export type ReadonlyRef<T> = Readonly<Ref<T>>;
 /**
  * @deprecated Use Datex.RefOrValue instead
@@ -578,10 +578,15 @@ type _PropertyProxy$<T> = _Proxy$Function<T> & {readonly [K in keyof T]: Pointer
 export type Proxy$<T> = _Proxy$<PrimitiveToClass<T>>
 export type PropertyProxy$<T> = _PropertyProxy$<PrimitiveToClass<T>>
 
-export type JSValueWith$<T> = T & {
+export type ObjectRef<T> = T & {
     $:Proxy$<T> // reference to value (might generate pointer property, if no underlying pointer reference)
     $$:PropertyProxy$<T> // always returns a pointer property reference
 };
+
+/**
+ * @deprecated use ObjectRef
+ */
+export type JSValueWith$<T> = ObjectRef<T>;
 
 // TODO: does this make sense? (probably requires proxy for all pointer objects)
 // export type JSValueWith$<T> = T & 
@@ -591,10 +596,10 @@ export type JSValueWith$<T> = T & {
 
 // convert from any JS/DATEX value to minimal representation with reference
 export type MinimalJSRefGeneralTypes<T, _C = CollapsedValue<T>> = 
-    JSPrimitiveToDatexRef<_C> extends never ? JSValueWith$<_C> : JSPrimitiveToDatexRef<_C>
+    JSPrimitiveToDatexRef<_C> extends never ? ObjectRef<_C> : JSPrimitiveToDatexRef<_C>
 // same as MinimalJSRefGeneralTypes, but returns Pointer<2|5> instead of IntergerRef
 export type MinimalJSRef<T, _C = CollapsedValue<T>> = 
-    JSPrimitiveToDatexRef<_C> extends never ? JSValueWith$<_C> : (Pointer<_C> & _C)
+    JSPrimitiveToDatexRef<_C> extends never ? ObjectRef<_C> : (Pointer<_C> & _C)
 
 export type CollapsedValueAdvanced<T extends RefOrValue<unknown>, COLLAPSE_POINTER_PROPERTY extends boolean|undefined = true, COLLAPSE_PRIMITIVE_POINTER extends boolean|undefined = true, _C = CollapsedValue<T>> = 
     // if
@@ -605,7 +610,7 @@ export type CollapsedValueAdvanced<T extends RefOrValue<unknown>, COLLAPSE_POINT
         T extends PointerProperty ?
             (COLLAPSE_POINTER_PROPERTY extends true ? _C : T) : // PointerProperty either collapsed or PointerProperty returned
         // else
-            JSValueWith$<_C>  // otherwise pointer is always collapsed
+            ObjectRef<_C>  // otherwise pointer is always collapsed
 
 
 // convert value to DATEX reference value
@@ -1207,7 +1212,7 @@ export class Pointer<T = any> extends Ref<T> {
     
 
     // create a new pointer with a transform value
-    static createTransform<const T, const V extends TransformFunctionInputs>(observe_values:V, transform:TransformFunction<V,T>, persistent_datex_transform?:string):Pointer<T> {
+    static createTransform<const T, const V extends TransformFunctionInputs>(observe_values:V, transform:TransformFunction<V,T>, persistent_datex_transform?:string) {
         return Pointer.create(undefined, NOT_EXISTING).handleTransform(observe_values, transform, persistent_datex_transform);
     }
 
@@ -1754,7 +1759,7 @@ export class Pointer<T = any> extends Ref<T> {
         else return super.val;
     }
 
-    override set val(v:T) {
+    override set val(v: T) {
         // TODO: fixme, check this.#loaded && this.original_value!==undefined?
         const valueExists = this.#loaded && (this.original_value!==undefined || this.is_js_primitive);
         if (valueExists) this.updateValue(v);
@@ -1784,7 +1789,7 @@ export class Pointer<T = any> extends Ref<T> {
 
 
     // same as val setter, but can be awaited - don't confuse with Pointer.setValue (TODO: rename?)
-    override setVal(v:T, trigger_observers = true, is_transform?:boolean) {
+    override setVal(v: T, trigger_observers = true, is_transform?:boolean) {
         // TODO: fixme, check this.#loaded && this.original_value!==undefined?
         const valueExists = this.#loaded && (this.original_value!==undefined || this.is_js_primitive);
         if (valueExists) return this.updateValue(v, trigger_observers, is_transform);
@@ -2939,7 +2944,9 @@ export class Pointer<T = any> extends Ref<T> {
 
         let obj = this.current_val;
 
-   
+        // inform observers before remove
+        this.callObservers(value, undefined, Ref.UPDATE_TYPE.BEFORE_REMOVE)
+
         // try set on custom pseudo class
         try {
             this.type.handleActionSubtract(obj, value, true);
@@ -3163,7 +3170,8 @@ export namespace Ref {
         CLEAR, // clear
         ADD, // add child
         REMOVE, // remove child
-        BEFORE_DELETE
+        BEFORE_DELETE,
+        BEFORE_REMOVE
     }
 }
 

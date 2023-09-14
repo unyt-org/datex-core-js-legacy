@@ -13,12 +13,19 @@ refB.val = 5;
 console.log(refSum.val) // 10
 ```
 
-This code is equivalent to the DATEX code above. 
-As you can see, the DATEX concepts are adopted in JavaScript in a very straightforward way.
+### The `always` Transform Function
+
+The `always` function automatically determines all dependency values and recalculates when one of the dependencies changes.
+For this reason, this function is very flexible and can be used for simple calculations or more complex functions.
+The `always` function is just one of a group of so-called *Transform functions*.
+
+There exist multiple transform functions that are optimizied for specific use cases like mathematical calculations
+and can be used instead of a generic `always` function.
+Read more about Transform functions in the chapter [Functional Programming](./6%20Functional%20Programming.md).
 
 Due to the limitations of the JavaScript language, there are just some pitfalls that you should be aware of:
 
-### Pitfall 1: References in JavaScript
+### References in JavaScript
 
 JavaScript does not support references for primitive values (e.g. numbers, strings, booleans).
 Because of this, primitive pointers must always be passed on with a wrapper object to keep the reference intact:
