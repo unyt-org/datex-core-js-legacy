@@ -2,15 +2,43 @@
 
 ## Creating Pointers
 
-To create a pointer for any JS value, just use the `$$` helper function:
+To create a pointer for any JS value, just use the `$$` helper function.
 
-```tsx
+```ts
 const refA = $$(5);
 const refB = $$(0);
 const refSum = always(() => refA + refB);
 
 refB.val = 5;
 console.log(refSum.val) // 10
+```
+
+
+## Pointers for object values and pointer properties.
+
+Pointer can also be created for non-primitive values (JSON Objects, Maps, Sets, ...).
+
+```ts
+const refObj = $$({
+    x: 100,
+    y: 200
+});
+```
+
+The created reference object can be used like a normal object:
+```ts
+refObj.x; // 100
+refObj.x = 50;
+```
+
+Live references for the properties of an object can be accessed via the special `$` property:
+```ts
+refObj.$.x // Datex.Ref<number>
+```
+
+Alternatively, the `$$` function can be used:
+```ts
+$$(refObj, "x") // Datex.Ref<number>
 ```
 
 ### The `always` transform function
@@ -24,6 +52,7 @@ and can be used instead of a generic `always` function.
 Read more about transform functions in the chapter [Functional Programming](./6%20Functional%20Programming.md).
 
 Due to the limitations of the JavaScript language, there are just some pitfalls that you should be aware of:
+
 
 ### References in JavaScript
 

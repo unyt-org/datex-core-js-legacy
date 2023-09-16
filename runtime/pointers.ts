@@ -411,6 +411,8 @@ export type TransformSource = {
     update: ()=>void
 }
 
+export type PointerPropertyParent<K,V> = Map<K,V> | Record<K & (string|symbol),V>;
+export type InferredPointerProperty<Parent, Key> = PointerProperty<Parent extends Map<unknown, infer MV> ? MV : Parent[Key&keyof Parent]>
 
 // interface to access (read/write) pointer value properties
 export class PointerProperty<T=any> extends Ref<T> {
@@ -426,7 +428,18 @@ export class PointerProperty<T=any> extends Ref<T> {
 
     private static synced_pairs = new WeakMap<Pointer, Map<any, PointerProperty>>()
 
-    public static get<K extends keyof T, T extends object = object>(parent: T|Pointer, key: K, leak_js_properties = false):PointerProperty<T[K]> {
+    // TODO: use InferredPointerProperty (does not collapse)
+    /**
+     * Returns a new Pointer property from a parent object/map and property key
+     * @param parent 
+     * @param key 
+     * @param leak_js_properties 
+     * @returns 
+     */
+    public static get<const Key, Parent extends PointerPropertyParent<Key,unknown>>(parent: Parent|Pointer<Parent>, key: Key, leak_js_properties = false): PointerProperty<Parent extends Map<unknown, infer MV> ? MV : Parent[Key&keyof Parent]> {
+        
+        if (Pointer.isReference(key)) throw new Error("Cannot use a reference as a pointer property key");
+        
         let pointer:Pointer;
         if (parent instanceof Pointer) pointer = parent;
         else pointer = Pointer.createOrGet(parent);
@@ -526,8 +539,14 @@ export type ReadonlyRef<T> = Readonly<Ref<T>>;
  */
 export type CompatValue<T> = Ref<T>|T;
 export type RefOrValue<T> = Ref<T>|T;
-// same as Partial<T>, but with RefOrValues
-export type CompatPartial<T> = { [P in keyof T]?: RefOrValue<T[P]>; }
+/**
+ * object with refs or values as properties
+ */
+export type RefOrValueObject<T> = { [P in keyof T]: RefOrValue<T[P]> }
+/**
+ * object with refs or values as properties, all optional
+ */
+export type PartialRefOrValueObject<T> = { [P in keyof T]?: RefOrValue<T[P]> }
 
 
 // collapsed value

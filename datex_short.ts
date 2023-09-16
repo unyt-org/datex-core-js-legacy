@@ -1,7 +1,7 @@
 
 // shortcut functions
 // import { Datex } from "./datex.ts";
-import { baseURL, Runtime, PrecompiledDXB, Type, Pointer, Ref, PointerProperty, primitive, any_class, Target, IdEndpoint, TransformFunctionInputs, AsyncTransformFunction, TransformFunction, TextRef, Markdown, DecimalRef, BooleanRef, IntegerRef, MinimalJSRef, RefOrValue, CompatPartial, datex_meta, ObjectWithDatexValues, Compiler, endpoint_by_endpoint_name, endpoint_name, Storage, compiler_scope, datex_scope, DatexResponse, target_clause, ValueError, logger, Class, getDefaultLocalMeta, Endpoint, INSERT_MARK, CollapsedValueAdvanced, CollapsedValue, SmartTransformFunction, compiler_options, activePlugins, METADATA, handleDecoratorArgs } from "./datex_all.ts";
+import { baseURL, Runtime, PrecompiledDXB, Type, Pointer, Ref, PointerProperty, primitive, any_class, Target, IdEndpoint, TransformFunctionInputs, AsyncTransformFunction, TransformFunction, TextRef, Markdown, DecimalRef, BooleanRef, IntegerRef, MinimalJSRef, RefOrValue, PartialRefOrValueObject, datex_meta, ObjectWithDatexValues, Compiler, endpoint_by_endpoint_name, endpoint_name, Storage, compiler_scope, datex_scope, DatexResponse, target_clause, ValueError, logger, Class, getDefaultLocalMeta, Endpoint, INSERT_MARK, CollapsedValueAdvanced, CollapsedValue, SmartTransformFunction, compiler_options, activePlugins, METADATA, handleDecoratorArgs, RefOrValueObject, PointerPropertyParent, InferredPointerProperty } from "./datex_all.ts";
 
 /** make decorators global */
 import {property as _property, sync as _sync, endpoint as _endpoint, template as _template, jsdoc as _jsdoc} from "./datex_all.ts";
@@ -201,39 +201,57 @@ export async function script(dx:string|TemplateStringsArray|PrecompiledDXB, data
 
 
 // generate a instance of a JS class / DATEX Type by casting
-export function instance<T>(fromClass:{new(...params:any[]):T}, properties?:CompatPartial<T>): T
-export function instance<T>(fromType:Type<T>, properties?:CompatPartial<T>): T
-export function instance<T>(fromClassOrType:{new(...params:any[]):T}|Type<T>, properties?:CompatPartial<T>): T {
+export function instance<T>(fromClass:{new(...params:any[]):T}, properties?:RefOrValueObject<T>): T
+export function instance<T>(fromType:Type<T>, properties?:RefOrValueObject<T>): T
+export function instance<T>(fromClassOrType:{new(...params:any[]):T}|Type<T>, properties?:RefOrValueObject<T>): T {
     if (fromClassOrType instanceof Type) return fromClassOrType.cast(properties);
     else return Type.getClassDatexType(fromClassOrType).cast(properties)
 }
 
-
-
 // generate a pointer for an object and returns the proxified object or the primitive pointer
-export function pointer<T>(value:RefOrValue<T>): MinimalJSRef<T> {
+/**
+ * Returns a pointer property (live ref that points to the property of a Map or Object)
+ * @param parentValue Map or Object
+ * @param property property name
+ */
+export function pointer<const Key, Parent extends PointerPropertyParent<Key,unknown>>(parentValue:RefOrValue<Parent>, property:Key): PointerProperty<Parent extends Map<unknown, infer MV> ? MV : Parent[Key&keyof Parent]>
+/**
+ * Creates a new pointer from a value
+ * @param value 
+ */
+export function pointer<T>(value:RefOrValue<T>): MinimalJSRef<T>
+export function pointer<T>(value:RefOrValue<T>, property?:unknown): unknown {
 
-    const pointer = <any> Pointer.createOrGet(value).js_value;
-    // store as eternal?
-    if (waiting_eternals.size) {
-        const info = getCallerInfo()?.[0];
-        if (!info) throw new Error("eternal values are not supported in this runtime environment");
-        const unique = `${info.file}:${info.row}`;
-        if (waiting_eternals.has(unique)) {
-            eternals.set(waiting_eternals.get(unique)!, pointer);
-            waiting_eternals.delete(unique);
-        }
+    // pointer property
+    if (property !== undefined) {
+        return PointerProperty.get(value as PointerPropertyParent<any, any>, property);
     }
-    if (waiting_lazy_eternals.size) {
-        const info = getCallerInfo()?.[0];
-        if (!info) throw new Error("eternal values are not supported in this runtime environment");
-        const unique = `${info.file}:${info.row}`;
-        if (waiting_lazy_eternals.has(unique)) {
-            Storage.setItem(waiting_lazy_eternals.get(unique)!, pointer);
-            waiting_lazy_eternals.delete(unique);
+
+    // pointer
+    else {
+        const pointer = <any> Pointer.createOrGet(value).js_value;
+        // store as eternal?
+        if (waiting_eternals.size) {
+            const info = getCallerInfo()?.[0];
+            if (!info) throw new Error("eternal values are not supported in this runtime environment");
+            const unique = `${info.file}:${info.row}`;
+            if (waiting_eternals.has(unique)) {
+                eternals.set(waiting_eternals.get(unique)!, pointer);
+                waiting_eternals.delete(unique);
+            }
         }
+        if (waiting_lazy_eternals.size) {
+            const info = getCallerInfo()?.[0];
+            if (!info) throw new Error("eternal values are not supported in this runtime environment");
+            const unique = `${info.file}:${info.row}`;
+            if (waiting_lazy_eternals.has(unique)) {
+                Storage.setItem(waiting_lazy_eternals.get(unique)!, pointer);
+                waiting_lazy_eternals.delete(unique);
+            }
+        }
+        return pointer
     }
-    return pointer
+    
 }
 
 export const $$ = pointer;
