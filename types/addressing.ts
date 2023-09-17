@@ -38,7 +38,7 @@ export type endpoints = Endpoint|Disjunction<Endpoint>
 
 export class Target implements ValueConsumer {
 
-	protected static targets = new Map<string, Endpoint>();   // target string -> target element
+	protected static targets = new Map<string, WeakRef<Endpoint>>();   // target string -> target element
 	static readonly prefix:target_prefix = "@"
 	static readonly type:BinaryCode
 
@@ -212,12 +212,20 @@ export class Endpoint extends Target {
 		// this.n = this.#n; // just for debugging/display purposes
 		
 		// target already exists? return existing filtertarget
-		if (Target.targets.has(this.#n)) {
-			return Target.targets.get(this.#n)!
+		if (Target.targets.has(this.#n) && Target.targets.get(this.#n)?.deref()) {
+			return Target.targets.get(this.#n)!.deref()!;
 		}
 		// add to filter target list
-		else Target.targets.set(this.#n, this);
+		else {
+			const ref = new WeakRef(this);
+			Endpoint.registry.register(this, this.#n);
+			Target.targets.set(this.#n, ref);
+		}
 	}
+	static registry: FinalizationRegistry<string> = new FinalizationRegistry((key)=>{
+		console.debug("Endpoint was gargabe collected", key);
+		Target.targets.delete(key);
+	});
 
 	get [Symbol.toStringTag]() {
 		return this.#n;
@@ -314,9 +322,19 @@ export class Endpoint extends Target {
 	#online?: Promise<boolean>
 	#current_online?: boolean
 	
+	#onlinePointer?: Pointer<boolean>;
+	public get online() {
+		if (this.#onlinePointer)
+			return this.#onlinePointer;
+		const interval = setInterval(()=>this.isOnline(), 10_000);
+		this.isOnline();
+		this.#onlinePointer = $$(this.#current_online ?? false);
+		this.#onlinePointer.onGargabeCollection(()=> clearInterval(interval));
+		return this.#onlinePointer;
+	}
 	// returns (cached) online status
-	public async isOnline(){
-		if (Runtime.endpoint.equals(this) || Runtime.main_node?.equals(this) || this === LOCAL_ENDPOINT) return true; // is own endpoint or main node
+	public async isOnline(): Promise<boolean> {
+		if (Runtime.endpoint.equals(this) || Runtime.main_node?.equals(this) || this as Endpoint === LOCAL_ENDPOINT) return true; // is own endpoint or main node
 		
 		if (this.#online != undefined) return this.#online;
 		
@@ -341,6 +359,7 @@ export class Endpoint extends Target {
 
 		// log if online state changed
 		if (prev_online !== this.#current_online) {
+			if (this.#onlinePointer) this.#onlinePointer.val = this.#current_online;
 			if (this.#current_online) logger.debug `new online state for ${this.toString()}: #color(green)online`
 			else logger.debug `new online state for ${this.toString()}: #color(red)offline`
 		}

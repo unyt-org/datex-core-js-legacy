@@ -29,7 +29,7 @@ export type observe_options = {types?:Ref.UPDATE_TYPE[], ignore_transforms?:bool
 
 
 // root class for pointers and pointer properties, value changes can be observed
-export abstract class Ref<T = any> {
+export abstract class Ref<T = any> extends EventTarget {
 
     #observerCount = 0;
 
@@ -1340,10 +1340,15 @@ export class Pointer<T = any> extends Ref<T> {
     }
 
 
+    public onGargabeCollection(callback: (event: Event) => void) {
+        this.addEventListener("garbageCollection", callback);
+    }
+
     /**
      *  Pointer Garbage collection
      *  handles no longer needed pointers
      */
+
 
     private static garbage_registry = new FinalizationRegistry<string>(pointer_id => {
         // clean up after garbage collection:
@@ -2174,7 +2179,6 @@ export class Pointer<T = any> extends Ref<T> {
             }, Runtime.OPTIONS.GARBAGE_COLLECTION_TIMEOUT);
         }
     }
-
 
     // only exists for non-js-primitive values
     public get original_value():T {    
