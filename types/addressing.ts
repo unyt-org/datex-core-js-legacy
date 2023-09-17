@@ -223,7 +223,6 @@ export class Endpoint extends Target {
 		}
 	}
 	static registry: FinalizationRegistry<string> = new FinalizationRegistry((key)=>{
-		console.debug("Endpoint was gargabe collected", key);
 		Target.targets.delete(key);
 	});
 

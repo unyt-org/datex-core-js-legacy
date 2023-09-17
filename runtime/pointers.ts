@@ -39,6 +39,7 @@ export abstract class Ref<T = any> extends EventTarget {
     #val?: T;
 
     constructor(value?:RefOrValue<T>) {
+        super();
         value = Ref.collapseValue(value);
         if (value!=undefined) this.val = value;
     }
@@ -2425,7 +2426,7 @@ export class Pointer<T = any> extends Ref<T> {
         }
 
         // special native function -> <Function> conversion
-        if (typeof obj == "function" && !(obj instanceof DatexFunction)) return <T><unknown> DatexFunction.createFromJSFunction(<(...params: any[]) => any>obj);
+        if (typeof obj == "function" && !(obj instanceof DatexFunction)) return <T><unknown> DatexFunction.createFromJSFunction(obj as (...params: any[]) => any);
 
         // get prototype and prototype of prototype (TODO go up the full protoype chain??!)
         let prototype1 = Object.getPrototypeOf(obj);

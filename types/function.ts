@@ -151,6 +151,9 @@ export class Function<T extends (...args: any) => any = (...args: any) => any> e
         params?:Tuple<Type>,
         meta_index?:number
     ):Function<(...args:Parameters<T>)=>ReturnType<T>> & Callable<Parameters<T>, ReturnType<T>> {
+       
+        if (ntarget.name.startsWith("bound ")) throw new Error("Cannot convert a bound function to a DATEX function");
+
         // already a DATEX Function
         if (ntarget instanceof Function) return ntarget;
         
@@ -237,9 +240,10 @@ export class Function<T extends (...args: any) => any = (...args: any) => any> e
     public static getFunctionParams(fun:globalThis.Function) {
         const tuple = new Tuple<Type>();
 
-        // get parmeters names from function body string
+        // get parameter names from function body string
         const function_body:string = fun?.toString();
         const args_match = function_body?.match(/^[^(]*\(([^)]*)\)/)?.[1];
+
         if (!args_match?.length) return tuple;
         const args_strings = args_match.split(",");
         if (args_strings) {

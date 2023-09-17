@@ -243,7 +243,7 @@ export async function runInThread<ReturnType, Args extends unknown[]>(task: ((..
 		if (e.message == "TypeError - Assignment to constant variable.") {
 			throw new RuntimeError("runInThread: Variables from the parent scope cannot be reassigned. Use pointers if you want to update values.")
 		}
-		else if (e.message == "ReferenceError - token is not defined") {
+		else if (e.message.match(/ReferenceError - \S* is not defined/)) {
 			const variableName = e.message.match(/ReferenceError - (\S*)/)[1];
 			throw new RuntimeError("runInThread: Variable '"+variableName+"' from the parent scope is not included in the dependencies object.")
 		}

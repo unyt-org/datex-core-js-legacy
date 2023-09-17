@@ -160,7 +160,7 @@ class EndpointConfig implements EndpointConfigData {
 	}
 
 	get storage() {
-		return (this.temporary ?? localStorage.getItem(this.locationId) === "session") ?
+		return (this.temporary ?? globalThis.localStorage?.getItem(this.locationId) === "session") ?
 			globalThis.sessionStorage :
 			globalThis.localStorage;
 	}
