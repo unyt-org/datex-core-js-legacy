@@ -135,18 +135,13 @@ export class Supranet {
 
         await endpoint_config.load(); // load config from storage/file
 
-        local_cache ??= !endpoint_config.temporary
-
         let keys:Crypto.ExportedKeySet|undefined;
 
         // load/create endpoint from cache?
         if (!endpoint) {
-            if (local_cache) {
-                [endpoint, keys] = await this.getLocalEndpointAndKeys();
-                sign_keys = keys.sign;
-                enc_keys = keys.encrypt;
-            }
-            else endpoint = <Endpoint>Target.get(this.createEndpointId());
+            [endpoint, keys] = await this.getLocalEndpointAndKeys();
+            sign_keys = keys.sign;
+            enc_keys = keys.encrypt;
         }
         // first resolve endpoint, connect anonymous
         if (endpoint instanceof UnresolvedEndpointProperty) {
@@ -186,7 +181,7 @@ export class Supranet {
             sign_keys = keys.sign;
             enc_keys = keys.encrypt;
         }
-        else if (local_cache) { // new keys were provided, save in storage
+        else { // new keys were provided, save in storage
             keys = {
                 sign: [
                     sign_keys[0] instanceof ArrayBuffer ? sign_keys[0] : await Crypto.exportPublicKey(sign_keys[0]),
@@ -199,11 +194,9 @@ export class Supranet {
             }    
         }
 
-        if (local_cache) {
-            endpoint_config.endpoint = endpoint;
-            endpoint_config.keys = keys;
-            endpoint_config.save();
-        }
+        endpoint_config.endpoint = endpoint;
+        endpoint_config.keys = keys;
+        endpoint_config.save();
 
         // start runtime + set endpoint
         await Runtime.init(endpoint);

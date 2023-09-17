@@ -81,8 +81,7 @@ class EndpointConfig implements EndpointConfigData {
 		}
 		else if (client_type == "browser") {
 			// get config from cache
-			const serialized = globalThis.localStorage?.getItem("endpoint_config::"+(globalThis.location.origin ?? ''));
-
+			const serialized = this.storage?.getItem(this.storageId);
 			if (serialized) {
 				config = <EndpointConfigData> await Runtime.executeDatexLocally(serialized, undefined, undefined, globalThis.location?.href ? new URL(globalThis.location.href) : undefined)
 			}
@@ -115,9 +114,22 @@ class EndpointConfig implements EndpointConfigData {
 			this.nodes = DatexObject.get(<any>config, 'nodes');
 		}
 
+		if (this.storage) {
+			if (this.storage === localStorage)
+				sessionStorage.removeItem(this.storageId);
+			else
+				localStorage.removeItem(this.storageId);
+		}
+
 		await this.loadNodes()
 	}
-   
+	
+	get storageId() {
+		return "endpoint_config::"+(globalThis.location?.origin ?? '');
+	}
+	get locationId() {
+		return "endpoint_config_location::"+(globalThis.location?.origin ?? '');
+	}
 
 	save() {
 		const serialized = Runtime.valueToDatexString(new Tuple({endpoint:this.#endpoint, connect:this.connect, temporary:this.temporary, keys:this.keys, nodes:this.nodes}));
@@ -139,10 +151,18 @@ class EndpointConfig implements EndpointConfigData {
 		else if (client_type == "worker") {
 			// ignore not saving in worker
 		}
-		else if (!globalThis.localStorage) {
-			logger.warn("Cannot save endpoint config persistently")
+		else if (!this.storage)
+			logger.warn("Cannot save endpoint config");
+		else {
+			localStorage.setItem(this.locationId, this.temporary ? "session" : "persistent");
+			this.storage.setItem(this.storageId, serialized);
 		}
-		else globalThis.localStorage.setItem("endpoint_config::"+(globalThis.location?.origin ?? ''), serialized);
+	}
+
+	get storage() {
+		return (this.temporary ?? localStorage.getItem(this.locationId) === "session") ?
+			globalThis.sessionStorage :
+			globalThis.localStorage;
 	}
 
 	clear() {
@@ -156,7 +176,7 @@ class EndpointConfig implements EndpointConfigData {
 			const config_file = new URL('./.dx', cache_path);
 			Deno.removeSync(config_file)
 		}
-		else if (globalThis.localStorage) globalThis.localStorage.removeItem("endpoint_config::"+(globalThis.location?.origin ?? ''));
+		else if (this.storage) this.storage.removeItem(this.storageId);
 	}
 
 
