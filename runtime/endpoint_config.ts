@@ -20,7 +20,8 @@ type node_config = {
 export interface EndpointConfigData {
 	endpoint?:Endpoint
 	keys?: Crypto.ExportedKeySet
-	connect?:boolean
+	connect?:boolean // default true
+	temporary?:boolean // default false
 	nodes?: Map<Endpoint, node_config>,
 }
 
@@ -33,6 +34,7 @@ class EndpointConfig implements EndpointConfigData {
 	#endpoint?:Endpoint
 	public keys?: Crypto.ExportedKeySet
 	public connect?:boolean
+	public temporary?:boolean
 	public nodes?: Map<Endpoint, node_config>
 	/*****************/
 
@@ -109,6 +111,7 @@ class EndpointConfig implements EndpointConfigData {
 			this.#endpoint = DatexObject.get(<any>config, 'endpoint')
 			this.keys = DatexObject.get(<any>config, 'keys')
 			this.connect = DatexObject.get(<any>config, 'connect')
+			this.temporary = DatexObject.get(<any>config, 'temporary')
 			this.nodes = DatexObject.get(<any>config, 'nodes');
 		}
 
@@ -117,7 +120,7 @@ class EndpointConfig implements EndpointConfigData {
    
 
 	save() {
-		const serialized = Runtime.valueToDatexString(new Tuple({endpoint:this.#endpoint, connect:this.connect, keys:this.keys, nodes:this.nodes}));
+		const serialized = Runtime.valueToDatexString(new Tuple({endpoint:this.#endpoint, connect:this.connect, temporary:this.temporary, keys:this.keys, nodes:this.nodes}));
 
 		if (client_type=="deno") {
 			try {
@@ -145,6 +148,7 @@ class EndpointConfig implements EndpointConfigData {
 	clear() {
 		this.#endpoint = undefined;
 		this.connect = undefined;
+		this.temporary = undefined;
 		this.keys = undefined;
 		this.nodes = undefined;
 

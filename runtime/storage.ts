@@ -154,7 +154,6 @@ export class Storage {
     // default location for saving pointers/items
     static set primary_location(location: StorageLocation | undefined) {
         this.#primary_location = location;
-        if (this.#trusted_location == undefined) this.trusted_location = this.#primary_location; // use as trusted location
     }
     static get primary_location () {return this.#primary_location}
 
@@ -193,6 +192,8 @@ export class Storage {
         if (options.primary) {
             this.primary_location = location;
         }
+
+        this.determineTrustedLocation();
 
         return this.restoreDirtyState()
     }
@@ -296,6 +297,10 @@ export class Storage {
         localStorage.removeItem(this.meta_prefix+'__saved__' + location.name);
     }
 
+    private static getSaveTime(location:StorageLocation) {
+        return Number(localStorage.getItem(this.meta_prefix+'__saved__' + location.name) ?? 0);
+    }
+
     static #dirty_locations = new Set<StorageLocation>()
 
     // handle dirty states for async storage operations:
@@ -330,23 +335,33 @@ export class Storage {
     }
     
 
-    private static getLastUpdatedStorage(fromLocations: StorageLocation[]) {
-        let last:StorageLocation|undefined;
-        let last_time = 0;
+    private static determineTrustedLocation(fromLocations: StorageLocation[] = [...this.#locations.keys()]) {
+        // primary is already trusted, use this
+        if (this.trusted_location === this.primary_location) return this.trusted_location;
+
+        let last:StorageLocation|undefined = this.trusted_location;
+        let last_time = last ? this.getSaveTime(last) : 0;
+
         for (const location of fromLocations) {
-			const time = Number(localStorage.getItem(this.meta_prefix+'__saved__' + location.name));
-			if (time > last_time) {
+            if (this.isInDirtyState(location)) continue;
+            // found trusted primary location, use this
+            if (location === this.primary_location) {
+                last = location
+                break;
+            }
+
+            // find location with latest update
+			const time = this.getSaveTime(location)
+            if (time > last_time) {
 				last_time = time;
 				last = location
 			}
 			this.deleteSaveTime(location); // no longer valid after this session
         }
-        return last;
+        if (this.trusted_location !== last) this.trusted_location = last
+        return this.trusted_location;
     }
 
-    static determineTrustedLocation(fromLocations: StorageLocation[]){
-        this.trusted_location = this.getLastUpdatedStorage(fromLocations) ?? this.primary_location;
-    }
 
     static setItem(key:string, value:any, listen_for_pointer_changes = true, location:StorageLocation|null|undefined = this.#primary_location):Promise<boolean>|boolean {
         Storage.cache.set(key, value); // save in cache
@@ -365,7 +380,7 @@ export class Storage {
 		this.setDirty(location, true)
         // also store pointer
         if (pointer) {
-            const res = await Storage.setPointer(pointer, listen_for_pointer_changes, location);
+            const res = await this.setPointer(pointer, listen_for_pointer_changes, location);
             if (!res) return false;
         }
         this.setDirty(location, true)
@@ -378,7 +393,7 @@ export class Storage {
 	static setItemSync(location:SyncStorageLocation, key: string,value: unknown,pointer: Pointer<any>|undefined,listen_for_pointer_changes: boolean): boolean {
 		// also store pointer
         if (pointer) {
-            const res = Storage.setPointer(pointer, listen_for_pointer_changes, location);
+            const res = this.setPointer(pointer, listen_for_pointer_changes, location);
             if (!res) return false;
         }
 
@@ -451,12 +466,15 @@ export class Storage {
 
     private static synced_pointers = new Set<Pointer>();
 
-    static syncPointer(pointer: Pointer, location?: StorageLocation) {
+    static syncPointer(pointer: Pointer, location: StorageLocation|undefined = this.#primary_location) {
         if (!this.#auto_sync_enabled) return;
-
 
         if (!pointer) {
             logger.error("tried to sync non-existing pointer with storage")
+            return;
+        }
+        if (!location) {
+            logger.error("location required for syncPointer")
             return;
         }
 
@@ -469,12 +487,14 @@ export class Storage {
         pointer.observe(()=>{
             if (saving) return;
             saving = true;
-            setTimeout(()=>{
-                saving = false;
+            this.setDirty(location, true)
+            setTimeout(async ()=>{
                 // set pointer (async)
-                logger.debug("Update " + pointer.idString() + " in storage");
-                this.setPointer(pointer, false, location); // update value and add new dependencies recursively
-            }, 2000);
+                saving = false;
+                await this.setPointer(pointer, false, location); // update value and add new dependencies recursively
+                logger.debug("updated " + pointer.idString() + " in storage");
+                this.setDirty(location, false)
+            }, 1000);
         }, undefined, undefined, {ignore_transforms:true, recursive:false})
         
     }
@@ -491,25 +511,36 @@ export class Storage {
         else return [this.#trusted_location, this.#primary_location] // first try to get from trusted location
     }
 
-    private static initPrimaryFromTrustedLocation(pointer_id:string, maybe_trusted_location:StorageLocation) {
+    private static initPointerFromTrustedLocation(id:string, maybe_trusted_location:StorageLocation) {
         if (this.#primary_location == undefined) return;
         if (this.#primary_location == this.#trusted_location) return;
 
-        // wait until pointer loaded
+        // wait until pointer loaded, TODO: timeout or return promise?
         setTimeout(async ()=>{
-            if (this.#trusted_location == maybe_trusted_location) {
-                const pointer = Pointer.get(pointer_id);
+            if (this.#primary_location == maybe_trusted_location) {
+                const pointer = Pointer.get(id);
                 if (pointer?.value_initialized) {
                     await this.setPointer(pointer, true, this.#primary_location)
-                    this.#trusted_pointers.add(pointer_id)
+                    this.#trusted_pointers.add(id)
                 }
                 else {
-                    console.log("cannot init pointer " +pointer_id)
+                    console.log("cannot init pointer " +id)
                 }
             }
         }, 3000);
 
     }
+
+    private static async initItemFromTrustedLocation(key: string, value:any, maybe_trusted_location:StorageLocation) {
+        if (this.#primary_location == undefined) return;
+        if (this.#primary_location == this.#trusted_location) return;
+
+        if (this.#primary_location == maybe_trusted_location) {
+            await this.setItem(key, value, true, this.#primary_location)
+        }
+
+    }
+
 
     private static async restoreDirtyState(){
         if (this.#primary_location != undefined && this.isInDirtyState(this.#primary_location) && this.#trusted_location != undefined && this.#trusted_location!=this.#primary_location) {
@@ -518,8 +549,9 @@ export class Storage {
             this.setDirty(this.#primary_location, false) // remove from dirty set
             this.clearDirtyState(this.#primary_location) // remove from localstorage
             this.#dirty = false;
-            // primary location is now trusted
-            this.trusted_location = this.#primary_location
+            // primary location is now trusted, update
+            this.determineTrustedLocation()
+            // this.trusted_location = this.#primary_location
         }
     }
 
@@ -551,7 +583,7 @@ export class Storage {
         const val = await this.getPointerAsync(location, pointer_id, pointerify, bind);
 		if (val == NOT_EXISTING) return NOT_EXISTING;
         
-		await this.initPrimaryFromTrustedLocation(pointer_id, location)
+		await this.initPointerFromTrustedLocation(pointer_id, location)
         return val;
     }
 
@@ -749,7 +781,7 @@ export class Storage {
 		if (val == NOT_EXISTING) return NOT_EXISTING;
 
 		Storage.cache.set(key, val);
-		await this.initPrimaryFromTrustedLocation(key, location)
+		await this.initItemFromTrustedLocation(key, val, location)
 		return val;
     }
 
@@ -846,10 +878,10 @@ export namespace Storage {
 
 
 // TODO: convert to static block (saFrari) --------------------------------------
-// @ts-ignore NO_INIT
-if (!globalThis.NO_INIT) {
-    Storage.determineTrustedLocation([]);
-}
+// // @ts-ignore NO_INIT
+// if (!globalThis.NO_INIT) {
+//     Storage.determineTrustedLocation([]);
+// }
 
 // @ts-ignore NO_INIT
 if (!globalThis.NO_INIT) {

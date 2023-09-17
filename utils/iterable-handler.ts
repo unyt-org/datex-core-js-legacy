@@ -58,10 +58,19 @@ export class IterableHandler<T, U = T> {
 	}
 
 	// pseudo keys for Sets, Maps and Objects which have no index
-	private getPseudoIndex(value:T): number {
-		if (this.iterable instanceof Set) return [...this.iterable].indexOf(value);
-		if (this.iterable instanceof Map) return [...this.iterable.values()].indexOf(value);
-		if (this.iterable instanceof Object) return [...Object.values(this.iterable)].indexOf(value);
+	private getPseudoIndex(key: unknown, value:T): number {
+		if (this.iterable instanceof Set) return this.findIndex(this.iterable, value)
+		if (this.iterable instanceof Map) return this.findIndex(this.iterable.keys(), key);
+		if (this.iterable instanceof Object) return this.findIndex(Object.keys(this.iterable), key);
+		return -1;
+	}
+
+	private findIndex<T>(iterable: Iterable<T>, value: T) {
+		let i = 0;
+		for (const entry of iterable) {
+			if (entry === value) return i;
+			i++;
+		}
 		return -1;
 	}
 
@@ -83,13 +92,16 @@ export class IterableHandler<T, U = T> {
 			const original_value = value;
 			// TODO: required?
 			if (this.iterable instanceof Map) value = <Iterable<T>>[key, value]
-			key = this.getPseudoIndex(<T>original_value)
-			if (key == -1) throw new ValueError("IterableValue: value not found in iterable")
+			key = this.getPseudoIndex(key, <T>original_value)
+			if (key == -1) {
+				console.log(original_value,value,key,type)
+				throw new ValueError("IterableValue: value not found in iterable")
+			}
 		}
 
 		// single property update
 		if (type == Datex.Ref.UPDATE_TYPE.SET) this.handleNewEntry(<T>value, key)
-		else if (type == Datex.Ref.UPDATE_TYPE.ADD) this.handleNewEntry(<T>value, this.getPseudoIndex(<T>value));
+		else if (type == Datex.Ref.UPDATE_TYPE.ADD) this.handleNewEntry(<T>value, this.getPseudoIndex(key, <T>value));
 		// property removed
 		else if (type == Datex.Ref.UPDATE_TYPE.CLEAR) {
 			for (const [key,] of this.#entries??[]) {
@@ -97,7 +109,7 @@ export class IterableHandler<T, U = T> {
 			}
 		}
 		else if (type == Datex.Ref.UPDATE_TYPE.BEFORE_DELETE) this.handleRemoveEntry(key);
-		else if (type == Datex.Ref.UPDATE_TYPE.BEFORE_REMOVE) this.handleRemoveEntry(this.getPseudoIndex(<T>value));
+		else if (type == Datex.Ref.UPDATE_TYPE.BEFORE_REMOVE) this.handleRemoveEntry(this.getPseudoIndex(key, <T>value));
 		// completely new value
 		else if (type == Datex.Ref.UPDATE_TYPE.INIT) {
 			for (const e of this.entries.keys()) this.handleRemoveEntry(e); // clear all entries

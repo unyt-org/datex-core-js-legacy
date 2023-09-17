@@ -672,7 +672,7 @@ export class Runtime {
      * @param dxb_base64 DATEX Data Binary (without header) as Base64 string
      * @returns evaluated DATEX result
      */
-    public static decodeValueBase64(dxb_base64:string, outer_serialized=false):Promise<any> {
+    public static decodeValueBase64<T=unknown>(dxb_base64:string, outer_serialized=false):Promise<T> {
         // create scope
         const scope = Runtime.createNewInitialScope();
         scope.outer_serialized = outer_serialized;

@@ -23,6 +23,7 @@ import { ProtocolDataType } from "../compiler/protocol_types.ts";
 import { buffer2hex } from "../utils/utils.ts";
 import { endpoint_config } from "../runtime/endpoint_config.ts";
 import { endpoint_name, UnresolvedEndpointProperty } from "../datex_all.ts";
+import { Datex } from "../datex.ts";
 const logger = new Logger("DATEX Supranet");
 
 // entry point to connect to the datex network
@@ -68,7 +69,8 @@ export class Supranet {
     // connect to cloud, say hello with public key
     // if local_cache=false, a new endpoint is created and not saved in the cache, even if an endpoint is stored in the cache
     // TODO problem: using same keys as stored endpoint!
-    public static async connect(endpoint?:Endpoint|UnresolvedEndpointProperty, local_cache = true, sign_keys?:[ArrayBuffer|CryptoKey,ArrayBuffer|CryptoKey], enc_keys?:[ArrayBuffer|CryptoKey,ArrayBuffer|CryptoKey], via_node?:Endpoint) {
+    public static async connect(endpoint?:Endpoint|UnresolvedEndpointProperty, local_cache?: boolean, sign_keys?:[ArrayBuffer|CryptoKey,ArrayBuffer|CryptoKey], enc_keys?:[ArrayBuffer|CryptoKey,ArrayBuffer|CryptoKey], via_node?:Endpoint) {
+
 
         if (this.#connected && (!endpoint || endpoint === Runtime.endpoint)) {
             // logger.info("already connected as", Runtime.endpoint);
@@ -128,10 +130,12 @@ export class Supranet {
     }
 
     // only init, don't (re)connect
-    public static async init(endpoint?:Endpoint|UnresolvedEndpointProperty|endpoint_name, local_cache = true, sign_keys?:[ArrayBuffer|CryptoKey,ArrayBuffer|CryptoKey], enc_keys?:[ArrayBuffer|CryptoKey,ArrayBuffer|CryptoKey]):Promise<Endpoint>  {
+    public static async init(endpoint?:Endpoint|UnresolvedEndpointProperty|endpoint_name, local_cache?: boolean, sign_keys?:[ArrayBuffer|CryptoKey,ArrayBuffer|CryptoKey], enc_keys?:[ArrayBuffer|CryptoKey,ArrayBuffer|CryptoKey]):Promise<Endpoint>  {
         if (typeof endpoint == "string") endpoint = await Endpoint.fromStringAsync(endpoint);
 
         await endpoint_config.load(); // load config from storage/file
+
+        local_cache ??= !endpoint_config.temporary
 
         let keys:Crypto.ExportedKeySet|undefined;
 
@@ -174,7 +178,7 @@ export class Supranet {
 
     static #interfaces_initialized = false
 
-    private static async _init(endpoint:Endpoint, local_cache = true, sign_keys?:[ArrayBuffer|CryptoKey,ArrayBuffer|CryptoKey], enc_keys?:[ArrayBuffer|CryptoKey,ArrayBuffer|CryptoKey], keys?:Crypto.ExportedKeySet) {
+    private static async _init(endpoint:Endpoint, local_cache = !endpoint_config.temporary, sign_keys?:[ArrayBuffer|CryptoKey,ArrayBuffer|CryptoKey], enc_keys?:[ArrayBuffer|CryptoKey,ArrayBuffer|CryptoKey], keys?:Crypto.ExportedKeySet) {
        
         // load/create keys, even if endpoint was provided?
         if (!sign_keys || !enc_keys) {
