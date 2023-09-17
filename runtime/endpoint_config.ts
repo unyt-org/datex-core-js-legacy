@@ -77,7 +77,7 @@ class EndpointConfig implements EndpointConfigData {
 				}
 			}
 		}
-		else {
+		else if (client_type == "browser") {
 			// get config from cache
 			const serialized = globalThis.localStorage?.getItem("endpoint_config::"+(globalThis.location.origin ?? ''));
 
@@ -100,6 +100,9 @@ class EndpointConfig implements EndpointConfigData {
 					}
 				}
 			}
+		}
+		else {
+			logger.debug("Cannot load endpoint config file for client type '" + client_type + "'")
 		}
 
 		if (config!=null) {
@@ -130,7 +133,12 @@ class EndpointConfig implements EndpointConfigData {
 				logger.error("Cannot save endpoint config cache file");
 			}			
 		}
-		else if (!globalThis.localStorage) logger.warn("Cannot save endpoint config persistently")
+		else if (client_type == "worker") {
+			// ignore not saving in worker
+		}
+		else if (!globalThis.localStorage) {
+			logger.warn("Cannot save endpoint config persistently")
+		}
 		else globalThis.localStorage.setItem("endpoint_config::"+(globalThis.location?.origin ?? ''), serialized);
 	}
 

@@ -4,9 +4,9 @@
  */
 
 
-import { AsyncTransformFunction, BooleanRef, CollapsedValue, CollapsedValueAdvanced, Decorators, INSERT_MARK, METADATA, MinimalJSRef, Pointer, Ref, RefOrValue, Runtime, SmartTransformFunction, TransformFunction, TransformFunctionInputs, handleDecoratorArgs, primitive } from "unyt_core/datex_all.ts";
-import { Datex } from "unyt_core/datex.ts";
-import { IterableHandler } from "unyt_core/utils/iterable-handler.ts";
+import { AsyncTransformFunction, BooleanRef, CollapsedValue, CollapsedValueAdvanced, Decorators, INSERT_MARK, METADATA, MinimalJSRef, Pointer, Ref, RefOrValue, Runtime, SmartTransformFunction, TransformFunction, TransformFunctionInputs, handleDecoratorArgs, primitive } from "./datex_all.ts";
+import { Datex } from "./datex.ts";
+import { IterableHandler } from "./utils/iterable-handler.ts";
 
 
 
@@ -120,7 +120,6 @@ export function map<T, U, O extends 'array'|'map' = 'array'>(iterable: Iterable<
 			})
 		}
 
-		console.warn(mapped)
 	}
 
 	// static map

@@ -6,7 +6,10 @@ if (globalThis.process) throw new Error("node.js is currently not supported - us
 
 export const TypedArray:typeof Uint8Array|typeof Uint16Array|typeof Uint32Array|typeof Int8Array|typeof Int16Array|typeof Int32Array|typeof BigInt64Array|typeof BigUint64Array|typeof Float32Array|typeof Float64Array = Object.getPrototypeOf(Uint8Array);
 
-export const client_type = "Deno" in globalThis ? 'deno' : 'browser'
+// @ts-ignore
+const is_worker = (typeof WorkerGlobalScope !== 'undefined' && self instanceof WorkerGlobalScope);
+
+export const client_type = is_worker ? 'worker' : ("Deno" in globalThis ? 'deno' : 'browser')
 
 export const Deno = <any>globalThis.Deno;
 

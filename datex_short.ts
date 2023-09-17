@@ -48,6 +48,10 @@ export async function get<T=unknown>(dx:string|URL|Endpoint, assert_type?:Type<T
         // TODO: only workaround, delete url cache for dx file, make sure content is fetched again with active plugins (only works if dx is an url)
         Runtime.deleteURLCache(dx.toString())
     }
+
+    // handle edge case blob:http:// -> escape
+    if (dx.toString().startsWith('blob:http://') || dx.toString().startsWith('blob:https://')) dx = `url '${dx}'`;
+
     const res = <T> await _datex('get (' + dx + ' )', undefined, undefined, undefined, undefined, context_location, plugins);
     if (plugins) activePlugins.splice(0, activePlugins.length);
 

@@ -33,8 +33,10 @@ export class Supranet {
     static available_channel_types:string[] = []; // all available interface channel types, sorted by preference
 
     static #connected = false;
-
     static get connected(){return this.#connected}
+
+    static #initialized = false;
+    static get initialized(){return this.#initialized}
 
     // add listeners for interface changes
     private static listeners_set = false;
@@ -211,6 +213,8 @@ export class Supranet {
             await InterfaceManager.init()
             this.setListeners();    
         }
+
+        this.#initialized = true;
 
         return endpoint;
     }

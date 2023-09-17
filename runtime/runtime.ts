@@ -339,6 +339,7 @@ export class Runtime {
     }
 
     static set endpoint(endpoint: Endpoint){
+        if (this.#endpoint === endpoint) return; // already set
         if (endpoint != LOCAL_ENDPOINT) logger.debug("using endpoint: " + endpoint);
         this.#endpoint = endpoint;
 
@@ -526,7 +527,7 @@ export class Runtime {
 
         let result:any;
 
-        if (url.protocol == "https:" || url.protocol == "http:") {
+        if (url.protocol == "https:" || url.protocol == "http:" || url.protocol == "blob:") {
             let response:Response;
             // workaround: Failed to fetch: Fetch twice
             try {
@@ -577,7 +578,8 @@ export class Runtime {
         else if (url.protocol == "file:") {
 
             const filePath = url.pathname;
-            if (client_type != "deno") {
+            // check if has deno api (worker, deno or browser (remote))
+            if (!globalThis.Deno) {
                 throw new RuntimeError("Cannot get content of '"+url_string+"'");
             }
 
@@ -1724,13 +1726,13 @@ export class Runtime {
             if (return_value) {
                 try {
                     let keys_updated = await Crypto.bindKeys(header.sender, ...<[ArrayBuffer,ArrayBuffer]>return_value);
-                    logger.info("HELLO from " + header.sender +  ", keys "+(keys_updated?"":"not ")+"updated");
+                    logger.debug("HELLO from " + header.sender +  ", keys "+(keys_updated?"":"not ")+"updated");
                 }
                 catch (e) {
                     logger.error("Invalid HELLO keys");
                 }
             }
-            else logger.info("HELLO from " + header.sender +  ", no keys");
+            else logger.debug("HELLO from " + header.sender +  ", no keys");
         }
         
         else if (header.type == ProtocolDataType.DEBUGGER) {
@@ -1972,7 +1974,6 @@ export class Runtime {
                 }
 
                 case Type.std.url: {
-                    console.warn("cast url",context_location)
                     if (typeof old_value == "string") new_value = new URL(old_value, context_location);
                     else new_value = INVALID;
                     break;
@@ -6521,7 +6522,7 @@ if (!globalThis.NO_INIT) {
             primary: false
         })
 	}
-	else {
+	else if (client_type == "deno") {
         const denoKV = new DenoKVStorageLocation();
         if (denoKV.isSupported()) {
             console.log("Using DenoKV as primary storage location (experimental)")

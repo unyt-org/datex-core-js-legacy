@@ -5,22 +5,23 @@ import { Pointer } from "../../runtime/pointers.ts";
 import { NOT_EXISTING } from "../constants.ts";
 import { AsyncStorageLocation } from "../storage.ts";
 import { ptr_cache_path } from "../cache_path.ts";
+import { client_type } from "../../datex_all.ts";
 
 const denoKvDir = new URL("./deno-kv/", ptr_cache_path);
 // @ts-ignore global Deno
-if (globalThis.Deno) Deno.mkdirSync(denoKvDir.pathname, {recursive: true});
+if (client_type == "deno") Deno.mkdirSync(denoKvDir.pathname, {recursive: true});
 
 let pointerDB: Deno.Kv|null = null
 let itemDB: Deno.Kv|null = null
 
 async function initKv() {
-	if (globalThis.Deno?.openKv as any) {
+	if (globalThis.Deno.openKv as any) {
 		pointerDB = await Deno.openKv(new URL("./pointers", denoKvDir).pathname);
 		itemDB =  await Deno.openKv(new URL("./items", denoKvDir).pathname);
 	}
 }
 
-await initKv();
+if (client_type == "deno") await initKv();
 
 export class DenoKVStorageLocation extends AsyncStorageLocation {
 	name = "DENO_KV"
@@ -28,7 +29,7 @@ export class DenoKVStorageLocation extends AsyncStorageLocation {
 	private MAX_SIZE = 65_500; // 65_536
 
 	isSupported() {
-		return !!globalThis.Deno.openKv;
+		return client_type == "deno" && !!globalThis.Deno?.openKv;
 	}
 
 	async setItem(key: string, value: unknown): Promise<boolean> {

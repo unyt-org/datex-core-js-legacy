@@ -1,11 +1,11 @@
-import { cwdURL } from "../utils/global_values.ts";
+import { client_type, cwdURL } from "../utils/global_values.ts";
 
 
 let _cache_path:string|URL = new URL('./.datex-cache/', cwdURL);
 let _ptr_cache_path:string|URL = new URL('./pointers/', _cache_path);
 
 // command line args (--watch-backend)
-if (globalThis.Deno) {
+if (client_type == "deno") {
 
 	const commandLineOptions = (await import("../utils/args.ts")).commandLineOptions
 

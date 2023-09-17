@@ -1,5 +1,5 @@
-import { Datex } from "unyt_core/datex.ts";
-import { ValueError } from "unyt_core/datex_all.ts";
+import { Datex } from "../datex.ts";
+import { ValueError } from "../datex_all.ts";
 
 export class IterableHandler<T, U = T> {
 
