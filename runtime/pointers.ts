@@ -109,7 +109,8 @@ export abstract class Ref<T = any> extends EventTarget {
         handler.get = (_, key) => {
             if (force_pointer_properties) return PointerProperty.get(pointer, <keyof typeof pointer>key, true);
             else {
-                if (!(key in Object(pointer.val)) || typeof key == "symbol") throw new ValueError("Property "+key.toString()+" does not exist in value");
+                // TODO: handle typeof key == "symbol" (currently not supported in DATEX)
+                if (!(key in Object(pointer.val))) throw new ValueError("Property "+key.toString()+" does not exist in value");
                 if (pointer instanceof Pointer && Pointer.pointerifyValue(pointer.shadow_object?.[key]) instanceof Ref) return Pointer.pointerifyValue(pointer.shadow_object?.[key]);
                 else return PointerProperty.get(pointer, <keyof typeof pointer>key, true);
             } 
