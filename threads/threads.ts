@@ -7,9 +7,9 @@ import { Datex, f } from "../datex.ts";
 import { blobifyFile, blobifyScript } from "../utils/blobify.ts";
 import { RuntimeError } from "unyt_core/types/errors.ts";
 
-type Promisify<imports extends Record<string, unknown>> = {
+type ThreadModule<imports extends Record<string, unknown> = Record<string, unknown>> = {
 	[key in keyof imports]: imports[key] extends ((...args: infer args) => infer returnType) ? ((...args: args) => Promise<returnType>) : imports[key]
-}
+} & {readonly __tag: unique symbol}
 
 export type MessageToWorker = 
 	{type: "INIT", datexURL: string, comInterfaceURL: string, moduleURL: string, tsInterfaceGeneratorURL:string, endpoint: URL}
@@ -18,7 +18,6 @@ export type MessageFromWorker =
 	{type: "INITIALIZED", endpoint: string, remoteModule: string} |
 	{type: "ERROR", error: string}
 
-export type ThreadModule = Record<string, unknown>
 
 class IdleThread {}
 const workerBlobUrl = await blobifyFile(new URL("./thread-worker.ts", import.meta.url))
@@ -48,8 +47,8 @@ export function disposeThread(...threads:ThreadModule[]) {
  * @param count number of threads
  * @returns module exports from the thread
  */
-export function spawnThreads<imports extends ThreadModule>(modulePath: string|URL, count = 1): Promise<Promisify<imports>[]> {
-	const promises:Promise<Promisify<imports>>[] = new Array(count).fill(null).map(() => spawnThread(modulePath));
+export function spawnThreads<imports extends Record<string,unknown>>(modulePath: string|URL, count = 1): Promise<ThreadModule<imports>[]> {
+	const promises:Promise<ThreadModule<imports>>[] = new Array(count).fill(null).map(() => spawnThread(modulePath));
 	return Promise.all(promises)
 }
 
@@ -75,13 +74,13 @@ export function spawnThreads<imports extends ThreadModule>(modulePath: string|UR
  * @param modulePath JS/TS module path to load in the thread
  * @returns module exports from the thread
  */
-export async function spawnThread<imports extends ThreadModule>(modulePath: string|URL): Promise<Promisify<imports>>
+export async function spawnThread<imports extends Record<string,unknown>>(modulePath: string|URL): Promise<ThreadModule<imports>>
 /**
  * Spawn a new idle worker thread
  * @returns an empty thread object
  */
-export async function spawnThread<imports extends ThreadModule>(modulePath: string|URL): Promise<Record<string,never>>
-export async function spawnThread<imports extends ThreadModule>(modulePath?: string|URL): Promise<Promisify<imports>> {
+export async function spawnThread<imports extends Record<string,unknown>>(modulePath: string|URL): Promise<ThreadModule<Record<string,never>>>
+export async function spawnThread<imports extends Record<string,unknown>>(modulePath?: string|URL): Promise<ThreadModule<imports>> {
 	if (modulePath) logger.debug("spawning new thread: " + modulePath)
 	else logger.debug("spawning new empty thread")
 
@@ -137,7 +136,6 @@ export async function spawnThread<imports extends ThreadModule>(modulePath?: str
 				for (const value of Object.values(remoteModule)) {
 					if (typeof value == "function") {
 						(value as any).datex_timeout = Infinity;
-						console.log("Infinity timeout for", value)
 					}
 				}
 
@@ -158,7 +156,7 @@ export async function spawnThread<imports extends ThreadModule>(modulePath?: str
 			}
 			// just return an empty thread
 			else {
-				const idleThread = Object.freeze(new IdleThread());
+				const idleThread = Object.freeze(new IdleThread() as ThreadModule);
 				threadWorkers.set(idleThread, worker)
 				resolve(idleThread)
 			}
