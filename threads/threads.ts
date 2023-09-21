@@ -132,6 +132,15 @@ export async function spawnThread<imports extends ThreadModule>(modulePath?: str
 			if (data.remoteModule) {
 				const remoteModuleURL = blobifyScript(data.remoteModule);
 				const remoteModule = await import(remoteModuleURL);
+
+				// make sure function calls don't time out
+				for (const value of Object.values(remoteModule)) {
+					if (typeof value == "function") {
+						(value as any).datex_timeout = Infinity;
+						console.log("Infinity timeout for", value)
+					}
+				}
+
 				const moduleProxy = new Proxy(remoteModule, {
 					get(target, p) {
 						if (!threadWorkers.get(moduleProxy))
