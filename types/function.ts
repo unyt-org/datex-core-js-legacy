@@ -14,6 +14,7 @@ import { ProtocolDataType } from "../compiler/protocol_types.ts";
 import { VOID } from "../runtime/constants.ts";
 import { Type, type_clause } from "./type.ts";
 import { callWithMetadata, callWithMetadataAsync } from "../utils/caller_metadata.ts";
+import { Datex } from "unyt_core/datex.ts";
 
 export class ExtensibleFunction {
     constructor(f:globalThis.Function) {
@@ -362,10 +363,10 @@ export class Function<T extends (...args: any) => any = (...args: any) => any> e
             for (let [key, val] of value.entries()) {
                 // normal number index
                 if (!isNaN(Number(key.toString()))) {
-                    if (Number(key.toString()) < 0) throw new RuntimeError("Invalid function arguments: '" + key + "'");
-                    if (Number(key.toString()) >= this.params.size) {
+                    if (Number(key.toString()) < 0) logger.warn(Datex.Pointer.getByValue(this)?.idString() + ": Invalid function arguments: '" + key + "'");
+                    else if (Number(key.toString()) >= this.params.size) {
                         // ignore if no params (TODO: just workaround to prevent errors)
-                        if (this.params.size !== 0) throw new RuntimeError("Maximum number of function arguments is " + (this.params.size), SCOPE);
+                        if (this.params.size !== 0) logger.warn(Datex.Pointer.getByValue(this)?.idString()+": Maximum number of function arguments is " + (this.params.size));
                     }
                     params[Number(key.toString())] = val;
                 }

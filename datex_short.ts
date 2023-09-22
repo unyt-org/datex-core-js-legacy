@@ -205,9 +205,9 @@ export async function script(dx:string|TemplateStringsArray|PrecompiledDXB, data
 
 
 // generate a instance of a JS class / DATEX Type by casting
-export function instance<T>(fromClass:{new(...params:any[]):T}, properties?:RefOrValueObject<T>): T
-export function instance<T>(fromType:Type<T>, properties?:RefOrValueObject<T>): T
-export function instance<T>(fromClassOrType:{new(...params:any[]):T}|Type<T>, properties?:RefOrValueObject<T>): T {
+export function instance<T>(fromClass:{new(...params:any[]):T}, properties?:PartialRefOrValueObject<T>): T
+export function instance<T>(fromType:Type<T>, properties?:PartialRefOrValueObject<T>): T
+export function instance<T>(fromClassOrType:{new(...params:any[]):T}|Type<T>, properties?:PartialRefOrValueObject<T>): T {
     if (fromClassOrType instanceof Type) return fromClassOrType.cast(properties);
     else return Type.getClassDatexType(fromClassOrType).cast(properties)
 }
