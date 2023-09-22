@@ -32,7 +32,7 @@ export function indent(string:TemplateStringsArray|number, _base_indent?:any|{[B
 
 	let base_indent = 0;
 	// extract base indent
-	if (typeof _base_indent == "object" && BASE_INDENT in _base_indent) {
+	if (typeof _base_indent == "object" && _base_indent && BASE_INDENT in _base_indent) {
 		base_indent = _base_indent[BASE_INDENT];
 	}
 	// base_indent not used, use as insert string

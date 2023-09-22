@@ -6,13 +6,16 @@ const logger = new Logger("thread-runner");
 import { Datex, f } from "../datex.ts";
 import { blobifyFile, blobifyScript } from "../utils/blobify.ts";
 import { RuntimeError } from "unyt_core/types/errors.ts";
+import { Path } from "unyt_node/path.ts";
+import { getCallerDir } from "../utils/caller_metadata.ts";
 
-type ThreadModule<imports extends Record<string, unknown> = Record<string, unknown>> = {
+export type ThreadModule<imports extends Record<string, unknown> = Record<string, unknown>> = {
 	[key in keyof imports]: imports[key] extends ((...args: infer args) => infer returnType) ? ((...args: args) => Promise<returnType>) : imports[key]
 } & {readonly __tag: unique symbol}
 
 export type MessageToWorker = 
-	{type: "INIT", datexURL: string, comInterfaceURL: string, moduleURL: string, tsInterfaceGeneratorURL:string, endpoint: URL}
+	{type: "INIT", datexURL: string, comInterfaceURL: string, moduleURL: string, tsInterfaceGeneratorURL:string, endpoint: URL} |
+	{type: "INIT_PORT"}
 
 export type MessageFromWorker = 
 	{type: "INITIALIZED", endpoint: string, remoteModule: string} |
@@ -21,7 +24,7 @@ export type MessageFromWorker =
 
 class IdleThread {}
 const workerBlobUrl = await blobifyFile(new URL("./thread-worker.ts", import.meta.url))
-const threadWorkers = new WeakMap<ThreadModule, Worker|null>()
+const threadWorkers = new WeakMap<ThreadModule, Worker|ServiceWorkerRegistration|null>()
 
 /**
  * Dispose a thread by terminating the worker
@@ -35,7 +38,9 @@ export function disposeThread(...threads:ThreadModule[]) {
 			throw new Error("Thread has already been disposed")
 		}
 		else {
-			worker.terminate();
+			// service worker
+			if ('active' in worker) worker.unregister()
+			else worker.terminate();
 			threadWorkers.set(thread, null);
 		}
 	}
@@ -51,6 +56,82 @@ export function spawnThreads<imports extends Record<string,unknown>>(modulePath:
 	const promises:Promise<ThreadModule<imports>>[] = new Array(count).fill(null).map(() => spawnThread(modulePath));
 	return Promise.all(promises)
 }
+
+
+async function registerServiceWorker(path:string|URL) {
+	if ('serviceWorker' in navigator) {
+		// find existing registration
+		const registrations = await navigator.serviceWorker.getRegistrations();
+
+		for (const registration of registrations) {
+			if (registration.active?.scriptURL.toString() === path.toString()) {
+				logger.debug("Service Worker for "+ path +" already registered");
+				return registration
+			}
+		}
+
+		// register new
+		try {
+			const registration = await navigator.serviceWorker.register(path);
+			logger.success("Service Worker registered");
+			return registration;
+		}
+		catch (e) {
+			logger.error("Error installing Service Worker: ?"+  e)
+			return null;
+		}
+	}
+	else return null;
+}
+
+
+/**
+ * TODO: does not work yet because import() is not allowed in sw
+ * Get a service worker thread - creates a new service worker if not yet registered.
+ * 
+ * Example:
+ * ```ts
+ * /// file: sw.ts
+ * export function exportedFunction(x: number, y:nuumber) {
+ * 	return x + y
+ * }
+ * export const exportedValue = $$([1,2,3]);
+ * 
+ * /// file: main.ts
+ * using thread = await getServiceWorkerThread<typeof import('./sw.ts')>('./sw.ts');
+ * // access exported values:
+ * const res = await thread.exportedFunction(1,2);
+ * thread.exportedValue.push(4);
+ * ```
+ * 
+ * @param serviceWorkerInitUrl JS/TS module path used to start the service worker - must contain the content of ./thread-worker.ts and must be accessible by the origin
+ * @param modulePath JS/TS module path to load in the service worker thread
+ * @returns module exports from the thread
+ */
+export async function getServiceWorkerThread<imports extends Record<string,unknown>>(modulePath: string|URL, serviceWorkerInitUrl: string|URL): Promise<ThreadModule<imports>>
+/**
+ * Get the service worker thread (idle)
+ * @returns an empty thread object
+ */
+export async function getServiceWorkerThread<imports extends Record<string,unknown>>(modulePath: null, serviceWorkerInitUrl: string|URL): Promise<ThreadModule<Record<string,never>>>
+export async function getServiceWorkerThread<imports extends Record<string,unknown>>(modulePath: string|URL|null|undefined, serviceWorkerInitUrl: string|URL): Promise<ThreadModule<imports>> {
+	// normalize module path
+	if (modulePath && !Path.pathIsURL(modulePath)) modulePath = new Path(modulePath, getCallerDir());
+	if (serviceWorkerInitUrl && !Path.pathIsURL(serviceWorkerInitUrl)) serviceWorkerInitUrl = new Path(serviceWorkerInitUrl, getCallerDir());
+
+	// make sure supranet is initialized (not connected)
+	if (!Datex.Supranet.initialized) await Datex.Supranet.init()
+	
+	if (modulePath) logger.debug("spawning new service worker thread: " + modulePath)
+	else logger.debug("spawning new empty service worker thread")
+
+	// create service worker (cannot use workerBlobURL because auf service worker restrictions)
+	const swRegistration = await registerServiceWorker(serviceWorkerInitUrl);
+	if (!swRegistration) throw new Error("Could not get service worker");
+
+	return _initWorker(swRegistration, modulePath);
+}
+
 
 
 /**
@@ -79,21 +160,75 @@ export async function spawnThread<imports extends Record<string,unknown>>(module
  * Spawn a new idle worker thread
  * @returns an empty thread object
  */
-export async function spawnThread<imports extends Record<string,unknown>>(modulePath: string|URL): Promise<ThreadModule<Record<string,never>>>
-export async function spawnThread<imports extends Record<string,unknown>>(modulePath?: string|URL): Promise<ThreadModule<imports>> {
-	if (modulePath) logger.debug("spawning new thread: " + modulePath)
-	else logger.debug("spawning new empty thread")
+export async function spawnThread<imports extends Record<string,unknown>>(modulePath?:null): Promise<ThreadModule<Record<string,never>>>
+export async function spawnThread<imports extends Record<string,unknown>>(modulePath?: string|URL|null): Promise<ThreadModule<imports>> {
 
+	// normalize module path
+	if (modulePath && !Path.pathIsURL(modulePath)) modulePath = new Path(modulePath, getCallerDir());
 	// make sure supranet is initialized (not connected)
 	if (!Datex.Supranet.initialized) await Datex.Supranet.init()
 	
+	if (modulePath) logger.debug("spawning new thread: " + modulePath)
+	else logger.debug("spawning new empty thread")
 
+	// create worker
 	const worker: Worker & {postMessage:(message:MessageToWorker)=>void} = new Worker(workerBlobUrl, {type: "module"});
 	worker.onerror = (e)=>console.error(e)
 
+	return _initWorker(worker, modulePath);
+}
 
-	// init worker endpoint
-	worker.postMessage({
+
+function awaitServiceWorkerActive(registration: ServiceWorkerRegistration) {
+	// already active
+	if (registration.active) return;
+	// wait until active
+	return new Promise<void>(resolve => {
+		if (registration.waiting) 
+			registration.waiting.addEventListener('statechange', () => {if (registration.active) resolve()});
+		  
+		if (registration.installing)
+			registration.installing.addEventListener('statechange', () => {if (registration.active) resolve()});
+		  
+		if (registration.active)
+			registration.active.addEventListener('statechange', () => {if (registration.active) resolve()});
+		  
+	})
+}
+  
+
+
+/**
+ * Initializes a worker/service worker with a custom module
+ * TODO: service worker does not work yet because import() is not allowed in sw
+ * Important: The worker/service worker must have been initialized with the content of ./thread-worker.ts
+ * @param worker 
+ * @param modulePath 
+ * @returns 
+ */
+export async function _initWorker(worker: Worker|ServiceWorkerRegistration, modulePath?: string|URL|null) {
+
+	const isServiceWorker = worker instanceof ServiceWorkerRegistration
+
+	// wait until sw active
+	if (isServiceWorker) {
+		await awaitServiceWorkerActive(worker)
+	}
+
+	const workerTarget = isServiceWorker ? worker.active! : worker;
+	if (workerTarget == null) throw new Error("Worker is null");
+
+	let messageSource:EventTarget = worker;
+
+
+	// for sw: use message channel
+	if (isServiceWorker) {
+		const messageChannel = new MessageChannel();
+		messageSource = messageChannel.port1;
+		workerTarget.postMessage({type: 'INIT_PORT'}, [messageChannel.port2]);
+	}
+
+	workerTarget.postMessage({
 		type: "INIT",
 		datexURL: import.meta.resolve("../datex.ts"),
 		comInterfaceURL: import.meta.resolve("./worker-com-interface.ts"),
@@ -109,7 +244,7 @@ export async function spawnThread<imports extends Record<string,unknown>>(module
 		reject = rej;
 	})
 
-	worker.addEventListener("message", async (event) => {
+	messageSource.addEventListener("message", async (event) => {
 		const data = event.data as MessageFromWorker;
 
 		if (data.type == "ERROR") {
@@ -150,7 +285,7 @@ export async function spawnThread<imports extends Record<string,unknown>>(module
 						else return target[p];
 					},
 				})
-	
+
 				threadWorkers.set(moduleProxy, worker)
 				resolve(moduleProxy)
 			}
