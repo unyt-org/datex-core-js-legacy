@@ -2406,7 +2406,7 @@ export class Pointer<T = any> extends Ref<T> {
 
 
     /** create proxy for object and adds listeners */
-    private addObjProxy(obj:T):T {
+    private addObjProxy(obj:T):T {   
 
         // custom proxy
         const res = JSInterface.createProxy(obj, this, this.type);
@@ -2485,10 +2485,9 @@ export class Pointer<T = any> extends Ref<T> {
                 else shadow_object[name] = obj[name];
 
                
-
                 // new getter + setter
                 Object.defineProperty(obj, name, {
-                    configurable: true,
+                    configurable: false, // true
                     enumerable: true,
                     set: val => { 
                         this.handleSet(name, val);
@@ -2500,8 +2499,8 @@ export class Pointer<T = any> extends Ref<T> {
                     }
                 });
             
-              
             }
+
             return obj;
         }
  
