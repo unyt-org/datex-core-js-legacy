@@ -11,7 +11,11 @@ import { getCallerDir } from "../utils/caller_metadata.ts";
 
 export type ThreadModule<imports extends Record<string, unknown> = Record<string, unknown>> = {
 	[key in keyof imports]: imports[key] extends ((...args: infer args) => infer returnType) ? ((...args: args) => Promise<returnType>) : imports[key]
-} & {readonly __tag: unique symbol}
+} & {readonly __tag: unique symbol} & {[Symbol.dispose]: ()=>void}
+
+
+export type ThreadPool<imports extends Record<string, unknown> = Record<string, unknown>> = ThreadModule<imports>[] 
+	& {readonly __tag: unique symbol} & {[Symbol.dispose]: ()=>void}
 
 export type MessageToWorker = 
 	{type: "INIT", datexURL: string, comInterfaceURL: string, moduleURL: string, tsInterfaceGeneratorURL:string, endpoint: URL} |
@@ -32,6 +36,7 @@ const threadWorkers = new WeakMap<ThreadModule, Worker|ServiceWorkerRegistration
  */
 export function disposeThread(...threads:ThreadModule[]) {
 	for (const thread of threads) {
+
 		if (!threadWorkers.has(thread)) throw new Error("Not a thread module");
 		const worker = threadWorkers.get(thread);
 		if (!worker) {
@@ -52,9 +57,14 @@ export function disposeThread(...threads:ThreadModule[]) {
  * @param count number of threads
  * @returns module exports from the thread
  */
-export function spawnThreads<imports extends Record<string,unknown>>(modulePath: string|URL, count = 1): Promise<ThreadModule<imports>[]> {
+export async function spawnThreads<imports extends Record<string,unknown>>(modulePath: string|URL, count = 1): Promise<ThreadPool<imports>> {
+	// normalize module path
+	if (modulePath && !Path.pathIsURL(modulePath)) modulePath = new Path(modulePath, getCallerDir());
+
 	const promises:Promise<ThreadModule<imports>>[] = new Array(count).fill(null).map(() => spawnThread(modulePath));
-	return Promise.all(promises)
+	const pool = await Promise.all(promises) as unknown as ThreadPool<imports>;
+	pool[Symbol.dispose||Symbol.for("Symbol.dispose")] = () => disposeThread(...pool)
+	return pool;
 }
 
 
@@ -279,7 +289,7 @@ export async function _initWorker(worker: Worker|ServiceWorkerRegistration, modu
 						if (!threadWorkers.get(moduleProxy))
 							throw new Error("Thread has already been disposed")
 						// @ts-ignore TODO: remove when Symbol.dispose is supported
-						else if (p == (Symbol.dispose??{})) {
+						else if (p == Symbol.dispose || p == Symbol.for("Symbol.dispose")) {
 							return () => disposeThread(moduleProxy)
 						}
 						else return target[p];

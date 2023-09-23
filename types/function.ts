@@ -14,7 +14,7 @@ import { ProtocolDataType } from "../compiler/protocol_types.ts";
 import { VOID } from "../runtime/constants.ts";
 import { Type, type_clause } from "./type.ts";
 import { callWithMetadata, callWithMetadataAsync } from "../utils/caller_metadata.ts";
-import { Datex } from "unyt_core/datex.ts";
+import { Datex } from "../datex.ts";
 
 export class ExtensibleFunction {
     constructor(f:globalThis.Function) {
