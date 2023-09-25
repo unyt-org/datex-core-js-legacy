@@ -2449,8 +2449,6 @@ export class Pointer<T = any> extends Ref<T> {
             const shadow_object = {[DX_PTR]:this};
             this.#shadow_object = new WeakRef(shadow_object);
 
-            const alwaysGetterProps = Object.getPrototypeOf(obj)[METADATA]?.[Decorators.ALWAYS_GETTER]?.public ?? {}
-
             for (const name of this.visible_children) {
 
                 /** extract existing getter + setter */
@@ -2462,10 +2460,10 @@ export class Pointer<T = any> extends Ref<T> {
                 // add original getters/setters to shadow_object if they exist (and call with right 'this' context)
                 if (property_descriptor?.set || property_descriptor?.get) {
                     
-                    // @always: set pointer as property instead of getter
-                    if (alwaysGetterProps[name] && property_descriptor.get) {
+                    // @property getter: set pointer as property instead of getter
+                    if (property_descriptor.get) {
                         if (property_descriptor?.set) {
-                            throw new Error(obj.constructor.name + ": @always can only be used in combination with a getter, but a setter for '"+name+"' was found")
+                            throw new Error(obj.constructor.name + ": @property can only be used in combination with a getter, but a setter for '"+name+"' was found")
                         }
                         // copied from always in datex_short
                         const transformRef = Pointer.createSmartTransform(property_descriptor.get.bind(obj));
@@ -2487,7 +2485,7 @@ export class Pointer<T = any> extends Ref<T> {
                
                 // new getter + setter
                 Object.defineProperty(obj, name, {
-                    configurable: false, // true
+                    configurable:  true, // TODO: cant be false because of uix @content bindings, fix
                     enumerable: true,
                     set: val => { 
                         this.handleSet(name, val);

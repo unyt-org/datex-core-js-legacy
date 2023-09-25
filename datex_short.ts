@@ -459,28 +459,10 @@ export function always<T=unknown>(script:TemplateStringsArray, ...vars:any[]): P
 /**
  * @deprecated use functions from unyt_core/function.ts
  *
- * always decorator
- * @param target
- * @param name
- */
-export function always(target: any, name?: string):any
-/**
- * @deprecated use functions from unyt_core/function.ts
- *
  * 
  */
 export function always(scriptOrJSTransform:TemplateStringsArray|SmartTransformFunction<any>, ...vars:any[]) {
-    // @always getter decorator
-    if (scriptOrJSTransform[METADATA]) {
-        console.log("dec",scriptOrJSTransform,vars[0])
-        handleDecoratorArgs([scriptOrJSTransform, ...vars], (...args)=>{
-            const setMetadata = args[5]
-            Decorators.property(...args)
-            setMetadata(Decorators.ALWAYS_GETTER, true)
-        } );
-    }
-    // js function
-    else if (typeof scriptOrJSTransform == "function") return Ref.collapseValue(Pointer.createSmartTransform(scriptOrJSTransform));
+    if (typeof scriptOrJSTransform == "function") return Ref.collapseValue(Pointer.createSmartTransform(scriptOrJSTransform));
     // datex script
     else return (async ()=>Ref.collapseValue(await _datex(`always (${scriptOrJSTransform.raw.join(INSERT_MARK)})`, vars)))()
 }
