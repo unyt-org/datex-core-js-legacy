@@ -380,7 +380,7 @@ export async function runInThread<ReturnType, Args extends unknown[]>(task: ((..
 	else throw new Error("task must be a function or template string");
 	
 	const functionScriptURL = blobifyScript(moduleSource);
-	thread ??= await spawnThread(functionScriptURL);
+	const thread = await spawnThread(functionScriptURL);
 
 	try {
 		const task = (thread["task"] as (...args:unknown[]) => Promise<ReturnType>);
