@@ -83,7 +83,6 @@ export class Decorators {
 
     static PROPERTY      = Symbol("PROPERTY");
     static STATIC_PROPERTY  = Symbol("STATIC_PROPERTY");
-    static ALWAYS_GETTER = Symbol("ALWAYS_GETTER");
     static SERIALIZE     = Symbol("SERIALIZE");
     static JSDOC         = Symbol("JSDOC");
 
