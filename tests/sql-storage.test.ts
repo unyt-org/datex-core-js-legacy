@@ -9,12 +9,13 @@ const logger = new Datex.Logger("sql-test");
  * Initial Setup
  */
 
-// docker run --name=datex -p=33060:33060 -e MYSQL_ROOT_PASSWORD=secret  -d mysql/mysql-server:latest
+// docker run --name=datex -p=3306:3306 -e MYSQL_ROOT_PASSWORD=secret  -d mysql/mysql-server:latest
+// https://baumannalexj.medium.com/connect-your-db-tool-to-a-dockerized-mysql-server-container-bc18853524ed
 const sqlStorage = new SQLDBStorageLocation({
 	hostname: "localhost",
 	port: 33600,
 	username: "root",
-	password: "secret",
+	password: "db-tool-password",
 	db: "datex"
 });
 
