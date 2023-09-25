@@ -327,10 +327,9 @@ export async function _initWorker(worker: Worker|ServiceWorkerRegistration, modu
  * 
  * @param task function that is executed on the thread
  * @param args input arguments for the function that are passed on to the execution thread
- * @param thread optional existing thread to use for execution
  * @returns 
  */
-export async function runInThread<ReturnType, Args extends unknown[]>(task: () => ReturnType, args?:Record<string,unknown>, thread?: ThreadModule): Promise<ReturnType>
+export async function runInThread<ReturnType, Args extends unknown[]>(task: () => ReturnType, args?:Record<string,unknown>): Promise<ReturnType>
 /**
  * Run a DATEX script in a separate thread and return the result.
  * 
@@ -349,10 +348,8 @@ export async function runInThread<ReturnType, Args extends unknown[]>(task: () =
  */
 export async function runInThread<ReturnType=unknown>(task:TemplateStringsArray, ...args:unknown[]):Promise<ReturnType>
 
-export async function runInThread<ReturnType, Args extends unknown[]>(task: ((...args:Args[]) => ReturnType)|TemplateStringsArray, args:any, thread?: any, ...rest:any): Promise<ReturnType> {
+export async function runInThread<ReturnType, Args extends unknown[]>(task: ((...args:Args[]) => ReturnType)|TemplateStringsArray, args:any, ...rest:any): Promise<ReturnType> {
 	
-	if (thread) throw "TODO: handle existing thread"
-
 	let moduleSource = ""
 
 	// DATEX Script
@@ -408,4 +405,30 @@ export async function runInThread<ReturnType, Args extends unknown[]>(task: ((..
 		disposeThread(thread);
 		if (functionScriptURL) URL.revokeObjectURL(functionScriptURL)
 	}
+}
+
+
+
+
+/**
+ * Run a function in a multiple threads in parallel and return the result of each thread.
+ * 
+ * Example:
+ * ```ts
+ * const token = "sm34ihncsdfn23kndovae";
+ * const sharedArray = $$([1,2,3]);
+ * const res = await runInThread(() => {
+ *   sharedArray.push(4);
+ *   return btoa(token);
+ * }, {token, sharedArray})
+ * ```
+ * 
+ * @param task function that is executed on the thread
+ * @param args input arguments for the function that are passed on to the execution thread
+ * @param thread optional existing thread to use for execution
+ * @returns 
+ */
+export function runInThreads<ReturnType, Args extends unknown[]>(task: () => ReturnType, args:Record<string,unknown>|undefined, count:number): Promise<ReturnType>[]
+export function runInThreads<ReturnType, Args extends unknown[]>(task: ((...args:Args[]) => ReturnType), args:any, count:number): Promise<ReturnType>[] {
+	return new Array(count).fill(null).map(() => runInThread(task, args));
 }
