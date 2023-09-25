@@ -21,6 +21,7 @@ export const exportedValue = $$([1,2,3]);
 /// file: main.ts
 import { spawnThread } from "datex-core-legacy/threads/threads.ts";
 
+// spawn a new thread and load the 'thread.ts' module
 using thread = await spawnThread<typeof import('./thread.ts')>('./thread.ts');
 // access exported values:
 const res = await thread.exportedFunction(1,2);
@@ -35,6 +36,7 @@ Alternatively, you can explicitly dispose a thread with the `disposeThread` func
 ```ts
 import { spawnThread, disposeThread } from "datex-core-legacy/threads/threads.ts";
 
+// spawn a new thread and load the 'thread.ts' module
 const thread = await spawnThread<typeof import('./thread.ts')>('./thread.ts');
 // do some stuff with this thread
 disposeThread(thread)
@@ -98,4 +100,11 @@ let fibonacciNumber = await runInThread `
 `
 ```
 
-Values from the parent scope can be injected in template string as with the [`datex` function]()
+Values from the parent scope can be injected in template string as with the [`datex` function](./5%20The%20DATEX%20API.md#the-datex-template-function)
+
+
+
+
+## Thread Pools
+
+TODO
