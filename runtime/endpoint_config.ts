@@ -141,8 +141,14 @@ class EndpointConfig implements EndpointConfigData {
 				} catch {
 					Deno.mkdirSync(cache_path, {recursive:true});
 				}
-				const config_file = new URL('./.dx', cache_path);
+				const config_file = new URL('./' + this.DX_FILE_NAME, cache_path);
+				// make writable if file already exists
+				try {
+					Deno.chmodSync(config_file.pathname, 0o700);
+				} catch {}
 				Deno.writeTextFileSync(config_file, serialized)
+				// make readonly
+				Deno.chmodSync(config_file.pathname, 0o444);
 			}
 			catch {
 				logger.error("Cannot save endpoint config cache file");
@@ -173,7 +179,7 @@ class EndpointConfig implements EndpointConfigData {
 		this.nodes = undefined;
 
 		if (client_type=="deno") {
-			const config_file = new URL('./.dx', cache_path);
+			const config_file = new URL('./' + this.DX_FILE_NAME, cache_path);
 			Deno.removeSync(config_file)
 		}
 		else if (this.storage) this.storage.removeItem(this.storageId);

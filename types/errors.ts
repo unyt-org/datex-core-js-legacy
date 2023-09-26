@@ -7,6 +7,7 @@ import { DATEX_ERROR_MESSAGE } from "./error_codes.ts";
 export class Error extends globalThis.Error {
     override message:string;
     datex_stack?: [Endpoint, string?][]
+    original_js_stack?: string
     type = "";
     code?:bigint
 
@@ -19,14 +20,16 @@ export class Error extends globalThis.Error {
         // extract name from class name
         this.name = this.constructor.name.replace("Datex","");
 
+        this.pushToStack(...Error.getJSStack(this))
+
         // convert scope to stack
         if (typeof stack == "object" && stack!=null && !(stack instanceof Array)) {
             this.addScopeToStack(stack)
         }
-        // stack already provided (as array)
-        else if (Runtime.OPTIONS.ERROR_STACK_TRACES && stack instanceof Array) this.datex_stack = stack;
-        // no stack
-        else this.datex_stack = [];
+        // // stack already provided (as array)
+        // else if (Runtime.OPTIONS.ERROR_STACK_TRACES && stack instanceof Array) this.datex_stack = stack;
+        // // no stack
+        // else this.datex_stack = [];
 
         // error message
         if (typeof message == "string") this.message = message;
@@ -76,9 +79,8 @@ export class Error extends globalThis.Error {
         return this.message;
     }
 
-    static fromJSError(e:globalThis.Error) {
-        // native errors are not exposed
-        if (!Runtime.OPTIONS.NATIVE_ERROR_MESSAGES) return new Error("Unknown");
+    static getJSStack(e: globalThis.Error) {
+        if (!Runtime.OPTIONS.NATIVE_ERROR_MESSAGES) return []
         
         if (Runtime.OPTIONS.NATIVE_ERROR_STACK_TRACES) {
             let ignore = false;
@@ -90,9 +92,19 @@ export class Error extends globalThis.Error {
                 }
                 return ignore ? undefined : [Runtime.endpoint,`JavaScript Error ${e.trim()}`]
             }).filter(v=>!!v).reverse() ?? [];
-            return new Error(e.name + " - " + e.message, js_stack)
+            return js_stack
         }
-        else return new Error(e.name + " - " + e.message);
+        else return [];
+    }
+
+    static fromJSError(e:globalThis.Error) {
+        // native errors are not exposed
+        if (!Runtime.OPTIONS.NATIVE_ERROR_MESSAGES) 
+            return new Error("Unknown");
+        else if (Runtime.OPTIONS.NATIVE_ERROR_STACK_TRACES)
+            return new Error(e.name + " - " + e.message, this.getJSStack(e))
+        else 
+            return new Error(e.name + " - " + e.message);
     }
 }
 
