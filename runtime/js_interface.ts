@@ -36,7 +36,7 @@ export type js_interface_configuration<T=any> = {
     has_property?: (parent:T, key:any)=>boolean,
     delete_property?: (parent:T, key:any, exclude?:Endpoint)=>void,
     clear?: (parent:T, exclude?:Endpoint)=>void,
-    apply_value?: (parent:T, args:any[])=>Promise<any>,
+    apply_value?: (parent:T, args:any[])=>Promise<any>|any,
 
     set_property_silently?: (parent:T, key:any, value:any, pointer:Pointer)=>void,
     get_property_silently?: (parent:T, key:any, pointer:Pointer)=>any,

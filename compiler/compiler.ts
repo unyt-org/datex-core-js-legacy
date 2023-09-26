@@ -40,6 +40,7 @@ import { Time } from "../types/time.ts";
 // WASM
 import wasm_init, {init_runtime as wasm_init_runtime, compile as wasm_compile, decompile as wasm_decompile} from "../wasm/adapter/pkg/datex_wasm.js";
 import { MessageLogger } from "../utils/message_logger.ts";
+import { JSTransferrableFunction } from "../types/js-function.ts";
 
 await wasm_init();
 wasm_init_runtime();
@@ -2604,7 +2605,7 @@ export class Compiler {
             const original_value = value;
  
             // exception for functions: convert to Datex.Function & create Pointer reference (proxifyValue required!)
-            if (value instanceof Function && !(value instanceof DatexFunction)) value = Pointer.proxifyValue(DatexFunction.createFromJSFunction(value));
+            if (value instanceof Function && !(value instanceof DatexFunction) && !(value instanceof JSTransferrableFunction)) value = Pointer.proxifyValue(DatexFunction.createFromJSFunction(value));
 
             // exception for Date: convert to Time (TODO: different approach?)
             if (value instanceof Date && !(value instanceof Time)) {

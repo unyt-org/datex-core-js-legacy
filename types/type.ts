@@ -478,6 +478,13 @@ export class Type<T = any> {
         else return NOT_EXISTING
     }
 
+    public handleApply(ref:T, value:any) {
+        if (this.interface_config?.apply_value instanceof Function) {
+            return this.interface_config.apply_value(ref, value)
+        }
+        else return NOT_EXISTING
+    }
+
     public handleActionAdd(ref:T, value:any, silently = false, exclude?:Endpoint) {
         if (this.interface_config?.action_add instanceof Function) {
             if (this.interface_config.action_add(ref, value, silently, exclude) === INVALID) throw new ValueError("Invalid value for add assign action"); 
@@ -903,7 +910,7 @@ export class Type<T = any> {
 
         StorageMap: Type.get<StorageMap<unknown, unknown>>("std:StorageMap"),
         StorageWeakMap: Type.get<StorageWeakMap<unknown, unknown>>("std:StorageWeakMap"),
-        StorageSet: Type.get<StorageSet<unknown, unknown>>("std:StorageSet"),
+        StorageSet: Type.get<StorageSet<unknown>>("std:StorageSet"),
 
         Error: Type.get<Error>("std:Error"),
         SyntaxError: Type.get("std:SyntaxError"),

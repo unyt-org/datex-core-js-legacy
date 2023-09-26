@@ -1,5 +1,6 @@
 import { Logger } from "../utils/logger.ts";
 import "./worker-com-interface.ts";
+import { Equals } from "../utils/global_types.ts";
 
 const logger = new Logger("thread-runner");
 
@@ -8,6 +9,7 @@ import { blobifyFile, blobifyScript } from "../utils/blobify.ts";
 import { RuntimeError } from "unyt_core/types/errors.ts";
 import { Path } from "unyt_node/path.ts";
 import { getCallerDir } from "../utils/caller_metadata.ts";
+import { PromiseMapReturnType, PromiseMappingFn } from "./promise-fn-types.ts";
 
 export type ThreadModule<imports extends Record<string, unknown> = Record<string, unknown>> = {
 	[key in keyof imports]: imports[key] extends ((...args: infer args) => infer returnType) ? ((...args: args) => Promise<returnType>) : imports[key]
@@ -29,6 +31,8 @@ export type MessageFromWorker =
 class IdleThread {}
 const workerBlobUrl = await blobifyFile(new URL("./thread-worker.ts", import.meta.url))
 const threadWorkers = new WeakMap<ThreadModule, Worker|ServiceWorkerRegistration|null>()
+
+type threadOptions = {signal?: AbortSignal}
 
 /**
  * Dispose a thread by terminating the worker
@@ -165,18 +169,20 @@ export async function getServiceWorkerThread<imports extends Record<string,unkno
  * @param modulePath JS/TS module path to load in the thread
  * @returns module exports from the thread
  */
-export async function spawnThread<imports extends Record<string,unknown>>(modulePath: string|URL): Promise<ThreadModule<imports>>
+export async function spawnThread<imports extends Record<string,unknown>>(modulePath: string|URL, options?: threadOptions): Promise<ThreadModule<imports>>
 /**
  * Spawn a new idle worker thread
  * @returns an empty thread object
  */
-export async function spawnThread<imports extends Record<string,unknown>>(modulePath?:null): Promise<ThreadModule<Record<string,never>>>
-export async function spawnThread<imports extends Record<string,unknown>>(modulePath?: string|URL|null): Promise<ThreadModule<imports>> {
+export async function spawnThread<imports extends Record<string,unknown>>(modulePath?:null, options?: threadOptions): Promise<ThreadModule<Record<string,never>>>
+export async function spawnThread<imports extends Record<string,unknown>>(modulePath?: string|URL|null, options?: threadOptions): Promise<ThreadModule<imports>> {
 
 	// normalize module path
 	if (modulePath && !Path.pathIsURL(modulePath)) modulePath = new Path(modulePath, getCallerDir());
 	// make sure supranet is initialized (not connected)
 	if (!Datex.Supranet.initialized) await Datex.Supranet.init()
+
+	if (options?.signal?.aborted) throw new Error("aborted");
 	
 	if (modulePath) logger.debug("spawning new thread: " + modulePath)
 	else logger.debug("spawning new empty thread")
@@ -185,7 +191,14 @@ export async function spawnThread<imports extends Record<string,unknown>>(module
 	const worker: Worker & {postMessage:(message:MessageToWorker)=>void} = new Worker(workerBlobUrl, {type: "module"});
 	worker.onerror = (e)=>console.error(e)
 
-	return _initWorker(worker, modulePath);
+	const thread = await _initWorker(worker, modulePath, options);
+
+	options?.signal?.addEventListener("abort", () => {
+		// only dispose if not already finished
+		if (threadWorkers.get(thread)) disposeThread(thread);
+	})
+
+	return thread;
 }
 
 
@@ -216,13 +229,14 @@ function awaitServiceWorkerActive(registration: ServiceWorkerRegistration) {
  * @param modulePath 
  * @returns 
  */
-export async function _initWorker(worker: Worker|ServiceWorkerRegistration, modulePath?: string|URL|null) {
+export async function _initWorker(worker: Worker|ServiceWorkerRegistration, modulePath?: string|URL|null, options?: threadOptions) {
 
 	const isServiceWorker = worker instanceof ServiceWorkerRegistration
 
 	// wait until sw active
 	if (isServiceWorker) {
 		await awaitServiceWorkerActive(worker)
+		if (options?.signal?.aborted) throw new Error("aborted");
 	}
 
 	const workerTarget = isServiceWorker ? worker.active! : worker;
@@ -237,6 +251,7 @@ export async function _initWorker(worker: Worker|ServiceWorkerRegistration, modu
 		messageSource = messageChannel.port1;
 		workerTarget.postMessage({type: 'INIT_PORT'}, [messageChannel.port2]);
 	}
+
 
 	workerTarget.postMessage({
 		type: "INIT",
@@ -254,7 +269,17 @@ export async function _initWorker(worker: Worker|ServiceWorkerRegistration, modu
 		reject = rej;
 	})
 
+	const checkAborted = () => {
+		if (options?.signal?.aborted) {
+			if (worker instanceof Worker) worker.terminate();
+			reject(new Error("aborted"));
+		}
+	}
+
 	messageSource.addEventListener("message", async (event) => {
+
+		checkAborted();
+
 		const data = event.data as MessageFromWorker;
 
 		if (data.type == "ERROR") {
@@ -267,6 +292,7 @@ export async function _initWorker(worker: Worker|ServiceWorkerRegistration, modu
 			// connect directly via worker com interface
 			logger.debug("connecting via worker com interface to " + data.endpoint);
 			const connected = await Datex.InterfaceManager.connect("worker", endpoint, [worker])
+			checkAborted();
 			if (!connected) {
 				reject(new Error("Could not connect via worker com interface"));
 				return;
@@ -276,6 +302,7 @@ export async function _initWorker(worker: Worker|ServiceWorkerRegistration, modu
 			if (data.remoteModule) {
 				const remoteModuleURL = blobifyScript(data.remoteModule);
 				const remoteModule = await import(remoteModuleURL);
+				checkAborted();
 
 				// make sure function calls don't time out
 				for (const value of Object.values(remoteModule)) {
@@ -329,7 +356,7 @@ export async function _initWorker(worker: Worker|ServiceWorkerRegistration, modu
  * @param args input arguments for the function that are passed on to the execution thread
  * @returns 
  */
-export async function runInThread<ReturnType, Args extends unknown[]>(task: () => ReturnType, args?:Record<string,unknown>): Promise<ReturnType>
+export async function runInThread<ReturnType, Args extends unknown[]>(task: () => ReturnType, args?:Record<string,unknown>, options?: {signal?:AbortSignal}): Promise<ReturnType>
 /**
  * Run a DATEX script in a separate thread and return the result.
  * 
@@ -348,8 +375,7 @@ export async function runInThread<ReturnType, Args extends unknown[]>(task: () =
  */
 export async function runInThread<ReturnType=unknown>(task:TemplateStringsArray, ...args:unknown[]):Promise<ReturnType>
 
-export async function runInThread<ReturnType, Args extends unknown[]>(task: ((...args:Args[]) => ReturnType)|TemplateStringsArray, args:any, ...rest:any): Promise<ReturnType> {
-	
+export async function runInThread<ReturnType>(task: (() => ReturnType)|TemplateStringsArray, args?:Record<string,unknown>, options?: {signal?:AbortSignal}, ..._rest:any): Promise<ReturnType> {
 	let moduleSource = ""
 
 	// DATEX Script
@@ -380,20 +406,25 @@ export async function runInThread<ReturnType, Args extends unknown[]>(task: ((..
 	else throw new Error("task must be a function or template string");
 	
 	const functionScriptURL = blobifyScript(moduleSource);
-	const thread = await spawnThread(functionScriptURL);
+	const thread = await spawnThread(functionScriptURL, options);
 
 	try {
+		if (options?.signal?.aborted) {
+			throw new Error("aborted");
+		}
+
 		const task = (thread["task"] as (...args:unknown[]) => Promise<ReturnType>);
 		(task as any).datex_timeout = Infinity;
 		const res = await task(...(args instanceof Array ? args : []));
 		return res;
 	}
 	catch (e) {
-		if (e.message == "TypeError - Assignment to constant variable.") {
+		if (options?.signal?.aborted) throw new Error("aborted");
+ 		if (e instanceof Error && e.message == "TypeError - Assignment to constant variable.") {
 			throw new RuntimeError("runInThread: Variables from the parent scope cannot be reassigned. Use pointers if you want to update values.")
 		}
-		else if (e.message.match(/ReferenceError - \S* is not defined/)) {
-			const variableName = e.message.match(/ReferenceError - (\S*)/)[1];
+		else if (e instanceof Error && e.message.match(/ReferenceError - \S* is not defined/)) {
+			const variableName = e.message.match(/ReferenceError - (\S*)/)![1];
 			throw new RuntimeError("runInThread: Variable '"+variableName+"' from the parent scope is not included in the dependencies object.")
 		}
 		else if (e instanceof Error) {
@@ -402,13 +433,13 @@ export async function runInThread<ReturnType, Args extends unknown[]>(task: ((..
 		else throw e;
 	}
 	finally {
-		disposeThread(thread);
-		if (functionScriptURL) URL.revokeObjectURL(functionScriptURL)
+		if (threadWorkers.get(thread)) disposeThread(thread);
+		if (functionScriptURL) URL.revokeObjectURL(functionScriptURL);
 	}
 }
 
 
-
+type runInThreadsReturn<ReturnType, Mapping extends PromiseMappingFn = never> = Equals<Mapping, never> extends true ? Promise<ReturnType>[] : PromiseMapReturnType<ReturnType, Mapping>
 
 /**
  * Run a function in a multiple threads in parallel and return the result of each thread.
@@ -428,7 +459,19 @@ export async function runInThread<ReturnType, Args extends unknown[]>(task: ((..
  * @param thread optional existing thread to use for execution
  * @returns 
  */
-export function runInThreads<ReturnType, Args extends unknown[]>(task: () => ReturnType, args:Record<string,unknown>|undefined, count:number): Promise<ReturnType>[]
-export function runInThreads<ReturnType, Args extends unknown[]>(task: ((...args:Args[]) => ReturnType), args:any, count:number): Promise<ReturnType>[] {
-	return new Array(count).fill(null).map(() => runInThread(task, args));
+export async function runInThreads<ReturnType, Mapping extends PromiseMappingFn = never>(task: () => ReturnType, args?:Record<string,unknown>, count = 1, outputMap?: Mapping): Promise<runInThreadsReturn<ReturnType, Mapping>> {
+	const abortController = new AbortController()
+	const result = new Array(count).fill(null).map(() => runInThread(task, args, {signal:abortController.signal}));
+
+	if (outputMap) {
+		try {
+			const res = await (outputMap as (...args:unknown[])=>unknown).bind(Promise)(result) as runInThreadsReturn<ReturnType, Mapping>;
+			return res;
+		}
+		finally {
+			abortController.abort();
+
+		}
+	}
+	else return result as runInThreadsReturn<ReturnType, Mapping>;
 }

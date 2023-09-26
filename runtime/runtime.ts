@@ -71,6 +71,7 @@ import { DenoKVStorageLocation } from "./storage-locations/deno-kv.ts";
 import "../types/native_types.ts"; // load prototype overrides
 import { Time } from "../types/time.ts";
 import { initPublicStaticClasses } from "../js_adapter/js_class_adapter.ts";
+import { JSTransferrableFunction } from "../types/js-function.ts";
 
 const mime = globalThis.Deno ? (await import("https://deno.land/x/mimetypes@v1.0.0/mod.ts")).mime : null;
 
@@ -4697,7 +4698,9 @@ export class Runtime {
 
 
                 else {
-                    throw(new ValueError(`Cannot apply ${Runtime.valueToDatexString(el)} to ${Runtime.valueToDatexString(val)}`, SCOPE))
+                    const res = await Type.ofValue(INNER_SCOPE.active_value).handleApply(INNER_SCOPE.active_value, el);
+                    if (res == INVALID || res == NOT_EXISTING) throw new ValueError(`Cannot apply ${Runtime.valueToDatexString(el)} to ${Runtime.valueToDatexString(val)}`, SCOPE)
+                    else INNER_SCOPE.active_value = res;
                 } 
 
             }
@@ -6759,6 +6762,27 @@ Type.std.time.setJSInterface({
     },
 
 })
+
+
+Type.get<JSTransferrableFunction>("js:Function").setJSInterface({
+
+    class: JSTransferrableFunction,
+    visible_children: new Set([
+        "source",
+        "dependencies"
+    ]),
+    cast(value,type,context,origin) {
+        const dependencies = value.dependencies
+        const intermediateFn = (new Function(...Object.keys(dependencies), `return (${value.source})`))(...Object.values(dependencies));
+        return new JSTransferrableFunction(intermediateFn, dependencies, value.source)
+    },
+
+    apply_value(parent, args) {
+        if (args instanceof Tuple) return parent.call(...args.toArray())
+        else return parent.call(args)
+    },
+
+});
 
 if (!globalThis.NO_INIT) {
     await Runtime.init();

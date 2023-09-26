@@ -187,3 +187,7 @@ export type Class<T=any> = (new (...args: any[]) => T); // type for a JS class
 export type compile_info = [datex:string|PrecompiledDXB, data?:any[], options?:compiler_options, add_header?:boolean, is_child_scope_block?:boolean, extract_pointers?:boolean, save_precompiled?:PrecompiledDXB, max_block_size?:number];
 
 export type any_class<V> = (new (...args: any[]) => V)|((...args: any[]) => V)|StringConstructor|NumberConstructor|BigIntConstructor|BooleanConstructor;
+
+export type Equals<X, Y> =
+    (<T>() => T extends X ? 1 : 2) extends
+    (<T>() => T extends Y ? 1 : 2) ? true : false;
