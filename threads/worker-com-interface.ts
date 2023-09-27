@@ -3,7 +3,7 @@ import InterfaceManager, { CommonInterface } from "../network/client.ts";
 /**
  * Creates a direct DATEX communication channel between workers/threads
  */
-export class WorkerCommunicationInterface extends CommonInterface {
+export class WorkerCommunicationInterface extends CommonInterface<[Worker]> {
 
 	declare worker: Worker
 
@@ -24,7 +24,7 @@ export class WorkerCommunicationInterface extends CommonInterface {
 		this.worker.addEventListener("message", (event) => {
 			const data = event.data;
 			if (data instanceof ArrayBuffer) {
-				InterfaceManager.handleReceiveBlock(data, this.endpoint);
+				InterfaceManager.handleReceiveBlock(data, this.endpoint, this);
 			}
 		});
         

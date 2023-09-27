@@ -82,7 +82,7 @@ export class WebRTCClientInterface extends CommonInterface {
 				console.log(this.data_channel_in)
                 this.data_channel_in.onmessage = (event)=>{
 					console.log("in>")
-                    InterfaceManager.handleReceiveBlock(event.data, this.endpoint);
+                    InterfaceManager.handleReceiveBlock(event.data, this.endpoint, this);
                 }
                 this.connected = true;
 				resolve(true);

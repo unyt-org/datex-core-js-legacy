@@ -20,7 +20,7 @@ export type ThreadPool<imports extends Record<string, unknown> = Record<string, 
 	& {readonly __tag: unique symbol} & {[Symbol.dispose]: ()=>void}
 
 export type MessageToWorker = 
-	{type: "INIT", datexURL: string, comInterfaceURL: string, moduleURL: string, tsInterfaceGeneratorURL:string, endpoint: URL} |
+	{type: "INIT", datexURL: string, comInterfaceURL: string, moduleURL: string, tsInterfaceGeneratorURL:string, endpoint: string, importMap:Record<string,any>} |
 	{type: "INIT_PORT"}
 
 export type MessageFromWorker = 
@@ -33,6 +33,29 @@ const workerBlobUrl = await blobifyFile(new URL("./thread-worker.ts", import.met
 const threadWorkers = new WeakMap<ThreadModule, Worker|ServiceWorkerRegistration|null>()
 
 type threadOptions = {signal?: AbortSignal}
+
+// default import map
+let importMap:{"imports":Record<string,string>} = {
+    "imports": {
+        "unyt/": "https://dev.cdn.unyt.org/",
+        "unyt_core": "https://dev.cdn.unyt.org/unyt_core/datex.ts",
+        "uix": "./uix.ts",
+        "unyt_core/": "https://dev.cdn.unyt.org/unyt_core/",
+        "datex-core-legacy/": "https://dev.cdn.unyt.org/unyt_core/",
+        "uix/": "./",
+        "uix_std/": "./uix_std/",
+        "unyt_tests/": "https://dev.cdn.unyt.org/unyt_tests/",
+        "unyt_web/": "https://dev.cdn.unyt.org/unyt_web/",
+        "unyt_node/": "https://dev.cdn.unyt.org/unyt_node/",
+        "unyt_cli/": "https://dev.cdn.unyt.org/unyt_cli/",
+        "uix/jsx-runtime": "./jsx-runtime/jsx.ts"
+    }
+};
+
+export function setImportMap(json: {"imports":Record<string,string>}) {
+	logger.debug("updated default thread import map", json)
+	importMap = json;
+}
 
 /**
  * Dispose a thread by terminating the worker
@@ -253,8 +276,9 @@ export async function _initWorker(worker: Worker|ServiceWorkerRegistration, modu
 	}
 
 
-	workerTarget.postMessage({
+	workerTarget.postMessage(<MessageToWorker>{
 		type: "INIT",
+		importMap: importMap,
 		datexURL: import.meta.resolve("../datex.ts"),
 		comInterfaceURL: import.meta.resolve("./worker-com-interface.ts"),
 		tsInterfaceGeneratorURL: import.meta.resolve("../utils/interface-generator.ts"),

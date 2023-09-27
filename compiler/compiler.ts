@@ -5409,8 +5409,16 @@ export class Compiler {
 
     }
 
+    // force disable encryption + signatures for all blocks (e.g. when using a crypto proxy)
+    static DISABLE_CRYPTO = false;
+
     /** compiles datex code to binary + adds  data (binary, strings, intergers,...) if provided */
     static compile(datex:string|{datex:string}|PrecompiledDXB, data:any[] = [], options:compiler_options={}, add_header=true, is_child_scope_block = false, extract_pointers = false, save_precompiled?:PrecompiledDXB, max_block_size?:number, _code_block_type?:0|1|2|42, _current_data_index=0): Promise<ArrayBuffer|ReadableStream<ArrayBuffer>>|ArrayBuffer {
+
+        if (this.DISABLE_CRYPTO) {
+            options.encrypt = false;
+            options.sign = false;
+        }
 
         // _datex is precompiled dxb
         if (datex instanceof PrecompiledDXB) {

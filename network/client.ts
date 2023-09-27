@@ -38,7 +38,7 @@ export interface ComInterface {
 
 
 /** common class for all client interfaces (WebSockets, TCP Sockets, GET Requests, ...)*/
-export abstract class CommonInterface implements ComInterface {
+export abstract class CommonInterface<Args extends unknown[] = []> implements ComInterface {
 
     // endpoint interface mapping
     protected static endpoint_connection_points = new Map<Target, Set<ComInterface>>();
@@ -47,17 +47,26 @@ export abstract class CommonInterface implements ComInterface {
 
     // DIRECT (direct end-to-end connection)
 
-    public static addInterfaceForEndpoint(endpoint:Target, com_interface:ComInterface) {
+    public static addInterfaceForEndpoint(endpoint:Endpoint, com_interface:ComInterface) {
         if (!this.endpoint_connection_points.has(endpoint)) this.endpoint_connection_points.set(endpoint, new Set());
-        this.endpoint_connection_points.get(endpoint).add(com_interface);
+        this.endpoint_connection_points.get(endpoint)!.add(com_interface);
+        // trigger listeners
+        for (const handler of this._endpointRegisteredHandlers.get(com_interface.type)??[]) handler(endpoint)
     }
     // does an endpoint have an explicit (direct) interface on this endpoint
-    public static hasDirectInterfaceForEndpoint(endpoint:Target):boolean {
+    public static hasDirectInterfaceForEndpoint(endpoint:Endpoint):boolean {
         return this.endpoint_connection_points.has(endpoint) && this.endpoint_connection_points.get(endpoint)?.size != 0;
     }
     // get a list of all currently available direct interfaces for an endpoint
-    public static getInterfacesForEndpoint(endpoint:Target, interface_type?:string) {
+    public static getInterfacesForEndpoint(endpoint:Endpoint, interface_type?:string) {
         return this.endpoint_connection_points.get(endpoint) || new Set();
+    }
+
+
+    private static _endpointRegisteredHandlers = new Map<string, Set<(e:Endpoint)=>void>>();
+    public static onEndpointRegistered(interface_type: string, handler: (e:Endpoint)=>void) {
+        if (!this._endpointRegisteredHandlers.has(interface_type)) this._endpointRegisteredHandlers.set(interface_type, new Set())
+        this._endpointRegisteredHandlers.get(interface_type)!.add(handler)
     }
 
 
@@ -65,7 +74,7 @@ export abstract class CommonInterface implements ComInterface {
 
     public static addIndirectInterfaceForEndpoint(endpoint:Target, com_interface:ComInterface) {
         if (!this.indirect_endpoint_connection_points.has(endpoint)) this.indirect_endpoint_connection_points.set(endpoint, new Set());
-        this.indirect_endpoint_connection_points.get(endpoint).add(com_interface);
+        this.indirect_endpoint_connection_points.get(endpoint)!.add(com_interface);
     }
     // is an endpoint reachable via a specific endpoint (indirectly)
     public static isEndpointReachableViaInterface(endpoint:Target):boolean {
@@ -82,7 +91,7 @@ export abstract class CommonInterface implements ComInterface {
 
     public static addVirtualInterfaceForEndpoint(endpoint:Target, com_interface:ComInterface) {
         if (!this.virtual_endpoint_connection_points.has(endpoint)) this.virtual_endpoint_connection_points.set(endpoint, new Set());
-        this.virtual_endpoint_connection_points.get(endpoint).add(com_interface);
+        this.virtual_endpoint_connection_points.get(endpoint)!.add(com_interface);
     }
     // get a list of all currently available virtual interfaces for an endpoint
     public static getVirtualInterfacesForEndpoint(endpoint:Target, interface_type?:string) {
@@ -116,7 +125,7 @@ export abstract class CommonInterface implements ComInterface {
     public type = "local"
     public persistent = false; // interface can be disconnected (per default)
     public authorization_required = true; // connect with public keys per default
-    public endpoint:Endpoint;
+    private _endpoint?:Endpoint;
     public endpoints = new Set<Endpoint>();
     public virtual = false; // only a relayed connection, don't use for DATEX rooting
 
@@ -124,22 +133,37 @@ export abstract class CommonInterface implements ComInterface {
     public out = true
     public global = true
 
-    protected initial_arguments:any[];
-
-    constructor(endpoint:Endpoint) {
-        this.logger = new Logger(this.constructor.name);
-        this.endpoint = endpoint;
+    public get endpoint() {
+        return this._endpoint
     }
 
-    // initialize
-    async init(...args:any[]):Promise<boolean> {
-        this.initial_arguments = args;
+    public set endpoint(endpoint: Endpoint|undefined) {
+        this.logger.debug("updated endpoint to " + endpoint);
+        this._endpoint = endpoint;
+        this.updateEndpoint();
+    }
 
-        this.connected = await this.connect();
-        if (this.connected && this.endpoint) {
+    private updateEndpoint() {
+        if (this.endpoint) {
             if (this.virtual) CommonInterface.addVirtualInterfaceForEndpoint(this.endpoint, this);
             else CommonInterface.addInterfaceForEndpoint(this.endpoint, this);
         }
+    }
+
+
+    protected declare initial_arguments:Args
+
+    constructor(endpoint:Endpoint) {
+        this.logger = new Logger(this.constructor.name);
+        this._endpoint = endpoint;
+    }
+
+    // initialize
+    async init(...args:Args):Promise<boolean> {
+        this.initial_arguments = args;
+
+        this.connected = await this.connect();
+        if (this.connected) this.updateEndpoint();
         return this.connected;
     }
     
@@ -160,7 +184,7 @@ export abstract class CommonInterface implements ComInterface {
     protected connecting = false;
     protected reconnecting = false;
 
-    protected reconnect():Promise<boolean>{
+    protected reconnect():Promise<boolean>|boolean {
         if (this.connected) this.connected = false; // (still) not connected
         
         if (this.reconnecting) return false;
@@ -184,7 +208,7 @@ export abstract class CommonInterface implements ComInterface {
     }
 
     /** implement how to send a message to the server*/
-    protected abstract sendBlock(datex:ArrayBuffer)
+    protected abstract sendBlock(datex:ArrayBuffer): void
 
 
     protected addEndpoint(endpoint:Endpoint) {
@@ -196,7 +220,7 @@ export abstract class CommonInterface implements ComInterface {
 
 
     /** called from outside for requests */
-    public async send(datex:ArrayBuffer):Promise<any> {
+    public async send(datex:ArrayBuffer):Promise<void>|void {
         await this.sendBlock(datex);   
     }
 }
@@ -260,7 +284,7 @@ export class RelayedClientInterface extends CommonInterface {
         this.logger.error("invalid")
     }
 
-    public override async send(datex:ArrayBuffer):Promise<any> {
+    public override send(datex:ArrayBuffer) {
         InterfaceManager.send(datex, this.endpoint);
     }
 }
@@ -275,7 +299,7 @@ export class BluetoothClientInterface extends CommonInterface {
     override out = true
     override global = false
 
-    async connect(){
+    connect(){
         console.log("connecting to bluetooth", this.initial_arguments);
 
 
@@ -283,13 +307,13 @@ export class BluetoothClientInterface extends CommonInterface {
         return true;
     }
 
-    async sendBlock(datex:ArrayBuffer){
+    sendBlock(datex:ArrayBuffer){
         console.log("bluetooth send block", datex)
     }
 }
 
 /** 'Serial' interface (USB, ...) */
-export class SerialClientInterface extends CommonInterface {
+export class SerialClientInterface extends CommonInterface<[any, number, number]> {
 
     override type = "serial"
     override authorization_required = false; // don't connect with public keys
@@ -300,7 +324,7 @@ export class SerialClientInterface extends CommonInterface {
     private baudRate = 9600;
     private bufferSize = 255;
 
-    private port: any
+    private port?: any
     private writer: any
 
 
@@ -322,7 +346,7 @@ export class SerialClientInterface extends CommonInterface {
             while (this.port.readable) {
                 const reader = this.port.readable.getReader();
             
-                await InterfaceManager.handleReceiveContinuosStream(reader, this.endpoint);
+                await InterfaceManager.handleReceiveContinuosStream(reader, this.endpoint, this);
             }
         })()
 
@@ -407,7 +431,7 @@ class WebsocketStreamClientInterface extends CommonInterface {
                             this.logger.error("stream done")
                             break;
                         } 
-                        InterfaceManager.handleReceiveBlock(value, this.endpoint);
+                        InterfaceManager.handleReceiveBlock(value, this.endpoint, this);
                     }
                 } catch (e) {
                     this.logger.error("connection error: " + "wss://"+this.host);
@@ -519,7 +543,7 @@ class WebsocketClientInterface extends CommonInterface {
                 });
 
                 this.socket!.addEventListener('message', (event:any) => {
-                    InterfaceManager.handleReceiveBlock(event.data, this.endpoint);
+                    InterfaceManager.handleReceiveBlock(event.data, this.endpoint, this);
                 });
 
             })
@@ -548,7 +572,7 @@ class WebsocketClientInterface extends CommonInterface {
 
     public override disconnect(){
         super.disconnect();
-        this.socket.close()
+        this.socket?.close()
         this.closed = true;
     }
 }
@@ -559,14 +583,14 @@ export class InterfaceManager {
 
     static logger = new Logger("DATEX Interface Manager");
 
-    static datex_in_handler: (dxb: ArrayBuffer|ReadableStreamDefaultReader<Uint8Array> | {dxb: ArrayBuffer|ReadableStreamDefaultReader<Uint8Array>; variables?: any; header_callback?: (header: dxb_header) => void, new_endpoint_callback?: (endpoint: Endpoint) => void}, last_endpoint:Endpoint) => Promise<dxb_header|void>
+    static datex_in_handler: (dxb: ArrayBuffer|ReadableStreamDefaultReader<Uint8Array> | {dxb: ArrayBuffer|ReadableStreamDefaultReader<Uint8Array>; variables?: any; header_callback?: (header: dxb_header) => void, new_endpoint_callback?: (endpoint: Endpoint) => void}, last_endpoint:Endpoint, source?:ComInterface) => Promise<dxb_header|void>
 
     static local_interface:LocalClientInterface;
 
     static interfaces = new Map<string, typeof CommonInterface>();
 
     // register new DatexCommonInterface
-    static registerInterface(channel_type:string, interf:typeof CommonInterface) {
+    static registerInterface<T extends unknown[]>(channel_type:string, interf:typeof CommonInterface<T>) {
         this.interfaces.set(channel_type,interf);
     }
 
@@ -578,14 +602,14 @@ export class InterfaceManager {
     static active_interfaces: Set<ComInterface>
 
 
-    static handleReceiveBlock(dxb:ArrayBuffer, last_endpoint?:Endpoint, header_callback?: (header: dxb_header) => void, new_endpoint_callback?: (endpoint: Endpoint) => void){
-        if (header_callback || new_endpoint_callback) this.datex_in_handler({dxb, header_callback, new_endpoint_callback}, last_endpoint);
-        else this.datex_in_handler(dxb, last_endpoint);
+    static handleReceiveBlock(dxb:ArrayBuffer, last_endpoint?:Endpoint, source?:ComInterface, header_callback?: (header: dxb_header) => void, new_endpoint_callback?: (endpoint: Endpoint) => void){
+        if (header_callback || new_endpoint_callback) this.datex_in_handler({dxb, header_callback, new_endpoint_callback}, last_endpoint, source);
+        else this.datex_in_handler(dxb, last_endpoint, source);
     }
 
-    static handleReceiveContinuosStream(reader:ReadableStreamDefaultReader<Uint8Array>, last_endpoint, header_callback?: (header: dxb_header) => void, new_endpoint_callback?: (endpoint: Endpoint) => void) {
-        if (header_callback || new_endpoint_callback) return this.datex_in_handler({dxb:reader, header_callback, new_endpoint_callback}, last_endpoint);
-        else return this.datex_in_handler(reader, last_endpoint);
+    static handleReceiveContinuosStream(reader:ReadableStreamDefaultReader<Uint8Array>, last_endpoint?:Endpoint, source?:ComInterface, header_callback?: (header: dxb_header) => void, new_endpoint_callback?: (endpoint: Endpoint) => void) {
+        if (header_callback || new_endpoint_callback) return this.datex_in_handler({dxb:reader, header_callback, new_endpoint_callback}, last_endpoint, source);
+        else return this.datex_in_handler(reader, last_endpoint, source);
     }
 
     static addReceiveListener(listen:(datex:ArrayBuffer)=>void){
@@ -672,7 +696,7 @@ export class InterfaceManager {
     // add an existing interface to the interface list
     static addInterface(i: ComInterface) {
         if (!this.active_interfaces) this.active_interfaces = Pointer.createOrGet(new Set<ComInterface>()).js_value;
-        for (let l of this.new_interface_listeners) l(i)
+        for (const l of this.new_interface_listeners) l(i)
         this.active_interfaces.add(i)
     }
     // remove an interface from the list
@@ -683,7 +707,7 @@ export class InterfaceManager {
 
     // disconnected
     static handleInterfaceDisconnect(i: ComInterface){
-        for (let l of this.interface_disconnected_listeners) l(i)
+        for (const l of this.interface_disconnected_listeners) l(i)
     }
     // (re)connected
     static handleInterfaceConnect(i: ComInterface){
@@ -692,7 +716,8 @@ export class InterfaceManager {
 
     /** main method to call send */
     // TODO: replace to with Disjunction<Endpoint>
-    static async send(datex:ArrayBuffer, to:Endpoint, flood = false) {
+    static async send(datex:ArrayBuffer, to:Endpoint, flood = false, source?:ComInterface) {
+
         if (!InterfaceManager.checkRedirectPermission(to)) return;
 
         // flooding instead of sending to a receiver
@@ -701,49 +726,57 @@ export class InterfaceManager {
         }
 
         // currently only sending to one target at a time here! TODO: improve
-        let addressed_datex = Compiler.updateHeaderReceiver(datex, new Disjunction(to)); // set right receiver
-
+        const addressed_datex = Compiler.updateHeaderReceiver(datex, new Disjunction(to))!; // set right receiver
+        
         // is self
         if (to instanceof Endpoint && (Runtime.endpoint.equals(to) || to === LOCAL_ENDPOINT)) {
             await InterfaceManager.datex_in_handler(addressed_datex, Runtime.endpoint);
             return;
         }
+
+        // default interface
+        let comInterface: ComInterface = CommonInterface.default_interface;
+
         // send via direct connection
         if (CommonInterface.hasDirectInterfaceForEndpoint(to)) {
-            let i = [...CommonInterface.getInterfacesForEndpoint(to)][0];
-            return await i.send(addressed_datex, to);  // send to first available interface (todo)
+            comInterface = [...CommonInterface.getInterfacesForEndpoint(to)][0]; // send to first available interface (todo)
         }
         // send via indirect connection
-        if (CommonInterface.isEndpointReachableViaInterface(to)) {
-            let i = [...CommonInterface.getIndirectInterfacesForEndpoint(to)][0];
-            return await i.send(addressed_datex, to); // send to first available interface (todo)
+        else if (CommonInterface.isEndpointReachableViaInterface(to)) {
+            comInterface = [...CommonInterface.getIndirectInterfacesForEndpoint(to)][0]; // send to first available interface (todo)
         }
 
-        // indirect connection - send per default interface
-        if (!CommonInterface.default_interface) {
+        // error: no default interface, no other interface found
+        if (!comInterface) {
             return InterfaceManager.handleNoRedirectFound(to);
         }
+        // error: loopback
+        else if (source == comInterface) {
+            return InterfaceManager.handleNoRedirectFound(to);
+        }
+        // send
+        else {
+            return await comInterface.send(addressed_datex, to); // send to first available interface (todo)
+        }
 
-        //console.warn("sending to " + receiver + " via ", DatexCommonInterface.default_interface.type);
-        return await CommonInterface.default_interface.send(addressed_datex, to);
     }
 
     // flood to all currently directly connected nodes (only nodes!)
     static flood(datex: ArrayBuffer, exclude: Target) {
-        let exclude_endpoints = new Set([exclude]);
+        const exclude_endpoints = new Set([exclude]);
 
         // iterate over all active endpoints
-        for (let interf of this.active_interfaces) {
+        for (const interf of this.active_interfaces) {
             if (interf.endpoint && !exclude_endpoints.has(interf.endpoint) && !interf.endpoint.equals(Runtime.endpoint)) {
             exclude_endpoints.add(interf.endpoint);
             //console.log("FLOOD > " + interf.endpoint)
             interf.send(datex, interf.endpoint);
             }
-            for (let endpoint of interf.endpoints??[]){
-                if (!exclude_endpoints.has(endpoint)  && !interf.endpoint.equals(Runtime.endpoint)) {
-                exclude_endpoints.add(endpoint);
-                //console.log("FLOOD > " + endpoint)
-                interf.send(datex, endpoint);
+            for (const endpoint of interf.endpoints??[]){
+                if (!exclude_endpoints.has(endpoint) && !interf.endpoint?.equals(Runtime.endpoint)) {
+                    exclude_endpoints.add(endpoint);
+                    //console.log("FLOOD > " + endpoint)
+                    interf.send(datex, endpoint);
                 }
             }
         }
@@ -755,7 +788,7 @@ export class InterfaceManager {
     }
 
     static handleNoRedirectFound(receiver:Target){
-        throw new NetworkError("no active client interface found");
+        throw new NetworkError("Cannot find route to endpoint " + receiver);
     }
 }
 
@@ -773,7 +806,7 @@ globalThis.DatexCommonInterface = CommonInterface;
 
 export default InterfaceManager;
 
-function fixedEncodeURIComponent(str) {
+function fixedEncodeURIComponent(str:string) {
     return encodeURIComponent(str).replace(/[!'()*]/g, function(c) {
         return '%' + c.charCodeAt(0).toString(16);
     });

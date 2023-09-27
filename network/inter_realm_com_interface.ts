@@ -83,7 +83,7 @@ export class InterRealmCommunicationInterface extends CommonInterface {
         // DATEX block received on main channel
         if (this.rxChannel1) this.rxChannel1.addEventListener("message", event => {
             //logger.info("inter-process data", event);
-            InterfaceManager.handleReceiveBlock(event.data);
+            InterfaceManager.handleReceiveBlock(event.data, undefined, this);
         })
     }
 

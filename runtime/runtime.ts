@@ -193,6 +193,8 @@ type local_text_map = {[lang:string]:{[key:string]:string}};
 type mime_type = `${string}/${string}`
 type mime_type_definition<T> = (new(...args:any[])=>T) | {class:(new(...args:any[])=>T),generator:(value:Blob)=>T}
 
+type Source = '_source'|{};
+
 export class Runtime {
 
 
@@ -442,7 +444,7 @@ export class Runtime {
     private static local_input_handler = Runtime.getDatexInputHandler();
 
     // default datex out: send to self (if no routing available)
-    private static datex_out:(dxb:ArrayBuffer, to?:Endpoint, flood?:boolean)=>Promise<void> = async (dxb, to, flood)=>{
+    private static datex_out:(dxb:ArrayBuffer, to?:Endpoint, flood?:boolean, source?:Source)=>Promise<void> = async (dxb, to, flood, source)=>{
         // external datex out request, but this is the default interface (only access to local endpoint)
         if (!(to instanceof Endpoint && Runtime.endpoint.equals(to))) {
             throw new NetworkError(DATEX_ERROR.NO_EXTERNAL_CONNECTION)
@@ -451,8 +453,20 @@ export class Runtime {
         else this.local_input_handler(dxb);
     } 
 
-    public static setDatexOut(handler:(dxb:ArrayBuffer, to?:Endpoint, flood?:boolean)=>Promise<void>){
-        this.datex_out = handler;
+    public static setDatexOut(handler:(dxb:ArrayBuffer, to?:Endpoint, flood?:boolean, source?:any)=>Promise<void>){
+        // datex out callback wrapper, handles crypto proxy
+        this.datex_out = (dxb:ArrayBuffer, to?:Endpoint, flood?:boolean, source?:any) => {
+
+            // redirect as crypto proxy: decrypt
+            if (to && this.#cryptoProxies.has(to)) {
+                // TODO#CryptoProxy: decrypt
+                const decKey = this.#cryptoProxies.get(to)![1]
+                console.log("TODO: handle proxy decrypt for " + to)
+            }
+
+            return handler(dxb, to, flood, source);
+        }
+
 
         if (this.#datex_out_handler_initialized_resolve) {
             this.#datex_out_handler_initialized_resolve();
@@ -802,7 +816,7 @@ export class Runtime {
      * @param timeout response timeout
      * @returns evaluated response value
      */
-    public static async datexOut(data:ArrayBuffer|compile_info, to:target_clause=Runtime.endpoint, sid?:number, wait_for_result=true, encrypt=false, detailed_result_callback?:(scope:datex_scope, header:dxb_header, error:Error)=>void, flood = false, flood_exclude?:Endpoint, timeout?:number):Promise<any>{
+    public static async datexOut(data:ArrayBuffer|compile_info, to:target_clause=Runtime.endpoint, sid?:number, wait_for_result=true, encrypt=false, detailed_result_callback?:(scope:datex_scope, header:dxb_header, error:Error)=>void, flood = false, flood_exclude?:Endpoint, timeout?:number, source?:Source):Promise<any>{
 
         // external request, but datex out not yet initialized, wait for initialization
         if (!(to instanceof Endpoint && Runtime.endpoint.equals(to)) && this.#datex_out_init_promise /*instanceof Promise*/) {
@@ -838,7 +852,7 @@ export class Runtime {
 
         // single block
         if (dxb instanceof ArrayBuffer) {
-            return this.datexOutSingleBlock(dxb, evaluated_receivers, sid, unique_sid, <compile_info>data, wait_for_result, encrypt, detailed_result_callback, flood, flood_exclude, timeout);
+            return this.datexOutSingleBlock(dxb, evaluated_receivers, sid, unique_sid, <compile_info>data, wait_for_result, encrypt, detailed_result_callback, flood, flood_exclude, timeout, source);
         }
 
         // multiple blocks
@@ -854,9 +868,9 @@ export class Runtime {
                 // empty arraybuffer indicates that next block is end_of_scope
                 if (next.value.byteLength == 0) end_of_scope = true;
                 // end_of_scope, now return result for last block (wait_for_result)
-                else if (end_of_scope) return this.datexOutSingleBlock(next.value, evaluated_receivers, sid, unique_sid, <compile_info>data, wait_for_result, encrypt, detailed_result_callback, flood, flood_exclude, timeout);
+                else if (end_of_scope) return this.datexOutSingleBlock(next.value, evaluated_receivers, sid, unique_sid, <compile_info>data, wait_for_result, encrypt, detailed_result_callback, flood, flood_exclude, timeout, source);
                 // not last block,  wait_for_result = false, no detailed_result_callback
-                else this.datexOutSingleBlock(next.value, evaluated_receivers, sid, unique_sid, <compile_info>data, false, encrypt, null, flood, flood_exclude, timeout);
+                else this.datexOutSingleBlock(next.value, evaluated_receivers, sid, unique_sid, <compile_info>data, false, encrypt, null, flood, flood_exclude, timeout, source);
             }
             
         }
@@ -870,7 +884,7 @@ export class Runtime {
     }
 
     // handle sending a single dxb block out
-    private static datexOutSingleBlock(dxb:ArrayBuffer, to:Disjunction<Endpoint>, sid:number, unique_sid:string, data:compile_info, wait_for_result=true, encrypt=false, detailed_result_callback?:(scope:datex_scope, header:dxb_header, error:Error)=>void, flood = false, flood_exclude?:Endpoint, timeout?:number) {
+    private static datexOutSingleBlock(dxb:ArrayBuffer, to:Disjunction<Endpoint>, sid:number, unique_sid:string, data:compile_info, wait_for_result=true, encrypt=false, detailed_result_callback?:(scope:datex_scope, header:dxb_header, error:Error)=>void, flood = false, flood_exclude?:Endpoint, timeout?:number, source?:Source) {
         
        
         // empty filter?
@@ -886,7 +900,7 @@ export class Runtime {
 
             // flood exclude flood_exclude receiver
             if (flood) {
-                this.datex_out(dxb, flood_exclude, true)?.catch(e=>reject(e));
+                this.datex_out(dxb, flood_exclude, true, source)?.catch(e=>reject(e));
             }           
             // send to receivers
             else if (to) {
@@ -896,7 +910,7 @@ export class Runtime {
                     // check offline status (async), immediately reject if offline
                     this._handleEndpointOffline(to_endpoint, reject)
                     // send dxb
-                    this.datex_out(dxb, to_endpoint)?.catch(e=>reject(e));
+                    this.datex_out(dxb, to_endpoint, undefined, source)?.catch(e=>reject(e));
                 }
             }
 
@@ -943,7 +957,7 @@ export class Runtime {
      * @param wait_for_result returns the result if set to true
      * @returns result of the redirected DATEX 
      */
-    static async redirectDatex(datex:ArrayBuffer, header:dxb_header, wait_for_result=true):Promise<any> {
+    static async redirectDatex(datex:ArrayBuffer, header:dxb_header, wait_for_result=true, source?:Source):Promise<any> {
 
         // too many redirects (ttl is 0)
         if (header.routing.ttl == 0) throw new NetworkError(DATEX_ERROR.TOO_MANY_REDIRECTS);
@@ -952,7 +966,7 @@ export class Runtime {
             
         logger.debug("redirect " + header.sid + " > " + Runtime.valueToDatexString(header.routing.receivers));
 
-        let res = await this.datexOut(datex, header.routing.receivers, header.sid, wait_for_result);
+        let res = await this.datexOut(datex, header.routing.receivers, header.sid, wait_for_result, undefined, undefined, undefined, undefined, undefined, source);
         return res;
     }
 
@@ -1359,19 +1373,19 @@ export class Runtime {
 
     // get handler function for dxb binary input
     public static getDatexInputHandler(full_scope_callback?:(sid:number, scope:datex_scope|Error)=>void) {
-        let handler = (dxb: ArrayBuffer|ReadableStreamDefaultReader<Uint8Array> | {dxb:ArrayBuffer|ReadableStreamDefaultReader<Uint8Array>, variables?:any, header_callback?:(header:dxb_header)=>void}, last_endpoint?:Endpoint): Promise<dxb_header|void>=>{
-            if (dxb instanceof ArrayBuffer) return this.handleDatexIn(dxb, last_endpoint, full_scope_callback); 
-            else if (dxb instanceof ReadableStreamDefaultReader) return this.handleContinuousBlockStream(dxb, full_scope_callback, undefined, undefined, last_endpoint)
+        let handler = (dxb: ArrayBuffer|ReadableStreamDefaultReader<Uint8Array> | {dxb:ArrayBuffer|ReadableStreamDefaultReader<Uint8Array>, variables?:any, header_callback?:(header:dxb_header)=>void}, last_endpoint?:Endpoint, source?:Source): Promise<dxb_header|void>=>{
+            if (dxb instanceof ArrayBuffer) return this.handleDatexIn(dxb, last_endpoint, full_scope_callback, undefined, undefined, source); 
+            else if (dxb instanceof ReadableStreamDefaultReader) return this.handleContinuousBlockStream(dxb, full_scope_callback, undefined, undefined, last_endpoint, source)
             else {
-                if ((<any>dxb).dxb instanceof ArrayBuffer) return this.handleDatexIn((<any>dxb).dxb, last_endpoint, full_scope_callback,(<any>dxb).variables, (<any>dxb).header_callback); 
-                else if ((<any>dxb).dxb instanceof ReadableStreamDefaultReader) return this.handleContinuousBlockStream((<any>dxb).dxb, full_scope_callback,  (<any>dxb).variables, (<any>dxb).header_callback, last_endpoint);
+                if ((<any>dxb).dxb instanceof ArrayBuffer) return this.handleDatexIn((<any>dxb).dxb, last_endpoint, full_scope_callback,(<any>dxb).variables, (<any>dxb).header_callback, source); 
+                else if ((<any>dxb).dxb instanceof ReadableStreamDefaultReader) return this.handleContinuousBlockStream((<any>dxb).dxb, full_scope_callback,  (<any>dxb).variables, (<any>dxb).header_callback, last_endpoint, source);
             }
         }
         return handler;
     }
 
     // extract dxb blocks from a continuos stream
-    private static async handleContinuousBlockStream(dxb_stream_reader: ReadableStreamDefaultReader<Uint8Array>, full_scope_callback, variables?:any, header_callback?:(header:dxb_header)=>void, last_endpoint?:Endpoint) {
+    private static async handleContinuousBlockStream(dxb_stream_reader: ReadableStreamDefaultReader<Uint8Array>, full_scope_callback, variables?:any, header_callback?:(header:dxb_header)=>void, last_endpoint?:Endpoint, source?:Source) {
         
         let current_block: Uint8Array;
         let current_block_size: number
@@ -1439,7 +1453,7 @@ export class Runtime {
             // block end
             if (current_block && index >= current_block_size) {
                 console.log("received new block from stream")
-                this.handleDatexIn(current_block.buffer, last_endpoint, full_scope_callback, variables, header_callback); 
+                this.handleDatexIn(current_block.buffer, last_endpoint, full_scope_callback, variables, header_callback, source); 
                 // reset for next block
                 current_block = null; 
                 index = 0; // force to 0
@@ -1470,6 +1484,15 @@ export class Runtime {
         return Ref.collapseValue(scope.result);
     }
 
+    static #cryptoProxies = new Map<Endpoint, [signKey:CryptoKey, decKey:CryptoKey]>()
+
+    public static enableCryptoProxy(proxiedEndpoint: Endpoint, keys: [signKey:CryptoKey, decKey:CryptoKey]) {
+        logger.success("enabling crypto proxy for " + proxiedEndpoint)
+        this.#cryptoProxies.set(proxiedEndpoint, keys)
+    }
+
+
+
     /**
      * handle incoming DATEX Binary
      * @param dxb DATEX Binary Message
@@ -1478,7 +1501,7 @@ export class Runtime {
      * @param header_callback callback method returning information for the evaluated header before executing the dxb
      * @returns header information (after executing the dxb)
      */
-    private static async handleDatexIn(dxb:ArrayBuffer, last_endpoint:Endpoint, full_scope_callback?:(sid:number, scope:any, error?:boolean)=>void, _?:any, header_callback?:(header:dxb_header)=>void): Promise<dxb_header> {
+    private static async handleDatexIn(dxb:ArrayBuffer, last_endpoint:Endpoint, full_scope_callback?:(sid:number, scope:any, error?:boolean)=>void, _?:any, header_callback?:(header:dxb_header)=>void, source: Source): Promise<dxb_header> {
 
         let header:dxb_header, data_uint8:Uint8Array;
 
@@ -1507,9 +1530,18 @@ export class Runtime {
 
 
         }
+
         // needs to be redirected 
         else {
-            this.redirectDatex(dxb, res, false);
+
+            // redirect as crypto proxy: sign
+            if (res.sender && this.#cryptoProxies.has(res.sender)) {
+                // TODO#CryptoProxy: sign
+                const signKey = this.#cryptoProxies.get(res.sender)![0]
+                console.log("TODO: handle proxy sign for " + res.sender)
+            }
+
+            this.redirectDatex(dxb, res, false, source);
 
             // callback for header info
             if (header_callback instanceof globalThis.Function) header_callback(res);
@@ -6480,7 +6512,7 @@ export class Runtime {
 
 
 try {
-    const res = await fetch(new URL("../version", import.meta.url));
+    const res = await fetch(new URL("../version", ''));
     if (res.ok) Runtime.VERSION = (await res.text()).replaceAll("\n","");
 }
 catch {}

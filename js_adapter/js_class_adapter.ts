@@ -11,7 +11,7 @@
 
 /** Imports **/
 
-import "../lib/reflect-metadata/Reflect.js";
+// import "../lib/reflect-metadata/Reflect.js";
 import { Runtime, StaticScope } from "../runtime/runtime.ts";
 
 import { Logger } from "../utils/logger.ts";

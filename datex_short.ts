@@ -15,7 +15,8 @@ declare global {
     const jsdoc: typeof _property;
 	const sync: typeof _sync;
 	const endpoint: typeof _endpoint;
-	const template: typeof _template;
+    // conflict with UIX.template (confusing)
+	// const template: typeof _template; 
 }
 
 // @ts-ignore global
@@ -24,8 +25,8 @@ globalThis.property = _property;
 globalThis.sync = _sync;
 // @ts-ignore global
 globalThis.endpoint = _endpoint;
-// @ts-ignore global
-globalThis.template = _template;
+// // @ts-ignore global
+// globalThis.template = _template;
 // @ts-ignore global
 globalThis.jsdoc = _jsdoc;
 

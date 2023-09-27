@@ -9,9 +9,14 @@ if (isServiceWorker) {
 	// https://developer.mozilla.org/en-US/docs/Web/API/Clients/claim
 	self.addEventListener("activate", (event) => {
 		console.log("service worker activated")
+		// @ts-ignore
 		event.waitUntil(clients.claim());
 	});
 }
+
+
+// for import maps (TODO: fix import shim)
+declare const importShim: any;
 
 let Datex: typeof DatexType;
 let generateTSModuleForRemoteAccess: typeof import("../utils/interface-generator.ts").generateTSModuleForRemoteAccess;
@@ -49,6 +54,10 @@ addEventListener("message", async function (event) {
 			messageTarget = event.ports[0];
 		}
 		else if (data.type == "INIT") {
+			// TODO:
+			// await import("https://ga.jspm.io/npm:es-module-shims@1.8.0/dist/es-module-shims.wasm.js");
+			// if (data.importMap) importShim.addImportMap(data.importMap);
+
 			await initDatex(data.datexURL);
 			await initWorkerComInterface(data.comInterfaceURL);
 			await initTsInterfaceGenerator(data.tsInterfaceGeneratorURL);

@@ -5,6 +5,7 @@ import { SecurityError, ValueError } from "../types/errors.ts";
 import { NetworkUtils } from "../network/network_utils.ts";
 import { Storage } from "../runtime/storage.ts";
 import { Runtime } from "./runtime.ts";
+import { ProxyAPI } from "../network/crypto-proxy.ts";
 
 // crypto
 export const crypto = globalThis.crypto
@@ -181,7 +182,7 @@ export class Crypto {
         let keyPromise:Promise<[CryptoKey, CryptoKey]>;
         this.#waiting_key_requests.set(endpoint, keyPromise = new Promise(async (resolve, reject)=>{
 
-            let exported_keys:[ArrayBuffer, ArrayBuffer]|void;
+            let exported_keys:[ArrayBuffer, ArrayBuffer]|void = undefined;
 
             // first check cache:
             if (await Storage.hasItem("keys_"+endpoint)) {
