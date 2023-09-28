@@ -1,4 +1,4 @@
-# 8 Threading
+# Threads
 
 The DATEX JS Library supports multi-threading with Workers.
 DATEX-compatible values like functions or complex objects can also be shared between threads.
