@@ -62,7 +62,7 @@ const obj = new MyObject();
 
 Instances of a class marked with `@sync` are also automatically bound to a pointer when created (The value does not have to be explicitly wrapped in `$$()`).
 
-Read more about `@sync` classes [here](./08%20Classes.md).
+Read more about `@sync` classes [here](./10%20Classes.md).
 
 ### Persistent data
 
@@ -95,4 +95,4 @@ const refArray = await datex `[1,2,3]`
 
 To execute functions on remote endpoints or do any other network related stuff, you always need to connect to the supranet first.
 
-Read more about the advanced DATEX APIs in the [DATEX API Chapter](./5%20The%20DATEX%20API.md).
+Read more about the advanced DATEX APIs in the [DATEX API Chapter](./08%20The%20DATEX%20API.md).
