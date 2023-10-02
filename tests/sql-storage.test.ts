@@ -1,4 +1,6 @@
 import { Assert, Test } from "unyt_tests/testing/test.ts"
+import { testLogger } from "unyt_tests/core/logger.ts"
+
 import { Datex } from "../datex.ts"
 import { SQLDBStorageLocation } from "../runtime/storage-locations/sql-db.ts"
 import { type } from "../datex_all.ts";
@@ -6,16 +8,15 @@ import { type } from "../datex_all.ts";
 const logger = new Datex.Logger("sql-test");
 
 /**
- * Initial Setup
+ * Initial Sestup
  */
 
-// docker run --name=datex -p=3306:3306 -e MYSQL_ROOT_PASSWORD=secret  -d mysql/mysql-server:latest
-// https://baumannalexj.medium.com/connect-your-db-tool-to-a-dockerized-mysql-server-container-bc18853524ed
+// docker run -d --name mysql-container -e MYSQL_ROOT_PASSWORD=secret -e MYSQL_DATABASE=datex -p 3306:3306 mysql
 const sqlStorage = new SQLDBStorageLocation({
 	hostname: "localhost",
-	port: 33600,
+	port: 3306,
 	username: "root",
-	password: "db-tool-password",
+	password: "secret",
 	db: "datex"
 });
 
@@ -29,13 +30,13 @@ Datex.Storage.addLocation(sqlStorage, {
 console.log(sqlStorage)
 
 @sync
-class Example1 {
-	@property @type(Datex.Type.std.text) declare number: number
-	@property @type(Datex.Type.std.text) declare string: string
+class ScoreboardEntry {
+	@property player: Player
+	@property score: number
 }
 
 @sync
-class Example2 {
+class Player {
 	@property @type(Datex.Type.std.decimal) declare number: number
 	@property @type(Datex.Type.std.text) declare string: string
 	@property @type(Datex.Type.get("ext:Example1")) declare example1: Example2
@@ -49,12 +50,14 @@ class Example2 {
 
 	@Test
 	databaseIsCreated(){
-		
+		testLogger.log("whatever 1")
 	}
 
 	@Test
 	pointerIsSaved() {
-		const exampleValue = $$(new Example2());
+		testLogger.log("whatever 2")
+
+		const exampleValue = $$(new Player());
 		logger.warn(exampleValue);
 		const examplePointer = Datex.Pointer.getByValue(exampleValue)!;
 		Datex.Storage.setPointer(examplePointer, true, sqlStorage);
