@@ -459,7 +459,7 @@ export class Runtime {
 
             // redirect as crypto proxy: decrypt
             if (to && this.#cryptoProxies.has(to)) {
-                // TODO#CryptoProxy: decrypt
+                // TODO#CryptoProxy: decrypt + check channel
                 const decKey = this.#cryptoProxies.get(to)![1]
                 console.log("TODO: handle proxy decrypt for " + to)
             }
