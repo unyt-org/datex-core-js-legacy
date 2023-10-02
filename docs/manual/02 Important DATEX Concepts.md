@@ -2,7 +2,7 @@
 
 In this section, we will give you a quick introduction to DATEX.
 
-> [!INFORMATION]
+> [!NOTE]
 > If you want to dive deeper, check out the [DATEX Language Specification](https://github.com/unyt-org/datex-specification).
 > You can also write and test DATEX Script code in the [DATEX Playground](https://playground.unyt.org/).
 
