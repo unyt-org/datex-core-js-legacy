@@ -17,7 +17,7 @@ Since pointers are identfied globally by a unique id, a pointer value can always
 Pointers are not shared with the network per default, only when they are also used by another endpoint.
 This means that per default, pointers only exist in the local memory of an endpoint and are gone after the endpoint process is stopped.
 
-## Using the `eternal` label
+## Using the `eternal`/`eternalVar` label
 
 To let a pointer exist beyond the lifetime of an endpoint, the `eternal` label can be used:
 
@@ -35,7 +35,18 @@ Even if the endpoint is restarted (page reload or deno process restart), the `us
 
 With the `eternal` label, pointers are not shared with the network. They are still only available on the origin endpoint per default, but also stored in the endpoint cache (`.datex-cache` directory or browser storage).
 
-*The expression followed by the `eternal` value must be always enclosed with `$$()`. This ensures that a new pointer is created and is also necessary to bind the eternal pointer to the correct value within the JavaScript module.*
+Using the `eternal` label can lead to problems when the source code is modified. 
+For this reason, it is currently recommended to use the `eternalVar` function instead.
+You can pass a unique identifier to `eternalVar` to guarantee that the eternal pointer is always correctly mapped:
+
+```ts
+const users = eternalVar('users') ?? $$(new Set<string>());
+```
+
+
+> [!NOTE]
+> The expression followed by the `eternal` value must be always enclosed with `$$()`.
+> This ensures that a new pointer is created and is also necessary to bind the eternal pointer to the correct value within the JavaScript module.
 
 ---
 The DATEX Script equivalent to creating eternal values is the *init* operator (`:=`):
@@ -52,17 +63,17 @@ In contrast to the `eternal` label in JS, the init operator can also be used for
 
 ## Using the `lazyEternal` label
 
-Pointers created and restored with `eternal` are loaded at endpoint startup.
+Pointers created and restored with `eternal`/`eternalVar` are loaded at endpoint startup.
 This guarantees that `eternal` can be used synchronously (without `await`).
-For the following usecases, the asynchronous `lazyEternal` label should be used instead of `eternal`:
+For the following usecases, the asynchronous `lazyEternal`/`lazyEternalVar` label should be used instead of `eternal`/`eternalVar`:
 
  * A value that consumes lots of memory and is only actually needed when certain conditions are met
  * A value that requires custom JavaScript bindings (e.g. a `@sync` class instance). JavaScript bindings cannnot be properly initialized at endpoint startup if the corresponding JavaScript class definition is not yet loaded.
 
-The `lazyEternal` label can be used the same was as the `eternal` label, only requiring an additional `await`:
+The `lazyEternal`/`lazyEternalVar` label can be used the same was as the `eternal` label, only requiring an additional `await`:
 
 ```ts
 import { User } from "user.ts";
 
-const users = await lazyEternal ?? $$(new Set<User>());
+const users = await lazyEternalVar('users') ?? $$(new Set<User>());
 ```
