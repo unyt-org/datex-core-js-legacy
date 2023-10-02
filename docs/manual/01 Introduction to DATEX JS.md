@@ -38,7 +38,7 @@ refB.val = 5;
 console.log(refSum.val) // 10
 ```
 
-When you compare this code with the [example code](./02%20Important%20%DATEX%20Concepts.md#References%20and%20Pointers) from the DATEX introduction chapter, 
+When you compare this code with the [example code](./02%20Important%20DATEX%20Concepts.md#references-and-pointers) from the DATEX introduction chapter, 
 you can see how the DATEX concepts are adopted in JavaScript in a very straightforward way.
 
 To learn more about DATEX pointers in JavaScript, check out the chapters [Pointers](./03%20Pointers.md).
