@@ -13,6 +13,9 @@ refB.val = 5;
 console.log(refSum.val) // 10
 ```
 
+This creates the [pointers](#pointers-for-primitive-values) `refA`, `refB` and a reactive [transformed](#transform-functions)
+`refSum` pointer that gets updated when `refA` or `refB` are changed.
+
 
 ## Pointers for object values and pointer properties.
 
@@ -23,45 +26,51 @@ const refObj = $$({
     x: 100,
     y: 200
 });
+const refArray1: string[] = $$(['some', 'example', 'values']);
 ```
 
-The created reference object can be used like a normal object:
+The created reference object can be used like a normal object. You can access all properties and methods.
 ```ts
 refObj.x; // 100
 refObj.x = 50;
+refArray[0] // 'some'
+refArray.push('more');
 ```
 
-Live references for the properties of an object can be accessed via the special `$` property:
+The underlying references for the properties of an object can be accessed via the special `$` property:
 ```ts
 refObj.$.x // Datex.Ref<number>
 ```
 
-Alternatively, the `$$` function can be used:
+With the `$$` property, a strong reference to the property (pointer property) can be created.
+A pointer property will always point to the reference assigned to the property name.
 ```ts
-$$(refObj, "x") // Datex.Ref<number>
+const propX = refObj.$$.x; // Datex.PointerProperty<number>
+
+refObj.x = 10; // update the value of refObj.x
+propX.val // 10, same as with normal reference
+
+refObj.$.x = $$(4); // assign a new reference to refObj.x
+propX.val // 4, points to the newly assigned reference
 ```
 
-### The `always` transform function
-
-The `always` function automatically determines all dependency values and recalculates when one of the dependencies changes.
-For this reason, this function is very flexible and can be used for simple calculations or more complex functions.
-The `always` function is just one of a group of so-called *Transform functions*.
-
-There exist multiple transform functions that are optimizied for specific use cases like mathematical calculations
-and can be used instead of a generic `always` function.
-Read more about transform functions in the chapter [Functional Programming](./6%20Functional%20Programming.md).
-
-Due to the limitations of the JavaScript language, there are just some pitfalls that you should be aware of:
+Alternatively, the `$$` function can be used:
+```ts
+$$(refObj, "x") // Datex.PointerProperty<number>
+```
 
 
-### References in JavaScript
+## Pointers for primitive values
 
-JavaScript does not support references for primitive values (e.g. numbers, strings, booleans).
-Because of this, primitive pointers must always be passed on with a wrapper object to keep the reference intact:
+With DATEX, primitive values can also be used as references.
+
+Since JavaScript does not support references for primitive values (e.g. numbers, strings, booleans), 
+primitive references are always wrapped in a `Datex.Pointer` object to keep the reference intact:
+
 ```ts
 const refA: Datex.Pointer<number> = $$(5);
 ```
-The advantage of having the `Datex.Pointer` interface always exposed as a primitive value wrapper is, that utility methods like `observe` can be easily accessed:
+The advantage of having the `Datex.Pointer` interface always exposed as a primitive value wrapper is that utility methods like `observe` can be easily accessed:
 
 ```ts
 refA.observe(a => console.log(`refA was updated: ${a}`)); // called every time the value of refA is changed
@@ -72,56 +81,43 @@ const refX = $$(2);
 const refY = $$(3);
 const result = (refX * refY) + 6; // = 12 (a normal JS primitive value)
 ```
-Primitive pointers can also be compared with a weak equality operator (`==`), but we do not encourage this,
-because type coercion of the weak equality operator can lead to unexpected results. To compare pointer values, always compare their `.val` properties with a strict equality operator:
-```ts
-const refString1 = $$("hello");
-const refString2 = $$("hello");
 
-console.log(refString1.val === refString2.val); // true
-console.log(refString1 === refString2); // false, not the same reference
-```
+> [!WARNING]
+> In certain cases, it is required to use the `.val` property because the type coercion does not behave as you might expect.
+> 
+> Primitive pointers can be compared with a weak equality operator (`==`), but we do not encourage this,
+> because type coercion of the weak equality operator can lead to unexpected results.
+> To compare pointer values, always compare their `.val` properties with a strict equality operator:
+> ```ts
+> const refString1 = $$("hello");
+> const refString2 = $$("hello");
+>
+> console.log(refString1.val === refString2.val); // true
+> console.log(refString1 === refString2); // false, not the same reference
+>
+> ```
+> A similar problem occurs when using boolean operators like `!` on a non-collapsed boolean pointer:
+> ```ts
+> const refBool = $$(false);
+> if (!refBool) console.log("bool is false") // expected branch to be executed
+> else console.log("bool is true") // actually executed
+> ```
+> When using boolean operators, always compare their `.val` properties.
+>
+> Consider using dedicated [transform functions](./09%20Functional%20Programming.md) for boolean or comparison transforms.
 
------
-**Comparison to DATEX comparison operators**
-
-DATEX also has a `==` and `===` comparison operator.
-The `===` operator also compares the identity of the operands,
-while the `==` operator, in contrast to JavaScript, always checks for value equality.
-
-This means that `(1 == 1)` and `([1,2,3] == [1,2,3])` are `true`, but `(1 == "1")` is `false`.
-
------
 
 
-Non-primitive values exists in the JavaScript space as normal objects, because they don't have the reference problem:
-```ts
-const refArray1: string[] = $$(['some', 'example', 'values']);
-```
-This value provides the same interface a a normal JavaScript array. You can access the
-indices and use array operations like `push`, `shift`, etc..
-Non-primitive values never expose the `Datex.Pointer` interface per default.
-This also applies for pointer properties:
-```ts
-const refObject: Record<string, number> = $$({a: 123});
-const refNum = $$(789);
+### Transform functions
 
-refObject.b = 456;
-console.log(refObject.b); // 456
+The `always` function automatically determines all dependency values and recalculates when one of the dependencies changes.
+For this reason, this function is very flexible and can be used for simple calculations or more complex functions.
+The `always` function is just one of a group of so-called *Transform functions*.
 
-refObject.c = refNum;
-console.log(refObject.c); // 789 (not Datex.Pointer<789>)
-```
-To get the underlying references for a pointer object, use the special `$` property:
-```ts
-console.log(refObject.$.c) // Datex.Pointer<789>
-refObject.$.c = $$(100); // update the underlying reference for refObject.c
-```
-To access the `Datex.Pointer` interface of a pointer object, use the `Datex.Pointer.getByValue` function:
-```ts
-Datex.Pointer.getByValue(refObject)
-    .observe(() => console.log("the value of refObject has changed"))
-```
+There exist multiple transform functions that are optimizied for specific use cases like mathematical calculations
+and can be used instead of a generic `always` function.
+Read more about transform functions in the chapter [Functional Programming](./09%20Functional%20Programming.md).
+
 
 ## Collapsing references
 
