@@ -33,7 +33,7 @@ The following example demonstrates how the result of an remotely called endpoint
 ref hello = @example.helloWorld(); // execute 'helloWorld' on example and save the value in the 'hello' variable
 ```
 
-You can read more about this in the chapters [Endpoints](./05%20Endpoints.md) and [Endpoint Configuration](./06%20Endpoint%20Configuration.md).
+You can read more about this in the chapters [Endpoints](./06%20Endpoints.md) and [Endpoint Configuration](./07%20Endpoint%20Configuration.md).
 You can also find more details in the [DATEX Specification](https://github.com/unyt-org/datex-specification).
 
 
