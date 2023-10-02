@@ -1,6 +1,6 @@
 # Introduction to DATEX JS
 
->  [!WARNING]  
+>  [!WARNING]
 >  The current implementation of the DATEX JavaScript Library is still a beta version.
 >  We are activly working on a new stable [Rust implementation](https://github.com/unyt-org/datex-core) that will be much more performant.
 
@@ -22,9 +22,10 @@ If you want to learn more about the DATEX, check out the  [Specification](https:
 >  interchangable with "*TypeScript*", since this library is designed as a TypeScript library.
 
 
-## Using the DATEX JavaScript API
+## Using DATEX JS
 
 ### Creating pointers
+
 
 To create a pointer for any JS value, just use the `$$` helper function:
 
@@ -37,10 +38,10 @@ refB.val = 5;
 console.log(refSum.val) // 10
 ```
 
-This code is equivalent to the DATEX code above. 
-As you can see, the DATEX concepts are adopted in JavaScript in a very straightforward way.
+When you compare this code with the [example code](./02%20Important%20%DATEX%20Concepts.md#References%20and%20Pointers) from the DATEX introduction chapter, 
+you can see how the DATEX concepts are adopted in JavaScript in a very straightforward way.
 
-To learn more about DATEX pointers in JavaScript, check out the chapters [Pointers](2%20Pointers.md).
+To learn more about DATEX pointers in JavaScript, check out the chapters [Pointers](./03%20Pointers.md).
 
 ### Creating DATEX-compatible classes
 
@@ -61,15 +62,15 @@ const obj = new MyObject();
 
 Instances of a class marked with `@sync` are also automatically bound to a pointer when created (The value does not have to be explicitly wrapped in `$$()`).
 
-Read more about `@sync` classes [here](./7%20Classes.md).
+Read more about `@sync` classes [here](./08%20Classes.md).
 
 ### Persistent data
 
-The DATEX JavaScript API allows you to access data from remote endpoints as normal JavaScript values.
+DATEX JS allows you to access data from remote endpoints as normal JavaScript values.
 
-With eternal pointers, DATEX-based applications can also access persistent data stored in their local storage in the same way - without the need for any third-party databases or other storage methods.
+With [eternal pointers](./04%20Eternal%20Pointers.md), DATEX-based applications can also access persistent data stored in their local storage in the same way - 
+without the need for any third-party databases or other storage types.
 
-Check out the chapter [Eternal Pointers](./3%20Eternal%20Pointers.md) to learn more about this feature.
 
 ### Connecting to the Supranet
 
@@ -78,9 +79,9 @@ To connect to the network, call:
 ```ts
 await Datex.Supranet.connect()
 ```
-Per default, the endpoint joins the supranet by connecting to a unyt relay endpoint with a websocket connection.
-You can always add custom connection channels and also connect over multiple channels at the same time.
-For more information, check out the chapter [Supranet Networking](./4%20Supranet%20Networking.md).
+Per default, the endpoint joins the Supranet by connecting to a unyt.org relay endpoint with a websocket connection.
+You can always add custom connection channels and also connect over multiple channels like WebRTC at the same time.
+For more information, check out the chapter [Supranet Networking](./05%20Supranet%20Networking.md).
 
 
 ### Executing DATEX directly from JavaScript
