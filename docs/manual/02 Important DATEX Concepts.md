@@ -2,6 +2,13 @@
 
 In this section, we will give you a quick introduction to DATEX.
 
+DATEX is a communication protocol and language developed by unyt.org.
+It provides realtime data exchange and synchronization for distributed applications.
+
+The DATEX Script Language (DATEX Script or DX) is a human-readable representation of DATEX.
+You can [write and execute DATEX Script code](./5%20The%20DATEX%20API.md#the-datex-template-function) directly in the browser with the DATEX runtime included in the DATEX JS library.
+
+
 > If you want to dive deeper, check out the [DATEX Language Specification](https://github.com/unyt-org/datex-specification).
 > You can also write and test DATEX Script code in the [DATEX Playground](https://playground.unyt.org/).
 
