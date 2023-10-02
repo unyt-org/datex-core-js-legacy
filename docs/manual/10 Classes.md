@@ -32,7 +32,7 @@ All non-primitive properties of an instance (that are decorated with `@property`
 
 ## Getters and setters
 
-When a property getter is decorated with `@property` (todo: currently with `@always`), it behaves like any other bound property at first glance.
+When a property getter is decorated with `@property`, it behaves like any other bound property at first glance.
 
 But there is one significant difference: The calculated value returned by the getter function is converted to an observable DATEX pointer.
 This has essentially the same effect as usinz the `always()` function. Whenever a pointer value used in the getter function is updated, the pointer value of the property is also updated.
