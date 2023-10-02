@@ -38,12 +38,12 @@ Filters are based on DATEX logic types, which include `Conjunction` (and), `Disj
 Those logical structures can be combined arbitrarily:
 
 ```ts
-const mammals = new Datex.Disjunction(f`@cow`, f`@dog`, f`@whale`, f`@dolphin`)
-const fish = new Datex.Disjunction(f`@`)
-const animals = new Datex.Disjunction(mammals, fish);
+const mammals = new Datex.Disjunction(f`@mickymouse`, f`@bigfoot`, f`@leonmask`, f`@flipper`) // @mickymouse|@bigfoot|@leonmask|@flipper
+const fish = new Datex.Disjunction(f`@nemo`, f`@dorie`) // @nemo|@dorie
+const animals = new Datex.Disjunction(mammals, fish); // @mickymouse|@bigfoot|@leonmask|@flipper|@nemo|@dorie
 
-const swimmers = new Datex.Conjunction(animals, new Datex.Negation(new Datex.Disjunction(f`@whale`, f`@dolphin`)));
-const nonSwimmers = new Datex.Conjunction(animals, new Datex.Negation(swimmers));
+const nonSwimmers = new Datex.Disjunction(f`@mickymouse`, f`@bigfoot`, f`@leonmask`) // @mickymouse|@bigfoot|@leonmask
+const swimmers = new Datex.Conjunction(animals, new Datex.Negation(nonSwimmers)); // @flipper|@nemo|@dorie
 
 giveDivingGoggles(swimmers);
 giveSwimmmingRing(nonSwimmers);
