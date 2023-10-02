@@ -1,61 +1,27 @@
-# Introduction to the DATEX JavaScript Library
+# Introduction to DATEX JS
 
-The DATEX JavaScript Library provides a JavaScript interface on top of a [DATEX Runtime environment](https://github.com/unyt-org/datex-specification).
+>  [!WARNING]  
+>  The current implementation of the DATEX JavaScript Library is still a beta version.
+>  We are activly working on a new stable [Rust implementation](https://github.com/unyt-org/datex-core) that will be much more performant.
 
-It can be used as a standalone library to get access to DATEX features like reactivity, synchronized network storage and endpoints, or in combination with extension libraries like [UIX](https://docs.unyt.org/manual/uix/getting-started) to develop full-stack web applications.
+The DATEX JavaScript Library (*DATEX JS*) enables fine-grained reactivity with cross-device processing including data synchronisation.
 
+This library is a great fit for various usecases:
+ * Client-side reactivity (e.g. reactive web apps like [React](https://react.dev/))
+ * Cross-device reactivity (e.g. multiplayer games)
+ * Secure end-to-end data exchange and synchronisation (e.g. end-to-end encrypted messengers)
+ * distributed computing (e.g. blockchain algorithms)
+
+The [UIX framework](https://uix.unyt.org/) provides a developer-friendly abstraction around DATEX JS to create reactive fullstack web applications.
+
+>  [!NOTE]  
+>  DATEX JS implements a JavaScript interface on top of a DATEX Runtime environment.
+>  If you want to learn more about the DATEX, check out the [Specification](https://github.com/unyt-org/datex-specification)
 
 >  [!NOTE]  
 >  We will use the term "*JavaScript*" throughout in this manual. This should be regarded as 
 >  interchangable with "*TypeScript*", since this library is designed as a TypeScript library.
 
-## Important DATEX concepts
-
-In this section, we will give you a quick introduction to DATEX.
-If you want to dive deeper, check out the [DATEX Language Specification](https://github.com/unyt-org/datex-specification).
-
-### Pointers
-In DATEX, every value can be bound to a reference.
-A reference can be either a local reference or a global reference (*pointer*).
-
-Pointers can be accessed and modified across the network from multiple endpoints at once
-(the creator of a pointer can configure read and write permissions for other enpoints).
-
-Pointers can also be transformed into new pointers. A transformed pointer is always updated to
-hold the value defined by a *transform function*.
-
-In DATEX, every value (including primitives) can be assigned to a pointer.
-
-```rust
-ref a = 5; // create a new pointer with the value '10'
-ref b = 0; // create a new pointer with the value '32'
-ref sum = always a + b; // create a pointer with the transformed value of 'a + b'
-
-b = 5; 	   // update the value of the pointer 'b'
-print sum; // the pointer 'sum' now has the value '10'
-```
-----
-Throughout this manual, we will use DATEX Script (like in the example above) to explain some DATEX specific concepts - but you don't need to write your code with DATEX - all important features are also available in the DATEX JavaScript API. If you want to try out DATEX Script, check out the [DATEX Playground](https://playground.unyt.org/)
-
-----
-
-
-### Endpoints
-
-An *endpoint* in the DATEX world is an entity that is participating in the network. 
-Endpoints can be associated with people or institutions, but they can also be completely anonymous.
-
-Each endpoint can connect multiple *endpoint instances* to the network simulataneously.
-Endpoints communicate via DATEX, either with relays or over direct connections.
-
-Endpoint identifiers always start with an '@' symbol and contain alphanumeric characters or a hex id in
-the case of anonymous endpoints.
-
-```rust
-ref hello = @example :: helloWorld(); // execute 'helloWorld' on example and save the value in the 'hello' variable
-```
-
-Endpoints can create pointers, expose public properties, handle permissions for pointers and much more. We won't go into to much detail at this point. You can always check out the [DATEX Specification](https://github.com/unyt-org/datex-specification) to learn more about DATEX and endpoints.
 
 ## Using the DATEX JavaScript API
 
