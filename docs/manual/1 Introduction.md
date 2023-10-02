@@ -14,9 +14,8 @@ This library is a great fit for various usecases:
 
 The [UIX framework](https://uix.unyt.org/) provides a developer-friendly abstraction around DATEX JS to create reactive fullstack web applications.
 
->  [!NOTE]  
->  DATEX JS implements a JavaScript interface on top of a DATEX Runtime environment.
->  If you want to learn more about the DATEX, check out the [Specification](https://github.com/unyt-org/datex-specification)
+DATEX JS implements a JavaScript interface on top of a DATEX Runtime environment.
+If you want to learn more about the DATEX, check out the  [Specification](https://github.com/unyt-org/datex-specification)
 
 >  [!NOTE]  
 >  We will use the term "*JavaScript*" throughout in this manual. This should be regarded as 
