@@ -49,8 +49,9 @@ as well as control flows like `if`/`else` branching.
 
 The only restriction is that the function must be [pure](#appendix-the-definition-of-pure-functions-in-datex), meaning:
   
-  1) External variables defined outside the scope of the function should never be reassigned to a new value
-  2) With the exception of `Datex.Ref` values, only constant external values should be used inside the function
+  1) External variables defined outside the scope of the function should never be reassigned to a new value or modified.
+  3) With the exception of `Datex.Ref` values, only constant external values should be used inside the function. To be on the safe side, only use
+     external `const` variables.
 
 Restriction (1) guarantees that there are no unintended sideffects when an `always` computation is invoked.
 The following example illustrates why restriction (2) is useful:
