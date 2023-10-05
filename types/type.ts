@@ -165,7 +165,6 @@ export class Type<T = any> {
             // don't set to void/undefined if key not in properties object, prevents overrides of JS prototype properties/methods
             if (!(key in value)) continue;
 
-            // error while assigning to readonly property from prototype chain might still occur
             try {
 
                 // no type check available
@@ -188,7 +187,11 @@ export class Type<T = any> {
                 else throw new ValueError("Property '" + key + "' must be of type " + required_type);
             }
             catch (e) {
-                logger.debug("ignoring unwriteable template prototype property " + key);
+                // TODO: catch required? for readonly properties
+                // error while assigning to readonly property from prototype chain might still occur
+
+                // logger.debug("ignoring unwriteable template prototype property " + key);
+                throw e;
             }
             
         }
@@ -635,6 +638,13 @@ export class Type<T = any> {
         // value has a matching DX_TEMPLATE
         if (type instanceof Type && type.template && value[DX_TEMPLATE] && this.matchesTemplate(value[DX_TEMPLATE], type.template)) return true;
         // compare types
+
+        // workaround: explicit text length matching, TODO: more general solution
+        // e.g. text matches text(10)
+        if (Type.ofValue(value) == Type.std.text && type !== Type.std.text && type instanceof Type && type.base_type === Type.std.text) {
+            return value.length <= type.parameters[0];
+        }
+
         return Type.matchesType(Type.ofValue(value), type);
     }
 
@@ -858,6 +868,9 @@ export class Type<T = any> {
         text_plain: Type.get<Blob>("std:text").getVariation("plain"),
         text_datex: Type.get<Blob>("std:text").getVariation("datex"),
         text_markdown: Type.get<Markdown>("std:text").getVariation("markdown"),
+
+        sized_text: (size: number) => Type.get<string>("std:text").getParametrized([size]),
+
 
         image: Type.get<Blob>("std:image"),
         video: Type.get<Blob>("std:video"),

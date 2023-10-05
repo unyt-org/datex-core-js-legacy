@@ -3,6 +3,7 @@
 	"compilerOptions": {
  		"noImplicitOverride":true,
 		"removeComments": true,
+		"experimentalDecorators": true,
 		"emitDecoratorMetadata": true,
 		"jsx": "react-jsx",
 		"jsxImportSource": "uix",
@@ -10,6 +11,6 @@
 	},
 	"tasks": {
 		"generate-api-docs": "deno run -Aqr --import-map importmap.dev.json https://dev.cdn.unyt.org/doc-generator/run.ts --import-map importmap.dev.json --base ./ -m ./datex.ts --out ./docs/api",
-		"test": "deno run -Aq --import-map importmap.dev.json https://dev.cdn.unyt.org/unyt_tests/run.ts"
+		"test": "deno run -Aq --import-map importmap.dev.json -c ./deno.json https://dev.cdn.unyt.org/unyt_tests/run.ts"
 	}
 }

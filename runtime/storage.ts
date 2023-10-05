@@ -4,7 +4,7 @@ import { Runtime } from "../runtime/runtime.ts";
 import type { PointerSource } from "../utils/global_types.ts";
 import { logger } from "../utils/global_values.ts";
 import { NOT_EXISTING } from "./constants.ts";
-import { Pointer, type MinimalJSRef } from "./pointers.ts";
+import { Pointer, type MinimalJSRef, Ref } from "./pointers.ts";
 import { localStorage } from "./storage-locations/local-storage-compat.ts";
 import { MessageLogger } from "../utils/message_logger.ts";
 import { displayFatalError, displayInit} from "./display.ts"
@@ -43,7 +43,7 @@ export interface StorageLocation<SupportedModes extends Storage.Mode = Storage.M
     setItemValueDXB(key:string, value: ArrayBuffer):Promise<void>|void
     getItemKeys(): Promise<Generator<string, void, unknown>> | Generator<string, void, unknown>
 
-    setPointer(pointer:Pointer): Promise<Set<Pointer>>|Set<Pointer>
+    setPointer(pointer:Pointer, partialUpdateKey: unknown|typeof NOT_EXISTING): Promise<Set<Pointer>>|Set<Pointer>
     getPointerValue(pointerId:string, outer_serialized:boolean):Promise<unknown>|unknown
     removePointer(pointerId:string):Promise<void>|void
     hasPointer(pointerId:string):Promise<boolean>|boolean
@@ -70,7 +70,7 @@ export abstract class SyncStorageLocation implements StorageLocation<Storage.Mod
     abstract getItemValueDXB(key: string): ArrayBuffer|null
     abstract setItemValueDXB(key:string, value: ArrayBuffer):void
 
-    abstract setPointer(pointer: Pointer<any>): Set<Pointer<any>>
+    abstract setPointer(pointer: Pointer<any>, partialUpdateKey: unknown|typeof NOT_EXISTING): Set<Pointer<any>>
     abstract getPointerValue(pointerId: string, outer_serialized:boolean): unknown
     abstract getPointerIds(): Generator<string, void, unknown>
 
@@ -98,7 +98,7 @@ export abstract class AsyncStorageLocation implements StorageLocation<Storage.Mo
     abstract getItemValueDXB(key: string): Promise<ArrayBuffer|null> 
     abstract setItemValueDXB(key:string, value: ArrayBuffer):Promise<void>
 
-    abstract setPointer(pointer: Pointer<any>): Promise<Set<Pointer<any>>>
+    abstract setPointer(pointer: Pointer<any>, partialUpdateKey: unknown|typeof NOT_EXISTING): Promise<Set<Pointer<any>>>
     abstract getPointerValue(pointerId: string, outer_serialized:boolean): Promise<unknown>
     abstract getPointerIds(): Promise<Generator<string, void, unknown>>
 
@@ -400,24 +400,26 @@ export class Storage {
         return location.setItem(key, value);
 	}
 
-    public static setPointer(pointer:Pointer, listen_for_changes = true, location:StorageLocation|undefined = this.#primary_location): Promise<boolean>|boolean {
+    public static setPointer(pointer:Pointer, listen_for_changes = true, location:StorageLocation|undefined = this.#primary_location, partialUpdateKey: unknown = NOT_EXISTING): Promise<boolean>|boolean {
 
         if (!pointer.value_initialized) {
             logger.warn("pointer value " + pointer.idString() + " not available, cannot save in storage");
+            this.#storage_active_pointers.delete(pointer);
+            this.#storage_active_pointer_ids.delete(pointer.id)
             return false
         }
         
 		if (location)  {
-			if (location.isAsync) return this.initPointerAsync(location as AsyncStorageLocation, pointer, listen_for_changes);
-			else return this.initPointerSync(location as SyncStorageLocation, pointer, listen_for_changes);
+			if (location.isAsync) return this.initPointerAsync(location as AsyncStorageLocation, pointer, listen_for_changes, partialUpdateKey);
+			else return this.initPointerSync(location as SyncStorageLocation, pointer, listen_for_changes, partialUpdateKey);
 		}
 		else return false;
     }
 
-    private static initPointerSync(location: SyncStorageLocation, pointer:Pointer, listen_for_changes = true):boolean {
+    private static initPointerSync(location: SyncStorageLocation, pointer:Pointer, listen_for_changes = true, partialUpdateKey: unknown = NOT_EXISTING):boolean {
         // if (pointer.transform_scope && this.hasPointer(pointer)) return true; // ignore transform pointer, initial transform scope already stored, does not change
 
-        const dependencies = this.updatePointerSync(location, pointer);
+        const dependencies = this.updatePointerSync(location, pointer, partialUpdateKey);
 
         // add required pointers for this pointer (only same-origin pointers)
         for (const ptr of dependencies) {
@@ -433,14 +435,14 @@ export class Storage {
         return true;
     }
 
-    private static updatePointerSync(location: SyncStorageLocation, pointer:Pointer): Set<Pointer>{
-		return location.setPointer(pointer);
+    private static updatePointerSync(location: SyncStorageLocation, pointer:Pointer, partialUpdateKey: unknown = NOT_EXISTING): Set<Pointer>{
+		return location.setPointer(pointer, partialUpdateKey);
     }
 
-    private static async initPointerAsync(location: AsyncStorageLocation, pointer:Pointer, listen_for_changes = true):Promise<boolean>{
+    private static async initPointerAsync(location: AsyncStorageLocation, pointer:Pointer, listen_for_changes = true, partialUpdateKey: unknown = NOT_EXISTING):Promise<boolean>{
         // if (pointer.transform_scope && await this.hasPointer(pointer)) return true; // ignore transform pointer, initial transform scope already stored, does not change
 
-        const dependencies = await this.updatePointerAsync(location, pointer);
+        const dependencies = await this.updatePointerAsync(location, pointer, partialUpdateKey);
 
         // add required pointers for this pointer (only same-origin pointers)
         for (const ptr of dependencies) {
@@ -456,9 +458,9 @@ export class Storage {
         return true;
     }
 
-    private static async updatePointerAsync(location: AsyncStorageLocation, pointer:Pointer): Promise<Set<Pointer>> {
+    private static async updatePointerAsync(location: AsyncStorageLocation, pointer:Pointer, partialUpdateKey: unknown = NOT_EXISTING): Promise<Set<Pointer>> {
         this.setDirty(location, true)
-		const res = await location.setPointer(pointer);
+		const res = await location.setPointer(pointer, partialUpdateKey);
 		this.setDirty(location, false)
 		return res;
     }
@@ -484,19 +486,26 @@ export class Storage {
 
         // any value change
         let saving = false;
-        pointer.observe(()=>{
+
+        const handler = (v:unknown,key:unknown,t?:Ref.UPDATE_TYPE)=>{
             if (saving) return;
             saving = true;
             this.setDirty(location, true)
             setTimeout(async ()=>{
                 // set pointer (async)
                 saving = false;
-                await this.setPointer(pointer, false, location); // update value and add new dependencies recursively
-                logger.debug("updated " + pointer.idString() + " in storage");
+                const couldSave = await this.setPointer(pointer, false, location, key); // update value and add new dependencies recursively
+                if (couldSave) {
+                    logger.debug("updated " + pointer.idString() + " in storage");
+                }
+                else {
+                    pointer.unobserve(handler);
+                }
                 this.setDirty(location, false)
             }, 1000);
-        }, undefined, undefined, {ignore_transforms:true, recursive:false})
-        
+        };
+
+        pointer.observe(handler, undefined, undefined, {ignore_transforms:true, recursive:false});   
     }
 
     public static hasPointer(pointer:Pointer, location:StorageLocation|undefined = this.#trusted_location) {

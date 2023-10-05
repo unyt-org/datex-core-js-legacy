@@ -1,6 +1,6 @@
 import type { Datex } from "../../datex.ts";
 
-export type db_credentials = {
+export type dbOptions = {
     hostname: string
     username: string
     password:string
@@ -51,13 +51,15 @@ export type table_entry_options = {
     sync?: boolean, // sync entry (default = true)
 }
 
-export type mysql_data_type = 'int'|'bigint'|'smallint'|'mediumint'|'tinyint'|'tiny'|'long'|'year'|'longlong'|
+type _mysql_data_type = 'int'|'bigint'|'smallint'|'mediumint'|'tinyint'|'tiny'|'long'|'year'|'longlong'|
                        'float'|'double'|'decimal'|
                        'timestamp'|'date'|'datetime'|
                        'time'|'varchar'|'char'|'text'|'tinytext'|'mediumtext'|'longtext'|'enum'|
                        'set'|'geometry'|
                        'tinyblob'|'blob'|'mediumblob'|'longblob'|'binary'|'varbinary'|'bit'|
                        'boolean'|'json';
+
+export type mysql_data_type = _mysql_data_type | `${_mysql_data_type}(${number})`;
 export type mysql_data_type_caps = `${Uppercase<mysql_data_type>}`
 
 export type mysql_type_field = {
@@ -94,4 +96,19 @@ export type mysql_column = {
     COLUMN_COMMENT: string,
     GENERATION_EXPRESSION: string,
     SRS_ID: any
+}
+
+export type ColumnDefinition = [
+    name: string, 
+    datatype: mysql_data_type|`${mysql_data_type}(${number})`|`${mysql_data_type}(${number},${number})`,
+    options?:string
+]
+
+export type ConstraintsDefinition = `FOREIGN KEY ${string}`
+
+
+export type TableDefinition = {
+	name: string,
+    columns: ColumnDefinition[],
+    constraints?: ConstraintsDefinition[]
 }
