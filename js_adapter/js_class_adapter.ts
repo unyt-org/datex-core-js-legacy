@@ -26,9 +26,9 @@ import { Tuple } from "../types/tuple.ts";
 import { DX_PERMISSIONS, DX_TYPE } from "../runtime/constants.ts";
 import { type Class } from "../utils/global_types.ts";
 import { Conjunction, Disjunction, Logical } from "../types/logic.ts";
+import { client_type } from "../utils/constants.ts";
 
-import { Reflect } from "https://unyt.land/x/reflect_metadata@v0.1.12/mod.ts";
-
+const { Reflect: MetadataReflect } = client_type == 'deno' ? await import("https://unyt.land/x/reflect_metadata@v0.1.12/mod.ts") : {Reflect};
 
 const logger = new Logger("DATEX JS Adapter");
 
@@ -1021,7 +1021,7 @@ export function createTemplateClass(original_class:{ new(...args: any[]): any; }
 
     // iterate over all properties TODO different dx_name?
     for (const [name, dx_name] of Object.entries(original_class.prototype[METADATA]?.[Decorators.PROPERTY]?.public??{})) {
-        let metadataConstructor = Reflect.getMetadata && Reflect.getMetadata("design:type", original_class.prototype, name);
+        let metadataConstructor = MetadataReflect.getMetadata && MetadataReflect.getMetadata("design:type", original_class.prototype, name);
         // if type is Object -> std:Any
         if (metadataConstructor == Object) metadataConstructor = null;
         // set best guess for property type
@@ -1073,7 +1073,7 @@ function getMethodParams(target:Function, method_name:string, meta_param_index?:
     if (!(method_name in target)) return null;
 
     let tuple = new Tuple();
-    let metadata:any[] = Reflect.getMetadata && Reflect.getMetadata("design:paramtypes", target, method_name);
+    let metadata:any[] = MetadataReflect.getMetadata && MetadataReflect.getMetadata("design:paramtypes", target, method_name);
 
     if (!metadata) return null;
 
@@ -1099,7 +1099,7 @@ function getMethodParams(target:Function, method_name:string, meta_param_index?:
 }
 function getMetaParamIndex(target:Function, method_name:string):number {
     return target[METADATA]?.[Decorators.META_INDEX]?.public?.[method_name] ??
-        (Reflect.getMetadata && Reflect.getMetadata("unyt:meta", target, method_name));
+        (MetadataReflect.getMetadata && MetadataReflect.getMetadata("unyt:meta", target, method_name));
 }
 
 

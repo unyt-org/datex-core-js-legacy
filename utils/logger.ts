@@ -23,8 +23,9 @@ interface StreamSink {
     write: (chunk:ArrayBuffer|string)=>Promise<any>|any
 }
 
-const client_type = "Deno" in globalThis ? 'deno' : 'browser';
-
+// @ts-ignore
+const is_worker = (typeof WorkerGlobalScope !== 'undefined' && self instanceof WorkerGlobalScope);
+const client_type = is_worker ? 'worker' : ("Deno" in globalThis && !(globalThis.Deno as any).isPolyfill ? 'deno' : 'browser')
 
 
 
@@ -136,7 +137,7 @@ try {
 
 // handles console.log/error/debug
 
-const actualConsole = globalThis.Deno ? console : console_ansi;
+const actualConsole = client_type === "deno" ? console : console_ansi;
 
 function console_log(log_data:any[], log_level:LOG_LEVEL=LOG_LEVEL.DEFAULT) {
     switch (log_level) {
@@ -408,7 +409,7 @@ export class Logger {
 
         if (this.log_to_console) {
             // update newlines
-            if (globalThis.Deno && update_xy) {
+            if (client_type === "deno" && update_xy) {
                 const new_lines = 1 + (text.match(/\n/g) || []).length
                 Logger.setCursorY(globalThis.Deno.stdout, Logger.getCursorY(globalThis.Deno.stdout)+new_lines);
             }
@@ -757,7 +758,7 @@ export class Logger {
     public dynamic(text:TemplateStringsArray, ...data:any[]): dynamicReturn
     public dynamic(text:string, ...data:any[]): dynamicReturn
     public dynamic(text:string|TemplateStringsArray,...data:any[]) {
-        if (!globalThis.Deno) {
+        if (client_type !== "deno") {
             throw "[Logger.dynamic is only supported in Deno environments]";
         }
         const logLevel = LOG_LEVEL.DEFAULT;
@@ -914,10 +915,10 @@ globalThis.logger = new Logger("main");
 
 
 // set log level (browser default true, deno default false)
-Logger.development_log_level = globalThis.Deno ? LOG_LEVEL.DEFAULT : LOG_LEVEL.VERBOSE
-Logger.production_log_level = globalThis.Deno ? LOG_LEVEL.DEFAULT : LOG_LEVEL.VERBOSE;
+Logger.development_log_level = client_type === "deno" ? LOG_LEVEL.DEFAULT : LOG_LEVEL.VERBOSE
+Logger.production_log_level = client_type === "deno" ? LOG_LEVEL.DEFAULT : LOG_LEVEL.VERBOSE;
 
-if (globalThis.Deno) (async ()=> {
+if (client_type === "deno") (async ()=> {
     const verbose = !!(await import("./args.ts")).commandLineOptions.option("verbose", {aliases: ["v"], type: "boolean", default: false, description: "Show logs for all levels, including debug logs"})
 
     if (verbose) {

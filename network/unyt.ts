@@ -15,7 +15,7 @@ import { ComInterface, CommonInterface } from "./client.ts";
 import { Runtime } from "../runtime/runtime.ts";
 import { Supranet } from "./supranet.ts";
 import { Endpoint } from "../types/addressing.ts";
-import { client_type } from "../datex_all.ts";
+import { client_type } from "../utils/constants.ts";
 
 const logger = new Logger("unyt");
 

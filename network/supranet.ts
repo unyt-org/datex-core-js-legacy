@@ -14,7 +14,7 @@ import { Compiler } from "../compiler/compiler.ts";
 import { Runtime } from "../runtime/runtime.ts";
 import { Crypto } from "../runtime/crypto.ts";
 
-import {client_type} from "../utils/global_values.ts";
+import {client_type} from "../utils/constants.ts";
 import { Endpoint, filter_target_name_id, Target } from "../types/addressing.ts";
 
 

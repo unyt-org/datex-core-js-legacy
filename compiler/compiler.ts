@@ -32,7 +32,7 @@ import { arrayBufferToBase64, base64ToArrayBuffer, buffer2hex, hex2buffer } from
 import { RuntimePerformance } from "../runtime/performance_measure.ts";
 import { Conjunction, Disjunction, Logical, Negation } from "../types/logic.ts";
 import { Regex } from "./tokens_regex.ts";
-import { baseURL, client_type, TypedArray } from "../utils/global_values.ts";
+import { baseURL, TypedArray } from "../utils/global_values.ts";
 import { type datex_scope } from "../utils/global_types.ts";
 import { unit_symbol } from "./unit_codes.ts";
 import { Time } from "../types/time.ts";
@@ -41,6 +41,7 @@ import { Time } from "../types/time.ts";
 import wasm_init, {init_runtime as wasm_init_runtime, compile as wasm_compile, decompile as wasm_decompile} from "../wasm/adapter/pkg/datex_wasm.js";
 import { MessageLogger } from "../utils/message_logger.ts";
 import { JSTransferrableFunction } from "../types/js-function.ts";
+import { client_type } from "../utils/constants.ts";
 
 await wasm_init();
 wasm_init_runtime();

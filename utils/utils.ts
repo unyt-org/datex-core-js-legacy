@@ -2,7 +2,8 @@
 
 //import { Storage } from "../runtime/storage.ts"; TODO Storage cannot be importet here, handle file caching somehow (somewhere else)
 import { ValueError } from "../types/errors.ts";
-import { baseURL, client_type, Deno } from "./global_values.ts";
+import { baseURL, Deno } from "./global_values.ts";
+import { client_type } from "./constants.ts";
 
 export function getRandomString(template: string = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx", charset: string = "abcdefghijklmnopqrstuvwxyz0123456789") {
     return template.replace(/x/g, (_: string, ...args: any[]) => {

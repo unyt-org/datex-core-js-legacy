@@ -1,3 +1,4 @@
+import { client_type } from "../utils/constants.ts";
 
 /**
  * used to display error and reset page to user
@@ -18,8 +19,7 @@ const errorReset = async ()=> {
 globalThis.errorReset = errorReset
 
 function setup() {
-	// @ts-ignore
-	if (!globalThis.Deno && globalThis.window && globalThis.document) {
+	if (client_type !== "deno" && globalThis.window && globalThis.document) {
 		// @ts-ignore
 		const document = globalThis.document;
 
@@ -35,7 +35,7 @@ function setup() {
 
 export function displayFatalError(code:string, reset_btn = true) {
 	// @ts-ignore
-	if (!globalThis.Deno && globalThis.window && globalThis.document) {
+	if (client_type !== "deno" && globalThis.window && globalThis.document) {
 		// @ts-ignore
 		const document = globalThis.document;
 		setup();
@@ -79,7 +79,7 @@ export function displayInit(message?:string) {
 	if (showing_init_screen) return;
 	if (!show_init_screen) return;
 	// @ts-ignore
-	if (!globalThis.Deno && globalThis.window && globalThis.document) {
+	if (client_type !== "deno" && globalThis.window && globalThis.document) {
 		// @ts-ignore
 		const document = globalThis.document;
 		// already content there, don't show init page
@@ -152,7 +152,7 @@ export function displayInit(message?:string) {
 export function displayClear() {
 	if (!show_init_screen || keepScreen) return;
 	// @ts-ignore
-	if (!globalThis.Deno && globalThis.window && globalThis.document) {
+	if (client_type != "deno" && globalThis.window && globalThis.document) {
 		// @ts-ignore
 		showing_init_screen = false;
 		globalThis.document.body.innerHTML = "";

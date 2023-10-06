@@ -1,4 +1,5 @@
-import { client_type, cwdURL } from "../utils/global_values.ts";
+import { client_type } from "../utils/constants.ts";
+import { cwdURL } from "../utils/global_values.ts";
 
 
 let _cache_path:string|URL = new URL('./.datex-cache/', cwdURL);

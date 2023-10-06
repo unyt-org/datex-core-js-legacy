@@ -8,8 +8,10 @@ export const TypedArray:typeof Uint8Array|typeof Uint16Array|typeof Uint32Array|
 
 // @ts-ignore
 const is_worker = (typeof WorkerGlobalScope !== 'undefined' && self instanceof WorkerGlobalScope);
-
-export const client_type = is_worker ? 'worker' : ("Deno" in globalThis ? 'deno' : 'browser')
+/**
+ * @deprecated, use client_type from utils/constants.ts
+ */
+export const client_type = is_worker ? 'worker' : ("Deno" in globalThis && !(globalThis.Deno as any).isPolyfill ? 'deno' : 'browser')
 
 export const Deno = <any>globalThis.Deno;
 

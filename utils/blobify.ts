@@ -1,5 +1,5 @@
 import { Datex } from "../datex.ts";
-import { client_type } from "./global_values.ts";
+import { client_type } from "./constants.ts";
 
 /**
  * Returns a blob URL for a file with the same content as the provided path

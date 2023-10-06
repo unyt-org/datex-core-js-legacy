@@ -3,6 +3,7 @@
 import {parse} from "https://deno.land/std@0.168.0/flags/mod.ts";
 import {Logger, ESCAPE_SEQUENCES} from "../utils/logger.ts";
 import { getCallerFile } from "../utils/caller_metadata.ts";
+import { client_type } from "./constants.ts";
 
 export type OptionType = "string" | "boolean" | "number"
 export type TypeFromOptionType<T extends OptionType> = (
@@ -589,7 +590,7 @@ let generatingStaticHelp = false;
 let defaultOptions: CommandLineOptions
 let printHelp = false;
 
-if (globalThis.Deno) {
+if (client_type === "deno") {
     defaultOptions = new CommandLineOptions("General Options");
     printHelp = !!defaultOptions.option("help", {type:"boolean", aliases: ['h'], description: "Show the help page"})
     generatingStaticHelp = !! defaultOptions.option("generate-help", {type:"boolean", _dev:true, description: "Run the program with this option to update this help page"})

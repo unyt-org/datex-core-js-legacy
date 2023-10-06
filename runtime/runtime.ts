@@ -47,7 +47,8 @@ import { ProtocolDataType } from "../compiler/protocol_types.ts";
 import { base64ToArrayBuffer, buffer2hex, getFileContent } from "../utils/utils.ts";
 import { IOHandler } from "./io_handler.ts";
 import { DX_PERMISSIONS, DX_SLOTS, DX_TYPE, DX_SERIALIZED, DX_VALUE, INVALID, MAX_UINT_16, NOT_EXISTING, UNKNOWN_TYPE, VOID, WILDCARD, SLOT_WRITE, SLOT_READ, DX_GET_PROPERTY, SLOT_GET, SLOT_SET } from "./constants.ts";
-import { baseURL, client_type, DEFAULT_HIDDEN_OBJECT_PROPERTIES, logger, TypedArray } from "../utils/global_values.ts";
+import { baseURL, DEFAULT_HIDDEN_OBJECT_PROPERTIES, logger, TypedArray } from "../utils/global_values.ts";
+import { client_type } from "../utils/constants.ts";
 import { MessageLogger } from "../utils/message_logger.ts";
 import { JSInterface } from "./js_interface.ts";
 import { Stream } from "../types/stream.ts";
@@ -73,7 +74,7 @@ import { Time } from "../types/time.ts";
 import { initPublicStaticClasses } from "../js_adapter/js_class_adapter.ts";
 import { JSTransferrableFunction } from "../types/js-function.ts";
 
-const mime = globalThis.Deno ? (await import("https://deno.land/x/mimetypes@v1.0.0/mod.ts")).mime : null;
+const mime = client_type === "deno" ? (await import("https://deno.land/x/mimetypes@v1.0.0/mod.ts")).mime : null;
 
 // from datex_short.ts --------------------------------------------
 function $$<T>(value:RefOrValue<T>): MinimalJSRef<T> {
@@ -594,7 +595,7 @@ export class Runtime {
 
             const filePath = url.pathname;
             // check if has deno api (worker, deno or browser (remote))
-            if (!globalThis.Deno) {
+            if (client_type !== "deno") {
                 throw new RuntimeError("Cannot get content of '"+url_string+"'");
             }
 
@@ -6592,7 +6593,7 @@ if (!Runtime.ENV) {
 }
 
 // add environment variables to #env (might override existing env settings (LANG))
-if (globalThis.Deno) {
+if (client_type === "deno") {
     for (const [key, val] of Object.entries(Deno.env.toObject())) {
         if (key == "LANG") {
             let lang = val.split("-")[0]?.split("_")[0];
@@ -6625,7 +6626,7 @@ else {
     else if(globalThis.navigator?.userAgent?.match(/safari/i)) Runtime.HOST_ENV = "Safari";
     else if(globalThis.navigator?.userAgent?.match(/opr\//i)) Runtime.HOST_ENV = "Opera";
     else if(globalThis.navigator?.userAgent?.match(/edg/i)) Runtime.HOST_ENV = "Edge";
-    else if (globalThis.Deno) Runtime.HOST_ENV = "Deno";
+    else if (client_type === "deno") Runtime.HOST_ENV = "Deno";
 }
 // version
 // @ts-ignore

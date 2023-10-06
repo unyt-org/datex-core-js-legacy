@@ -1,6 +1,7 @@
 // store and read endpoint config (name, keys, ...)
 
-import { client_type, cwdURL, Deno, logger } from "../utils/global_values.ts";
+import { cwdURL, Deno, logger } from "../utils/global_values.ts";
+import { client_type } from "../utils/constants.ts";
 import { Endpoint } from "../types/addressing.ts";
 import { Crypto } from "./crypto.ts";
 import { getLocalFileContent } from "../utils/utils.ts";

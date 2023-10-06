@@ -4,7 +4,7 @@
 import { RuntimeError } from "../types/errors.ts";
 import { Type } from "../types/type.ts";
 import type { datex_scope, dxb_header } from "../utils/global_types.ts";
-import { client_type } from "../utils/global_values.ts";
+import { client_type } from "../utils/constants.ts";
 import { Endpoint, Target, target_clause } from "../types/addressing.ts";
 import { Runtime } from "./runtime.ts";
 import { Datex } from "../datex.ts";

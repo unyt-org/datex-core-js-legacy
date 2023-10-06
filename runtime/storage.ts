@@ -3,6 +3,7 @@ import { Runtime } from "../runtime/runtime.ts";
 
 import type { PointerSource } from "../utils/global_types.ts";
 import { logger } from "../utils/global_values.ts";
+import { client_type } from "../utils/constants.ts";
 import { NOT_EXISTING } from "./constants.ts";
 import { Pointer, type MinimalJSRef, Ref } from "./pointers.ts";
 import { localStorage } from "./storage-locations/local-storage-compat.ts";
@@ -853,7 +854,7 @@ export class Storage {
         await Storage.clearAll();
         Storage.allowExitWithoutSave();
         if (globalThis.window) window.location.reload();
-        else if (globalThis.Deno) Deno.exit(1);
+        else if (client_type === "deno") Deno.exit(1);
         else logger.error("Could not reload in non-browser or Deno context")
     }
 
@@ -900,9 +901,11 @@ if (!globalThis.NO_INIT) {
         // @ts-ignore document
         if (document.visibilityState === 'hidden') Storage.handleExit()
     });
-    if (globalThis.Deno) Deno.addSignalListener("SIGINT", ()=>Deno.exit())
-    if (globalThis.Deno) Deno.addSignalListener("SIGTERM", ()=>Deno.exit())
-    if (globalThis.Deno) Deno.addSignalListener("SIGQUIT", ()=>Deno.exit())
+    if (client_type== "deno") {
+        Deno.addSignalListener("SIGINT", ()=>Deno.exit())
+        Deno.addSignalListener("SIGTERM", ()=>Deno.exit())
+        Deno.addSignalListener("SIGQUIT", ()=>Deno.exit())
+    }
 }
 // ------------------------------------------------------------------------------
 

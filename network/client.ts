@@ -16,7 +16,7 @@ import { Compiler } from "../compiler/compiler.ts";
 import { Endpoint, LOCAL_ENDPOINT, Target } from "../types/addressing.ts";
 import { NetworkError } from "../types/errors.ts";
 import type { dxb_header } from "../utils/global_types.ts";
-import { client_type } from "../utils/global_values.ts";
+import { client_type } from "../utils/constants.ts";
 import { Disjunction } from "../types/logic.ts";
 import { Pointer } from "../runtime/pointers.ts";
 

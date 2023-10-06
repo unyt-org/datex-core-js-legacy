@@ -1,6 +1,7 @@
 // custom localstorage class that handles browser and node local storage and temporary (session) storage
 
-import { client_type, Deno, logger } from "../../utils/global_values.ts";
+import { Deno, logger } from "../../utils/global_values.ts";
+import { client_type } from "../../utils/constants.ts";
 import { ptr_cache_path } from "../cache_path.ts";
 
 class LocalStorage implements Storage {

@@ -8,6 +8,7 @@ import { Logger } from "unyt_core/utils/logger.ts";
 import { Datex } from "unyt_core/datex.ts";
 import { datex_type_mysql_map } from "unyt_core/runtime/storage-locations/sql-type-map.ts";
 import { NOT_EXISTING } from "unyt_core/runtime/constants.ts";
+import { client_type } from "unyt_core/utils/constants.ts";
 
 const logger = new Logger("SQL Storage");
 
@@ -269,7 +270,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 
 
 	isSupported() {
-		return !!globalThis.Deno;
+		return client_type === "deno";
 	}
 
 	async setItem(key: string,value: unknown): Promise<boolean> {

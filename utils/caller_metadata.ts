@@ -1,10 +1,14 @@
+// @ts-ignore
+const is_worker = (typeof WorkerGlobalScope !== 'undefined' && self instanceof WorkerGlobalScope);
+const client_type = is_worker ? 'worker' : ("Deno" in globalThis && !(globalThis.Deno as any).isPolyfill ? 'deno' : 'browser')
+
 const caller_file = /((?:https?|file)\:\/\/.*?)(?::\d+)*(?:$|\nevaluate@|\)$)/;
 const caller_row_col = /(\d+)\:(\d+)(\))?$/;
 const caller_name = /([^ ]*)(?:@| \()(?:https?|file)\:\/\//;
 const extract_meta = /__meta__([^_]+)__/;
 
 // @ts-ignore check for safari
-const is_safari = !globalThis.Deno && (typeof globalThis.webkitConvertPointFromNodeToPage === 'function')
+const is_safari = client_type !== "deno" && (typeof globalThis.webkitConvertPointFromNodeToPage === 'function')
 
 const meta = new Map<number, any>();
 let min_key = 0;

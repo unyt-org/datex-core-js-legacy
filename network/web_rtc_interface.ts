@@ -1,5 +1,7 @@
 import { remote, expose } from "../datex.ts";
-import { Endpoint, Target, client_type, datex_advanced, scope } from "../datex_all.ts";
+import { Endpoint, Target, datex_advanced, scope } from "../datex_all.ts";
+import { client_type } from "../utils/constants.ts";
+
 import InterfaceManager, { CommonInterface } from "./client.ts";
 
 // signaling for WebRTC connections (used by WebRTCClientInterface)
