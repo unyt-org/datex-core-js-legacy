@@ -32,10 +32,10 @@ All non-primitive properties of an instance (that are decorated with `@property`
 
 ## Getters and setters
 
-When a property getter is decorated with `@property` (todo: currently with `@always`), it behaves like any other bound property at first glance.
+When a property getter is decorated with `@property`, it behaves like any other bound property at first glance.
 
 But there is one significant difference: The calculated value returned by the getter function is converted to an observable DATEX pointer.
-This has essentially the same effect as usinz the `always()` function. Whenever a pointer value used in the getter function is updated, the pointer value of the property is also updated.
+This has essentially the same effect as [using the `always()` function](./03%20Pointers.md#creating-pointers). Whenever a pointer value that is referenced in the getter function is updated, the pointer value of the property is also updated.
 
 ```ts
 @sync class MyObject {
@@ -49,6 +49,8 @@ This has essentially the same effect as usinz the `always()` function. Whenever 
 const obj = new MyObject();
 obj.a // 10
 obj.sum // 30
+
+// set observer
 obj.$.sum.observe(sum => console.log(`The current sum is ${s}`))
 
 obj.a++; // triggers observer
@@ -57,4 +59,4 @@ obj.sum // 26
 ```
 
 ## Using the raw API
-For more customization, you can directly use the [JavaScript interface API]() which allows you to define custom DATEX mapping behaviours for specific JavaScript types.
+For more customization, you can directly use the [JavaScript interface API] which allows you to define custom DATEX mapping behaviours for specific JavaScript types.

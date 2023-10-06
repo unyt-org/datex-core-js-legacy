@@ -49,8 +49,9 @@ as well as control flows like `if`/`else` branching.
 
 The only restriction is that the function must be [pure](#appendix-the-definition-of-pure-functions-in-datex), meaning:
   
-  1) External values (variables defined outside the scope of the function) should never be modified
-  2) With the exception of `Datex.Ref` values, only constant external values should be used inside the function
+  1) External variables defined outside the scope of the function should never be reassigned to a new value or modified.
+  3) With the exception of `Datex.Ref` values, only constant external values should be used inside the function. To be on the safe side, only use
+     external `const` variables.
 
 Restriction (1) guarantees that there are no unintended sideffects when an `always` computation is invoked.
 The following example illustrates why restriction (2) is useful:
@@ -71,12 +72,12 @@ c = 20;
 
 The correct implementation for this example would be:
 ```ts
-let c = $$(5);
+const c = $$(5);
 const product: Datex.Ref<number> = always(() => c * 10);
 
 // ✅ observer gets triggered when c is updated
 product.observe((v) => console.log(v))
-c = 20;
+c.val = 20;
 ```
 
 >  [!NOTE]  
@@ -128,12 +129,12 @@ const urlContent = transformAsync([url], async url => (await fetch(url)).json())
 
 The same restrictions as for `transform` functions apply
 
-## Standard transform functions
+## Dedicated transform functions
 
 The DATEX JavaSccript Library provides some standard transform functions for common operations.
 
 ### add
-Calculates the sum of multiple number references.
+Calculates the sum of multiple numbers.
 ```ts
 const a = $$(1);
 const b = $$(2);
@@ -142,12 +143,104 @@ const c = $$(3);
 const sum = add(a,b,c); // equivalent to always(() => a + b + c)
 ```
 
+### sub
+Calculates the difference of multiple numbers.
+```ts
+const a = $$(44);
+const b = $$(2);
+
+const difference = sub(a,b); // equivalent to always(() => a - b)
+```
+
+### mul
+Calculates the product of multiple numbers.
+```ts
+const a = $$(7);
+const b = $$(6);
+
+const product = mul(a,b); // equivalent to always(() => a * b)
+```
+
+### div
+Calculates the quotient of multiple numbers.
+```ts
+const a = $$(84);
+const b = $$(2);
+
+const quotient = div(a,b); // equivalent to always(() => a / b)
+```
+
+### pow
+Calculates the result of a number raised to another number.
+```ts
+const a = $$(10);
+const b = $$(2);
+
+const raised = pow(a,b); // equivalent to always(() => a ** b)
+```
+
+
+### and
+Calculates the logical conjunction of multiple boolean values.
+```ts
+const a = $$(true);
+const b = $$(false);
+
+const conjunction = and(a,b); // equivalent to always(() => a.val && b.val)
+```
+
+### or
+Calculates the logical disjunction of multiple boolean values.
+```ts
+const a = $$(true);
+const b = $$(false);
+
+const disjunction = or(a,b); // equivalent to always(() => a.val || b.val)
+```
+
+### not
+Calculates the negation of a boolean value.
+```ts
+const a = $$(true);
+
+const notA = not(a); // equivalent to always(() => !a.val)
+```
+
+
+### select
+Switches between two values depending on the truthiness of another value.
+
+```ts
+const lightSwitchOn = $$(false);
+
+const sum = select(lightSwitchOn, "Yei light", "It's dark in here"); // equivalent to always(() => lightSwitchOn.val ? "Yei light" : "It's dark in here")
+```
+
+### selectProperty
+Selects a property value from an object depending on a string reference.
+
+```ts
+const potato = {
+    de: "Kartoffel",
+    en: "potato",
+    fr: "pomme de terre",
+    kr: "비행기",
+    schwä: 'Gromber'
+};
+
+const lang = $$("de");
+
+const translatedPotato = selectProperty(lang, potato); // equivalent to always(() => potato[lang])
+```
+
 ### map
 Maps an iterable to an array using a callback function (same API as Array.map).
 ```ts
 const array = $$([1,2,3]);
 const double = map(array, v => v*2) // equivalent to always(() => array.map(v => v*2))
 ```
+
+
 
 ## Appendix: The definition of 'pure' functions in DATEX
 
