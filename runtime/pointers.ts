@@ -2463,12 +2463,12 @@ export class Pointer<T = any> extends Ref<T> {
                 if (property_descriptor?.set || property_descriptor?.get) {
                     
                     // @property getter: set pointer as property instead of getter
-                    if (property_descriptor.get) {
-                        if (property_descriptor?.set) {
-                            throw new Error(obj.constructor.name + ": @property can only be used in combination with a getter, but a setter for '"+name+"' was found")
-                        }
+                    // TODO: what should happen if getter & SETTER set (still use always transform?)
+                    if (property_descriptor.get && !property_descriptor?.set) {
+                        
                         // copied from always in datex_short
                         const transformRef = Pointer.createSmartTransform(property_descriptor.get.bind(obj));
+
                         Object.defineProperty(shadow_object, name, {value:transformRef})
                     }
                     // bind default getters and setters
