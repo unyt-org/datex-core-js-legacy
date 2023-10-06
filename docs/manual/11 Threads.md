@@ -1,8 +1,8 @@
 # Threads
 
-The DATEX JS Library supports multi-threading with Workers.
+The DATEX JS Library supports multi-threading with [Workers](https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API).
 DATEX-compatible values like functions or complex objects can also be shared between threads.
-The Library provides a way to use threads in a type-safe way.
+The library provides a way to use threads in a type-safe way.
 
 ## Usage
 
@@ -28,7 +28,7 @@ const res = await thread.exportedFunction(1,2);
 thread.exportedValue.push(4);
 ```
 
-## Thread Disposal
+## Thread disposal
 
 When a new thread is created with the `using` specifier, it is automatically disposed on scope exit.
 Alternatively, you can explicitly dispose a thread with the `disposeThread` function:
@@ -105,6 +105,6 @@ Values from the parent scope can be injected in template string as with the [`da
 
 
 
-## Thread Pools
+## Thread pools
 
 TODO

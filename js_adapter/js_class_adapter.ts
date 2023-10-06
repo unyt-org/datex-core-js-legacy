@@ -26,7 +26,9 @@ import { Tuple } from "../types/tuple.ts";
 import { DX_PERMISSIONS, DX_TYPE } from "../runtime/constants.ts";
 import { type Class } from "../utils/global_types.ts";
 import { Conjunction, Disjunction, Logical } from "../types/logic.ts";
-import { getCallerInfo } from "../utils/caller_metadata.ts";
+
+import { Reflect } from "https://unyt.land/x/reflect_metadata@v0.1.12/mod.ts";
+
 
 const logger = new Logger("DATEX JS Adapter");
 
@@ -448,7 +450,11 @@ export class Decorators {
     static type(value:any, name:context_name, kind:context_kind, is_static:boolean, is_private:boolean, setMetadata:context_meta_setter, getMetadata:context_meta_getter, params:[(string|Type)?] = []) {
 
         // handle decorator
-        if (typeof params[0] == "string") setMetadata(Decorators.FORCE_TYPE, Type.get(params[0].replace(/^\</,'').replace(/\>$/,'')))
+        if (typeof params[0] == "string") {
+            const [typeName, paramsString] = params[0].replace(/^\</,'').replace(/\>$/,'').match(/^(\w*)(?:\((.*)\))?$/)?.slice(1) ?? [];
+            const parsedParams = paramsString ? JSON.parse(`[${paramsString}]`) : undefined;
+            setMetadata(Decorators.FORCE_TYPE, Type.get(typeName, parsedParams))
+        }
         else if (params[0] instanceof Type) setMetadata(Decorators.FORCE_TYPE, params[0])
     }
 
@@ -1011,9 +1017,15 @@ export function createTemplateClass(original_class:{ new(...args: any[]): any; }
         }
     }
 
+
+
     // iterate over all properties TODO different dx_name?
     for (const [name, dx_name] of Object.entries(original_class.prototype[METADATA]?.[Decorators.PROPERTY]?.public??{})) {
-        template[name] = property_types?.[name] ?? Type.std.Any; // add type
+        let metadataConstructor = Reflect.getMetadata && Reflect.getMetadata("design:type", original_class.prototype, name);
+        // if type is Object -> std:Any
+        if (metadataConstructor == Object) metadataConstructor = null;
+        // set best guess for property type
+        template[name] = property_types?.[name] ?? (metadataConstructor && Type.getClassDatexType(metadataConstructor)) ?? Type.std.Any; // add type
         if (allow_filters?.[name]) template[DX_PERMISSIONS][name] = allow_filters[name]; // add filter
     }
 
@@ -1063,7 +1075,7 @@ function getMethodParams(target:Function, method_name:string, meta_param_index?:
     let tuple = new Tuple();
     let metadata:any[] = Reflect.getMetadata && Reflect.getMetadata("design:paramtypes", target, method_name);
 
-    if (!metadata) return null;;
+    if (!metadata) return null;
 
     // get parmeters names from function body string
     const function_body:string = target[method_name]?.toString();
