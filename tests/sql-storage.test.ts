@@ -58,6 +58,8 @@ function logValue(val:any) {
 // await sqlStorage.resetAll()
 // Deno.exit()
 
+
+
 @Test export class SQLStorageTests {
 
 	@Test

@@ -5,7 +5,7 @@ import { Compiler, PrecompiledDXB } from "../compiler/compiler.ts";
 import { DX_PTR, DX_VALUE, INVALID, NOT_EXISTING, SET_PROXY, SHADOW_OBJECT, UNKNOWN_TYPE, VOID } from "./constants.ts";
 import { Runtime, UnresolvedValue } from "./runtime.ts";
 import { DEFAULT_HIDDEN_OBJECT_PROPERTIES, logger, TypedArray } from "../utils/global_values.ts";
-import type { compile_info, datex_scope, PointerSource } from "../utils/global_types.ts";
+import type { compile_info, datex_scope, Equals, PointerSource } from "../utils/global_types.ts";
 import { Type } from "../types/type.ts";
 import { BinaryCode } from "../compiler/binary_codes.ts";
 import { JSInterface } from "./js_interface.ts";
@@ -615,6 +615,7 @@ export type JSValueWith$<T> = ObjectRef<T>;
 //     {[P in keyof T & string as `$${P}`]: Ref<T[P]>} & 
 //     {[P in keyof T & string as `$prop_${P}`]: PointerProperty<T[P]>}
 
+// converts Object to Record<string|symbol, unknown>
 
 // convert from any JS/DATEX value to minimal representation with reference
 export type MinimalJSRefGeneralTypes<T, _C = CollapsedValue<T>> = 
