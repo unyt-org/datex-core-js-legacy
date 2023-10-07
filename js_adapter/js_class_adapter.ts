@@ -28,7 +28,7 @@ import { type Class } from "../utils/global_types.ts";
 import { Conjunction, Disjunction, Logical } from "../types/logic.ts";
 import { client_type } from "../utils/constants.ts";
 
-const { Reflect: MetadataReflect } = client_type == 'deno' ? await import("https://unyt.land/x/reflect_metadata@v0.1.12/mod.ts") : {Reflect};
+const { Reflect: MetadataReflect } = client_type == 'deno' ? await import("https://deno.land/x/reflect_metadata@v0.1.12/mod.ts") : {Reflect};
 
 const logger = new Logger("DATEX JS Adapter");
 
