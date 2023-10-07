@@ -1,17 +1,23 @@
-# Unyt Core Library (JavaScript)
+# DATEX Core JS (Legacy)
 
 Includes
- * Unyt core libraries
- * DATEX Runtime for JavaScript
+ * [DATEX](https://github.com/unyt-org/datex-specification) Runtime for JavaScript
  * DATEX Compiler for JavaScript
- * Unyt default node configurations
+ * Bindings for built-in JavaScript types
 
 ## Documentation
- 1. [Introduction](./docs/manual/1%20Introduction.md)
- 2. [Pointers](./docs/manual/2%20Pointers.md)
- 1. [Eternal Pointers](./docs/manual/3%20Eternal%20Pointers.md)
- 4. [Supranet Networking](./docs/manual/4%20Supranet%20Networking.md)
- 4. [The DATEX API](./docs/manual/5%20The%20DATEX%20API.md)
+
+ 1. [Introduction](./docs/manual/01%20Introduction.md)
+ 2. [Important DATEX Concepts](./docs/manual/02%20Important%20DATEX%20Concepts.md)
+ 3. [Pointers](./docs/manual/03%20Pointers.md)
+ 4. [Eternal Pointers](./docs/manual/04%20Eternal%20Pointers.md)
+ 5. [Supranet Networking](./docs/manual/05%20Supranet%20Networking.md)
+ 6. [Endpoints](./docs/manual/06%20Endpoints.md)
+ 7. [Endpoint Configuration](./docs/manual/07%20Endpoint%20Configuration.md)
+ 8. [The DATEX API](./docs/manual/08%20The%20DATEX%20API.md)
+ 9. [Functional Programming](./docs/manual/09%20Functional%20Programming.md)
+ 10. [Classes](./docs/manual/10%20Classes.md)
+ 11. [Threads](./docs/manual/11%20Threads.md)
 
 ## Run Tests
 ```bash
