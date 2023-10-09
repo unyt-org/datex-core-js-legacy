@@ -373,7 +373,7 @@ export async function _initWorker(worker: Worker|ServiceWorkerRegistration, modu
  * const sharedArray = $$([1,2,3]);
  * 
  * const res = await run(() => {
- *   using (token, sharedArray);
+ *   use (token, sharedArray);
  *   sharedArray.push(4);
  *   return btoa(token);
  * })
@@ -450,7 +450,7 @@ export async function run<ReturnType>(task: (() => ReturnType)|JSTransferableFun
 		}
 		else if (e instanceof Error && e.message.match(/ReferenceError - \S* is not defined/)) {
 			const variableName = e.message.match(/ReferenceError - (\S*)/)![1];
-			throw new RuntimeError("Variable '"+variableName+"' from the parent scope must be explicitly declared at the beginning of the function body with 'using ("+variableName+")'.")
+			throw new RuntimeError("Variable '"+variableName+"' from the parent scope must be explicitly declared at the beginning of the function body with 'use ("+variableName+")'.")
 		}
 		else if (e instanceof Error) {
 			throw new Error(e.message);
@@ -474,7 +474,7 @@ type runInThreadsReturn<ReturnType, Mapping extends PromiseMappingFn = never> = 
  * const token = "sm34ihncsdfn23kndovae";
  * const sharedArray = $$([1,2,3]);
  * const res = await runConcurrent(() => {
- *   using (token, sharedArray);
+ *   use (token, sharedArray);
  * 
  *   sharedArray.push(4);
  *   return btoa(token);

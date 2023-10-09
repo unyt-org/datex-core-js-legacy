@@ -12,7 +12,7 @@ export class JSTransferableFunction extends ExtensibleFunction {
 	constructor(fn: (...args:unknown[])=>unknown, public deps?: Record<string,unknown>, originalSource?: string) {
 		const source = originalSource ?? fn.toString(); // fn.toString() must be called before fn is passed to super
 		
-		// get dependencies from using() statement
+		// get dependencies from use() statement
 		if (!deps) {
 			const is_async = fn.constructor.name == "AsyncFunction"
 			// save external variables

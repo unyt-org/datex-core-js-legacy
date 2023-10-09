@@ -17,7 +17,7 @@ import { callWithMetadata, callWithMetadataAsync, getMeta } from "../utils/calle
 import { Datex } from "../datex.ts";
 
 
-const EXTRACT_USING = Symbol("EXTRACT_USING")
+const EXTRACT_USED_VARS = Symbol("EXTRACT_USING")
 
 /**
  * Used to declare all variables from the parent scope that are used inside the current function.
@@ -29,7 +29,7 @@ const EXTRACT_USING = Symbol("EXTRACT_USING")
  * const x = $$(10);
  * 
  * const fn = eternal ?? $$(function() {
- *  using (x)
+ *  use (x)
  *  
  *  x.val++
  *  console.log("x:" + x)
@@ -37,45 +37,45 @@ const EXTRACT_USING = Symbol("EXTRACT_USING")
  * ```
  * @param variables 
  */
-export function using(...variables: unknown[]): true {
-    (variables as any)[EXTRACT_USING] = true;
-    if (getMeta()?.[EXTRACT_USING]) throw variables;
+export function use(...variables: unknown[]): true {
+    (variables as any)[EXTRACT_USED_VARS] = true;
+    if (getMeta()?.[EXTRACT_USED_VARS]) throw variables;
     return true;
 }
 
-type _using = typeof using;
+type _use = typeof use;
 
 // @ts-ignore global
-globalThis.using = using;
+globalThis.use = use;
 declare global {
-    const using: _using
+    const use: _use
 }
 
-function getUsingVars(fn: (...args:unknown[])=>unknown) {
+function getUsedVars(fn: (...args:unknown[])=>unknown) {
     const source = fn.toString();
-    const usingVarsSource = source.match(/^(?:(?:[\w\s*])+\(.*\)\s*{|\(.*\)\s*=>\s*{?|.*\s*=>\s*{?)\s*using\s*\(([\s\S]*?)\)/)?.[1]
-    if (!usingVarsSource) return null;
+    const usedVarsSource = source.match(/^(?:(?:[\w\s*])+\(.*\)\s*{|\(.*\)\s*=>\s*{?|.*\s*=>\s*{?)\s*use\s*\(([\s\S]*?)\)/)?.[1]
+    if (!usedVarsSource) return null;
 
-    const usingVars = usingVarsSource.split(",").map(v=>v.trim()).filter(v=>!!v)
-    for (const usingVar of usingVars) {
-        if (!usingVar.match(/^[a-zA-Z_$][0-9a-zA-Z_$\u0080-\uFFFF]*$/)) throw new RuntimeError("Unexpected identifier in 'using' declaration: '" + usingVar+ "' - only variable names are allowed.");
+    const usedVars = usedVarsSource.split(",").map(v=>v.trim()).filter(v=>!!v)
+    for (const usedVar of usedVars) {
+        if (!usedVar.match(/^[a-zA-Z_$][0-9a-zA-Z_$\u0080-\uFFFF]*$/)) throw new RuntimeError("Unexpected identifier in 'use' declaration: '" + usedVar+ "' - only variable names are allowed.");
     }
-    return usingVars;
+    return usedVars;
 }
 
 
 export function getDeclaredExternalVariables(fn: (...args:unknown[])=>unknown) {
-    const usingVars = getUsingVars(fn);
-    if (!usingVars) return {}
+    const usedVars = getUsedVars(fn);
+    if (!usedVars) return {}
 
-    // call the function with EXTRACT_USING metadata
+    // call the function with EXTRACT_USED_VARS metadata
     try {
-        callWithMetadata({[EXTRACT_USING]: true}, fn as any)
+        callWithMetadata({[EXTRACT_USED_VARS]: true}, fn as any)
     }
     catch (e) {
-        // capture returned variables from using()
-        if (e instanceof Array && (e as any)[EXTRACT_USING]) {
-            return Object.fromEntries(usingVars.map((v,i)=>[v, e[i]]))
+        // capture returned variables from use()
+        if (e instanceof Array && (e as any)[EXTRACT_USED_VARS]) {
+            return Object.fromEntries(usedVars.map((v,i)=>[v, e[i]]))
         }
         // otherwise, throw normal error
         else throw e;
@@ -83,17 +83,17 @@ export function getDeclaredExternalVariables(fn: (...args:unknown[])=>unknown) {
 }
 
 export async function getDeclaredExternalVariablesAsync(fn: (...args:unknown[])=>Promise<unknown>) {
-    const usingVars = getUsingVars(fn);
-    if (!usingVars) return {}
+    const usedVars = getUsedVars(fn);
+    if (!usedVars) return {}
 
-    // call the function with EXTRACT_USING metadata
+    // call the function with EXTRACT_USED_VARS metadata
     try {
-        await callWithMetadataAsync({[EXTRACT_USING]: true}, fn as any)
+        await callWithMetadataAsync({[EXTRACT_USED_VARS]: true}, fn as any)
     }
     catch (e) {
-        // capture returned variables from using()
-        if (e instanceof Array && (e as any)[EXTRACT_USING]) {
-            return Object.fromEntries(usingVars.map((v,i)=>[v, e[i]]))
+        // capture returned variables from use()
+        if (e instanceof Array && (e as any)[EXTRACT_USED_VARS]) {
+            return Object.fromEntries(usedVars.map((v,i)=>[v, e[i]]))
         }
         // otherwise, throw normal error
         else throw e;
@@ -103,7 +103,7 @@ export async function getDeclaredExternalVariablesAsync(fn: (...args:unknown[])=
 function getSourceWithoutUsingDeclaration(fn: (...args:unknown[])=>unknown) {
     return fn
         .toString()
-        .replace(/(?<=(?:(?:[\w\s*])+\(.*\)\s*{|\(.*\)\s*=>\s*{?|.*\s*=>\s*{?)\s*)(using\s*\((?:[\s\S]*?)\))/, 'true /*$1*/')
+        .replace(/(?<=(?:(?:[\w\s*])+\(.*\)\s*{|\(.*\)\s*=>\s*{?|.*\s*=>\s*{?)\s*)(use\s*\((?:[\s\S]*?)\))/, 'true /*$1*/')
 }
  
 
@@ -246,7 +246,7 @@ export class Function<T extends (...args: any) => any = (...args: any) => any> e
             // is asnyc or sync fnc (TODO: only checks for AsyncFunction, function might still return a Promise!)
             this.is_async = this.fn.constructor.name == "AsyncFunction"
 
-            // get external_variables dependencies from using() statement
+            // get external_variables dependencies from use() statement
             if (this.is_async) {
                 (async () => {
                     this.external_variables = await getDeclaredExternalVariablesAsync(this.fn!)

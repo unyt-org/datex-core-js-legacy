@@ -47,7 +47,7 @@ disposeThread(thread)
 ## Immediately evaluated tasks
 
 Instead of declaring a thread module in a separate file, a function can be passed to `run` to be executed in a new thread immediately.
-Values from the parent scope can be passed to the thread by explicitly adding them to the `using()` declaration at the beginning of the
+Values from the parent scope can be passed to the thread by explicitly adding them to the `use()` declaration at the beginning of the
 function body.
 
 In the following example, a function calculates the nth fibonacci number in a thread.
@@ -60,7 +60,7 @@ let n = 10000n;
 
 // calculate fibonacci number in a separate thread
 let fibonacciNumber = await run(() => {
-  using (n);
+  use (n);
 
   let n1 = 0n;
   let n2 = 1n;
