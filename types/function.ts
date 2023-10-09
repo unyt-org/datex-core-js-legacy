@@ -56,7 +56,11 @@ function getUsingVars(fn: (...args:unknown[])=>unknown) {
     const usingVarsSource = source.match(/^(?:(?:[\w\s*])+\(.*\)\s*{|\(.*\)\s*=>\s*{?|.*\s*=>\s*{?)\s*using\s*\(([\s\S]*?)\)/)?.[1]
     if (!usingVarsSource) return null;
 
-    return usingVarsSource.split(",").map(v=>v.trim()).filter(v=>!!v)
+    const usingVars = usingVarsSource.split(",").map(v=>v.trim()).filter(v=>!!v)
+    for (const usingVar of usingVars) {
+        if (!usingVar.match(/^[a-zA-Z_$][0-9a-zA-Z_$\u0080-\uFFFF]*$/)) throw new RuntimeError("Unexpected identifier in 'using' declaration: '" + usingVar+ "' - only variable names are allowed.");
+    }
+    return usingVars;
 }
 
 
