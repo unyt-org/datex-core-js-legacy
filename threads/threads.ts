@@ -10,6 +10,7 @@ import { RuntimeError } from "unyt_core/types/errors.ts";
 import { Path } from "unyt_node/path.ts";
 import { getCallerDir } from "../utils/caller_metadata.ts";
 import { PromiseMapReturnType, PromiseMappingFn } from "./promise-fn-types.ts";
+import { JSTransferableFunction } from "../types/js-function.ts";
 
 export type ThreadModule<imports extends Record<string, unknown> = Record<string, unknown>> = {
 	[key in keyof imports]: imports[key] extends ((...args: infer args) => infer returnType) ? ((...args: args) => Promise<returnType>) : imports[key]
@@ -371,16 +372,17 @@ export async function _initWorker(worker: Worker|ServiceWorkerRegistration, modu
  * const token = "sm34ihncsdfn23kndovae";
  * const sharedArray = $$([1,2,3]);
  * const res = await runInThread(() => {
+ *   using (token, sharedArray);
  *   sharedArray.push(4);
  *   return btoa(token);
- * }, {token, sharedArray})
+ * })
  * ```
  * 
  * @param task function that is executed on the thread
  * @param args input arguments for the function that are passed on to the execution thread
  * @returns 
  */
-export async function runInThread<ReturnType, Args extends unknown[]>(task: () => ReturnType, args?:Record<string,unknown>, options?: {signal?:AbortSignal}): Promise<ReturnType>
+export async function runInThread<ReturnType, Args extends unknown[]>(task: () => ReturnType, options?: {signal?:AbortSignal}): Promise<ReturnType>
 /**
  * Run a DATEX script in a separate thread and return the result.
  * 
@@ -399,9 +401,8 @@ export async function runInThread<ReturnType, Args extends unknown[]>(task: () =
  */
 export async function runInThread<ReturnType=unknown>(task:TemplateStringsArray, ...args:unknown[]):Promise<ReturnType>
 
-export async function runInThread<ReturnType>(task: (() => ReturnType)|TemplateStringsArray, args?:Record<string,unknown>, options?: {signal?:AbortSignal}, ..._rest:any): Promise<ReturnType> {
+export async function runInThread<ReturnType>(task: (() => ReturnType)|JSTransferableFunction|TemplateStringsArray, options?: {signal?:AbortSignal}, ..._rest:any): Promise<ReturnType> {
 	let moduleSource = ""
-
 	// DATEX Script
 	if (task instanceof Array) {
 		const args = [...arguments].slice(1);
@@ -416,15 +417,13 @@ export async function runInThread<ReturnType>(task: (() => ReturnType)|TemplateS
 			i++;
 		}
 		moduleSource += '`;'
-		
 	}
 
-	// JS Function
-	else if (task instanceof Function) {
-		for (const [name, val] of Object.entries(args??{})) {
-			moduleSource += `const ${name} = await datex(\`${Datex.Runtime.valueToDatexStringExperimental(val)}\`)\n`;	
-		}
-		moduleSource += 'export const task = ' + task.toString() + ';\n';
+	// JS Function (might already be a JSTransferableFunction)
+	else if (task instanceof Function || task instanceof JSTransferableFunction) {
+		const transferableTaskFn = task instanceof JSTransferableFunction ? task : $$(new JSTransferableFunction(task));
+		moduleSource += `const taskFn = await datex(\`${Datex.Runtime.valueToDatexStringExperimental(transferableTaskFn)}\`)\n`
+		moduleSource += `export const task = () => taskFn()\n`;	
 	}
 
 	else throw new Error("task must be a function or template string");
@@ -436,10 +435,9 @@ export async function runInThread<ReturnType>(task: (() => ReturnType)|TemplateS
 		if (options?.signal?.aborted) {
 			throw new Error("aborted");
 		}
-
 		const task = (thread["task"] as (...args:unknown[]) => Promise<ReturnType>);
 		(task as any).datex_timeout = Infinity;
-		const res = await task(...(args instanceof Array ? args : []));
+		const res = await task();
 		return res;
 	}
 	catch (e) {
@@ -457,8 +455,8 @@ export async function runInThread<ReturnType>(task: (() => ReturnType)|TemplateS
 		else throw e;
 	}
 	finally {
-		if (threadWorkers.get(thread)) disposeThread(thread);
-		if (functionScriptURL) URL.revokeObjectURL(functionScriptURL);
+		// if (threadWorkers.get(thread)) disposeThread(thread);
+		// if (functionScriptURL) URL.revokeObjectURL(functionScriptURL);
 	}
 }
 
@@ -472,10 +470,11 @@ type runInThreadsReturn<ReturnType, Mapping extends PromiseMappingFn = never> = 
  * ```ts
  * const token = "sm34ihncsdfn23kndovae";
  * const sharedArray = $$([1,2,3]);
- * const res = await runInThread(() => {
+ * const res = await runInThreads(() => {
+ *   using (token, sharedArray);
  *   sharedArray.push(4);
  *   return btoa(token);
- * }, {token, sharedArray})
+ * })
  * ```
  * 
  * @param task function that is executed on the thread
@@ -483,9 +482,9 @@ type runInThreadsReturn<ReturnType, Mapping extends PromiseMappingFn = never> = 
  * @param thread optional existing thread to use for execution
  * @returns 
  */
-export async function runInThreads<ReturnType, Mapping extends PromiseMappingFn = never>(task: () => ReturnType, args?:Record<string,unknown>, count = 1, outputMap?: Mapping): Promise<runInThreadsReturn<ReturnType, Mapping>> {
+export async function runInThreads<ReturnType, Mapping extends PromiseMappingFn = never>(task: () => ReturnType, count = 1, outputMap?: Mapping): Promise<runInThreadsReturn<ReturnType, Mapping>> {
 	const abortController = new AbortController()
-	const result = new Array(count).fill(null).map(() => runInThread(task, args, {signal:abortController.signal}));
+	const result = new Array(count).fill(null).map(() => runInThread(task, {signal:abortController.signal}));
 
 	if (outputMap) {
 		try {

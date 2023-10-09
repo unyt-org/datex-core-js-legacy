@@ -219,15 +219,15 @@ export function instance<T>(fromClassOrType:{new(...params:any[]):T}|Type<T>, pr
  * @param parentValue Map or Object
  * @param property property name
  */
-export function pointer<const Key, Parent extends PointerPropertyParent<Key,unknown>>(parentValue:Ref<Parent>, property:Key): PointerProperty<Parent extends Map<unknown, infer MV> ? MV : Parent[Key&keyof Parent]> // defined 2x with Ref<Parent> and Parent for correct type inference
-export function pointer<const Key, Parent extends PointerPropertyParent<Key,unknown>>(parentValue:Parent, property:Key): PointerProperty<Parent extends Map<unknown, infer MV> ? MV : Parent[Key&keyof Parent]>
+export function pointer<Key, Parent extends PointerPropertyParent<Key,unknown>>(parentValue:Ref<Parent>, property:Key): PointerProperty<Parent extends Map<unknown, infer MV> ? MV : Parent[Key&keyof Parent]> // defined 2x with Ref<Parent> and Parent for correct type inference
+export function pointer<Key, Parent extends PointerPropertyParent<Key,unknown>>(parentValue:Parent, property:Key): PointerProperty<Parent extends Map<unknown, infer MV> ? MV : Parent[Key&keyof Parent]>
 /**
  * Creates a new pointer from a value
  * @param value 
  */
-export function pointer<const T>(value:Ref<T>): MinimalJSRef<T> // defined 2x with Ref<T> and T for correct type inference
-export function pointer<const T>(value:T): MinimalJSRef<T>
-export function pointer<const T>(value:RefOrValue<T>, property?:unknown): unknown {
+export function pointer<T>(value:Ref<T>): MinimalJSRef<T> // defined 2x with Ref<T> and T for correct type inference
+export function pointer<T>(value:T): MinimalJSRef<T>
+export function pointer<T>(value:RefOrValue<T>, property?:unknown): unknown {
 
     // pointer property
     if (property !== undefined) {

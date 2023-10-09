@@ -13,8 +13,95 @@ import { PermissionError, RuntimeError, TypeError, ValueError } from "./errors.t
 import { ProtocolDataType } from "../compiler/protocol_types.ts";
 import { VOID } from "../runtime/constants.ts";
 import { Type, type_clause } from "./type.ts";
-import { callWithMetadata, callWithMetadataAsync } from "../utils/caller_metadata.ts";
+import { callWithMetadata, callWithMetadataAsync, getMeta } from "../utils/caller_metadata.ts";
 import { Datex } from "../datex.ts";
+
+
+const EXTRACT_USING = Symbol("EXTRACT_USING")
+
+/**
+ * Used to declare all variables from the parent scope that are used inside the current function.
+ * This is required for functions that are transferred to a different context or restored from eternal pointers.
+ * 
+ * Example:
+ * 
+ * ```ts
+ * const x = $$(10);
+ * 
+ * const fn = eternal ?? $$(function() {
+ *  using (x)
+ *  
+ *  x.val++
+ *  console.log("x:" + x)
+ * })
+ * ```
+ * @param variables 
+ */
+export function using(...variables: unknown[]): true {
+    (variables as any)[EXTRACT_USING] = true;
+    if (getMeta()?.[EXTRACT_USING]) throw variables;
+    return true;
+}
+
+type _using = typeof using;
+
+// @ts-ignore global
+globalThis.using = using;
+declare global {
+    const using: _using
+}
+
+function getUsingVars(fn: (...args:unknown[])=>unknown) {
+    const source = fn.toString();
+    const usingVarsSource = source.match(/^(?:(?:[\w\s*])+\(.*\)\s*{|\(.*\)\s*=>\s*{?|.*\s*=>\s*{?)\s*using\s*\(([\s\S]*?)\)/)?.[1]
+    if (!usingVarsSource) return null;
+
+    return usingVarsSource.split(",").map(v=>v.trim()).filter(v=>!!v)
+}
+
+
+export function getDeclaredExternalVariables(fn: (...args:unknown[])=>unknown) {
+    const usingVars = getUsingVars(fn);
+    if (!usingVars) return {}
+
+    // call the function with EXTRACT_USING metadata
+    try {
+        callWithMetadata({[EXTRACT_USING]: true}, fn as any)
+    }
+    catch (e) {
+        // capture returned variables from using()
+        if (e instanceof Array && (e as any)[EXTRACT_USING]) {
+            return Object.fromEntries(usingVars.map((v,i)=>[v, e[i]]))
+        }
+        // otherwise, throw normal error
+        else throw e;
+    }
+}
+
+export async function getDeclaredExternalVariablesAsync(fn: (...args:unknown[])=>Promise<unknown>) {
+    const usingVars = getUsingVars(fn);
+    if (!usingVars) return {}
+
+    // call the function with EXTRACT_USING metadata
+    try {
+        await callWithMetadataAsync({[EXTRACT_USING]: true}, fn as any)
+    }
+    catch (e) {
+        // capture returned variables from using()
+        if (e instanceof Array && (e as any)[EXTRACT_USING]) {
+            return Object.fromEntries(usingVars.map((v,i)=>[v, e[i]]))
+        }
+        // otherwise, throw normal error
+        else throw e;
+    }
+}
+
+function getSourceWithoutUsingDeclaration(fn: (...args:unknown[])=>unknown) {
+    return fn
+        .toString()
+        .replace(/(?<=(?:(?:[\w\s*])+\(.*\)\s*{|\(.*\)\s*=>\s*{?|.*\s*=>\s*{?)\s*)(using\s*\((?:[\s\S]*?)\))/, 'true /*$1*/')
+}
+ 
 
 export class ExtensibleFunction {
     constructor(f:globalThis.Function) {
@@ -47,58 +134,6 @@ export function getDefaultLocalMeta(){
     })
 }
 
-// const free_ids:Set<number> = new Set(Array(500).fill(1).map((x, y) => x + y)); // 500 free ids
-// const meta = new Map<number, any>();
-
-// function createMetaMapping(object:any){
-//     const key = <number> free_ids.values().next().value;
-//     if (key == undefined) throw new RuntimeError("not enough meta mapping ids (limit 500) - too many function were called at once"); // TODO better solution?
-//     free_ids.delete(key);
-//     meta.set(key, object);
-//     return key;
-// }
-// function removeMeta(key:number){
-//     meta.delete(key);
-//     free_ids.add(key);
-// }
-
-
-// // @ts-ignore check for safari
-// const is_safari = !!globalThis.Deno && (typeof globalThis.webkitConvertPointFromNodeToPage === 'function')
-
-// /**
-//  * Injects meta data to the stack trace, which can be accessed within the function.
-//  * Calls the function (async) with paramters.
-//  * @param meta object that can be accessed within the function by calling getMeta()
-//  * @param ctx value of 'this' inside the function
-//  * @param fn the function to call
-//  * @param args function arguments array
-//  * @returns return value of the function call
-//  */
-// async function callWithMeta<args extends any[], returns>(meta:any, ctx:any, fn:(...args:args)=>returns, args:args): any {
-//     const key = createMetaMapping(meta);
-//     const encoded = '__DX_meta__'+key+'__';
-//     try {
-//         const res = await (is_safari ? new globalThis.Function('f', 'a', '(function '+encoded+'(){f.call(...a)})()')(fn, [ctx, ...args]) : ({[encoded]:()=>fn.call(ctx,...args)})[encoded]());
-//         removeMeta(key); // clear meta
-//         return res;
-//     }
-//     catch (e) {
-//         removeMeta(key); // clear meta
-//         throw e;
-//     }
-// }
-
-// /**
-//  * get the current DATEX meta data within a JS function scope
-//  * @returns meta object
-//  */
-// let default_meta:datex_meta;
-// export function getMeta(){
-//     const key = new Error().stack?.match(/__DX_meta__([^_]+)__/)?.[1];
-//     return meta.get(Number(key)) ?? (default_meta ?? (default_meta = Object.freeze(getDefaultLocalMeta())));
-// }
-
 
 /** function - execute datex or js code - use for normal functions, not for static scope functions */
 export class Function<T extends (...args: any) => any = (...args: any) => any> extends ExtensibleFunction implements ValueConsumer, StreamConsumer {
@@ -126,7 +161,12 @@ export class Function<T extends (...args: any) => any = (...args: any) => any> e
 
     private proxy_fn?: globalThis.Function // in case the function should be called remotely, a proxy function
 
+    external_variables?: Record<string,unknown>
 
+    get js_source() {
+        if (!this.ntarget) return null;
+        return getSourceWithoutUsingDeclaration(this.ntarget)
+    }
 
     static #method_params_source:(target:any, method_name:string, meta_param_index?:number)=>Tuple<Type>
     static #method_meta_index_source:(target:any, method_name:string)=>number
@@ -178,7 +218,6 @@ export class Function<T extends (...args: any) => any = (...args: any) => any> e
         return new Function(scope, undefined, context, location, allowed_callers, anonymize_result, params);
     }
 
-
     private constructor(body?:Scope, ntarget?:T, context?:object|Pointer, location:Endpoint = Runtime.endpoint, allowed_callers?:target_clause, anonymize_result=false, params?:Tuple, meta_index?:number) {
         super((...args:any[]) => this.handleApply(new Tuple(args)));
         
@@ -202,6 +241,17 @@ export class Function<T extends (...args: any) => any = (...args: any) => any> e
             this.fn = (ctx && ntarget.bind) ? ntarget.bind(ctx) : ntarget;
             // is asnyc or sync fnc (TODO: only checks for AsyncFunction, function might still return a Promise!)
             this.is_async = this.fn.constructor.name == "AsyncFunction"
+
+            // get external_variables dependencies from using() statement
+            if (this.is_async) {
+                (async () => {
+                    this.external_variables = await getDeclaredExternalVariablesAsync(this.fn!)
+                })();
+            }
+            else {
+                this.external_variables = getDeclaredExternalVariables(this.fn)
+            }
+            
         }
 
         this.allowed_callers = allowed_callers;

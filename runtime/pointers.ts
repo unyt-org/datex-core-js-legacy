@@ -23,7 +23,7 @@ import { Time } from "../types/time.ts";
 import "../types/native_types.ts"; // getAutoDefault
 import { displayFatalError } from "./display.ts";
 import { Decorators, METADATA } from "../js_adapter/js_class_adapter.ts";
-import { JSTransferrableFunction } from "../types/js-function.ts";
+import { JSTransferableFunction } from "../types/js-function.ts";
 
 export type observe_handler<K=any, V extends Ref = any> = (value:V extends Ref<infer T> ? T : V, key?:K, type?:Ref.UPDATE_TYPE, transform?:boolean, is_child_update?:boolean)=>void|boolean
 export type observe_options = {types?:Ref.UPDATE_TYPE[], ignore_transforms?:boolean, recursive?:boolean}
@@ -2339,7 +2339,7 @@ export class Pointer<T = any> extends Ref<T> {
         let child = value === NOT_EXISTING ? this.shadow_object[name] : value;
         
         // special native function -> <Function> conversion;
-        if (typeof child == "function" && !(child instanceof DatexFunction) && !(child instanceof JSTransferrableFunction)) {
+        if (typeof child == "function" && !(child instanceof DatexFunction) && !(child instanceof JSTransferableFunction)) {
             child = DatexFunction.createFromJSFunction(child, this, name);
         }
 
@@ -2415,7 +2415,7 @@ export class Pointer<T = any> extends Ref<T> {
         const res = JSInterface.createProxy(obj, this, this.type);
         if (res != INVALID && res != NOT_EXISTING) return res; // proxy created successfully
 
-        if (obj instanceof Stream || obj instanceof DatexFunction || obj instanceof JSTransferrableFunction) { // no proxy needed?!
+        if (obj instanceof Stream || obj instanceof DatexFunction || obj instanceof JSTransferableFunction) { // no proxy needed?!
             return obj;
         }
 
@@ -2430,7 +2430,7 @@ export class Pointer<T = any> extends Ref<T> {
         }
 
         // special native function -> <Function> conversion
-        if (typeof obj == "function" && !(obj instanceof DatexFunction) && !(obj instanceof JSTransferrableFunction)) return <T><unknown> DatexFunction.createFromJSFunction(obj as (...params: any[]) => any);
+        if (typeof obj == "function" && !(obj instanceof DatexFunction) && !(obj instanceof JSTransferableFunction)) return <T><unknown> DatexFunction.createFromJSFunction(obj as (...params: any[]) => any);
 
         // get prototype and prototype of prototype (TODO go up the full protoype chain??!)
         let prototype1 = Object.getPrototypeOf(obj);

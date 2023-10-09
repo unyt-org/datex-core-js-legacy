@@ -72,7 +72,7 @@ import { DenoKVStorageLocation } from "./storage-locations/deno-kv.ts";
 import "../types/native_types.ts"; // load prototype overrides
 import { Time } from "../types/time.ts";
 import { initPublicStaticClasses } from "../js_adapter/js_class_adapter.ts";
-import { JSTransferrableFunction } from "../types/js-function.ts";
+import { JSTransferableFunction } from "../types/js-function.ts";
 
 const mime = client_type === "deno" ? (await import("https://deno.land/x/mimetypes@v1.0.0/mod.ts")).mime : null;
 
@@ -2044,8 +2044,20 @@ export class Runtime {
 
                     if (Type.std.Function.matchesType(type)) {
                         if (old_value instanceof Tuple) {
-                            new_value = DatexFunction.createFromDatexScope(old_value.get('body'), old_value.get('context'), old_value.get('location'), undefined, false, type.parameters?.[0]);
-                            DatexObject.setType(new_value, type);
+                            // from js source
+                            if (old_value.has('js_source')) {
+                                const source = old_value.get('js_source');
+                                const dependencies = old_value.get('js_deps') ?? {}
+                                const intermediateFn = (new Function(...Object.keys(dependencies), `return (${source})`))(...Object.values(dependencies));
+                                new_value = DatexFunction.createFromJSFunction(intermediateFn, old_value.get('context'), old_value.get('location'), undefined, undefined, undefined, type.parameters?.[0]);
+                                new_value.external_variables = dependencies;
+                                DatexObject.setType(new_value, type);
+                            }
+                            // datex
+                            else {
+                                new_value = DatexFunction.createFromDatexScope(old_value.get('body'), old_value.get('context'), old_value.get('location'), undefined, false, type.parameters?.[0]);
+                                DatexObject.setType(new_value, type);
+                            }
                         }
                         else if (old_value instanceof Scope) {
                             new_value = DatexFunction.createFromDatexScope(old_value, context, undefined, undefined, false, type.parameters?.[0]);
@@ -2164,7 +2176,7 @@ export class Runtime {
      * @param value any value
      * @returns serialized value
      */    
-    static serializeValue(value:unknown):fundamental {
+    static serializeValue(value:unknown, receiver?:target_clause):fundamental {
 
         let type:Type;
 
@@ -2187,7 +2199,14 @@ export class Runtime {
         if (value instanceof Time) return value;
 
         // TODO fix recursive context problem TODO: replace with return value.body ?? VOID;
-        if (value instanceof DatexFunction) return new Tuple({/*context:value.context,*/ body:value.body, location:value.location});
+        if (value instanceof DatexFunction) {
+            // only expose js source if function location matches receiver
+            // TODO: improve, prevent 100% internal js code exposure
+            if (value.ntarget && receiver === value.location) {
+                return new Tuple({js_source: value.js_source, js_deps: value.external_variables, body:value.body, location:value.location});
+            }
+            return new Tuple({/*context:value.context,*/ body:value.body, location:value.location});
+        }
         if (value instanceof Assertion) return value.scope;
         if (value instanceof Iterator) return VOID;
 
@@ -2476,6 +2495,7 @@ export class Runtime {
             parents.add(value);   
             const brackets = ['{', '}'];
             const entries = Object.entries(value);
+
             string = brackets[0] + (formatted ? "\n":"");
             let first = true;
             const spaces = Array(this.FORMAT_INDENT*(depth+1)).join(' ');
@@ -2488,7 +2508,7 @@ export class Runtime {
         }
         else if (typeof value == "object" || value instanceof DatexFunction || value instanceof Assertion /*also an object*/) {
             parents.add(value);
-            let serialized = value!=null ? this.serializeValue(value) : value;
+            let serialized = value!=null ? this.serializeValue(value, Runtime.endpoint) : value;
             serialized = Pointer.pointerifyValue(serialized); // try to get a pointer from serialized
 
 
@@ -6797,20 +6817,20 @@ Type.std.time.setJSInterface({
 })
 
 
-Type.get<JSTransferrableFunction>("js:Function").setJSInterface({
+Type.get<JSTransferableFunction>("js:Function").setJSInterface({
 
-    class: JSTransferrableFunction,
+    class: JSTransferableFunction,
     visible_children: new Set([
         "source",
-        "dependencies"
+        "deps"
     ]),
     cast(value,type,context,origin) {
-        const dependencies = value.dependencies
+        const dependencies = value.deps
         const intermediateFn = (new Function(...Object.keys(dependencies), `return (${value.source})`))(...Object.values(dependencies));
-        return new JSTransferrableFunction(intermediateFn, dependencies, value.source)
+        return new JSTransferableFunction(intermediateFn, dependencies, value.source)
     },
 
-    apply_value(parent, args) {
+    apply_value(parent, args = []) {
         if (args instanceof Tuple) return parent.call(...args.toArray())
         else return parent.call(args)
     },

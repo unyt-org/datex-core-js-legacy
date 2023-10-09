@@ -40,7 +40,7 @@ import { Time } from "../types/time.ts";
 // WASM
 import wasm_init, {init_runtime as wasm_init_runtime, compile as wasm_compile, decompile as wasm_decompile} from "../wasm/adapter/pkg/datex_wasm.js";
 import { MessageLogger } from "../utils/message_logger.ts";
-import { JSTransferrableFunction } from "../types/js-function.ts";
+import { JSTransferableFunction } from "../types/js-function.ts";
 import { client_type } from "../utils/constants.ts";
 
 await wasm_init();
@@ -2552,7 +2552,16 @@ export class Compiler {
         serializeValue: (v:any, SCOPE:compiler_scope):any => {
             if (SCOPE.serialized_values.has(v)) return SCOPE.serialized_values.get(v);
             else {
-                let s = Runtime.serializeValue(v);
+                let receiver:target_clause = Runtime.endpoint;
+                let options:compiler_options | undefined = SCOPE.options;
+                while(options) {
+                    if (options.to) {
+                        receiver = options.to as target_clause;
+                        break;
+                    }
+                    options = options.parent_scope?.options;
+                }
+                const s = Runtime.serializeValue(v, receiver);
                 SCOPE.serialized_values.set(v,s);
                 return s;
             }
@@ -2606,7 +2615,7 @@ export class Compiler {
             const original_value = value;
  
             // exception for functions: convert to Datex.Function & create Pointer reference (proxifyValue required!)
-            if (value instanceof Function && !(value instanceof DatexFunction) && !(value instanceof JSTransferrableFunction)) value = Pointer.proxifyValue(DatexFunction.createFromJSFunction(value));
+            if (value instanceof Function && !(value instanceof DatexFunction) && !(value instanceof JSTransferableFunction)) value = Pointer.proxifyValue(DatexFunction.createFromJSFunction(value));
 
             // exception for Date: convert to Time (TODO: different approach?)
             if (value instanceof Date && !(value instanceof Time)) {
