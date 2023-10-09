@@ -2048,7 +2048,8 @@ export class Runtime {
                             if (old_value.has('js_source')) {
                                 const source = old_value.get('js_source');
                                 const dependencies = old_value.get('js_deps') ?? {}
-                                const intermediateFn = (new Function(...Object.keys(dependencies), `return (${source})`))(...Object.values(dependencies));
+                                const varMapping = Object.keys(dependencies).map(k=>`const ${k} = _${k};`).join("\n");
+                                const intermediateFn = (new Function(...Object.keys(dependencies).map(k=>'_'+k), `${varMapping}; return (${source})`))(...Object.values(dependencies));
                                 new_value = DatexFunction.createFromJSFunction(intermediateFn, old_value.get('context'), old_value.get('location'), undefined, undefined, undefined, type.parameters?.[0]);
                                 new_value.external_variables = dependencies;
                                 DatexObject.setType(new_value, type);
@@ -6826,7 +6827,8 @@ Type.get<JSTransferableFunction>("js:Function").setJSInterface({
     ]),
     cast(value,type,context,origin) {
         const dependencies = value.deps
-        const intermediateFn = (new Function(...Object.keys(dependencies), `return (${value.source})`))(...Object.values(dependencies));
+        const varMapping = Object.keys(dependencies).map(k=>`const ${k} = _${k};`).join("\n");
+        const intermediateFn = (new Function(...Object.keys(dependencies).map(k=>'_'+k), `${varMapping}; return (${value.source})`))(...Object.values(dependencies));
         return new JSTransferableFunction(intermediateFn, dependencies, value.source)
     },
 

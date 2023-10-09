@@ -424,6 +424,7 @@ export async function run<ReturnType>(task: (() => ReturnType)|JSTransferableFun
 	// JS Function (might already be a JSTransferableFunction)
 	else if (task instanceof Function || task instanceof JSTransferableFunction) {
 		const transferableTaskFn = task instanceof JSTransferableFunction ? task : $$(new JSTransferableFunction(task));
+		console.dir(transferableTaskFn)
 		moduleSource += `const taskFn = await datex(\`${Datex.Runtime.valueToDatexStringExperimental(transferableTaskFn)}\`)\n`
 		moduleSource += `export const task = () => taskFn()\n`;	
 	}
@@ -445,11 +446,11 @@ export async function run<ReturnType>(task: (() => ReturnType)|JSTransferableFun
 	catch (e) {
 		if (options?.signal?.aborted) throw new Error("aborted");
  		if (e instanceof Error && e.message == "TypeError - Assignment to constant variable.") {
-			throw new RuntimeError("runInThread: Variables from the parent scope cannot be reassigned. Use pointers if you want to update values.")
+			throw new RuntimeError("Variables from the parent scope cannot be reassigned. Use pointers if you want to update values.")
 		}
 		else if (e instanceof Error && e.message.match(/ReferenceError - \S* is not defined/)) {
 			const variableName = e.message.match(/ReferenceError - (\S*)/)![1];
-			throw new RuntimeError("runInThread: Variable '"+variableName+"' from the parent scope is not included in the dependencies object.")
+			throw new RuntimeError("Variable '"+variableName+"' from the parent scope must be explicitly declared at the beginning of the function body with 'using ("+variableName+")'.")
 		}
 		else if (e instanceof Error) {
 			throw new Error(e.message);
