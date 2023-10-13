@@ -1,4 +1,4 @@
-import { Datex } from "../datex.ts";
+import { Datex } from "../mod.ts";
 import { client_type } from "./constants.ts";
 
 /**

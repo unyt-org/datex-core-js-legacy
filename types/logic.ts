@@ -9,7 +9,7 @@ import { Ref } from "../runtime/pointers.ts";
 import { RuntimeError } from "./errors.ts";
 import { Assertion } from "./assertion.ts";
 import { Type } from "./type.ts";
-import { Datex } from "../datex.ts";
+import { Datex } from "../mod.ts";
 
 export type literal<T> = T|Negation<T>|Assertion<T>; // x, ~x
 type cnf_disjunction<T> = Disjunction<literal<T>>|literal<T>; // x, x|y, x|~y, ...

@@ -1,5 +1,5 @@
 // deno-lint-ignore-file no-namespace
-import { Endpoint, endpoints, endpoint_name, IdEndpoint, Person, Target, target_clause } from "../types/addressing.ts";
+import { Endpoint, endpoints, endpoint_name, IdEndpoint, Person, Target, target_clause, LOCAL_ENDPOINT } from "../types/addressing.ts";
 import { NetworkError, PointerError, RuntimeError, ValueError } from "../types/errors.ts";
 import { Compiler, PrecompiledDXB } from "../compiler/compiler.ts";
 import { DX_PTR, DX_VALUE, INVALID, NOT_EXISTING, SET_PROXY, SHADOW_OBJECT, UNKNOWN_TYPE, VOID } from "./constants.ts";
@@ -19,10 +19,8 @@ import { Conjunction, Disjunction } from "../types/logic.ts";
 import { ProtocolDataType } from "../compiler/protocol_types.ts";
 import { Scope } from "../types/scope.ts";
 import { Time } from "../types/time.ts";
-
 import "../types/native_types.ts"; // getAutoDefault
 import { displayFatalError } from "./display.ts";
-import { Decorators, METADATA } from "../js_adapter/js_class_adapter.ts";
 import { JSTransferableFunction } from "../types/js-function.ts";
 
 export type observe_handler<K=any, V extends Ref = any> = (value:V extends Ref<infer T> ? T : V, key?:K, type?:Ref.UPDATE_TYPE, transform?:boolean, is_child_update?:boolean)=>void|boolean
@@ -900,7 +898,16 @@ export class Pointer<T = any> extends Ref<T> {
         PUBLIC:  6, // static public address
     }
 
-    public static pointer_prefix = new Uint8Array(21); // gets overwritten in DatexRuntime when endpoint id exists
+    static #pointer_prefix?: Uint8Array
+
+    public static get pointer_prefix() {
+        if (!this.#pointer_prefix) this.#pointer_prefix = Runtime.endpoint.getPointerPrefix(); // new Uint8Array(21); // gets overwritten in DatexRuntime when endpoint id exists
+        return this.#pointer_prefix!;
+    }
+
+    static set pointer_prefix(pointer_prefix: Uint8Array) {
+        this.#pointer_prefix = pointer_prefix
+    }
 
     static #is_local = true;
     static #local_pointers = new Set<Pointer>();
@@ -1984,9 +1991,9 @@ export class Pointer<T = any> extends Ref<T> {
             if (!this.#exclude_origin_from_updates) this.handleDatexUpdate(null, '#0=?;? = #0', [this.current_val, this], this.origin, true)
         }
         else if (this.is_origin && this.subscribers.size) {
-            logger.debug("forwarding update to subscribers", this.#update_endpoints);
+            logger.debug("forwarding update to subscribers", this.update_endpoints);
             // console.log(this.#update_endpoints);
-            this.handleDatexUpdate(null, '#0=?;? = #0', [this.current_val, this], this.#update_endpoints, true)
+            this.handleDatexUpdate(null, '#0=?;? = #0', [this.current_val, this], this.update_endpoints, true)
         }
 
         // pointer value change listeners
@@ -2156,7 +2163,7 @@ export class Pointer<T = any> extends Ref<T> {
         }
 
         // remove WeakRef (keep value) if persistant, or has subscribers
-        else if (this.is_persistant || this.subscribers.size != 0 || this.is_js_primitive) {
+        else if (this.is_persistant || this.subscribers?.size != 0 || this.is_js_primitive) {
             //logger.warn("blocking " + this + " from beeing garbage collected")
             this.#garbage_collectable = false;
             if (super.val instanceof WeakRef) super.setVal(super.val.deref(), false);
@@ -2270,7 +2277,12 @@ export class Pointer<T = any> extends Ref<T> {
         return this.canReadProperty(property_name) && (!this.sealed_properties || !this.sealed_properties.has(property_name));
     }
 
-    public subscribers = new Disjunction<Endpoint>()
+    #subscribers?: Disjunction<Endpoint>
+
+    public get subscribers() {
+        if (!this.#subscribers) this.#subscribers = new Disjunction()
+        return this.#subscribers!;
+    }
 
     public addSubscriber(subscriber: Endpoint) {
         if (this.subscribers.has(subscriber)) {
@@ -2313,7 +2325,8 @@ export class Pointer<T = any> extends Ref<T> {
         this.#update_endpoints = this.subscribers;
     }
     get update_endpoints() {
-        return this.#update_endpoints;
+        if (!this.#update_endpoints) this.#update_endpoints = this.subscribers
+        return this.#update_endpoints!;
     }
 
 
@@ -2735,8 +2748,8 @@ export class Pointer<T = any> extends Ref<T> {
         if (this.origin && !this.is_origin) {
             if (!this.#exclude_origin_from_updates) this.handleDatexUpdate(key, Runtime.PRECOMPILED_DXB.SET_PROPERTY, [this, key, value], this.origin)
         }
-        else if (this.is_origin && this.#update_endpoints.size) {
-            this.handleDatexUpdate(key, Runtime.PRECOMPILED_DXB.SET_PROPERTY, [this, key, value], this.#update_endpoints)
+        else if (this.is_origin && this.update_endpoints.size) {
+            this.handleDatexUpdate(key, Runtime.PRECOMPILED_DXB.SET_PROPERTY, [this, key, value], this.update_endpoints)
         }
 
         // make sure the array index is a number
@@ -2787,8 +2800,8 @@ export class Pointer<T = any> extends Ref<T> {
         if (this.origin && !this.is_origin) {
             if (!this.#exclude_origin_from_updates) this.handleDatexUpdate(null, '? += ?', [this, value], this.origin)
         }
-        else if (this.is_origin && this.#update_endpoints.size) {
-            this.handleDatexUpdate(null, '? += ?', [this, value], this.#update_endpoints)
+        else if (this.is_origin && this.update_endpoints.size) {
+            this.handleDatexUpdate(null, '? += ?', [this, value], this.update_endpoints)
         }
         
 
@@ -2819,9 +2832,9 @@ export class Pointer<T = any> extends Ref<T> {
             logger.info("streaming to parent " + this.origin);
             if (!this.#exclude_origin_from_updates) this.handleDatexUpdate(null, '? << ?'/*DatexRuntime.PRECOMPILED_DXB.STREAM*/, [this, obj], this.origin)
         }
-        else if (this.is_origin && this.#update_endpoints.size) {
-            logger.info("streaming to subscribers " + this.#update_endpoints);
-            this.handleDatexUpdate(null, '? << ?'/*DatexRuntime.PRECOMPILED_DXB.STREAM*/, [this, obj], this.#update_endpoints)
+        else if (this.is_origin && this.update_endpoints.size) {
+            logger.info("streaming to subscribers " + this.update_endpoints);
+            this.handleDatexUpdate(null, '? << ?'/*DatexRuntime.PRECOMPILED_DXB.STREAM*/, [this, obj], this.update_endpoints)
         }
     }
 
@@ -2852,8 +2865,8 @@ export class Pointer<T = any> extends Ref<T> {
         if (this.origin && !this.is_origin) {
             if (!this.#exclude_origin_from_updates) this.handleDatexUpdate(null, Runtime.PRECOMPILED_DXB.CLEAR_WILDCARD, [this], this.origin)
         }
-        else if (this.is_origin && this.#update_endpoints.size) {
-            this.handleDatexUpdate(null, Runtime.PRECOMPILED_DXB.CLEAR_WILDCARD, [this], this.#update_endpoints)
+        else if (this.is_origin && this.update_endpoints.size) {
+            this.handleDatexUpdate(null, Runtime.PRECOMPILED_DXB.CLEAR_WILDCARD, [this], this.update_endpoints)
         }
 
 
@@ -2903,9 +2916,9 @@ export class Pointer<T = any> extends Ref<T> {
                 else this.handleDatexUpdate(null, '#0=?0;#0.(?4..?1) = void; #0.(?2..((count #0) + ?3)) = #0.(?4..(count #0));#0.(?4..?5) = ?6;', [this, end, start-size+replace_length, replace_length, start, start+replace_length, replace], this.origin) // insert
             }
         }
-        else if (this.is_origin && this.#update_endpoints.size) {
-            if (!replace?.length) this.handleDatexUpdate(null, '#0 = ?0; #1 = count #0;#0.(?1..?2) = void;#0.(?1..#1) = #0.(?3..#1);', [this, start, end, start+size], this.#update_endpoints) // no insert
-            else  this.handleDatexUpdate(null, '#0=?0;#0.(?4..?1) = void; #0.(?2..((count #0) + ?3)) = #0.(?4..(count #0));#0.(?4..?5) = ?6;', [this, end, start-size+replace_length, replace_length, start, start+replace_length, replace], this.#update_endpoints) // insert
+        else if (this.is_origin && this.update_endpoints.size) {
+            if (!replace?.length) this.handleDatexUpdate(null, '#0 = ?0; #1 = count #0;#0.(?1..?2) = void;#0.(?1..#1) = #0.(?3..#1);', [this, start, end, start+size], this.update_endpoints) // no insert
+            else  this.handleDatexUpdate(null, '#0=?0;#0.(?4..?1) = void; #0.(?2..((count #0) + ?3)) = #0.(?4..(count #0));#0.(?4..?5) = ?6;', [this, end, start-size+replace_length, replace_length, start, start+replace_length, replace], this.update_endpoints) // insert
         }
 
         // inform observers TODO what to do here?
@@ -2945,8 +2958,8 @@ export class Pointer<T = any> extends Ref<T> {
         if (this.origin && !this.is_origin) {
             if (!this.#exclude_origin_from_updates) this.handleDatexUpdate(null, '?.? = void', [this, key], this.origin)
         }
-        else if (this.is_origin && this.#update_endpoints.size) {
-            this.handleDatexUpdate(null, '?.? = void', [this, key], this.#update_endpoints)
+        else if (this.is_origin && this.update_endpoints.size) {
+            this.handleDatexUpdate(null, '?.? = void', [this, key], this.update_endpoints)
         }
         
 
@@ -2984,9 +2997,9 @@ export class Pointer<T = any> extends Ref<T> {
         if (this.origin && !this.is_origin) {
             if (!this.#exclude_origin_from_updates) this.handleDatexUpdate(null, '? -= ?', [this, value], this.origin)
         }
-        else if (this.is_origin && this.#update_endpoints.size) {
-            logger.info("forwarding delete to subscribers " + this.#update_endpoints);
-            this.handleDatexUpdate(null, '? -= ?', [this, value], this.#update_endpoints)
+        else if (this.is_origin && this.update_endpoints.size) {
+            logger.info("forwarding delete to subscribers " + this.update_endpoints);
+            this.handleDatexUpdate(null, '? -= ?', [this, value], this.update_endpoints)
         }
 
 
@@ -3183,8 +3196,6 @@ export class Pointer<T = any> extends Ref<T> {
     }
 
 }
-
-
 
 export namespace Ref {
     export enum UPDATE_TYPE {

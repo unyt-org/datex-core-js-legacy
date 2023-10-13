@@ -23,7 +23,7 @@ import { ProtocolDataType } from "../compiler/protocol_types.ts";
 import { buffer2hex } from "../utils/utils.ts";
 import { endpoint_config } from "../runtime/endpoint_config.ts";
 import { endpoint_name, UnresolvedEndpointProperty } from "../datex_all.ts";
-import { Datex } from "../datex.ts";
+import { Datex } from "../mod.ts";
 const logger = new Logger("DATEX Supranet");
 
 // entry point to connect to the datex network

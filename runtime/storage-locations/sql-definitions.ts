@@ -1,4 +1,4 @@
-import type { Datex } from "../../datex.ts";
+import type { Datex } from "../../mod.ts";
 
 export type dbOptions = {
     hostname: string

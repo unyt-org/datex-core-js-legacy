@@ -2,7 +2,8 @@ import { VOID } from "../runtime/constants.ts";
 import type { datex_scope } from "../utils/global_types.ts";
 import { ValueConsumer } from "./abstract_types.ts";
 import { AssertionError, RuntimeError, ValueError } from "./errors.ts";
-import { Callable, ExtensibleFunction } from "./function.ts";
+import { ExtensibleFunction } from "./function-utils.ts";
+import { Callable } from "./function.ts";
 import { Scope } from "./scope.ts";
 import { Tuple } from "./tuple.ts";
 

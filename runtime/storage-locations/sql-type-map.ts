@@ -1,4 +1,4 @@
-import { Datex } from "../../datex.ts";
+import { Datex } from "../../mod.ts";
 import { mysql_data_type } from "./sql-definitions.ts";
 
 export const mysql_datex_type_map = new Map<mysql_data_type,Datex.Type>([

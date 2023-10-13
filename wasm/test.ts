@@ -1,5 +1,5 @@
-import init, {init_runtime, compile, decompile, execute, cli} from "unyt_core/wasm/adapter/pkg/datex_wasm.js"
-import {Datex} from "unyt_core"
+import init, {init_runtime, compile, decompile, execute, cli} from "./adapter/pkg/datex_wasm.js"
+import {Datex} from "../mod.ts"
 import "uix"
 import {Terminal} from "uix_std/terminal/main.ts"
 import { GridGroup } from "uix/components/grid_group.ts"

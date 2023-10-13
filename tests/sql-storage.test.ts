@@ -1,7 +1,7 @@
 import { Assert, Test } from "unyt_tests/testing/test.ts"
 import { testLogger } from "unyt_tests/core/logger.ts"
 
-import { Datex, instance } from "../datex.ts"
+import { Datex, instance } from "../mod.ts"
 import { SQLDBStorageLocation } from "../runtime/storage-locations/sql-db.ts"
 import { type } from "../datex_all.ts";
 

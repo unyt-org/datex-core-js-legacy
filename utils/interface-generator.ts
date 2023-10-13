@@ -1,6 +1,6 @@
 // generates typescript code for @namespace JS classes with static @expose methods
 // (matching code to call the methods on another endpoint)
-import { $$, Datex } from "../datex.ts";
+import { $$, Datex } from "../mod.ts";
 import { indent } from "./indent.ts";
 
 const logger = new Datex.Logger("ts interface generator")

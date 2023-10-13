@@ -1,6 +1,6 @@
-import { Datex } from "unyt_core/datex.ts";
+import { Datex } from "../mod.ts";
 import {Endpoint, endpoint, endpoint_default, logger, property} from "../datex_all.ts";
-import { Disjunction } from "unyt_core/types/logic.ts";
+import { Disjunction } from "../types/logic.ts";
 
 
 @endpoint class ProxyAPI {

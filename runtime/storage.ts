@@ -896,6 +896,7 @@ export namespace Storage {
 // @ts-ignore NO_INIT
 if (!globalThis.NO_INIT) {
     addEventListener("unload", ()=>Storage.handleExit(), {capture: true});
+    addEventListener("beforeunload", ()=>Storage.handleExit(), {capture: true});
     // @ts-ignore document
     if (globalThis.document) addEventListener("visibilitychange", ()=>{
         // @ts-ignore document
@@ -920,7 +921,8 @@ class DatexStoragePointerSource implements PointerSource {
     syncPointer(pointer:Pointer) {
         return Storage.syncPointer(pointer)
     }
-} 
+}
 
-// register DatexStorage as pointer source
-Pointer.registerPointerSource(new DatexStoragePointerSource());
+export function registerStorageAsPointerSource() {
+	Pointer.registerPointerSource(new DatexStoragePointerSource());
+}

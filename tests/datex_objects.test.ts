@@ -1,5 +1,5 @@
 import { Assert, Test } from "unyt_tests/testing/test.ts"
-import { Datex } from "../datex.ts";
+import { Datex } from "../mod.ts";
 import { $$ } from "../datex_short.ts"
 
 /**

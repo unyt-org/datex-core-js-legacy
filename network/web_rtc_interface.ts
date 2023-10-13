@@ -1,4 +1,4 @@
-import { remote, expose } from "../datex.ts";
+import { remote, expose } from "../mod.ts";
 import { Endpoint, Target, datex_advanced, scope } from "../datex_all.ts";
 import { client_type } from "../utils/constants.ts";
 

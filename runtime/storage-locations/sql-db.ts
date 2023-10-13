@@ -4,11 +4,11 @@ import { Where } from "https://deno.land/x/sql_builder@v1.9.2/where.ts";
 import { Pointer } from "../../runtime/pointers.ts";
 import { AsyncStorageLocation } from "../storage.ts";
 import { ColumnDefinition, ConstraintsDefinition, TableDefinition, dbOptions, mysql_data_type } from "./sql-definitions.ts";
-import { Logger } from "unyt_core/utils/logger.ts";
-import { Datex } from "unyt_core/datex.ts";
-import { datex_type_mysql_map } from "unyt_core/runtime/storage-locations/sql-type-map.ts";
-import { NOT_EXISTING } from "unyt_core/runtime/constants.ts";
-import { client_type } from "unyt_core/utils/constants.ts";
+import { Logger } from "../../utils/logger.ts";
+import { Datex } from "../../mod.ts";
+import { datex_type_mysql_map } from "./sql-type-map.ts";
+import { NOT_EXISTING } from "../../runtime/constants.ts";
+import { client_type } from "../../utils/constants.ts";
 
 const logger = new Logger("SQL Storage");
 

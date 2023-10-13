@@ -414,7 +414,10 @@ class WebsocketStreamClientInterface extends CommonInterface {
                     this.logger.error("connection closed");
                     this.connecting = false;
                     this.reconnect();
-                } catch(e) { }
+                } catch(e) {
+                    console.log(e);
+                    this.reconnect();
+                }
             })();
 
             // connect, get reader and writer

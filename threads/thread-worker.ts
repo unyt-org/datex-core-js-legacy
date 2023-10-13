@@ -1,5 +1,5 @@
 import type { MessageToWorker } from "./threads.ts";
-import type { Datex as DatexType } from "../datex.ts";
+import type { Datex as DatexType } from "../mod.ts";
 
 const isServiceWorker = 'registration' in globalThis && (globalThis as any).registration instanceof ServiceWorkerRegistration;
 

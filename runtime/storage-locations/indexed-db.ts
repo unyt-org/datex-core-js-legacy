@@ -5,8 +5,9 @@ import { Pointer } from "../../runtime/pointers.ts";
 import { NOT_EXISTING } from "../constants.ts";
 import { AsyncStorageLocation, site_suffix } from "../storage.ts";
 
+import localforage from "../../lib/localforage/localforage.js";
+
 // db based storage for DATEX value caching (IndexDB in the browser)
-const localforage = (await import("../../lib/localforage/localforage.js")).default;
 const datex_item_storage = <globalThis.Storage><unknown> localforage.createInstance({name: "dxitem::"+site_suffix});
 const datex_pointer_storage = <globalThis.Storage><unknown> localforage.createInstance({name: "dxptr::"+site_suffix});
 

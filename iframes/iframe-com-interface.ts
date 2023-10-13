@@ -1,6 +1,6 @@
-import { Datex } from "unyt_core/datex.ts";
+import { Datex } from "../mod.ts";
 import InterfaceManager, { CommonInterface } from "../network/client.ts";
-import { f } from "unyt_core/datex_short.ts";
+import { Target } from "../types/addressing.ts";
 
 type ParentDocument = [Window] & {postMessage:(data:unknown,origin:string)=>void};
 
@@ -59,7 +59,7 @@ export class IFrameCommunicationInterface extends CommonInterface<[HTMLIFrameEle
                 }
 
                 else if (data?.type == "INIT") {
-                    this.endpoint = f(data.endpoint)
+                    this.endpoint = Target.get(data.endpoint)
 
                     // if in parent: send INIT to iframe after initialized
                     if (this.iframe) this.sendInit();

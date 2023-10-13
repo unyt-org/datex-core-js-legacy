@@ -5,10 +5,11 @@ import { baseURL, Runtime, PrecompiledDXB, Type, Pointer, Ref, PointerProperty, 
 
 /** make decorators global */
 import {property as _property, sync as _sync, endpoint as _endpoint, template as _template, jsdoc as _jsdoc} from "./datex_all.ts";
-import { Decorators } from "./js_adapter/js_class_adapter.ts";
 import { NOT_EXISTING, DX_SLOTS, SLOT_GET, SLOT_SET } from "./runtime/constants.ts";
 import { AssertionError } from "./types/errors.ts";
 import { getCallerFile, getCallerInfo, getMeta } from "./utils/caller_metadata.ts";
+import { eternals, getLazyEternal, waitingEternals, waitingLazyEternals } from "./utils/eternals.ts";
+
 
 declare global {
 	const property: typeof _property;
@@ -238,22 +239,22 @@ export function pointer<T>(value:RefOrValue<T>, property?:unknown): unknown {
     else {
         const pointer = <any> Pointer.createOrGet(value).js_value;
         // store as eternal?
-        if (waiting_eternals.size) {
+        if (waitingEternals.size) {
             const info = getCallerInfo()?.[0];
             if (!info) throw new Error("eternal values are not supported in this runtime environment");
             const unique = `${info.file}:${info.row}`;
-            if (waiting_eternals.has(unique)) {
-                eternals.set(waiting_eternals.get(unique)!, pointer);
-                waiting_eternals.delete(unique);
+            if (waitingEternals.has(unique)) {
+                eternals.set(waitingEternals.get(unique)!, pointer);
+                waitingEternals.delete(unique);
             }
         }
-        if (waiting_lazy_eternals.size) {
+        if (waitingLazyEternals.size) {
             const info = getCallerInfo()?.[0];
             if (!info) throw new Error("eternal values are not supported in this runtime environment");
             const unique = `${info.file}:${info.row}`;
-            if (waiting_lazy_eternals.has(unique)) {
-                Storage.setItem(waiting_lazy_eternals.get(unique)!, pointer);
-                waiting_lazy_eternals.delete(unique);
+            if (waitingLazyEternals.has(unique)) {
+                Storage.setItem(waitingLazyEternals.get(unique)!, pointer);
+                waitingLazyEternals.delete(unique);
             }
         }
         return pointer
@@ -490,60 +491,6 @@ export function label<T>(label:string|number, value:RefOrValue<T>): T {
 
 
 
-// create a infinitely persistant value stored in the DATEX Storage
-let PERSISTENT_INDEX = 0;
-
-// TODO: remove @deprecated
-// create default values for type
-export function eternal<T>(type:Type<T>):Promise<MinimalJSRef<T>>
-export function eternal<T>(value_class:any_class<T>):Promise<MinimalJSRef<T>>
-
-// create with *primitive* default value
-export function eternal<T>(initial_value:T&primitive):Promise<MinimalJSRef<T>>
-
-// use creator function
-export function eternal<T>(create:()=>Promise<T>|T):Promise<MinimalJSRef<T>>
-export function eternal<T>(id_or_create_or_class:(primitive&T)|((()=>Promise<T>|T)|any_class<T>|Type<T>), _create_or_class?:(()=>Promise<T>|T)|any_class<T>|Type<T>) {
-    const create_or_class = (id_or_create_or_class instanceof Function || id_or_create_or_class instanceof Type || !_create_or_class) ? id_or_create_or_class : _create_or_class;
-
-    // create unique id for eternal call (file location + type)
-    const unique = ()=>{
-        const type = create_or_class instanceof Type ? create_or_class : Type.getClassDatexType(<any>create_or_class);
-        const stackInfo = new Error().stack?.toString().split(/\r\n|\n/)[3]?.replace(/ *at/,'').trim(); // line 3: after Error header, unique() call, eternal() call
-        return (stackInfo??'*') + ':' + (type ? type.toString() : '*') + ':' + (PERSISTENT_INDEX++)
-    }
-    const id = (_create_or_class && (typeof id_or_create_or_class == "string" || typeof id_or_create_or_class == "number")) ? id_or_create_or_class : unique();
- 
-    let creator:(()=>Promise<T>|T)|null = null;
-    // is class
-    if (typeof create_or_class === "function" && create_or_class.prototype !== undefined) {
-        // primitive
-        if (create_or_class == String || create_or_class == Number || create_or_class == Boolean)
-            creator = ()=><T><unknown>create_or_class();
-        // BigInt(0);
-        else if (create_or_class == BigInt)
-            creator = ()=><T><unknown>create_or_class(0);
-        // normal
-        else
-            creator = ()=>new (<(new (...args: any[]) => T)>create_or_class)();
-    }
-    // creator function
-    else if (typeof create_or_class === "function") {
-        creator = <(()=>Promise<T>|T)> create_or_class;
-    }
-    // DATEX type
-    else if (create_or_class instanceof Type) {
-        creator = () => create_or_class.createDefaultValue();
-    }
-    // primitive value
-    else if (typeof create_or_class == "string" || typeof create_or_class == "number" || typeof create_or_class == "boolean" || typeof create_or_class == "bigint") {
-        creator = () => create_or_class; // return primitive value
-    }
-
-    if (creator == null) throw new Error("Undefined creator for eternal creation")
-    return Storage.loadOrCreate(id, creator);
-}
-
 // call once and return stored value
 export function once<T>(init:()=>Promise<T>|T):Promise<T>
 export function once<T>(identifier:string, init:()=>Promise<T>|T):Promise<T>
@@ -556,10 +503,10 @@ export async function once<T>(id_or_init:string|(()=>Promise<T>|T), _init?:()=>P
     const existing = await getLazyEternal(info, identifier, true)
     if (existing === NOT_EXISTING) {
         const unique = `${info[0].file}:${info[0].row}`;
-        if (waiting_lazy_eternals.has(unique)) {
+        if (waitingLazyEternals.has(unique)) {
             const value = await init();
-            Storage.setItem(waiting_lazy_eternals.get(unique)!, value);
-            waiting_lazy_eternals.delete(unique);
+            Storage.setItem(waitingLazyEternals.get(unique)!, value);
+            waitingLazyEternals.delete(unique);
             return value;
         }
         else throw new Error("could not handle once() initializer");
@@ -567,74 +514,6 @@ export async function once<T>(id_or_init:string|(()=>Promise<T>|T), _init?:()=>P
     else return existing;
 }
 
-
-let eternals:Map<string,unknown>;
-const waiting_eternals = new Map<string,string>();
-const waiting_lazy_eternals = new Map<string,string>();
-
-export async function loadEternalValues(){
-    eternals = await Storage.loadOrCreate("eternals", ()=>new Map<string,unknown>());
-    // console.log("eternal",eternals,Pointer.getByValue(eternals)?.idString())
-}
-
-export async function clearEternalValues() {
-    eternals.clear();
-    await Storage.clearAll();
-}
-
-
-// get a stored eternal value from a caller location
-export function getEternal(info?:ReturnType<typeof getCallerInfo>, customIdentifier?:string, return_not_existing = false) {
-    info ??= getCallerInfo();
-    if (!info) throw new Error("eternal values are not supported in this runtime environment");
-    const line = info[0]
-
-    if (!line.file) throw new Error("eternal values are only supported inside module files");
-
-    const unique_row = `${line.file}:${line.row}`;
-    const key = customIdentifier!=undefined ? `${line.file}#${customIdentifier}` : `${unique_row}:${line.col}`; // use file location or customIdentifier as key
-
-    if (!eternals.has(key)) {
-        waiting_eternals.set(unique_row, key); // assign next pointer to this eternal
-        setTimeout(()=>{
-            if (waiting_eternals.has(unique_row)) logger.error(`uncaptured eternal value at ${unique_row}: please surround the value with $$(), otherwise it cannot be restored correctly`)
-        }, 6000)
-        if (return_not_existing) return NOT_EXISTING
-    }
-    else return eternals.get(key)
-}
-
-export async function getLazyEternal(info?:ReturnType<typeof getCallerInfo>, customIdentifier?:string, return_not_existing = false) {
-    info ??= getCallerInfo();
-    if (!info) throw new Error("eternal values are not supported in this runtime environment");
-    const line = info[0]
-
-    if (!line.file) throw new Error("eternal values are only supported inside module files");
-
-    const unique_row = `${line.file}:${line.row}`;
-    const key = customIdentifier!=undefined ? `${line.file}#${customIdentifier}` : `${unique_row}:${line.col}`; // use file location or customIdentifier as key
-    
-    if (!await Storage.hasItem(key)) {
-        waiting_lazy_eternals.set(unique_row, key); // assign next pointer to this eternal
-        setTimeout(()=>{
-            if (waiting_lazy_eternals.has(unique_row)) logger.error(`uncaptured lazy_eternal value at ${unique_row}: please surround the value with $$(), otherwise it cannot be restored correctly`)
-        }, 6000)
-        if (return_not_existing) return NOT_EXISTING
-    }
-    else return Storage.getItem(key);
-}
-
-
-// TODO: remove eternal
-Object.defineProperty(globalThis, 'eternal', {get:getEternal, configurable:false})
-Object.defineProperty(globalThis, 'once', {value:once, configurable:false})
-
-Object.defineProperty(globalThis, 'lazyEternal', {get:getLazyEternal, configurable:false})
-// TODO: remove
-Object.defineProperty(globalThis, 'lazy_eternal', {get:getLazyEternal, configurable:false})
-
-Object.defineProperty(globalThis, 'eternalVar', {value:(customIdentifier:string)=>getEternal(getCallerInfo(), customIdentifier), configurable:false})
-Object.defineProperty(globalThis, 'lazyEternalVar', {value:(customIdentifier:string)=>getLazyEternal(getCallerInfo(), customIdentifier), configurable:false})
 
 const _once = once;
 type val = typeof val;
@@ -665,20 +544,11 @@ declare global {
 
 // load all eternal values from storage
 
-// @ts-ignore NO_INIT
-if (!globalThis.NO_INIT) await loadEternalValues();
-
 
 // create any filter Target from a string
 export function f<T extends endpoint_name>(name:[T]|T):endpoint_by_endpoint_name<T> {
     return <any>Target.get((typeof name == "string" ? name : name[0]));
 }
-
-
-
-
-
-
 
 
 export function syncedValue(parent:any|Pointer, key?:any):PointerProperty {
@@ -760,6 +630,9 @@ export function translocate<T extends Map<unknown,unknown>|Set<unknown>|Array<un
 // }
 
 
+
+
+Object.defineProperty(globalThis, 'once', {value:once, configurable:false})
 
 
 // @ts-ignore

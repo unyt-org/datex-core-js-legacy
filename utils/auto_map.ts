@@ -7,7 +7,7 @@ const DEFAULT_CLASS_PRIMITIVE = Symbol('DEFAULT_CLASS_PRIMITIVE')
 const DEFAULT_CREATOR_FUNCTION = Symbol('DEFAULT_CREATOR_FUNCTION')
 const DEFAULT_VALUE = Symbol('DEFAULT_VALUE')
 
-export {};
+export const _ = "_";
 
 // TODO
 declare global {

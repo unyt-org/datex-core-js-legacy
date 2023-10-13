@@ -1,5 +1,4 @@
 import { Tuple } from "./tuple.ts";
-import { Type } from "./type.ts";
 import type { datex_scope } from "../utils/global_types.ts";
 import { ValueConsumer } from "./abstract_types.ts";
 
@@ -12,7 +11,6 @@ export class Iterator<T> {
     reiterate = true
     #recording = true;
     #recorded:T[] = [];
-
 
 
     internal_iterator: globalThis.Iterator<T>|globalThis.AsyncIterator<T>
@@ -144,16 +142,6 @@ export class RangeIterator extends Iterator<bigint> {
     }
     
 }
-
-
-
-Type.get("std:Iterator").setJSInterface({
-    class: Iterator,
-    is_normal_object: true,
-    proxify_children: true,
-    visible_children: new Set(['val', 'next']),
-})
-
 
 
 export class IterationFunction implements ValueConsumer  {

@@ -14,113 +14,9 @@ import { ProtocolDataType } from "../compiler/protocol_types.ts";
 import { VOID } from "../runtime/constants.ts";
 import { Type, type_clause } from "./type.ts";
 import { callWithMetadata, callWithMetadataAsync, getMeta } from "../utils/caller_metadata.ts";
-import { Datex } from "../datex.ts";
+import { Datex } from "../mod.ts";
+import { Callable, ExtensibleFunction, getDeclaredExternalVariables, getDeclaredExternalVariablesAsync, getSourceWithoutUsingDeclaration } from "./function-utils.ts";
 
-
-const EXTRACT_USED_VARS = Symbol("EXTRACT_USING")
-
-/**
- * Used to declare all variables from the parent scope that are used inside the current function.
- * This is required for functions that are transferred to a different context or restored from eternal pointers.
- * 
- * Example:
- * 
- * ```ts
- * const x = $$(10);
- * 
- * const fn = eternal ?? $$(function() {
- *  use (x)
- *  
- *  x.val++
- *  console.log("x:" + x)
- * })
- * ```
- * @param variables 
- */
-export function use(...variables: unknown[]): true {
-    (variables as any)[EXTRACT_USED_VARS] = true;
-    if (getMeta()?.[EXTRACT_USED_VARS]) throw variables;
-    return true;
-}
-
-type _use = typeof use;
-
-// @ts-ignore global
-globalThis.use = use;
-declare global {
-    const use: _use
-}
-
-function getUsedVars(fn: (...args:unknown[])=>unknown) {
-    const source = fn.toString();
-    const usedVarsSource = source.match(/^(?:(?:[\w\s*])+\(.*\)\s*{|\(.*\)\s*=>\s*{?|.*\s*=>\s*{?)\s*use\s*\(([\s\S]*?)\)/)?.[1]
-    if (!usedVarsSource) return null;
-
-    const usedVars = usedVarsSource.split(",").map(v=>v.trim()).filter(v=>!!v)
-    for (const usedVar of usedVars) {
-        if (!usedVar.match(/^[a-zA-Z_$][0-9a-zA-Z_$\u0080-\uFFFF]*$/)) throw new RuntimeError("Unexpected identifier in 'use' declaration: '" + usedVar+ "' - only variable names are allowed.");
-    }
-    return usedVars;
-}
-
-
-export function getDeclaredExternalVariables(fn: (...args:unknown[])=>unknown) {
-    const usedVars = getUsedVars(fn);
-    if (!usedVars) return {}
-
-    // call the function with EXTRACT_USED_VARS metadata
-    try {
-        callWithMetadata({[EXTRACT_USED_VARS]: true}, fn as any)
-    }
-    catch (e) {
-        // capture returned variables from use()
-        if (e instanceof Array && (e as any)[EXTRACT_USED_VARS]) {
-            return Object.fromEntries(usedVars.map((v,i)=>[v, e[i]]))
-        }
-        // otherwise, throw normal error
-        else throw e;
-    }
-}
-
-export async function getDeclaredExternalVariablesAsync(fn: (...args:unknown[])=>Promise<unknown>) {
-    const usedVars = getUsedVars(fn);
-    if (!usedVars) return {}
-
-    // call the function with EXTRACT_USED_VARS metadata
-    try {
-        await callWithMetadataAsync({[EXTRACT_USED_VARS]: true}, fn as any)
-    }
-    catch (e) {
-        // capture returned variables from use()
-        if (e instanceof Array && (e as any)[EXTRACT_USED_VARS]) {
-            return Object.fromEntries(usedVars.map((v,i)=>[v, e[i]]))
-        }
-        // otherwise, throw normal error
-        else throw e;
-    }
-}
-
-function getSourceWithoutUsingDeclaration(fn: (...args:unknown[])=>unknown) {
-    return fn
-        .toString()
-        .replace(/(?<=(?:(?:[\w\s*])+\(.*\)\s*{|\(.*\)\s*=>\s*{?|.*\s*=>\s*{?)\s*)(use\s*\((?:[\s\S]*?)\))/, 'true /*$1*/')
-}
- 
-
-export class ExtensibleFunction {
-    constructor(f:globalThis.Function) {
-        return Object.setPrototypeOf(f, new.target.prototype);
-    }
-}
-
-
-
-// omit last element from parameters
-type Head<T extends any[]> = T extends [ ...infer Head, any ] ? Head : any[];
-
-export interface Callable<args extends any[], return_type> {
-    (...args:args): return_type;
-} 
 
 
 /**
@@ -406,7 +302,10 @@ export class Function<T extends (...args: any) => any = (...args: any) => any> e
         }
 
         // no function or DATEX provided
-        if (!this.fn) throw new RuntimeError("Cannot apply values to a <Function> with no executable DATEX or valid native target");
+        if (!this.fn) {
+            console.dir(this)
+            throw new RuntimeError("Cannot apply values to a <Function> with no executable DATEX or valid native target");
+        }
 
         const context = (this.context instanceof Ref ? this.context.val : this.context);
         let params:any[];
@@ -534,7 +433,7 @@ function to (this:any, receivers:target_clause|endpoint_name) {
     if (this instanceof Function) {
         return new Proxy(this, {
             apply: (_target, thisArg, argArray:any[]) => {
-                return _target.apply(thisArg, argArray) // TODO: inject receivers
+                return (_target as any).apply(thisArg, argArray) // TODO: inject receivers
             }
         })
     }

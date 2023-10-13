@@ -1,20 +1,12 @@
 // deno-lint-ignore-file no-this-alias
-// import { Logger } from "../utils/logger.ts";
-// import { Storage } from "../runtime/Datex.Storage.ts";
-// import { Compiler } from "../compiler/compiler.ts";
-// const logger = new Logger("StorageMap");
 
+import { Compiler } from "../compiler/compiler.ts";
+import { DX_PTR } from "../runtime/constants.ts";
 import { Pointer } from "../runtime/pointers.ts";
+import { Storage } from "../runtime/storage.ts";
+import { Logger } from "../utils/logger.ts";
 
-let logger: import("../utils/logger.ts").Logger;
-let Datex: typeof import("../datex.ts").Datex;
-
-// workaround for working module import resolution
-async function init() {
-	if (logger) return;
-	({ Datex } = (await import("../datex.ts")));
-	logger = new Datex.Logger("StorageMap");
-}
+const logger = new Logger("StorageMap");
 
 
 /**
@@ -41,7 +33,7 @@ export class StorageWeakMap<K,V> {
 
 	get prefix() {
 		// @ts-ignore
-		if (!this.#prefix) this.#prefix = 'dxmap::'+this[Datex.DX_PTR].idString()+'.';
+		if (!this.#prefix) this.#prefix = 'dxmap::'+this[DX_PTR].idString()+'.';
 		return this.#prefix;
 	}
 
@@ -49,28 +41,25 @@ export class StorageWeakMap<K,V> {
 		const storage_key = await this.getStorageKey(key);
 		return this._get(storage_key);
 	}
-	protected async _get(storage_key:string) {
-		await init();
+	protected _get(storage_key:string) {
 		this.activateCacheTimeout(storage_key);
-		return Datex.Storage.getItem(storage_key);
+		return Storage.getItem(storage_key);
 	}
 
 	async has(key: K): Promise<boolean> {
 		const storage_key = await this.getStorageKey(key);
 		return this._has(storage_key);
 	}
-	protected async _has(storage_key:string) {
-		await init();
-		return Datex.Storage.hasItem(storage_key)
+	protected _has(storage_key:string) {
+		return Storage.hasItem(storage_key)
 	}
 
 	async delete(key: K) {
 		const storage_key = await this.getStorageKey(key);
 		return this._delete(storage_key);
 	}
-	protected async _delete(storage_key:string) {
-		await init();
-		return Datex.Storage.removeItem(storage_key)
+	protected _delete(storage_key:string) {
+		return Storage.removeItem(storage_key)
 	}
 
 
@@ -78,30 +67,28 @@ export class StorageWeakMap<K,V> {
 		const storage_key = await this.getStorageKey(key);
 		return this._set(storage_key, value);
 	}
-	protected async _set(storage_key:string, value:V) {
-		await init();
+	protected _set(storage_key:string, value:V) {
 		this.activateCacheTimeout(storage_key);
-		return Datex.Storage.setItem(storage_key, value)
+		return Storage.setItem(storage_key, value)
 	}
 
 	protected activateCacheTimeout(storage_key:string){
 		setTimeout(()=>{
 			logger.debug("removing item from cache: " + storage_key);
-			Datex.Storage.cache.delete(storage_key)
+			Storage.cache.delete(storage_key)
 		}, 60_000);
 	}
 
 	protected async getStorageKey(key: K) {
-		await init();
-		const keyHash = await Datex.Compiler.getUniqueValueIdentifier(key);
+		const keyHash = await Compiler.getUniqueValueIdentifier(key);
 		// @ts-ignore DX_PTR
 		return this.prefix + keyHash;
 	}
 
 	async clear() {
 		const promises = [];
-		for (const key of await Datex.Storage.getItemKeysStartingWith(this.prefix)) {
-			promises.push(await Datex.Storage.removeItem(key));
+		for (const key of await Storage.getItemKeysStartingWith(this.prefix)) {
+			promises.push(await Storage.removeItem(key));
 		}
 		await Promise.all(promises);
 	}
@@ -122,35 +109,32 @@ export class StorageMap<K,V> extends StorageWeakMap<K,V> {
 	#key_prefix = 'key.'
 
 	override async set(key: K, value: V): Promise<boolean> {
-		await init();
 		const storage_key = await this.getStorageKey(key);
 		const storage_item_key = this.#key_prefix + storage_key;
 		// store value
 		await this._set(storage_key, value);
 		// store key
 		this.activateCacheTimeout(storage_item_key);
-		return Datex.Storage.setItem(storage_item_key, key)
+		return Storage.setItem(storage_item_key, key)
 	}
 
 	override async delete(key: K) {
-		await init();
 		const storage_key = await this.getStorageKey(key);
 		const storage_item_key = this.#key_prefix + storage_key;
 		// delete value
 		await this._delete(storage_key);
 		// delete key
-		return Datex.Storage.removeItem(storage_item_key)
+		return Storage.removeItem(storage_item_key)
 	}
 
 	keys() {
 		const self = this;
 		const key_prefix = this.#key_prefix;
 		return (async function*(){
-			await init();
-			const keyGenerator = await Datex.Storage.getItemKeysStartingWith(self.prefix);
+			const keyGenerator = await Storage.getItemKeysStartingWith(self.prefix);
 			
 			for (const key of keyGenerator) {
-				const keyValue = await Datex.Storage.getItem(key_prefix+key);
+				const keyValue = await Storage.getItem(key_prefix+key);
 				yield (<K> keyValue);
 			}
 		})()
@@ -164,11 +148,10 @@ export class StorageMap<K,V> extends StorageWeakMap<K,V> {
 	values() {
 		const self = this;
 		return (async function*(){
-			await init();
-			const keyGenerator = await Datex.Storage.getItemKeysStartingWith(self.prefix);
+			const keyGenerator = await Storage.getItemKeysStartingWith(self.prefix);
 			
 			for (const key of keyGenerator) {
-				const value = await Datex.Storage.getItem(key);
+				const value = await Storage.getItem(key);
 				yield (<V> value);
 			}
 		})()
@@ -189,21 +172,20 @@ export class StorageMap<K,V> extends StorageWeakMap<K,V> {
 	}
 
 	async *[Symbol.asyncIterator]() {
-		await init();
-		const keyGenerator = await Datex.Storage.getItemKeysStartingWith(this.prefix);
+		const keyGenerator = await Storage.getItemKeysStartingWith(this.prefix);
 		
 		for (const key of keyGenerator) {
-			const keyValue = await Datex.Storage.getItem(this.#key_prefix+key);
-			const value = await Datex.Storage.getItem(key);
+			const keyValue = await Storage.getItem(this.#key_prefix+key);
+			const value = await Storage.getItem(key);
 			yield (<[K,V]> [keyValue, value]);
 		}
 	}
 
 	override async clear() {
 		const promises = [];
-		for (const key of await Datex.Storage.getItemKeysStartingWith(this.prefix)) {
-			promises.push(await Datex.Storage.removeItem(key));
-			promises.push(await Datex.Storage.removeItem(this.#key_prefix+key));
+		for (const key of await Storage.getItemKeysStartingWith(this.prefix)) {
+			promises.push(await Storage.removeItem(key));
+			promises.push(await Storage.removeItem(this.#key_prefix+key));
 		}
 		await Promise.all(promises);
 	}

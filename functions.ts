@@ -5,7 +5,7 @@
 
 
 import { AsyncTransformFunction, BooleanRef, CollapsedValue, CollapsedValueAdvanced, Decorators, INSERT_MARK, METADATA, MinimalJSRef, Pointer, Ref, RefOrValue, Runtime, SmartTransformFunction, TransformFunction, TransformFunctionInputs, handleDecoratorArgs, primitive } from "./datex_all.ts";
-import { Datex } from "./datex.ts";
+import { Datex } from "./mod.ts";
 import { IterableHandler } from "./utils/iterable-handler.ts";
 
 

@@ -1,4 +1,4 @@
-import { Datex, instance } from "../datex.ts";
+import { Datex, instance } from "../mod.ts";
 import { Endpoint } from "../datex_all.ts";
 import {endpoint, property} from "../datex_all.ts";
 import { Logger } from "../utils/logger.ts";

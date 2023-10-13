@@ -4,9 +4,9 @@ import { Equals } from "../utils/global_types.ts";
 
 const logger = new Logger("thread-runner");
 
-import { Datex, f } from "../datex.ts";
+import { Datex, f } from "../mod.ts";
 import { blobifyFile, blobifyScript } from "../utils/blobify.ts";
-import { RuntimeError } from "unyt_core/types/errors.ts";
+import { RuntimeError } from "../types/errors.ts";
 import { Path } from "unyt_node/path.ts";
 import { getCallerDir } from "../utils/caller_metadata.ts";
 import { PromiseMapReturnType, PromiseMappingFn } from "./promise-fn-types.ts";
@@ -423,8 +423,11 @@ export async function run<ReturnType>(task: (() => ReturnType)|JSTransferableFun
 
 	// JS Function (might already be a JSTransferableFunction)
 	else if (task instanceof Function || task instanceof JSTransferableFunction) {
-		const transferableTaskFn = task instanceof JSTransferableFunction ? task : $$(new JSTransferableFunction(task));
-		console.dir(transferableTaskFn)
+		const transferableTaskFn = task instanceof JSTransferableFunction ? task : (
+			JSTransferableFunction.functionIsAsync(task) ? 
+				await JSTransferableFunction.createAsync(task) :
+				JSTransferableFunction.create(task)
+		)
 		moduleSource += `const taskFn = await datex(\`${Datex.Runtime.valueToDatexStringExperimental(transferableTaskFn)}\`)\n`
 		moduleSource += `export const task = () => taskFn()\n`;	
 	}

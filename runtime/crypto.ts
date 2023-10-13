@@ -5,7 +5,6 @@ import { SecurityError, ValueError } from "../types/errors.ts";
 import { NetworkUtils } from "../network/network_utils.ts";
 import { Storage } from "../runtime/storage.ts";
 import { Runtime } from "./runtime.ts";
-import { ProxyAPI } from "../network/crypto-proxy.ts";
 
 // crypto
 export const crypto = globalThis.crypto
@@ -191,7 +190,7 @@ export class Crypto {
             }
             if (!exported_keys) {
                 logger.debug("requesting keys for " + endpoint);
-                exported_keys = await (await import("../network/blockchain_adapter.ts")).Blockchain.getEndpointPublicKeys(endpoint);
+                exported_keys = await Runtime.Blockchain.getEndpointPublicKeys(endpoint);
                 if (!exported_keys) exported_keys =  await NetworkUtils.get_keys(endpoint);
                 if (exported_keys) await Storage.setItem("keys_"+endpoint, exported_keys);
                 else {

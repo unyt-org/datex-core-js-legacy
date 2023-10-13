@@ -65,14 +65,12 @@ import { Logger } from "../utils/logger.ts";
 import { Debugger } from "./debugger.ts";
 import {decompile as wasm_decompile} from "../wasm/adapter/pkg/datex_wasm.js";
 
-import { IndexedDBStorageLocation } from "./storage-locations/indexed-db.ts";
-import { LocalStorageLocation } from "./storage-locations/local-storage.ts";
-import { DenoKVStorageLocation } from "./storage-locations/deno-kv.ts";
-
 import "../types/native_types.ts"; // load prototype overrides
 import { Time } from "../types/time.ts";
 import { initPublicStaticClasses } from "../js_adapter/js_class_adapter.ts";
 import { JSTransferableFunction } from "../types/js-function.ts";
+import { createFunctionWithDependencyInjections } from "../types/function-utils.ts";
+import type { Blockchain } from "../network/blockchain_adapter.ts";
 
 const mime = client_type === "deno" ? (await import("https://deno.land/x/mimetypes@v1.0.0/mod.ts")).mime : null;
 
@@ -224,6 +222,9 @@ export class Runtime {
 
     public static PRECOMPILED_DXB: {[key:string]:PrecompiledDXB}
 
+    // blockchain is loaded in init()
+    static Blockchain?: typeof Blockchain
+
     static #saved_local_strings = new WeakMap<local_text_map, Map<RefOrValue<string>, Pointer<string>>>();
     static #not_loaded_local_strings = new WeakMap<local_text_map, Set<RefOrValue<string>>>();
     
@@ -347,14 +348,16 @@ export class Runtime {
         if (endpoint != LOCAL_ENDPOINT) logger.debug("using endpoint: " + endpoint);
         this.#endpoint = endpoint;
 
-        Pointer.pointer_prefix = this.endpoint.getPointerPrefix();
-        // has only local endpoint id (%0000) or global id?
-        if (endpoint != LOCAL_ENDPOINT) Pointer.is_local = false;
-        else Pointer.is_local = true;
-
         Observers.call(this,"endpoint",this.#endpoint);
     }
 
+    static _setEndpoint(endpoint: Endpoint) {
+        this.endpoint = endpoint;
+    }
+
+    static {
+        Observers.register(Runtime, "endpoint");
+    }
 
     static onEndpointChanged(listener:(endpoint:Endpoint)=>void){
         Observers.add(this,"endpoint",listener);
@@ -2048,8 +2051,7 @@ export class Runtime {
                             if (old_value.has('js_source')) {
                                 const source = old_value.get('js_source');
                                 const dependencies = old_value.get('js_deps') ?? {}
-                                const varMapping = Object.keys(dependencies).map(k=>`const ${k} = _${k};`).join("\n");
-                                const intermediateFn = (new Function(...Object.keys(dependencies).map(k=>'_'+k), `${varMapping}; return (${source})`))(...Object.values(dependencies));
+                                const intermediateFn = createFunctionWithDependencyInjections(source, dependencies)
                                 new_value = DatexFunction.createFromJSFunction(intermediateFn, old_value.get('context'), old_value.get('location'), undefined, undefined, undefined, type.parameters?.[0]);
                                 new_value.external_variables = dependencies;
                                 DatexObject.setType(new_value, type);
@@ -6557,78 +6559,9 @@ Logger.setType(Type); // workaround to prevent circular imports
 Logger.setPointer(Pointer); // workaround to prevent circular imports
 
 
-/** DatexRuntime static initializations: */
-// observers (DatexRuntime.endpoint calls observer)
-Observers.register(Runtime, "endpoint");
 
-Runtime.endpoint = LOCAL_ENDPOINT;
 Runtime.onEndpointChanged(initPublicStaticClasses)
 
-
-// default storage config:
-
-// @ts-ignore NO_INIT
-if (!globalThis.NO_INIT) {
-    if (client_type == "browser") {
-		await Storage.addLocation(new IndexedDBStorageLocation(), {
-			modes: [Storage.Mode.SAVE_ON_CHANGE, Storage.Mode.SAVE_PERIODICALLY],
-			primary: true
-		})
-        await Storage.addLocation(new LocalStorageLocation(), {
-            modes: [Storage.Mode.SAVE_ON_EXIT],
-            primary: false
-        })
-	}
-	else if (client_type == "deno") {
-        const denoKV = new DenoKVStorageLocation();
-        if (denoKV.isSupported()) {
-            console.log("Using DenoKV as primary storage location (experimental)")
-            await Storage.addLocation(denoKV, {
-                modes: [Storage.Mode.SAVE_ON_CHANGE],
-                primary: true
-            })
-        }
-        await Storage.addLocation(new LocalStorageLocation(), {
-            modes: [Storage.Mode.SAVE_ON_EXIT, Storage.Mode.SAVE_PERIODICALLY],
-            primary: denoKV.isSupported() ? false : true
-        })
-	}
-    
-}
-
-function getDefaultEnv() {
-    return {
-        LANG: globalThis.localStorage?.lang ?? globalThis?.navigator?.language?.split("-")[0]?.split("_")[0] ?? 'en',
-        DATEX_VERSION: null
-    }
-}
-
-
-// set Runtime ENV (not persistent if globalThis.NO_INIT)
-Runtime.ENV = globalThis.NO_INIT ? getDefaultEnv() : await Storage.loadOrCreate("Datex.Runtime.ENV", getDefaultEnv);
-
-// workaround, should never happen
-if (!Runtime.ENV) {
-    logger.error("Runtime ENV is undefined");
-    Runtime.ENV = getDefaultEnv()
-}
-
-// add environment variables to #env (might override existing env settings (LANG))
-if (client_type === "deno") {
-    for (const [key, val] of Object.entries(Deno.env.toObject())) {
-        if (key == "LANG") {
-            let lang = val.split("-")[0]?.split("_")[0];
-            if (lang == "C" || lang?.startsWith("C.")) lang = "en";
-            Runtime.ENV[key] = lang;
-        }
-        else Runtime.ENV[key] = val;
-    }
-}
-
-Runtime.ENV.DATEX_VERSION = Runtime.VERSION;
-
-// init persistent memory
-Runtime.persistent_memory = (await Storage.loadOrCreate("Datex.Runtime.MEMORY", ()=>new Map())).setAutoDefault(Object);
 
 
 
@@ -6826,10 +6759,7 @@ Type.get<JSTransferableFunction>("js:Function").setJSInterface({
         "deps"
     ]),
     cast(value,type,context,origin) {
-        const dependencies = value.deps
-        const varMapping = Object.keys(dependencies).map(k=>`const ${k} = _${k};`).join("\n");
-        const intermediateFn = (new Function(...Object.keys(dependencies).map(k=>'_'+k), `${varMapping}; return (${value.source})`))(...Object.values(dependencies));
-        return new JSTransferableFunction(intermediateFn, dependencies, value.source)
+        return JSTransferableFunction.recreate(value.source, value.deps)
     },
 
     apply_value(parent, args = []) {
@@ -6839,17 +6769,14 @@ Type.get<JSTransferableFunction>("js:Function").setJSInterface({
 
 });
 
-if (!globalThis.NO_INIT) {
-    await Runtime.init();
 
-    // @ts-ignore
-    globalThis.print = Runtime.STD_STATIC_SCOPE.print
-    // @ts-ignore
-    globalThis.printf = Runtime.STD_STATIC_SCOPE.printf
-    // @ts-ignore
-    globalThis.printn = Runtime.STD_STATIC_SCOPE.printn
-}
 
+Type.get("std:Iterator").setJSInterface({
+    class: Iterator,
+    is_normal_object: true,
+    proxify_children: true,
+    visible_children: new Set(['val', 'next']),
+})
 
 
 

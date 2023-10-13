@@ -8,8 +8,7 @@ import { buffer2hex, hex2buffer } from "../utils/utils.ts";
 import { clause, Disjunction } from "./logic.ts";
 import { Runtime, StaticScope } from "../runtime/runtime.ts";
 import { logger } from "../utils/global_values.ts";
-import { Datex } from "../datex.ts";
-
+import { Datex } from "../mod.ts";
 
 type target_prefix_person = "@";
 type target_prefix_id = "@@";
@@ -254,7 +253,7 @@ export class Endpoint extends Target {
 		// probably network error, endpoint not reachable
 		catch {}
 		// fallback: Blockchain
-		const res = (await import("../network/blockchain_adapter.ts")).Blockchain.getEndpointProperty(this, key);
+		const res = Runtime.Blockchain.getEndpointProperty(this, key);
 		this.#properties.set(key, res)
 		return res;
 	}
@@ -273,13 +272,13 @@ export class Endpoint extends Target {
 		// probably network error, endpoint not reachable
 		catch {}
 		// fallback: Blockchain
-		return this.#entrypoint = (await import("../network/blockchain_adapter.ts")).Blockchain.getEndpointDefault(this);
+		return this.#entrypoint = Runtime.Blockchain.getEndpointDefault(this);
 	}
 
 	public async getAlias(){
 		// resolve alias from Blockchain
 		try {
-			this.#alias = <string | undefined> await (await import("../network/blockchain_adapter.ts")).Blockchain.resolveAlias(this);
+			this.#alias = <string | undefined> await Runtime.Blockchain.resolveAlias(this);
 		}
 		catch {}
 		return this.#alias
@@ -287,7 +286,7 @@ export class Endpoint extends Target {
 
 	public async getCertifier(){
 		// resolve alias from Blockchain
-		return this.#certifier = <Endpoint | undefined> (await import("../network/blockchain_adapter.ts")).Blockchain.getEndpointCertifier(this);
+		return this.#certifier = <Endpoint | undefined> Runtime.Blockchain.getEndpointCertifier(this);
 	}
 
 
