@@ -24,7 +24,7 @@ export function getEternal(info?:ReturnType<typeof getCallerInfo>, customIdentif
     if (!info) throw new Error("eternal values are not supported in this runtime environment");
     const line = info[0]
 
-    if (!line.file) throw new Error("eternal values are only supported inside module files");
+    if (!line.file) logger.error("eternal values are only supported inside module files");
 
     const unique_row = `${line.file}:${line.row}`;
     const key = customIdentifier!=undefined ? `${line.file}#${customIdentifier}` : `${unique_row}:${line.col}`; // use file location or customIdentifier as key
@@ -44,7 +44,7 @@ export async function getLazyEternal(info?:ReturnType<typeof getCallerInfo>, cus
     if (!info) throw new Error("eternal values are not supported in this runtime environment");
     const line = info[0]
 
-    if (!line.file) throw new Error("eternal values are only supported inside module files");
+    if (!line.file) logger.error("eternal values are only supported inside module files");
 
     const unique_row = `${line.file}:${line.row}`;
     const key = customIdentifier!=undefined ? `${line.file}#${customIdentifier}` : `${unique_row}:${line.col}`; // use file location or customIdentifier as key
