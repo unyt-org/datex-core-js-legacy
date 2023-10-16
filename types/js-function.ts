@@ -4,13 +4,27 @@
 
 import { ExtensibleFunction, getDeclaredExternalVariables, getDeclaredExternalVariablesAsync, createFunctionWithDependencyInjections, getSourceWithoutUsingDeclaration, Callable } from "./function-utils.ts";
 
+
+export type JSTransferableFunctionOptions = {
+	errorOnOriginContext?: Error
+}
+
 export class JSTransferableFunction extends ExtensibleFunction {
 	
 	#fn: (...args:unknown[])=>unknown
 
-	private constructor(intermediateFn: (...args:unknown[])=>unknown, public deps: Record<string,unknown>, public source: string) {
-		super(intermediateFn);
-		this.#fn = intermediateFn;
+	// deno-lint-ignore constructor-super
+	private constructor(intermediateFn: (...args:unknown[])=>unknown, public deps: Record<string,unknown>, public source: string, options?: JSTransferableFunctionOptions) {
+		if (options?.errorOnOriginContext) {
+			const invalidIntermediateFunction = () => {throw options.errorOnOriginContext};
+			super(invalidIntermediateFunction);
+			this.#fn = invalidIntermediateFunction;
+		}
+		else {
+			super(intermediateFn);
+			this.#fn = intermediateFn;
+		}
+		
 		this.source = source;
 	}
 
@@ -40,9 +54,9 @@ export class JSTransferableFunction extends ExtensibleFunction {
 	 * Important: use createAsync for async functions instead
 	 * @param fn 
 	 */
-	static create<T extends (...args:unknown[])=>unknown>(fn: T): JSTransferableFunction & Callable<Parameters<T>, ReturnType<T>> {
+	static create<T extends (...args:unknown[])=>unknown>(fn: T, options?:JSTransferableFunctionOptions): JSTransferableFunction & Callable<Parameters<T>, ReturnType<T>> {
         const dependencies = getDeclaredExternalVariables(fn);
-		return this.#createTransferableFunction(getSourceWithoutUsingDeclaration(fn), dependencies) as any;
+		return this.#createTransferableFunction(getSourceWithoutUsingDeclaration(fn), dependencies, options) as any;
 	}
 
 	/**
@@ -50,9 +64,9 @@ export class JSTransferableFunction extends ExtensibleFunction {
 	 * Automatically determines dependency variables declared with use()
 	 * @param fn 
 	 */
-	static async createAsync<T extends (...args:unknown[])=>Promise<unknown>>(fn: T): Promise<JSTransferableFunction & Callable<Parameters<T>, ReturnType<T>>> {
+	static async createAsync<T extends (...args:unknown[])=>Promise<unknown>>(fn: T, options?:JSTransferableFunctionOptions): Promise<JSTransferableFunction & Callable<Parameters<T>, ReturnType<T>>> {
 		const dependencies = await getDeclaredExternalVariablesAsync(fn)	
-		return this.#createTransferableFunction(getSourceWithoutUsingDeclaration(fn), dependencies) as any;
+		return this.#createTransferableFunction(getSourceWithoutUsingDeclaration(fn), dependencies, options) as any;
 	}
 
 	/**
@@ -64,9 +78,9 @@ export class JSTransferableFunction extends ExtensibleFunction {
 		return this.#createTransferableFunction(source, dependencies)
 	}
 
-	static #createTransferableFunction(source: string, dependencies: Record<string, unknown>) {
+	static #createTransferableFunction(source: string, dependencies: Record<string, unknown>, options?:JSTransferableFunctionOptions) {
         const intermediateFn = createFunctionWithDependencyInjections(source, dependencies);
-		return new JSTransferableFunction(intermediateFn, dependencies, source);
+		return new JSTransferableFunction(intermediateFn, dependencies, source, options);
 	}
 
 }

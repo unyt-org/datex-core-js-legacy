@@ -13,6 +13,7 @@ export const DX_PTR: unique symbol = Symbol("DX_PTR"); // key for pointer object
 export const DX_TYPE: unique symbol = Symbol("DX_TYPE");
 export const DX_SERIALIZED: unique symbol = Symbol("DX_SERIALIZED");
 export const DX_VALUE: unique symbol = Symbol("DX_VALUE");
+export const DX_SOURCE: unique symbol = Symbol("DX_SOURCE"); // used to override the default loading behaviour for a pointer (fetching by id). Can be an arbitrary DATEX Script that can be resolved with datex.get. Currently only used by the interface generator for JS modules.
 // TODO: remove? replaced with DX_SLOTS
 export const DX_TEMPLATE: unique symbol = Symbol("DX_TEMPLATE");
 export const DX_PERMISSIONS: unique symbol = Symbol("DX_PERMISSIONS");

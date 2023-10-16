@@ -919,6 +919,8 @@ Logger.development_log_level = client_type === "deno" ? LOG_LEVEL.DEFAULT : LOG_
 Logger.production_log_level = client_type === "deno" ? LOG_LEVEL.DEFAULT : LOG_LEVEL.VERBOSE;
 
 if (client_type === "deno") (async ()=> {
+    // @ts-ignore no init workaround
+    if (globalThis.NO_DATEX) return;
     const verbose = !!(await import("./args.ts")).commandLineOptions.option("verbose", {aliases: ["v"], type: "boolean", default: false, description: "Show logs for all levels, including debug logs"})
 
     if (verbose) {

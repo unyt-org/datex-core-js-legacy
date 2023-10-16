@@ -222,7 +222,7 @@ export class Type<T = any> {
     }
 
     // cast any value to a value of this type (for custom types)
-    public cast(value: any, context?:any, origin:Endpoint = Runtime.endpoint, make_pointer = false, ignore_js_config = false):T {
+    public cast(value: any, context?:any, origin:Endpoint = Runtime.endpoint, make_pointer = false, ignore_js_config = false, assigningPtrId?: string):T {
         // unknown type (no template or config)
         //if (!this.interface_config && !this.template) return UNKNOWN_TYPE;
         
@@ -232,10 +232,10 @@ export class Type<T = any> {
             if (value === VOID && this.interface_config.empty_generator instanceof globalThis.Function) return this.interface_config.empty_generator(this, context, origin);
             // custom cast method
             else if (this.interface_config.cast) {
-                return this.interface_config.cast(value, this, context, origin);
+                return this.interface_config.cast(value, this, context, origin, assigningPtrId);
             }
             else if (this.interface_config.cast_no_tuple && !(value instanceof Tuple)) {
-                return this.interface_config.cast_no_tuple(value, this, context, origin);
+                return this.interface_config.cast_no_tuple(value, this, context, origin, assigningPtrId);
             }
             // special cast: prototype
             else if (typeof value == "object" && this.interface_config.prototype) {

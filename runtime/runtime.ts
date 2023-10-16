@@ -1804,7 +1804,7 @@ export class Runtime {
     }
 
     /** casts an object, handles all <std:*> types */
-    public static async castValue(type:Type, value:any, context?:any, context_location?:URL, origin:Endpoint = Runtime.endpoint, no_fetch?:boolean): Promise<any> {
+    public static async castValue(type:Type, value:any, context?:any, context_location?:URL, origin:Endpoint = Runtime.endpoint, no_fetch?:boolean, assigningPtrId?: string): Promise<any> {
         
         let old_type = Type.ofValue(value);
         let old_value = value instanceof UnresolvedValue ? value[DX_VALUE] : value;
@@ -2131,7 +2131,7 @@ export class Runtime {
 
         // try custom type cast to JS class
         if (new_value === UNKNOWN_TYPE && type.hasMatchingJSClassOrPrototype()) {
-            new_value = type.cast(old_value, context, origin);
+            new_value = type.cast(old_value, context, origin, false, false, assigningPtrId);
         }
 
         // still unknown type
@@ -2141,7 +2141,7 @@ export class Runtime {
             if (!no_fetch) {
                 try {
                     await JSInterface.loadTypeConfiguration(type);
-                    return Runtime.castValue(type, value, context, undefined, origin, true); // no_fetch = true
+                    return Runtime.castValue(type, value, context, undefined, origin, true, assigningPtrId); // no_fetch = true
                 } catch (e) {
                     logger.error(e)
                 }
@@ -2150,7 +2150,7 @@ export class Runtime {
             else {
                 // cannot fetch type, just cast default
                 logger.warn("Cannot further resolve unknown type '"+type.toString()+"'");
-                new_value = type.cast(old_value, context, origin);
+                new_value = type.cast(old_value, context, origin, false, false, assigningPtrId);
             }
 
         }
@@ -3835,7 +3835,13 @@ export class Runtime {
             // apply all casts 
             if (INNER_SCOPE.type_casts) {
                 let type:Type
-                while (type = INNER_SCOPE.type_casts.pop()) el = await Runtime.castValue(type, el, INNER_SCOPE.ctx_intern, SCOPE.context_location, SCOPE.origin)
+                while (type = INNER_SCOPE.type_casts.pop()) {
+                    // workaround to get pointer that the new cast value will be assigned to
+                    const waitingPtr = [...INNER_SCOPE.waiting_ptrs??[]][0];
+                    let ptrId: string|undefined;
+                    if (waitingPtr && waitingPtr[1] == undefined) ptrId = waitingPtr[0].id;
+                    el = await Runtime.castValue(type, el, INNER_SCOPE.ctx_intern, SCOPE.context_location, SCOPE.origin, undefined, ptrId)
+                }
             }
 
            

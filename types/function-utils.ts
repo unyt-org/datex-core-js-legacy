@@ -102,8 +102,13 @@ export function getSourceWithoutUsingDeclaration(fn: (...args:unknown[])=>unknow
  * @returns 
  */
 export function createFunctionWithDependencyInjections(source: string, dependencies: Record<string, unknown>): ((...args:unknown[]) => unknown) {
-	const varMapping = Object.keys(dependencies).map(k=>`const ${k} = _${k};`).join("\n");
-    return (new Function(...Object.keys(dependencies).map(k=>'_'+k), `${varMapping}; return (${source})`))(...Object.values(dependencies));
+	const hasThis = Object.keys(dependencies).includes('this');
+    const renamedVars = Object.keys(dependencies).filter(d => d!=='this').map(k=>'_'+k);
+    const varMapping = renamedVars.map(k=>`const ${k.slice(1)} = ${k};`).join("\n");
+
+    let creatorFn = new Function(...renamedVars, `${varMapping}; return (${source})`)
+    if (hasThis) creatorFn = creatorFn.bind(dependencies['this'])
+    return creatorFn(...Object.values(dependencies));
 }
 
 export class ExtensibleFunction {

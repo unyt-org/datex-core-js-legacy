@@ -1,6 +1,7 @@
 // generates typescript code for @namespace JS classes with static @expose methods
 // (matching code to call the methods on another endpoint)
 import { $$, Datex } from "../mod.ts";
+import { DX_SOURCE } from "../runtime/constants.ts";
 import { indent } from "./indent.ts";
 
 const logger = new Datex.Logger("ts interface generator")
@@ -186,7 +187,8 @@ function getValueTSCode(module_name:string, name:string, value: any, no_pointer 
 	const ptr = <Datex.Pointer> Datex.Pointer.getByValue(value);
 	if (ptr) ptr.is_persistant = true;
 
-	code += `${name =='default' ? 'export default' : 'export const ' + name + ' ='} await datex(\`${Datex.Runtime.valueToDatexStringExperimental(value)}\`)${types ? ` as ${getValueTSType(value)}` : ''};\n`;
+	const loader = value[DX_SOURCE] ? `await datex.get('${value[DX_SOURCE]}')` : `await datex('${Datex.Runtime.valueToDatexStringExperimental(value)}')`
+	code += `${name =='default' ? 'export default' : 'export const ' + name + ' ='} ${loader}${types ? ` as ${getValueTSType(value)}` : ''};\n`;
 	return code;
 }
 
