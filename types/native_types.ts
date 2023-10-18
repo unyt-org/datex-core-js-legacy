@@ -69,6 +69,8 @@ Type.std.Map.setJSInterface({
 
     empty_generator: ()=>new Map(),
 
+    proxify_children: true,
+
     cast: value => {
         if (value instanceof Array) {
             try { // might not be an entry array ([[x,y], [z,v]])
@@ -158,6 +160,8 @@ Type.std.Set.setJSInterface({
     serialize: value => [...value].sort(),
 
     empty_generator: ()=>new Set(),
+
+    proxify_children: true,
 
     cast: value => {
         if (value instanceof Array) return new Set(value);

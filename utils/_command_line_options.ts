@@ -4,6 +4,7 @@ import {parse} from "https://deno.land/std@0.168.0/flags/mod.ts";
 import {Logger, ESCAPE_SEQUENCES} from "../utils/logger.ts";
 import { getCallerFile } from "../utils/caller_metadata.ts";
 import { client_type } from "./constants.ts";
+import { normalizePath } from "./normalize-path.ts";
 
 export type OptionType = "string" | "boolean" | "number"
 export type TypeFromOptionType<T extends OptionType> = (
@@ -421,7 +422,7 @@ export class CommandLineOptions {
     public generateHelpMarkdownFile() {
         if (!this.#helpFile.toString().startsWith("file://")) return false; // can only save file:// paths
         logger.info("Generating help page in "+this.#helpFile.pathname+" (can be displayed with --help)")
-        Deno.writeTextFileSync(this.#helpFile, CommandLineOptions.generateHelp(markdownHelpGenerator));
+        Deno.writeTextFileSync(normalizePath(this.#helpFile), CommandLineOptions.generateHelp(markdownHelpGenerator));
         return true;
     }
 

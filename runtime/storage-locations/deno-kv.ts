@@ -6,18 +6,19 @@ import { NOT_EXISTING } from "../constants.ts";
 import { AsyncStorageLocation } from "../storage.ts";
 import { ptr_cache_path } from "../cache_path.ts";
 import { client_type } from "../../utils/constants.ts";
+import { normalizePath } from "../../utils/normalize-path.ts";
 
 const denoKvDir = new URL("./deno-kv/", ptr_cache_path);
 // @ts-ignore global Deno
-if (client_type == "deno") Deno.mkdirSync(denoKvDir.pathname, {recursive: true});
+if (client_type == "deno") Deno.mkdirSync(normalizePath(denoKvDir), {recursive: true});
 
 let pointerDB: Deno.Kv|null = null
 let itemDB: Deno.Kv|null = null
 
 async function initKv() {
 	if (client_type === "deno" && globalThis.Deno.openKv as any) {
-		pointerDB = await Deno.openKv(new URL("./pointers", denoKvDir).pathname);
-		itemDB =  await Deno.openKv(new URL("./items", denoKvDir).pathname);
+		pointerDB = await Deno.openKv(normalizePath(new URL("./pointers", denoKvDir)));
+		itemDB =  await Deno.openKv(normalizePath(new URL("./items", denoKvDir)));
 	}
 }
 

@@ -8,11 +8,11 @@ import { NOT_EXISTING } from "./constants.ts";
 import { Pointer, type MinimalJSRef, Ref } from "./pointers.ts";
 import { localStorage } from "./storage-locations/local-storage-compat.ts";
 import { MessageLogger } from "../utils/message_logger.ts";
-import { displayFatalError, displayInit} from "./display.ts"
+import { displayFatalError } from "./display.ts"
 import { Type } from "../types/type.ts";
 
 
-displayInit();
+// displayInit();
 
 /***** imports and definitions with top-level await - node.js / browser interoperability *******************************/
 export const site_suffix = (()=>{
@@ -902,10 +902,14 @@ if (!globalThis.NO_INIT) {
         // @ts-ignore document
         if (document.visibilityState === 'hidden') Storage.handleExit()
     });
-    if (client_type== "deno") {
+    if (client_type == "deno") {
         Deno.addSignalListener("SIGINT", ()=>Deno.exit())
-        Deno.addSignalListener("SIGTERM", ()=>Deno.exit())
-        Deno.addSignalListener("SIGQUIT", ()=>Deno.exit())
+        try {
+            // not supported by WiNdoWs
+            await Deno.addSignalListener("SIGTERM", ()=>Deno.exit(1))
+            await Deno.addSignalListener("SIGQUIT", ()=>Deno.exit())
+        }
+        catch {}
     }
 }
 // ------------------------------------------------------------------------------

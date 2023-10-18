@@ -1,5 +1,6 @@
 import { client_type } from "../utils/constants.ts";
 import { cwdURL } from "../utils/global_values.ts";
+import { normalizePath } from "../utils/normalize-path.ts";
 
 
 let _cache_path:string|URL = new URL('./.datex-cache/', cwdURL);
@@ -25,12 +26,12 @@ if (client_type == "deno") {
 	
 	try {
 		const testUrl = new URL("write_test", _cache_path.toString());
-		Deno.mkdirSync(testUrl, {recursive: true})
+		Deno.mkdirSync(normalizePath(testUrl), {recursive: true})
 		Deno.removeSync(testUrl);
 	}
 	catch (e) {
 		const prev = _cache_path;
-		_cache_path = new URL(await Deno.makeTempDir()+"/", "file:///");
+		_cache_path = new URL(normalizePath(await Deno.makeTempDir()+"/"), "file:///");
 		_ptr_cache_path = new URL('./pointers/', _cache_path);
 		console.log("(!) cache directory "+prev+" is readonly, using temporary directory " + _cache_path);
 	}

@@ -3,6 +3,7 @@
 import { Deno, logger } from "../../utils/global_values.ts";
 import { client_type } from "../../utils/constants.ts";
 import { ptr_cache_path } from "../cache_path.ts";
+import { normalizePath } from "../../utils/normalize-path.ts";
 
 class LocalStorage implements Storage {
 	[name: string]: any;
@@ -40,15 +41,15 @@ class LocalStorage implements Storage {
 		this.#cache_file = new URL(name, ptr_cache_path);
 		try {
 			try {
-				Deno.openSync(ptr_cache_path);
+				Deno.openSync(normalizePath(ptr_cache_path));
 			} catch {
-				Deno.mkdirSync(ptr_cache_path, {recursive:true});
+				Deno.mkdirSync(normalizePath(ptr_cache_path), {recursive:true});
 			}
 	
 			try {
-				Deno.openSync(this.#cache_file);
+				Deno.openSync(normalizePath(this.#cache_file));
 			} catch {
-				Deno.writeTextFileSync(this.#cache_file, '{}');
+				Deno.writeTextFileSync(normalizePath(this.#cache_file), '{}');
 			}
 		}
 		catch {
@@ -60,7 +61,7 @@ class LocalStorage implements Storage {
 	saveFile(){
 		if (!this.#initialized) return;
 		this.#createCacheFileIfNotExisting();
-		Deno.writeTextFileSync(this.#cache_file, JSON.stringify(this));
+		if (this.#cache_file) Deno.writeTextFileSync(normalizePath(this.#cache_file), JSON.stringify(this));
 	}
 
 

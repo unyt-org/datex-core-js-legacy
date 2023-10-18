@@ -38,6 +38,7 @@ export * from "./runtime/performance_measure.ts";
 export * from "./runtime/pointers.ts";
 export * from "./runtime/storage.ts";
 export * from "./runtime/cli.ts";
+export * from "./runtime/cache_path.ts";
 
 
 // types
@@ -62,6 +63,7 @@ export * from "./types/quantity.ts";
 export * from "./types/time.ts";
 export * from "./types/storage_map.ts";
 export * from "./types/storage_set.ts";
+export * from "./types/struct.ts";
 
 // polyfills
 import "./utils/polyfills.ts"

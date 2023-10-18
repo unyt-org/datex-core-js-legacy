@@ -14,9 +14,8 @@
 
 
 //logger.info("initializing ...");
-import {displayInit, displayClear} from "./display.ts";
 
-displayInit();
+// displayInit();
 
 
 globalThis.performance?.mark("runtime_start");
@@ -548,16 +547,38 @@ export class Runtime {
 
         if (url.protocol == "https:" || url.protocol == "http:" || url.protocol == "blob:") {
             let response:Response;
-            // workaround: Failed to fetch: Fetch twice
-            try {
-                response = await fetch(url);
+
+            let doFetch = true;
+
+            // possible js module import: fetch headers first and check content type:
+            if (url_string.endsWith("js") || url_string.endsWith("ts") || url_string.endsWith("tsx") || url_string.endsWith("jsx") || url_string.endsWith("dx")  || url_string.endsWith("dxb")) {
+                try {
+                    response = await fetch(url, {method: 'HEAD'});
+                    const type = response.headers.get('content-type');
+                    if (type?.startsWith("text/javascript") || type?.startsWith("application/javascript")) {
+                        doFetch = false; // no body fetch required, can directly import() module
+                    }
+                }
+                catch {
+                    response.ok = false;
+                }
+                if (!response.ok) {
+                    throw new RuntimeError("Cannot get content of '"+url_string+"' (" + response.status + ")");
+                }
             }
-            catch {
-                response = await fetch(url);
+
+            if (doFetch) {
+                try {
+                    response = await fetch(url);
+                }
+                catch {
+                    response.ok = false;
+                }
+                if (!response.ok) {
+                    throw new RuntimeError("Cannot get content of '"+url_string+"' (" + response.status + ")");
+                }
             }
-            if (!response.ok) {
-                throw new RuntimeError("Cannot get content of '"+url_string+"' (" + response.status + ")");
-            }
+            
             const type = response.headers.get('content-type');
 
             if (type == "application/datex" || type == "text/dxb" || url_string.endsWith(".dxb")) {
@@ -2129,8 +2150,9 @@ export class Runtime {
             }
         }
 
+
         // try custom type cast to JS class
-        if (new_value === UNKNOWN_TYPE && type.hasMatchingJSClassOrPrototype()) {
+        if (new_value === UNKNOWN_TYPE && (type.hasMatchingJSClassOrPrototype() || type.template)) {
             new_value = type.cast(old_value, context, origin, false, false, assigningPtrId);
         }
 
@@ -6784,6 +6806,4 @@ Type.get("std:Iterator").setJSInterface({
     visible_children: new Set(['val', 'next']),
 })
 
-
-
-displayClear();
+// displayClear();

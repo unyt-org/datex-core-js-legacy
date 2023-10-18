@@ -4,12 +4,12 @@ import { cwdURL, Deno, logger } from "../utils/global_values.ts";
 import { client_type } from "../utils/constants.ts";
 import { Endpoint } from "../types/addressing.ts";
 import { Crypto } from "./crypto.ts";
-import { getLocalFileContent } from "../utils/utils.ts";
 import { Runtime } from "./runtime.ts";
 import { Tuple } from "../types/tuple.ts";
 import { cache_path } from "./cache_path.ts";
 import { DatexObject } from "../types/object.ts";
 import { Ref } from "./pointers.ts";
+import { normalizePath } from "../utils/normalize-path.ts";
 
 
 type channel_type = 'websocket'|'http'
@@ -59,7 +59,7 @@ class EndpointConfig implements EndpointConfigData {
 			let config_file = new URL('./'+this.DX_FILE_NAME, cache_path);
 			// try to open .dx from cache
 			try {
-				Deno.openSync(config_file);
+				Deno.openSync(normalizePath(config_file));
 				// console.log("using endpoint config cache: " + config_file);
 			} 
 			// use normal dx file
@@ -138,20 +138,24 @@ class EndpointConfig implements EndpointConfigData {
 		if (client_type=="deno") {
 			try {
 				try {
-					Deno.openSync(cache_path);
+					Deno.openSync(normalizePath(cache_path));
 				} catch {
-					Deno.mkdirSync(cache_path, {recursive:true});
+					Deno.mkdirSync(normalizePath(cache_path), {recursive:true});
 				}
 				const config_file = new URL('./' + this.DX_FILE_NAME, cache_path);
 				// make writable if file already exists
 				try {
-					Deno.chmodSync(config_file.pathname, 0o700);
+					Deno.chmodSync(normalizePath(config_file), 0o700);
 				} catch {}
-				Deno.writeTextFileSync(config_file, serialized)
+				Deno.writeTextFileSync(normalizePath(config_file), serialized)
 				// make readonly
-				Deno.chmodSync(config_file.pathname, 0o444);
+				try {
+					// not supported by windows
+					Deno.chmodSync(normalizePath(config_file), 0o444);
+				} catch {}
 			}
-			catch {
+			catch (e) {
+				console.log(e)
 				logger.error("Cannot save endpoint config cache file");
 			}			
 		}

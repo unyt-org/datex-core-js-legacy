@@ -20,6 +20,7 @@ import * as Datex from "./datex_all.ts";
 export {Datex};
 export * from "./js_adapter/legacy_decorators.ts";
 export * from "./datex_short.ts";
+
 export {init} from "./init.ts";
 
 if ((globalThis as any).Datex) throw new Error(`The datex-core-js-legacy library was imported more than once from different sources`);// (v${Datex.Runtime?.VERSION??'X'} from ${Datex.libURL??'unknown'} and v${globalThis.Datex?.Runtime?.VERSION??'X'} from ${globalThis.Datex?.libURL??'unknown'}). Check your imports!`)

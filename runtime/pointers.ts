@@ -2363,6 +2363,8 @@ export class Pointer<T = any> extends Ref<T> {
     /** proxify the child elements of a proxified value */
     private objProxifyChildren() {
 
+        // console.log("is objet like " + this.type, this.type.interface_config.is_normal_object)
+
         if (!this.shadow_object) return;
         
         const high_priority_keys = new Set();// remember higher priority keys in prototype chain, don't override observer with older properties in the chain
@@ -2688,7 +2690,7 @@ export class Pointer<T = any> extends Ref<T> {
 
         if(!this.current_val) return;
         // convert value/key to datex conform value/key
-        value = this.proxifyChild(key, value);
+        value = this.type.proxify_children ? this.proxifyChild(key, value) : value;
         key = Pointer.proxifyValue(key);
         
         const obj = this.current_val;
@@ -2779,7 +2781,7 @@ export class Pointer<T = any> extends Ref<T> {
         if(!this.current_val) return;
 
         // convert value to datex conform value
-        value = this.proxifyChild(undefined, value);
+        value = this.type.proxify_children ? this.proxifyChild(undefined, value) : value;
 
         const obj = this.current_val;
 

@@ -642,21 +642,11 @@ globalThis.script = script
 // @ts-ignore
 globalThis.instance = instance;
 // @ts-ignore
-globalThis.decimal = decimal;
-// @ts-ignore
-globalThis.integer = integer;
-// @ts-ignore
-globalThis.text = text;
-// @ts-ignore
 globalThis.md = md;
-// @ts-ignore
-globalThis.boolean = boolean;
 // @ts-ignore
 globalThis.local_text = local_text;
 // @ts-ignore
 globalThis.label = label;
-// @ts-ignore
-globalThis.pointer = pointer;
 // @ts-ignore
 globalThis.$$ = $$;
 // @ts-ignore

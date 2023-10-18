@@ -21,6 +21,7 @@ import { Assertion } from "./assertion.ts";
 import type { Iterator } from "./iterator.ts";
 import {StorageMap, StorageWeakMap} from "./storage_map.ts"
 import {StorageSet} from "./storage_set.ts"
+import { ExtensibleFunction } from "./function-utils.ts";
 
 export type inferDatexType<T extends Type> = T extends Type<infer JST> ? JST : any;
 
@@ -28,7 +29,7 @@ export type inferDatexType<T extends Type> = T extends Type<infer JST> ? JST : a
 export type type_clause<T=any> = clause<Type<T>>
 
 /** <ns:type> */
-export class Type<T = any> {
+export class Type<T = any> extends ExtensibleFunction {
 
     // part of the datex standard types, complex or primitive, no specific type casting needed
     static fundamental_types = ["text", "image", "audio", "video", "model", "application", "decimal", "integer", "boolean", "target", "endpoint", "null", "void", "time", "quantity", "url", "buffer", "Array", "Object", "Tuple", "Type", "Negation", "Conjunction", "Disjunction"]
@@ -64,7 +65,8 @@ export class Type<T = any> {
     
     timeout?: number // timeout for request on values of this type
 
-    #proxify_children: boolean // proxify all (new) children of this type
+    // TODO: make true per default? currently results in stack overflows for some std types
+    #proxify_children = false // proxify all (new) children of this type
 
     children_timeouts?: Map<string, number> // individual timeouts for children
 
@@ -145,7 +147,7 @@ export class Type<T = any> {
     }
 
     // cast object with template to new <Tuple>
-    private createFromTemplate(value:object = {}, assign_to_object:object = new TypedValue(this)):T {
+    private createFromTemplate(value:object = {}, assign_to_object:object = {[DX_TYPE]: this}):T {
         if (!this.#template) throw new RuntimeError("Type has no template");
         if (!(typeof value == "object")) throw new RuntimeError("Cannot create template value from non-object value");
 
@@ -282,7 +284,7 @@ export class Type<T = any> {
     public newJSInstance(is_constructor = true, args:any[]|undefined, propertyInitializer:{[INIT_PROPS]:(instance:any)=>void}) {
         // create new instance - TODO 'this' as last constructor argument still required?
         Type.#current_constructor = this.interface_config?.class;
-        const instance = <T> (this.interface_config?.class ? Reflect.construct(Type.#current_constructor, is_constructor?[...args]:[propertyInitializer]) : new TypedValue(this));
+        const instance = <T> (this.interface_config?.class ? Reflect.construct(Type.#current_constructor, is_constructor?[...args]:[propertyInitializer]) : {[DX_TYPE]: this});
         Type.#current_constructor = null;
         return instance;
     }
@@ -333,6 +335,7 @@ export class Type<T = any> {
 
     // never call the constructor directly!! should be private
     constructor(namespace?:string, name?:string, variation?:string, parameters?:any[]) {
+        super((val:any) => this.cast(val))
         if (name) this.name = name;
         if (namespace) this.namespace = namespace;
         if (variation) this.variation = variation;
@@ -1013,3 +1016,25 @@ Type.std.StorageSet.setJSInterface({
     proxify_children: true,
     visible_children: new Set(),
 })
+
+/**
+ * useful global type aliases
+ */
+
+export const string = Type.std.text
+export const number = Type.std.decimal
+export const boolean = Type.std.boolean
+export const bigint = Type.std.integer
+
+Object.defineProperty(globalThis, "string", {value: string})
+Object.defineProperty(globalThis, "number", {value: number})
+Object.defineProperty(globalThis, "boolean", {value: boolean})
+Object.defineProperty(globalThis, "bigint", {value: bigint})
+
+
+declare global {
+    const string: typeof Type.std.text
+    const number: typeof Type.std.decimal
+    const boolean: typeof Type.std.boolean
+    const bigint: typeof Type.std.integer
+}

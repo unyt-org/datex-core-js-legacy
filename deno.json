@@ -1,16 +1,11 @@
 {
 	"importMap": "importmap.dev.json",
 	"compilerOptions": {
- 		"noImplicitOverride":true,
-		"removeComments": true,
-		"experimentalDecorators": true,
-		"emitDecoratorMetadata": true,
-		"jsx": "react-jsx",
-		"jsxImportSource": "uix",
 		"lib": ["deno.window", "dom", "deno.unstable"]
 	},
 	"tasks": {
 		"generate-api-docs": "deno run -Aqr --import-map importmap.dev.json https://dev.cdn.unyt.org/doc-generator/run.ts --import-map importmap.dev.json --base ./ -m ./datex.ts --out ./docs/api",
-		"test": "deno run -Aq --import-map importmap.dev.json -c ./deno.json https://dev.cdn.unyt.org/unyt_tests/run.ts"
+		"test": "deno run -Aq --import-map importmap.dev.json -c ./deno.json https://dev.cdn.unyt.org/unyt_tests/run.ts",
+		"bundle": "deno bundle --no-check ./datex.ts /dist/datex.ts"
 	}
 }

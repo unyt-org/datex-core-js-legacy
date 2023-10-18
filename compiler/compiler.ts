@@ -42,6 +42,7 @@ import wasm_init, {init_runtime as wasm_init_runtime, compile as wasm_compile, d
 import { MessageLogger } from "../utils/message_logger.ts";
 import { JSTransferableFunction } from "../types/js-function.ts";
 import { client_type } from "../utils/constants.ts";
+import { normalizePath } from "../utils/normalize-path.ts";
 
 await wasm_init();
 wasm_init_runtime();
@@ -5295,7 +5296,7 @@ export class Compiler {
      * @param file_path path where the file should be stored
      */
      private static async saveFile(file:Blob, file_path:string|URL) {
-        return await Deno.writeFile(file_path, new Uint8Array(await file.arrayBuffer()));
+        return await Deno.writeFile(normalizePath(file_path), new Uint8Array(await file.arrayBuffer()));
     }
 
 
