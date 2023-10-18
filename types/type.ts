@@ -147,12 +147,12 @@ export class Type<T = any> extends ExtensibleFunction {
     }
 
     // cast object with template to new <Tuple>
-    private createFromTemplate(value:object = {}, assign_to_object:object = {[DX_TYPE]: this}):T {
+    private createFromTemplate(value:Record<string,unknown> = {}, assign_to_object:Record<string,unknown> = {[DX_TYPE]: this}):T {
         if (!this.#template) throw new RuntimeError("Type has no template");
         if (!(typeof value == "object")) throw new RuntimeError("Cannot create template value from non-object value");
 
         // add all allowed properties (check template types)
-        for (let key of Object.keys(this.#template)) {
+        for (const key of Object.keys(this.#template)) {
             // @ts-ignore this.#template is always a Tuple
             const required_type = this.#template[key];
 
@@ -186,6 +186,10 @@ export class Type<T = any> extends ExtensibleFunction {
                     assign_to_object[key] = required_type.createFromTemplate();
                 }
                 else if (value[key] == VOID) assign_to_object[key] = VOID;
+                // try to cast to struct
+                else if (required_type instanceof Type && required_type.namespace == "struct" && Type.ofValue(value[key]) == Type.std.Object) {
+                    assign_to_object[key] = required_type.cast(value[key])
+                }
                 else throw new ValueError("Property '" + key + "' must be of type " + required_type);
             }
             catch (e) {
@@ -771,10 +775,17 @@ export class Type<T = any> extends ExtensibleFunction {
             if (value instanceof Target) return <Type<T>>Type.std.target;
             if (value instanceof Scope) return <Type<T>>Type.std.Scope;
     
-
-            if (typeof value == "object") return <Type<T>>Type.std.Object;
+            if (typeof value == "object") {
+                const proto = Object.getPrototypeOf(value);
+                // plain object
+                if (proto === Object.prototype || proto === null)
+                    return <Type<T>>Type.std.Object;
+                // complex object with prototype
+                else 
+                    return <Type<T>>Type.std.JSComplexObject;
+            }
     
-            else return <Type<T>>Type.std.Object;
+            else return <Type<T>>Type.std.JSComplexObject;
         }
         return custom_type;
     }
@@ -833,7 +844,7 @@ export class Type<T = any> extends ExtensibleFunction {
 
             if (_forClass == Object) return <Type<T>>Type.std.Object;
 
-            else return <Type<T>>Type.std.Object;
+            else return <Type<T>>Type.std.JSComplexObject;
         }
         return custom_type;
     }
@@ -899,6 +910,7 @@ export class Type<T = any> extends ExtensibleFunction {
         Map: Type.get<(Map<any,any>)>("std:Map"),
         Transaction: Type.get("std:Transaction"),
 
+        JSComplexObject: Type.get<object>("std:JSComplexObject"), // special object type for non-plain objects (objects with prototype) - no automatic children pointer initialization
         Object: Type.get<object>("std:Object"),
         Array: Type.get<Array<any>>("std:Array"),
         Array_8: Type.get<Array<number>>("std:Array").getVariation("8"),
@@ -1017,6 +1029,12 @@ Type.std.StorageSet.setJSInterface({
     visible_children: new Set(),
 })
 
+// proxify_children leads to problems with native types - use plain objects for pointer propagation.
+Type.std.JSComplexObject.proxify_children = false
+Type.std.Object.proxify_children = true
+Type.std.Array.proxify_children = true
+
+
 /**
  * useful global type aliases
  */
@@ -1025,11 +1043,13 @@ export const string = Type.std.text
 export const number = Type.std.decimal
 export const boolean = Type.std.boolean
 export const bigint = Type.std.integer
+export const any = Type.std.Any
 
 Object.defineProperty(globalThis, "string", {value: string})
 Object.defineProperty(globalThis, "number", {value: number})
 Object.defineProperty(globalThis, "boolean", {value: boolean})
 Object.defineProperty(globalThis, "bigint", {value: bigint})
+Object.defineProperty(globalThis, "any", {value: any})
 
 
 declare global {
@@ -1037,4 +1057,5 @@ declare global {
     const number: typeof Type.std.decimal
     const boolean: typeof Type.std.boolean
     const bigint: typeof Type.std.integer
+    const any: typeof Type.std.Any
 }

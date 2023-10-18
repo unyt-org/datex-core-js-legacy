@@ -1855,7 +1855,7 @@ export class Pointer<T = any> extends Ref<T> {
         // console.log("loaded : "+ this.id + " - " + this.#type, val)
 
         // init proxy value for non-JS-primitives value (also treat non-uix HTML Elements as primitives)
-        if (Object(val) === val && !this.#type.is_js_pseudo_primitive && !(this.#type == Type.std.Object && globalThis.Element && val instanceof globalThis.Element)) {
+        if (Object(val) === val && !this.#type.is_js_pseudo_primitive && !(this.#type == Type.std.JSComplexObject && globalThis.Element && val instanceof globalThis.Element)) {
 
             // already an existing non-primitive pointer
             if (Pointer.getByValue(val)) {
@@ -1904,7 +1904,7 @@ export class Pointer<T = any> extends Ref<T> {
                 this.updateGarbageCollection(); 
     
                 // proxify children, if not anonymous
-                if (this.type.proxify_children) this.objProxifyChildren();
+                if (this.type.proxify_children) this.proxifyChildren();
     
                 // save proxy + original value in map to find the right pointer for this value in the future
                 Pointer.pointer_value_map.set(value, this);
@@ -2361,12 +2361,48 @@ export class Pointer<T = any> extends Ref<T> {
     }
 
     /** proxify the child elements of a proxified value */
-    private objProxifyChildren() {
+    private proxifyChildren() {
 
         // console.log("is objet like " + this.type, this.type.interface_config.is_normal_object)
 
         if (!this.shadow_object) return;
-        
+        // normal object with properties
+        if (!this.type.interface_config || this.type.interface_config.is_normal_object) this.objProxifyChildren();
+        // other children (e.g. Set, Map)
+        else this.specialProxifyChildren()
+
+        return;
+    }
+
+    /**
+     * Add pointers to all non-primitive children recursively.
+     * For special objects like Maps, Sets, ...
+     */
+    private specialProxifyChildren() {
+        if (!this.type.interface_config) throw new Error("Cannot proxify children of type " + this.type);
+        for (const key of this.getKeys()) {
+            const prop = this.getProperty(key);
+            // "Set" like type
+            if (prop == NOT_EXISTING) {
+                if (!this.type.interface_config.action_add || !this.type.interface_config.action_subtract) 
+                    throw new Error("Cannot add children to type " + this.type);
+                this.type.interface_config.action_subtract(this.val, key, true) 
+                this.type.interface_config.action_add(this.val, this.proxifyChild(undefined, key), true) 
+            }
+            // key->value relationship
+            else {
+                if (!this.type.interface_config.set_property_silently) 
+                    throw new Error("Cannot set property of type " + this.type);
+                this.type.interface_config.set_property_silently(this.val, key, this.proxifyChild(undefined, prop), this) 
+            }
+        }
+    }
+
+    /**
+     * Add pointers to all non-primitive children recursively.
+     * For normal objects-like values with properties
+     */
+    private objProxifyChildren() {
         const high_priority_keys = new Set();// remember higher priority keys in prototype chain, don't override observer with older properties in the chain
 
         const value = this.shadow_object!;
@@ -2406,10 +2442,7 @@ export class Pointer<T = any> extends Ref<T> {
                 high_priority_keys.add(name);
             }
         }
-
-        return;
     }
-
 
     #custom_prop_getter?:(key:unknown)=>unknown
     #custom_prop_setter?:(key:unknown, value:unknown)=>unknown
@@ -2651,13 +2684,13 @@ export class Pointer<T = any> extends Ref<T> {
         let property_value = JSInterface.handleGetProperty(this.shadow_object, key, this.type)
         if (property_value == INVALID || property_value == NOT_EXISTING) {
             // all JS properties
-            if (leak_js_properties) {
+            if (leak_js_properties && this.current_val && key in this.current_val) {
                 property_value = this.current_val?.[key]; 
                 // also bind non-datex function to parent
                 return (typeof property_value == "function") ? (...args:unknown[])=>(<Function>property_value).apply(this.current_val, args) : property_value;
             }
             // restricted to DATEX properties
-            else property_value = Ref.collapseValue(this.shadow_object?.[key], true, true)
+            else if (this.shadow_object && key in this.shadow_object) property_value = Ref.collapseValue(this.shadow_object[key], true, true)
         }
         return property_value;
     }

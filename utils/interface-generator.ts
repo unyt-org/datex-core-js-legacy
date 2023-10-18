@@ -71,7 +71,7 @@ async function getModuleExports(path_or_specifier:URL|string, caller:string|unde
 		const inject_default = exports.has("default") && is_dx;
 
 		const dx_type = Datex.Type.ofValue(module)
-		const module_is_collapsable_obj = dx_type == Datex.Type.std.Object
+		const module_is_collapsable_obj = dx_type == Datex.Type.std.Object || dx_type == Datex.Type.std.JSComplexObject
 		
 		if (module_is_collapsable_obj) {
 			for (const exp of exports) {
@@ -102,7 +102,8 @@ async function getModuleExports(path_or_specifier:URL|string, caller:string|unde
 
 // TODO: better solution (currently also targets other objects than uix default exports) exceptions for values that should not be converted to pointers when exported
 function dontConvertValueToPointer(name:string, value:any){
-	return name == "default" && Datex.Type.ofValue(value) == Datex.Type.std.Object;
+	const type = Datex.Type.ofValue(value);
+	return name == "default" && (type == Datex.Type.std.Object || type == Datex.Type.std.JSComplexObject);
 }
 
 /**
@@ -111,7 +112,7 @@ function dontConvertValueToPointer(name:string, value:any){
 async function getAllExportNames(path:URL|string) {
 	const module = await datex.get(path);
 	const dx_type = Datex.Type.ofValue(module)
-	const names = module && dx_type == Datex.Type.std.Object ? Object.keys(module) : [];
+	const names = module && (dx_type == Datex.Type.std.Object || dx_type == Datex.Type.std.JSComplexObject) ? Object.keys(module) : [];
 	return new Set(names);
 	// try {
 		
@@ -170,7 +171,7 @@ function getValueTSCode(module_name:string, name:string, value: any, no_pointer 
 			}
 
 			// log warning for non-pointer arrays and object (ignore defaults aka 'no_pointer')
-			else if ((type == Datex.Type.std.Array || type == Datex.Type.std.Object) && !no_pointer) {
+			else if ((type == Datex.Type.std.Array || type == Datex.Type.std.Object || type == Datex.Type.std.JSComplexObject) && !no_pointer) {
 				if (!is_datex_module) code += name ? `logger.warn('The export "${name}" was implicitly converted to a shared pointer value. This might have unintended side effects. Consider explicitly converting it to a ${type} pointer using $$().');\n` : `logger.warn('The default export was implicitly converted to a shared pointer value. This might have unintended side effects. Consider explicitly converting it to a ${type} pointer using $$().');\n`
 				implicitly_converted.getAuto(module_name).add(name);
 			}
@@ -187,7 +188,7 @@ function getValueTSCode(module_name:string, name:string, value: any, no_pointer 
 	const ptr = <Datex.Pointer> Datex.Pointer.getByValue(value);
 	if (ptr) ptr.is_persistant = true;
 
-	const loader = value[DX_SOURCE] ? `await datex.get('${value[DX_SOURCE]}')` : `await datex('${Datex.Runtime.valueToDatexStringExperimental(value)}')`
+	const loader = value?.[DX_SOURCE] ? `await datex.get('${value[DX_SOURCE]}')` : `await datex('${Datex.Runtime.valueToDatexStringExperimental(value)}')`
 	code += `${name =='default' ? 'export default' : 'export const ' + name + ' ='} ${loader}${types ? ` as ${getValueTSType(value)}` : ''};\n`;
 	return code;
 }
@@ -307,6 +308,7 @@ export const DX_TS_TYPE_MAP = new Map<Datex.Type,[string,boolean]>([
 
 	[Datex.Type.std.Any, ["any", false]],
 	[Datex.Type.std.Object, ["Record<string,any>", false]],
+	[Datex.Type.std.JSComplexObject, ["Record<string,any>", false]],
 	[Datex.Type.std.Array, ["any[]", false]],
 	[Datex.Type.std.Function, ["(...args:any[]) => Promise<any>", false]],
 	[Datex.Type.std.Map, ["Map<any,any>", false]],

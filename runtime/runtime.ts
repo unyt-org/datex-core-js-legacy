@@ -1909,6 +1909,13 @@ export class Runtime {
                     else new_value = INVALID;
                     break;
                 }
+                case Type.std.JSComplexObject: {
+                    if (old_value === VOID) new_value = Object();
+                    else if (old_value instanceof Tuple) new_value = old_value.toObject();
+                    else if (old_value && typeof old_value == "object") new_value = {...<object>Runtime.serializeValue(old_value)??{}};
+                    else new_value = INVALID;
+                    break;
+                }
                 case Type.std.Tuple: {
                     if (old_value === VOID) new_value = new Tuple().seal();
                     else if (old_value instanceof Array){
@@ -2400,7 +2407,7 @@ export class Runtime {
         if (parents.has(value)) return value instanceof Tuple ? "(...)"  : (value instanceof Array ? "[...]" : "{...}");
 
         // get type
-        let type = value instanceof Pointer ? Type.std.Object : Type.ofValue(value);
+        const type = value instanceof Pointer ? Type.std.Object : Type.ofValue(value);
 
         if (typeof value == "string") {
             string = Runtime.escapeString(value, formatted);
@@ -4020,7 +4027,7 @@ export class Runtime {
                     INNER_SCOPE.waiting_collapse = false;
 
                     if (el instanceof Tuple) Object.assign(INNER_SCOPE.active_object, el.toObject());
-                    else if (Type.ofValue(el) == Type.std.Object) Object.assign(INNER_SCOPE.active_object, el)
+                    else if (Type.ofValue(el) == Type.std.Object || Type.ofValue(el) == Type.std.JSComplexObject) Object.assign(INNER_SCOPE.active_object, el)
                     else throw new ValueError("Cannot collapse value")
                 }
 
