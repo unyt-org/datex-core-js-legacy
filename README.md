@@ -16,8 +16,9 @@ Includes
  7. [Endpoint Configuration](./docs/manual/07%20Endpoint%20Configuration.md)
  8. [The DATEX API](./docs/manual/08%20The%20DATEX%20API.md)
  9. [Functional Programming](./docs/manual/09%20Functional%20Programming.md)
- 10. [Classes](./docs/manual/10%20Classes.md)
- 11. [Threads](./docs/manual/11%20Threads.md)
+ 10. [Types](./docs/manual/10%20Types.md)
+ 11. [Classes](./docs/manual/11%20Classes.md)
+ 12. [Threads](./docs/manual/12%20Threads.md)
 
 ## Run Tests
 ```bash

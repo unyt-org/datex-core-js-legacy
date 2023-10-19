@@ -1835,8 +1835,8 @@ export class Runtime {
         
         let new_value:any = UNKNOWN_TYPE;
 
-        // only handle std namespace
-        if (type.namespace == "std") {
+        // only handle std namespace / js:Object
+        if (type.namespace == "std" || type == Type.js.NativeObject) {
             if (old_value instanceof Pointer) old_value = old_value.val;
 
             // handle default casts
@@ -1909,7 +1909,7 @@ export class Runtime {
                     else new_value = INVALID;
                     break;
                 }
-                case Type.std.JSComplexObject: {
+                case Type.js.NativeObject: {
                     if (old_value === VOID) new_value = Object();
                     else if (old_value instanceof Tuple) new_value = old_value.toObject();
                     else if (old_value && typeof old_value == "object") new_value = {...<object>Runtime.serializeValue(old_value)??{}};
@@ -4027,7 +4027,7 @@ export class Runtime {
                     INNER_SCOPE.waiting_collapse = false;
 
                     if (el instanceof Tuple) Object.assign(INNER_SCOPE.active_object, el.toObject());
-                    else if (Type.ofValue(el) == Type.std.Object || Type.ofValue(el) == Type.std.JSComplexObject) Object.assign(INNER_SCOPE.active_object, el)
+                    else if (Type.ofValue(el) == Type.std.Object || Type.ofValue(el) == Type.js.NativeObject) Object.assign(INNER_SCOPE.active_object, el)
                     else throw new ValueError("Cannot collapse value")
                 }
 

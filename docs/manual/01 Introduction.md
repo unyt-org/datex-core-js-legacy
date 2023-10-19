@@ -62,7 +62,7 @@ const obj = new MyObject();
 
 Instances of a class marked with `@sync` are also automatically bound to a pointer when created (The value does not have to be explicitly wrapped in `$$()`).
 
-Read more about `@sync` classes [here](./10%20Classes.md).
+Read more about `@sync` classes [here](./11%20Classes.md).
 
 ### Persistent data
 

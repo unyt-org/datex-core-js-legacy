@@ -1855,7 +1855,7 @@ export class Pointer<T = any> extends Ref<T> {
         // console.log("loaded : "+ this.id + " - " + this.#type, val)
 
         // init proxy value for non-JS-primitives value (also treat non-uix HTML Elements as primitives)
-        if (Object(val) === val && !this.#type.is_js_pseudo_primitive && !(this.#type == Type.std.JSComplexObject && globalThis.Element && val instanceof globalThis.Element)) {
+        if (Object(val) === val && !this.#type.is_js_pseudo_primitive && !(this.#type == Type.js.NativeObject && globalThis.Element && val instanceof globalThis.Element)) {
 
             // already an existing non-primitive pointer
             if (Pointer.getByValue(val)) {

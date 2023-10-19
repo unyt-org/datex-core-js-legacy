@@ -2,7 +2,7 @@
 
 Per default, most native JavaScript types (Arrays, Maps, Sets, primitive values, JSON Objects) are compatible with DATEX. This means that they can be converted to an equivalent DATEX representation and shared between endpoints.
 
-Instances of custom classes are mapped to a generic DATEX object representation per default and thus lose their class type and prototypes.
+Instances of custom classes are mapped to a DATEX representation of the generic type `js:Object` per default and thus lose their class type and prototypes.
 
 With the `@sync` decorator, a class can be bound to a new DATEX type.
 
@@ -30,7 +30,7 @@ Instances of a class marked with `@sync` are also automatically bound to a point
 
 All non-primitive properties of an instance (that are decorated with `@property`) are automatically bound to a new pointer if they don't have a pointer yet.
 
-## Getters and setters
+## Reactive Getters
 
 When a property getter is decorated with `@property`, it behaves like any other bound property at first glance.
 

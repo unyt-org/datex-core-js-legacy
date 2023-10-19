@@ -22,6 +22,7 @@ import type { Iterator } from "./iterator.ts";
 import {StorageMap, StorageWeakMap} from "./storage_map.ts"
 import {StorageSet} from "./storage_set.ts"
 import { ExtensibleFunction } from "./function-utils.ts";
+import type { JSTransferableFunction } from "./js-function.ts";
 
 export type inferDatexType<T extends Type> = T extends Type<infer JST> ? JST : any;
 
@@ -782,10 +783,10 @@ export class Type<T = any> extends ExtensibleFunction {
                     return <Type<T>>Type.std.Object;
                 // complex object with prototype
                 else 
-                    return <Type<T>>Type.std.JSComplexObject;
+                    return <Type<T>>Type.js.NativeObject;
             }
     
-            else return <Type<T>>Type.std.JSComplexObject;
+            else return <Type<T>>Type.js.NativeObject;
         }
         return custom_type;
     }
@@ -844,7 +845,7 @@ export class Type<T = any> extends ExtensibleFunction {
 
             if (_forClass == Object) return <Type<T>>Type.std.Object;
 
-            else return <Type<T>>Type.std.JSComplexObject;
+            else return <Type<T>>Type.js.NativeObject;
         }
         return custom_type;
     }
@@ -865,7 +866,17 @@ export class Type<T = any> extends ExtensibleFunction {
     }
 
 
+    /**
+     * js: namespace
+     */
+    static js = {
+        NativeObject: Type.get<object>("js:Object"), // special object type for non-plain objects (objects with prototype) - no automatic children pointer initialization
+        TransferableFunction: Type.get<JSTransferableFunction>("js:TransferableFunction")
+    }
 
+    /**
+     * std: namespace
+     */
     static std = {
         integer: Type.get<bigint>("std:integer"),
         integer_8: Type.get<bigint>("std:integer").getVariation("8"),
@@ -910,7 +921,6 @@ export class Type<T = any> extends ExtensibleFunction {
         Map: Type.get<(Map<any,any>)>("std:Map"),
         Transaction: Type.get("std:Transaction"),
 
-        JSComplexObject: Type.get<object>("std:JSComplexObject"), // special object type for non-plain objects (objects with prototype) - no automatic children pointer initialization
         Object: Type.get<object>("std:Object"),
         Array: Type.get<Array<any>>("std:Array"),
         Array_8: Type.get<Array<number>>("std:Array").getVariation("8"),
@@ -1030,7 +1040,7 @@ Type.std.StorageSet.setJSInterface({
 })
 
 // proxify_children leads to problems with native types - use plain objects for pointer propagation.
-Type.std.JSComplexObject.proxify_children = false
+Type.js.NativeObject.proxify_children = false
 Type.std.Object.proxify_children = true
 Type.std.Array.proxify_children = true
 
