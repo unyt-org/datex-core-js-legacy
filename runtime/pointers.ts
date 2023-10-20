@@ -290,7 +290,12 @@ export abstract class Ref<T = any> extends EventTarget {
     //     return dx_value;
     // }
 
-   
+    /**
+     * Returns true if the value has a bound pointer or is a Datex.Ref
+     */
+    public static isRef(value: unknown) {
+        return (value instanceof Ref || Pointer.pointer_value_map.has(value));
+    }
 
     // copy the value of a primitive datex value to another primitive value
     static mirror<T extends primitive>(from:Ref<T>, to:Ref<T>) {
@@ -994,9 +999,12 @@ export class Pointer<T = any> extends Ref<T> {
 
     static ANONYMOUS_ID = new Uint8Array(/*24*/1) // is anonymous pointer
 
-    // returns true if the value has a pointer or is a Datex.Ref
-    public static isReference(value:any) {
-        return (value instanceof Ref || this.pointer_value_map.has(value));
+    /**
+     * returns true if the value has a bound pointer or is a Datex.Ref
+     * @deprecated use Ref.isRef
+     */
+    public static isReference(value:unknown) {
+        return Ref.isRef(value);
     }
 
     // returns the existing pointer for a value, or the value, if no pointer exists
