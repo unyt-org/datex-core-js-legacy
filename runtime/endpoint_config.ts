@@ -22,6 +22,7 @@ export interface EndpointConfigData {
 	endpoint?:Endpoint
 	keys?: Crypto.ExportedKeySet
 	connect?:boolean // default true
+	ws_relay?: boolean // create ws relay on backend server, default true
 	temporary?:boolean // default false
 	nodes?: Map<Endpoint, node_config>,
 }
@@ -36,6 +37,7 @@ class EndpointConfig implements EndpointConfigData {
 	public keys?: Crypto.ExportedKeySet
 	public connect?:boolean
 	public temporary?:boolean
+	public ws_relay?:boolean
 	public nodes?: Map<Endpoint, node_config>
 	/*****************/
 
@@ -112,7 +114,9 @@ class EndpointConfig implements EndpointConfigData {
 			this.keys = DatexObject.get(<any>config, 'keys')
 			this.connect = DatexObject.get(<any>config, 'connect')
 			this.temporary = DatexObject.get(<any>config, 'temporary')
-			this.nodes = DatexObject.get(<any>config, 'nodes');
+			this.ws_relay = DatexObject.get(<any>config, 'ws_relay')
+			// TODO: enable nodes from cached .dx file, currently disabled for backends to avoid problems during development
+			this.nodes = client_type == "browser" ? DatexObject.get(<any>config, 'nodes') : undefined // DatexObject.get(<any>config, 'nodes');
 		}
 
 		if (this.storage) {
@@ -133,7 +137,7 @@ class EndpointConfig implements EndpointConfigData {
 	}
 
 	save() {
-		const serialized = Runtime.valueToDatexString(new Tuple({endpoint:this.#endpoint, connect:this.connect, temporary:this.temporary, keys:this.keys, nodes:this.nodes}));
+		const serialized = Runtime.valueToDatexString(new Tuple({endpoint:this.#endpoint, connect:this.connect, ws_relay:this.ws_relay, temporary:this.temporary, keys:this.keys, nodes:this.nodes}));
 
 		if (client_type=="deno") {
 			try {
@@ -180,6 +184,7 @@ class EndpointConfig implements EndpointConfigData {
 		this.#endpoint = undefined;
 		this.connect = undefined;
 		this.temporary = undefined;
+		this.ws_relay = undefined;
 		this.keys = undefined;
 		this.nodes = undefined;
 

@@ -68,11 +68,20 @@ export class Type<T = any> extends ExtensibleFunction {
 
     // TODO: make true per default? currently results in stack overflows for some std types
     #proxify_children = false // proxify all (new) children of this type
-
     children_timeouts?: Map<string, number> // individual timeouts for children
 
+    /**
+     * Should proxify all children with proxify_as_child=true
+     * when creating a pointer of this type
+     */
     get proxify_children() {return this.interface_config?.proxify_children ?? this.#proxify_children}
     set proxify_children(proxify: boolean) {if (this.interface_config) {this.interface_config.proxify_children = proxify}; this.#proxify_children = proxify}
+
+    /**
+     * Prevents proxification if a child of a parent with proxified children.
+     * Primitive values are not proxified per default
+     */
+    proxify_as_child = true;
 
     // all children allowed by the template
     #visible_children: Set<any>
@@ -1039,8 +1048,9 @@ Type.std.StorageSet.setJSInterface({
     visible_children: new Set(),
 })
 
-// proxify_children leads to problems with native types - use plain objects for pointer propagation.
+// proxify_children leads to problems with native types - use plain objects for pointer propagation + don't propagate proxification
 Type.js.NativeObject.proxify_children = false
+Type.js.NativeObject.proxify_as_child = false;
 Type.std.Object.proxify_children = true
 Type.std.Array.proxify_children = true
 

@@ -217,7 +217,7 @@ export class Runtime {
     static mime_type_classes = new Map(Object.entries(this.MIME_TYPE_MAPPING).map(x=>[('class' in x[1] && typeof x[1].class == "function") ? x[1].class : x[1], x[0]])) 
 
     public static ENV: ObjectRef<{LANG:string, DATEX_VERSION:string, [key:string]:string}>
-    public static VERSION = "0.0.0";
+    public static VERSION = "beta";
 
     public static PRECOMPILED_DXB: {[key:string]:PrecompiledDXB}
 

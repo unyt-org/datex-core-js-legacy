@@ -81,10 +81,10 @@ export type BCData<T extends BCEntryType> =
 
 
 /**
- * Blockchain interface
+ * Blockchain interface (using @+unyt2 relay node)
  */
 
-@endpoint('@+unyt') export class Blockchain {
+@endpoint('@+unyt2') export class Blockchain {
 
 	/**
 	 * Methods that must be implemented on an endpoint that has access to the blockchain:#

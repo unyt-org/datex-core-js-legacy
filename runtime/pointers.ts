@@ -26,6 +26,8 @@ import { JSTransferableFunction } from "../types/js-function.ts";
 export type observe_handler<K=any, V extends Ref = any> = (value:V extends Ref<infer T> ? T : V, key?:K, type?:Ref.UPDATE_TYPE, transform?:boolean, is_child_update?:boolean)=>void|boolean
 export type observe_options = {types?:Ref.UPDATE_TYPE[], ignore_transforms?:boolean, recursive?:boolean}
 
+const arrayProtoNames = Object.getOwnPropertyNames(Array.prototype);
+const objectProtoNames = Object.getOwnPropertyNames(Object.prototype)
 
 // root class for pointers and pointer properties, value changes can be observed
 export abstract class Ref<T = any> extends EventTarget {
@@ -1199,13 +1201,14 @@ export class Pointer<T = any> extends Ref<T> {
     }
 
     // create/get DatexPointer for value if possible (not primitive) and return value
-    static proxifyValue<T,C extends RefOrValue<T> = RefOrValue<T>>(value:C, sealed = false, allowed_access?:target_clause, anonymous = false, persistant= false): C|T {
+    static proxifyValue<T,C extends RefOrValue<T> = RefOrValue<T>>(value:C, sealed = false, allowed_access?:target_clause, anonymous = false, persistant= false, check_proxify_as_child = false): C|T {
         if ((value instanceof Pointer && value.is_js_primitive) || value instanceof PointerProperty) return <any>value; // return by reference
         else if (value instanceof Ref) return value.val; // return by value
         const type = Type.ofValue(value)
         const collapsed_value = <T> Ref.collapseValue(value,true,true)
-        // don' create pointer for this value, return original value
-        if (type.is_primitive) {
+    // if proxify_as_child=false: don't create pointer for this value, return original value
+        // e.g.: primitive values
+        if ((check_proxify_as_child && !type.proxify_as_child) || type.is_primitive) {
             return <any>collapsed_value;
         }
 
@@ -2357,7 +2360,7 @@ export class Pointer<T = any> extends Ref<T> {
         }
 
         // create/get pointer, same permission filter
-        return Pointer.proxifyValue(child, false, this.allowed_access, this.anonymous_properties?.has(name));
+        return Pointer.proxifyValue(child, false, this.allowed_access, this.anonymous_properties?.has(name), false, true);
     }
 
     /** proxify the child elements of a proxified value */
@@ -2578,20 +2581,27 @@ export class Pointer<T = any> extends Ref<T> {
                     this.handleValueGet();
                     if (key == DX_PTR) return this;
                     if (this.#custom_prop_getter && (!this.shadow_object || !(key in this.shadow_object)) && !(typeof key == "symbol")) return this.#custom_prop_getter(key);
-                    const val = Ref.collapseValue(this.shadow_object?.[key], true, true);
+                    const val:any = Ref.collapseValue(this.shadow_object?.[key], true, true);
 
-                    /*if (typeof val == "function" && key != "$" && key != "$$") {
-                        try {
-                            const bind = Ref.collapseValue(val.bind, true, true);
-                            const res = typeof bind == "function" ? bind.call(val, _target) : val;
-                            return res;
+                    // should fix #private properties, but does not seem to work for inheriting classes?
+                    if (typeof val == "function" 
+                        && typeof val.bind == "function"
+                        && key != "$" 
+                        && key != "$$" 
+                        // ignore constructors
+                        && key != "constructor"
+                        // ignore builtin object/array methods
+                        && !(_target.constructor == Array && (arrayProtoNames.includes(key as string)))
+                        && !(_target.constructor == Object && (objectProtoNames.includes(key as string)))
+                    ) {
+                        const propertyDesc = Object.getOwnPropertyDescriptor(_target, key);
+                        if (propertyDesc && propertyDesc.writable == false && propertyDesc.configurable == false) {
+                            // not allowed, return without bind
+                            return val;
                         }
-                        catch (e) {
-                            console.log(val, key, e)
-                        }
-                      
+                        return val.bind(_target);
                     }
-                    else*/ return val
+                    else return val
                 },
                 set: (target, val_name: keyof any, val: any) => {
                     if (this.#custom_prop_setter) {

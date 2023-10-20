@@ -29,8 +29,6 @@ const logger = new Logger("DATEX Supranet");
 // entry point to connect to the datex network
 export class Supranet {
 
-    static NODES_LIST_URL =  '/unyt_core/dx_data/nodes.dx' //'https://docs.unyt.org/unyt_web/unyt_core/dx_data/nodes.dx';
-
     static available_channel_types:string[] = []; // all available interface channel types, sorted by preference
 
     static #connected = false;
