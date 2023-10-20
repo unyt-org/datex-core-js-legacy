@@ -2,7 +2,9 @@
 
 ## Creating Pointers
 
-To create a pointer for any JS value, just use the `$$` helper function.
+To create a pointer for any JavaScript value, you can use the `$$` helper function.
+The `always` helper function lets you define a reactive pointer that depends on other
+pointers.
 
 ```ts
 const refA = $$(5);
@@ -14,7 +16,7 @@ console.log(refSum.val) // 10
 ```
 
 This creates the [pointers](#pointers-for-primitive-values) `refA`, `refB` and a reactive [transformed](#transform-functions)
-`refSum` pointer that gets updated when `refA` or `refB` are changed.
+`refSum` pointer that gets updated every time `refA` or `refB` are changed.
 
 
 ## Pointers for object values and pointer properties
@@ -102,7 +104,7 @@ primitive references are always wrapped in a `Datex.Pointer` object to keep the 
 ```ts
 const refA: Datex.Pointer<number> = $$(5);
 ```
-The advantage of having the `Datex.Pointer` interface always exposed as a primitive value wrapper is that utility methods like `observe` can be easily accessed:
+The advantage of having the `Datex.Pointer` interface always exposed as a primitive value wrapper is that utility methods like [`observe`](#observing-pointer-changes) can be easily accessed:
 
 ```ts
 refA.observe(a => console.log(`refA was updated: ${a}`)); // called every time the value of refA is changed
@@ -151,6 +153,74 @@ and can be used instead of a generic `always` function.
 Read more about transform functions in the chapter [Functional Programming](./09%20Functional%20Programming.md).
 
 
+## Observing pointer changes
+
+With transform functions, many value changes can be defined declaratively.
+Still, there are some scenarios where the actual pointer value change event must be handled.
+
+In this case, the `Datex.Ref.observe()` function can be used:
+
+```ts
+const ptr = $$(10);
+
+// log on value change
+Datex.Ref.observe(ptr, value => console.log(`ptr value is now ${value}`));
+
+// equivalent instance method for primitive pointers:
+ptr.observe(nr, value => console.log(`ptr value is now ${value}`));
+
+ptr.val++; // logs "ptr value is now 11"
+```
+
+An observer callback function gets called with up to 5 arguments:
+```ts
+(
+    value: any, // the new value
+    key?: any, // if a property of the pointer was changed, key contains the property key
+               // and value contains the property value
+    type: Ref.UPDATE_TYPE, // update type that triggered the observer
+    isTransform?: boolean, // true if the observer was triggered by a transform function
+    isChildUpdate?: boolean // true if the observer was triggered recursively by a child update
+) => {
+    // ...
+}
+```
+
+The following update types exist:
+```ts
+enum Ref.UPDATE_TYPE {
+    INIT, // pointer value was set for the first time
+    UPDATE, // pointer value was updated
+    SET, // a property was set
+    DELETE, // a property was deleted
+    CLEAR, // the value was cleared (all properties removed)
+    ADD, // a child value was added (e.g. for Sets)
+    REMOVE, // a child value was removed
+    BEFORE_DELETE, // called before DELETE, before the property gets deleted from the value
+    BEFORE_REMOVE // called before REMOVE, before the property gets removed from the value
+}
+```
+
+
+
+### Canceling observers
+Calling `Datex.Ref.unobserve()` with the same callback function that was passed to `Datex.Ref.observe()`
+removes the observer.
+
+```ts
+const ptr = $$(10);
+
+const observer = value => console.log(`ptr value is now ${value}`);
+
+// enable observer
+Datex.Ref.observe(ptr, observer);
+nr.val++; // logs "nr value is now 11"
+
+// disable observer
+Datex.Ref.unobserve(ptr, observer);
+nr.val++; // observer not triggered
+```
+
 ## Collapsing references
 
 Non-primitive pointer values are normally always passed in their collapsed form (normal JavaScript object representation). 
@@ -166,3 +236,7 @@ const valX: number = val(refX);
 ```
 
 If a non-reference value (e.g. a normal `number` or object) is passed to the `val` function, the value is just returned, so that it is guaranteed to always return a normal JavaScript value.
+
+
+
+
