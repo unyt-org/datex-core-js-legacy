@@ -17,7 +17,7 @@ This creates the [pointers](#pointers-for-primitive-values) `refA`, `refB` and a
 `refSum` pointer that gets updated when `refA` or `refB` are changed.
 
 
-## Pointers for object values and pointer properties.
+## Pointers for object values and pointer properties
 
 Pointer can also be created for non-primitive values (JSON Objects, Maps, Sets, ...).
 
@@ -58,6 +58,38 @@ Alternatively, the `$$` function can be used:
 ```ts
 $$(refObj, "x") // Datex.PointerProperty<number>
 ```
+
+### Recursive pointer initialization
+
+In most cases, when an object is bound to a pointer, its property values are automatically bound to pointers recursively:
+
+```ts
+const map = new Map([
+    ['y', {
+        a: 10,
+        b: 20
+    }]
+]);
+
+Datex.Ref.isRef(map) // false, not bound to a pointer
+Datex.Ref.isRef(map.get('y')) // false, not bound to a pointer
+
+const nestedObject = $$({
+    map: map
+})
+
+nestedObject.map // Map
+Datex.Ref.isRef(map) // true, was implicitly bound to a pointer
+Datex.Ref.isRef(map.get('y')) // true, was implicitly bound to a pointer
+```
+
+There are some exceptions to this behaviour:
+1. Primitive property values are not converted to pointers per default
+2. Normal [class instances](./10%20Types.md#jsobject) (`js:Object`) are not converted to pointers per default.
+   Instances of [`@sync`](11%20Classes.md) classes are still converted to pointers
+3. When a [class instances](./10%20Types.md#jsobject) is directly bound to a pointer with `$$()`, its
+   properties are not converted to pointers per default (like 2., this does not affect `@sync` class instances 
+
 
 
 ## Pointers for primitive values
