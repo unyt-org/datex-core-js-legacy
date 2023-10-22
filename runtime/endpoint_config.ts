@@ -41,6 +41,9 @@ class EndpointConfig implements EndpointConfigData {
 	public nodes?: Map<Endpoint, node_config>
 	/*****************/
 
+	// not saved in endpoint config, loaded from https://unyt.cc/nodes.dx
+	public publicNodes?: Map<Endpoint, node_config>
+
 	public get endpoint() {
 		return Ref.collapseValue(this.#endpoint, true, true)!;
 	}
@@ -49,7 +52,8 @@ class EndpointConfig implements EndpointConfigData {
 	}
 
 
-	#nodes_loaded = false;
+
+	#nodesInitialized = false;
 	// list of available nodes with public keys
 	#node_channels_by_type = new Map<string, [Endpoint, unknown][]>();
 
@@ -126,7 +130,9 @@ class EndpointConfig implements EndpointConfigData {
 				localStorage.removeItem(this.storageId);
 		}
 
-		await this.loadNodes()
+		// load public nodes from unyt.org
+		await this.loadPublicNodes();
+		await this.initNodes()
 	}
 	
 	get storageId() {
@@ -195,27 +201,31 @@ class EndpointConfig implements EndpointConfigData {
 		else if (this.storage) this.storage.removeItem(this.storageId);
 	}
 
-
-	// node handling
-
-	private async loadNodes(){
-		if (this.#nodes_loaded) return;
-		this.#nodes_loaded = true;
-
-		// no nodes provided in .dx config, fall back to default nodes list
-		if (!this.nodes) {
-			// try to get from cdn.unyt.org
+	/**
+	 * get public node keys + connection points from unyt.cc/nodes.dx
+	 */
+	private async loadPublicNodes() {
+		// get public nodes
+		if (!this.publicNodes) {
+			// try to get from unyt.cc
 			try {
-				this.nodes = await datex.get('https://dev.cdn.unyt.org/unyt_core/dx_data/nodes.dx');
+				this.publicNodes = await datex.get('https://unyt.cc/nodes.dx');
 			}
 			// otherwise try to get local file (only backend)
 			catch {
-				this.nodes = await datex.get(new URL('../dx_data/nodes.dx', import.meta.url));
+				this.publicNodes = await datex.get(new URL('../dx_data/nodes.dx', import.meta.url));
 			}
 		}
-		
+	}
 
-		for (const [node, {channels, keys:[verify_key, enc_key]}] of this.nodes.entries()) {
+	/**
+	 * register custom + public nodes as interface channels
+	 */
+	private initNodes(){
+		if (this.#nodesInitialized) return;
+		this.#nodesInitialized = true;
+
+		for (const [node, {channels, keys:[verify_key, enc_key]}] of [...(this.nodes??new Map()).entries(), ...(this.publicNodes??new Map()).entries()]) {
 			// save keys
 			Crypto.bindKeys(node, verify_key, enc_key);
 

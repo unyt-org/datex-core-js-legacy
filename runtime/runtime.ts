@@ -70,6 +70,7 @@ import { initPublicStaticClasses } from "../js_adapter/js_class_adapter.ts";
 import { JSTransferableFunction } from "../types/js-function.ts";
 import { createFunctionWithDependencyInjections } from "../types/function-utils.ts";
 import type { Blockchain } from "../network/blockchain_adapter.ts";
+import { AutoMap } from "../utils/auto_map.ts";
 
 const mime = client_type === "deno" ? (await import("https://deno.land/x/mimetypes@v1.0.0/mod.ts")).mime : null;
 
@@ -1812,7 +1813,10 @@ export class Runtime {
     // Persistant Scope Memory
 
     // TODO save permanently in storage
-    static persistent_memory:Map<string,{[key:number|string]:any}>;
+    static persistent_memory:AutoMap<string,{[key:number|string]:any}>;
+
+    // Persistent Pointer subscriber cache (ptr id -> subscribers)
+    static subscriber_cache:AutoMap<string, Set<Endpoint>>;
 
     static saveScopeMemoryValue(scope_identifier:string, key:string|number, value: any) {
         logger.debug("saving persistent memory location ? for ?: ?", key, scope_identifier, value)

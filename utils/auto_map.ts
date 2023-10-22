@@ -1,6 +1,8 @@
 
 // extends Map class to automatically create new empty entries when the getAuto() method is called and the entry does not exist
 
+import type { any_class } from "unyt_core/utils/global_types.ts";
+
 const DEFAULT_CLASS = Symbol('DEFAULT_CLASS')
 const DEFAULT_IS_CLASS = Symbol('DEFAULT_IS_CLASS')
 const DEFAULT_CLASS_PRIMITIVE = Symbol('DEFAULT_CLASS_PRIMITIVE')
@@ -9,11 +11,12 @@ const DEFAULT_VALUE = Symbol('DEFAULT_VALUE')
 
 export const _ = "_";
 
+export type AutoMap<K,V> = Map<K,V> & {getAuto(key: K): V}
+
 // TODO
 declare global {
     interface Map<K, V> {
-        setAutoDefault(default_class_or_creator_function_or_value:V|any_class<V>|(()=>V)):Map<K, V>;
-        getAuto(key: K): V;
+        setAutoDefault(default_class_or_creator_function_or_value:V|any_class<V>|(()=>V)):AutoMap<K, V>;
     }
 }
 

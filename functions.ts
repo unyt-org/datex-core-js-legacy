@@ -71,7 +71,7 @@ export function map<T, U, O extends 'array'|'map' = 'array'>(iterable: Iterable<
 	let mapped:U[]|Map<number, U>
 	
 	// live map
-	if (Datex.Pointer.isReference(iterable)) {
+	if (Datex.Ref.isRef(iterable)) {
 
 		// return map
 		if (options?.outType == "map") {
@@ -98,10 +98,12 @@ export function map<T, U, O extends 'array'|'map' = 'array'>(iterable: Iterable<
 					return mapFn(v,k,iterable)
 				},
 				onEntryRemoved: (v,k) => {
-					if (options?.spliceArray) (mapped as U[]).splice(k, 1);
+					if (options?.spliceArray !== false) (mapped as U[]).splice(k, 1);
 					else delete (mapped as U[])[k];
 				},
-				onNewEntry: (v,k) => (mapped as U[])[k] = v,
+				onNewEntry: (v,k) => {
+					(mapped as U[])[k] = v
+				},
 				onEmpty: () => (mapped as U[]).length = 0
 			})
 		}

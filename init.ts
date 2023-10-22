@@ -98,6 +98,10 @@ export async function init() {
 	Runtime.persistent_memory = (await Storage.loadOrCreate("Datex.Runtime.MEMORY", ()=>new Map())).setAutoDefault(Object);
 
 
+	// init persistent subscriber cache
+	Runtime.subscriber_cache = (await Storage.loadOrCreate("Datex.Runtime.SUBSCRIBER_CACHE", ()=>new Map())).setAutoDefault(Set);
+
+
 	if (!globalThis.NO_INIT) {
 		await Runtime.init();
 

@@ -23,8 +23,7 @@ export class MessageLogger {
          
             return wasm_decompile(new Uint8Array(dxb), true, colorized, true).replace(/\r\n$/, '');
         } catch (e) {
-            console.log("decompiler error",e.message);
-            return "/* ERROR: Decompiler Error */";
+            return "Decompiler Error: "+ e.message;
         }
     }
 
@@ -37,8 +36,11 @@ export class MessageLogger {
             const receivers = header.routing?.receivers;
             if (header.sender == Runtime.endpoint && (receivers instanceof Logical && receivers?.size == 1 && receivers.has(Runtime.endpoint)) && header.type != ProtocolDataType.RESPONSE && header.type != ProtocolDataType.DEBUGGER) return;
         
+            const content = MessageLogger.decompile(dxb);
+            if (content.trim() == "\x1b[38;2;219;45;129mvoid\x1b[39m;") return; // dont log void; messages
+            
             this.logger.plain(`\n#color(blue)⭠  ${header.sender||'@*'} `.padEnd(70, '─'));
-            console.log(MessageLogger.decompile(dxb));
+            console.log(content);
             this.logger.plain(`#color(blue)─────────────────────────────────────────────────────────\n`);
         });
 
@@ -47,8 +49,11 @@ export class MessageLogger {
             const receivers = header.routing?.receivers;
             if (header.sender == Runtime.endpoint && (receivers instanceof Logical && receivers?.size == 1 && receivers.has(Runtime.endpoint)) && header.type != ProtocolDataType.RESPONSE && header.type != ProtocolDataType.DEBUGGER) return;
 
+            const content = MessageLogger.decompile(dxb);
+            if (content.trim() == "\x1b[38;2;219;45;129mvoid\x1b[39m;") return; // dont log void; messages
+ 
             this.logger.plain(`\n#color(green)⭢  ${receivers||'@*'} `.padEnd(70, '─'));
-            console.log(MessageLogger.decompile(dxb));
+            console.log(content);
             this.logger.plain(`#color(green)─────────────────────────────────────────────────────────\n`);
         });
 

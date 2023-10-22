@@ -11,7 +11,7 @@ export class IterableHandler<T, U = T> {
 	
 	constructor(private iterable: Datex.RefOrValue<Iterable<T>>, callbacks: {
 		map?: (value: T, index: number, array: Iterable<T>) => U,
-		onNewEntry: (entry:U, key:number) => void
+		onNewEntry: (this: IterableHandler<T, U>, entry:U, key:number) => void
 		onEntryRemoved: (entry: U, key:number) => void,
 		onEmpty: () => void
 	}) {

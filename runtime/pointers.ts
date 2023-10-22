@@ -111,7 +111,9 @@ export abstract class Ref<T = any> extends EventTarget {
             if (force_pointer_properties) return PointerProperty.get(pointer, <keyof typeof pointer>key, true);
             else {
                 // TODO: handle typeof key == "symbol" (currently not supported in DATEX)
-                if (!(key in Object(pointer.val))) throw new ValueError("Property "+key.toString()+" does not exist in value");
+                if (!(key in Object(pointer.val))) {
+                    throw new ValueError("Property "+key.toString()+" does not exist in value");
+                }
                 if (pointer instanceof Pointer && Pointer.pointerifyValue(pointer.shadow_object?.[key]) instanceof Ref) return Pointer.pointerifyValue(pointer.shadow_object?.[key]);
                 else return PointerProperty.get(pointer, <keyof typeof pointer>key, true);
             } 
@@ -1096,7 +1098,7 @@ export class Pointer<T = any> extends Ref<T> {
                 if (source?.syncPointer) source.syncPointer(pointer);
 
                 // use local endpoint as default origin for storage pointer (TODO change?)
-                pointer.origin = Runtime.endpoint;
+                // pointer.origin = Runtime.endpoint;
             }
 
             // special pointers
@@ -1175,7 +1177,7 @@ export class Pointer<T = any> extends Ref<T> {
 
                 try {
                     logger.debug("could not find local pointer, requesting pointer from "+SCOPE?.sender+": " + pointer.idString());
-                    pointer = await pointer.subscribeForPointerUpdates(SCOPE?.sender);
+                    pointer = await pointer.subscribeForPointerUpdates(SCOPE?.sender, undefined, true);
                 } catch  {
                     loading_pointers?.delete(id_string);
                     // could not subscribe, remove pointer again
@@ -1394,7 +1396,7 @@ export class Pointer<T = any> extends Ref<T> {
         }
         if (deleteCount == undefined) deleteCount = (<Array<unknown>><unknown>this.shadow_object).length; // default deleteCount: all
         if (deleteCount && deleteCount < 0) deleteCount = 0;
-        return this.handleSplice(start, deleteCount, items);
+        return this.handleSplice(start??0, deleteCount, items);
     }
     
 
@@ -1445,6 +1447,9 @@ export class Pointer<T = any> extends Ref<T> {
 
         // set value
         if (<any>value != NOT_EXISTING) this.val = value;
+
+        // set update_endpoint and trigger suscribers getter (get from cache)
+        this.#update_endpoints = this.subscribers
     }
     
     // delete pointer again (reset everything) if not needed
@@ -1465,6 +1470,9 @@ export class Pointer<T = any> extends Ref<T> {
         }
         this.#loaded = false;
 
+        // remove subscriber cache
+        Runtime.subscriber_cache?.delete(this.id);
+
         // delete labels
         for (const label of this.labels??[]) Pointer.pointer_label_map.delete(label);
         
@@ -1474,6 +1482,7 @@ export class Pointer<T = any> extends Ref<T> {
 
         // call remove listeners
         if (!this.is_anonymous) for (const l of Pointer.pointer_remove_listeners) l(this);
+
     }
     
 
@@ -1621,7 +1630,7 @@ export class Pointer<T = any> extends Ref<T> {
     * Subscribe for external pointer updates at remote endpoint -> might return a different pointer if current pointer was placeholder
     */
 
-    public async subscribeForPointerUpdates(override_endpoint?:Endpoint, get_value = !this.#loaded):Promise<Pointer> {
+    public async subscribeForPointerUpdates(override_endpoint?:Endpoint, get_value = !this.#loaded, keep_pointer_origin = false):Promise<Pointer> {
         if (this.#subscribed) {
             // logger.debug("already subscribed to " + this.idString());
             return this;
@@ -1645,7 +1654,7 @@ export class Pointer<T = any> extends Ref<T> {
             // if (pointer_value instanceof Function) {
             //     pointer_value.setRemoteEndpoint(endpoint);
             // }
-            this.origin = endpoint;
+            if (!keep_pointer_origin) this.origin = endpoint;
 
             if (!this.#loaded) return this.setValue(pointer_value); // set value
             else return this;
@@ -2291,7 +2300,13 @@ export class Pointer<T = any> extends Ref<T> {
     #subscribers?: Disjunction<Endpoint>
 
     public get subscribers() {
-        if (!this.#subscribers) this.#subscribers = new Disjunction()
+        if (!this.#subscribers) {
+            if (Runtime.subscriber_cache?.has(this.id)) {
+                this.#subscribers = new Disjunction(...Runtime.subscriber_cache.get(this.id)!)
+                logger.info("restored subscriber cache for " + this.idString() + ":",this.#subscribers)
+            }
+            else this.#subscribers = new Disjunction();
+        }
         return this.#subscribers!;
     }
 
@@ -2305,6 +2320,9 @@ export class Pointer<T = any> extends Ref<T> {
         if (this.streaming.length) setTimeout(()=>this.startStreamOutForEndpoint(subscriber), 1000); // TODO do without timeout?
         // force enable live mode also if primitive (subscriber is not handled a new observer)
         if (this.is_js_primitive) this.setForcedLiveTransform(true)
+
+        // update subscriber_cache
+        Runtime.subscriber_cache.getAuto(this.id).add(subscriber)
     }
 
     public removeSubscriber(subscriber: Endpoint) {
@@ -2315,12 +2333,20 @@ export class Pointer<T = any> extends Ref<T> {
             if (this.is_js_primitive) this.setForcedLiveTransform(false)
             this.updateGarbageCollection() 
         }
+
+        // update subscriber_cache
+        if (this.subscribers.size == 0) {
+            Runtime.subscriber_cache?.delete(this.id);
+        }
+        else {
+            Runtime.subscriber_cache?.getAuto(this.id).delete(subscriber)
+        }
     }
     
 
 
     // updates are from datex (external) and should not be distributed again or local update -> should be distributed to subscribers
-    #update_endpoints = this.subscribers; // endpoint to update
+    #update_endpoints: Disjunction<Endpoint>; // endpoint to update
 
     #exclude_origin_from_updates:boolean;
     public excludeEndpointFromUpdates(endpoint:Endpoint) {
@@ -2593,9 +2619,9 @@ export class Pointer<T = any> extends Ref<T> {
 
                     // should fix #private properties, but does not seem to work for inheriting classes?
                     if (typeof val == "function" 
-                        && typeof val.bind == "function"
                         && key != "$" 
                         && key != "$$" 
+                        && typeof val.bind == "function"
                         // ignore constructors
                         && key != "constructor"
                         // ignore builtin object/array methods
@@ -2610,6 +2636,7 @@ export class Pointer<T = any> extends Ref<T> {
                         return val.bind(_target);
                     }
                     else return val
+                    
                 },
                 set: (target, val_name: keyof any, val: any) => {
                     if (this.#custom_prop_setter) {
@@ -2931,11 +2958,8 @@ export class Pointer<T = any> extends Ref<T> {
             }, 0)
         }
 
-        // TODO inform observers?
         // inform observers
-        for (const key of keys) {
-            this.callObservers(VOID, key, Ref.UPDATE_TYPE.CLEAR)
-        }
+        this.callObservers(VOID, VOID, Ref.UPDATE_TYPE.CLEAR)
     }
 
     /** all values are removed */
@@ -2946,6 +2970,10 @@ export class Pointer<T = any> extends Ref<T> {
 
         const obj = this.current_val;
 
+        if (!(obj instanceof Array)) {
+            logger.error("Cannot handle splice for non-array value");
+            return;
+        }
         
         const start = BigInt(start_index);
         const end = BigInt(start_index+deleteCount);
@@ -2953,14 +2981,18 @@ export class Pointer<T = any> extends Ref<T> {
         const replace_length = BigInt(replace.length);
 
         // removed overflows array length
-        if (obj instanceof Array && start+size > obj.length) size = BigInt(obj.length) - start;
+        if (start+size > obj.length) size = BigInt(obj.length) - start;
 
-        let ret:any;
 
+        const netDeleteCount = deleteCount - replace?.length;
+        const originalLength = obj.length;
         // array splice
-        if (obj instanceof Array) {
-            ret = Array.prototype.splice.call(this.shadow_object, start_index, deleteCount, ...replace);
+        // trigger BEFORE_DELETE
+        for (let i = obj.length - netDeleteCount; i < obj.length; i++) {
+            this.callObservers(obj[i], i, Ref.UPDATE_TYPE.BEFORE_DELETE)
         }
+
+        const ret = Array.prototype.splice.call(this.shadow_object, start_index, deleteCount, ...replace);
 
         // propagate updates via datex?
         if (this.origin && !this.is_origin) {
@@ -2969,7 +3001,7 @@ export class Pointer<T = any> extends Ref<T> {
                 else this.handleDatexUpdate(null, '#0=?0;#0.(?4..?1) = void; #0.(?2..((count #0) + ?3)) = #0.(?4..(count #0));#0.(?4..?5) = ?6;', [this, end, start-size+replace_length, replace_length, start, start+replace_length, replace], this.origin) // insert
             }
         }
-        else if (this.is_origin && this.update_endpoints.size) {
+        else if (this.is_origin && this.update_endpoints.size) {
             if (!replace?.length) this.handleDatexUpdate(null, '#0 = ?0; #1 = count #0;#0.(?1..?2) = void;#0.(?1..#1) = #0.(?3..#1);', [this, start, end, start+size], this.update_endpoints) // no insert
             else  this.handleDatexUpdate(null, '#0=?0;#0.(?4..?1) = void; #0.(?2..((count #0) + ?3)) = #0.(?4..(count #0));#0.(?4..?5) = ?6;', [this, end, start-size+replace_length, replace_length, start, start+replace_length, replace], this.update_endpoints) // insert
         }
@@ -2983,6 +3015,19 @@ export class Pointer<T = any> extends Ref<T> {
                 for (const l of Pointer.pointer_property_delete_listeners) l(this, undefined)
             }, 0)
         }
+
+        // inform observers after splice finished - value already in right position
+        for (let i = originalLength-1; i>=start_index; i--) {
+            // element moved here?
+            if (i < obj.length) {
+                this.callObservers(obj[i], i, Ref.UPDATE_TYPE.SET)
+            }
+            // end of array, trigger delete
+            else {
+                this.callObservers(VOID, i, Ref.UPDATE_TYPE.DELETE)
+            }
+        }
+       
 
         return ret;
     }
