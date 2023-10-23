@@ -7,7 +7,7 @@ const logger = new Logger("thread-runner");
 import { Datex, f } from "../mod.ts";
 import { blobifyFile, blobifyScript } from "../utils/blobify.ts";
 import { RuntimeError } from "../types/errors.ts";
-import { Path } from "unyt_node/path.ts";
+import { Path } from "https://dev.cdn.unyt.org/uix/utils/path.ts";
 import { getCallerDir } from "../utils/caller_metadata.ts";
 import { PromiseMapReturnType, PromiseMappingFn } from "./promise-fn-types.ts";
 import { JSTransferableFunction } from "../types/js-function.ts";

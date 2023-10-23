@@ -33,7 +33,7 @@ import { RuntimePerformance } from "../runtime/performance_measure.ts";
 import { Conjunction, Disjunction, Logical, Negation } from "../types/logic.ts";
 import { Regex } from "./tokens_regex.ts";
 import { baseURL, TypedArray } from "../utils/global_values.ts";
-import { type datex_scope } from "../utils/global_types.ts";
+import type { datex_scope } from "../utils/global_types.ts";
 import { unit_symbol } from "./unit_codes.ts";
 import { Time } from "../types/time.ts";
 
@@ -249,8 +249,6 @@ export type compiler_options = {
     __routing_ttl?:number,
     __routing_prio?:number,
     __routing_to?: endpoints|Pointer<target_clause>
-
-    
 
     // for special compiler info
     inserted_ptrs?: Set<Pointer>
@@ -2150,8 +2148,20 @@ export class Compiler {
         addPreemptivePointer: (SCOPE:compiler_scope|extract_var_scope, id:string|Uint8Array)=>{
             const normalized_id = Pointer.normalizePointerId(id);
             const ptr = Pointer.get(normalized_id);
+
+            let alreadyInitializing = false;
+            let currentScope:compiler_scope|extract_var_scope|undefined = SCOPE;
+            while (currentScope) {
+                if (currentScope.preemptive_pointers.has(normalized_id)) {
+                    alreadyInitializing = true;
+                    break;
+                }
+                currentScope = currentScope.options.parent_scope;
+            }
+
             // preemptive value already exists and was not yet initialized in scope
-            if (ptr?.value_initialized && !SCOPE.preemptive_pointers.has(normalized_id)) {
+            if (ptr?.value_initialized && !alreadyInitializing) {
+                SCOPE.preemptive_pointers.add(normalized_id);
                 Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+1, SCOPE);
                 SCOPE.uint8[SCOPE.b_index++] = BinaryCode.SUBSCOPE_START;
                 Compiler.builder.addPointerNormal(SCOPE, id, ACTION_TYPE.INIT, undefined, true, ptr.val); // sync
@@ -2160,7 +2170,6 @@ export class Compiler {
                 Compiler.builder.addPointerNormal(SCOPE, id, ACTION_TYPE.GET); // sync
                 Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+1, SCOPE);
                 SCOPE.uint8[SCOPE.b_index++] = BinaryCode.SUBSCOPE_END;
-                SCOPE.preemptive_pointers.add(normalized_id);
             }
             // just add normal pointer
             else {

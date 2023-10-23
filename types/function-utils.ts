@@ -21,6 +21,26 @@ const EXTRACT_USED_VARS = Symbol("EXTRACT_USED_VARS")
  * ```
  * @param variables 
  */
+export function use(noDatex: 'no-datex', ...variables: unknown[]): true 
+/**
+ * Used to declare all variables from the parent scope that are used inside the current function.
+ * This is required for functions that are transferred to a different context or restored from eternal pointers.
+ * 
+ * Example:
+ * 
+ * ```ts
+ * const x = $$(10);
+ * 
+ * const fn = eternal ?? $$(function() {
+ *  use (x)
+ *  
+ *  x.val++
+ *  console.log("x:" + x)
+ * })
+ * ```
+ * @param variables 
+ */
+export function use(...variables: unknown[]): true
 export function use(...variables: unknown[]): true {
     if (getMeta()?.[EXTRACT_USED_VARS]) {
         (variables as any)[EXTRACT_USED_VARS] = true;
@@ -40,19 +60,22 @@ declare global {
 function getUsedVars(fn: (...args:unknown[])=>unknown) {
     const source = fn.toString();
     const usedVarsSource = source.match(/^(?:(?:[\w\s*])+\(.*\)\s*{|\(.*\)\s*=>\s*{?|.*\s*=>\s*{?)\s*use\s*\(([\s\S]*?)\)/)?.[1]
-    if (!usedVarsSource) return null;
+    if (!usedVarsSource) return {};
 
     const usedVars = usedVarsSource.split(",").map(v=>v.trim()).filter(v=>!!v)
+    const flags = []
     for (const usedVar of usedVars) {
-        if (!usedVar.match(/^[a-zA-Z_$][0-9a-zA-Z_$\u0080-\uFFFF]*$/)) throw new RuntimeError("Unexpected identifier in 'use' declaration: '" + usedVar+ "' - only variable names are allowed.");
+        if (usedVar == `"no-datex"` || usedVar == `'no-datex'`) flags.push("no-datex");
+        else if (!usedVar.match(/^[a-zA-Z_$][0-9a-zA-Z_$\u0080-\uFFFF]*$/)) throw new RuntimeError("Unexpected identifier in 'use' declaration: '" + usedVar+ "' - only variable names are allowed.");
     }
-    return usedVars;
+    if (flags.length) usedVars.splice(0, flags.length); // remove flags
+    return {usedVars, flags};
 }
 
 
 export function getDeclaredExternalVariables(fn: (...args:unknown[])=>unknown) {
-    const usedVars = getUsedVars(fn);
-    if (!usedVars) return {}
+    const {usedVars, flags} = getUsedVars(fn);
+    if (!usedVars) return {vars:{}}
 
     // call the function with EXTRACT_USED_VARS metadata
     try {
@@ -61,17 +84,18 @@ export function getDeclaredExternalVariables(fn: (...args:unknown[])=>unknown) {
     catch (e) {
         // capture returned variables from use()
         if (e instanceof Array && (e as any)[EXTRACT_USED_VARS]) {
-            return Object.fromEntries(usedVars.map((v,i)=>[v, e[i]]))
+            if (flags.length) e.splice(0, flags.length); // remove flags
+            return {vars: Object.fromEntries(usedVars.map((v,i)=>[v, e[i]])), flags}
         }
         // otherwise, throw normal error
         else throw e;
     }
-    return {};
+    return {vars:{}};
 }
 
 export async function getDeclaredExternalVariablesAsync(fn: (...args:unknown[])=>Promise<unknown>) {
-    const usedVars = getUsedVars(fn);
-    if (!usedVars) return {}
+    const {usedVars, flags} = getUsedVars(fn);
+    if (!usedVars) return {vars:{}}
 
     // call the function with EXTRACT_USED_VARS metadata
     try {
@@ -80,12 +104,13 @@ export async function getDeclaredExternalVariablesAsync(fn: (...args:unknown[])=
     catch (e) {
         // capture returned variables from use()
         if (e instanceof Array && (e as any)[EXTRACT_USED_VARS]) {
-            return Object.fromEntries(usedVars.map((v,i)=>[v, e[i]]))
+            if (flags.length) e.splice(0, flags.length); // remove flags
+            return {vars: Object.fromEntries(usedVars.map((v,i)=>[v, e[i]])), flags}
         }
         // otherwise, throw normal error
         else throw e;
     }
-    return {};
+    return {vars:{}};
 }
 
 export function getSourceWithoutUsingDeclaration(fn: (...args:unknown[])=>unknown) {
@@ -104,9 +129,17 @@ export function getSourceWithoutUsingDeclaration(fn: (...args:unknown[])=>unknow
 export function createFunctionWithDependencyInjections(source: string, dependencies: Record<string, unknown>): ((...args:unknown[]) => unknown) {
 	const hasThis = Object.keys(dependencies).includes('this');
     const renamedVars = Object.keys(dependencies).filter(d => d!=='this').map(k=>'_'+k);
-    const varMapping = renamedVars.map(k=>`const ${k.slice(1)} = ${k};`).join("\n");
+    const varMapping = renamedVars.map(k=>`const ${k.slice(1)} = createStaticObject(${k});`).join("\n");
 
-    let creatorFn = new Function(...renamedVars, `${varMapping}; return (${source})`)
+    const createStaticFn = `function createStaticObject(val) {
+        if (val && typeof val == "object" && !globalThis.Datex?.Ref.isRef(val)) {
+            for (const key of Object.keys(val)) val[key] = createStaticObject(val[key]);
+            Object.freeze(val);
+        }
+        return val;
+    };`
+
+    let creatorFn = new Function(...renamedVars, `"use strict";${varMapping?createStaticFn:''}${varMapping}; return (${source})`)
     if (hasThis) creatorFn = creatorFn.bind(dependencies['this'])
     return creatorFn(...Object.values(dependencies));
 }

@@ -22,6 +22,9 @@ export type js_interface_configuration<T=any> = {
     empty_generator?: (type:Type<T>, context?:any, origin?:Endpoint)=>any // return an default empty value if the type is casted from <Void>
     override_silently?: (ref:T, value:T)=>void, // reset the reference, copy the value to the ref silently
 
+    wrap_transform?: (value: T) => any, // returns a special wrapper value to use instead of the initial value of a transform pointer,
+    handle_transform?: (value: T, pointer: Pointer<T>) => void, // gets called when a transform function produces a new value, default override behaviour is ignored
+
     class?: Class<T>, // the corresponding JS class or a prototype
     prototype?: object, // the inherited JS prototype
     detect_class?: (value:any)=>boolean, // a function that returns whether the value has the type of the pseudo class

@@ -67,7 +67,7 @@ export async function transformAsync<T,V extends TransformFunctionInputs>(depend
 }
 
 
-export function map<T, U, O extends 'array'|'map' = 'array'>(iterable: Iterable<T>, mapFn: (value: T, index: number, array: Iterable<T>) => U, options?: {outType: O, spliceArray?: boolean}): O extends "array" ? U[] : Map<number, U> {
+export function map<T, U, O extends 'array'|'map' = 'array'>(iterable: Iterable<T>, mapFn: (value: T, index: number, array: Iterable<T>) => U, options?: {outType: O}): O extends "array" ? U[] : Map<number, U> {
 	let mapped:U[]|Map<number, U>
 	
 	// live map
@@ -93,12 +93,15 @@ export function map<T, U, O extends 'array'|'map' = 'array'>(iterable: Iterable<
 		else {
 			mapped = $$([])
 
+			// no gaps in a set -> array splice required
+			const spliceArray = iterable instanceof Set; 
+
 			new IterableHandler(iterable, {
 				map: (v,k)=>{
 					return mapFn(v,k,iterable)
 				},
 				onEntryRemoved: (v,k) => {
-					if (options?.spliceArray !== false) (mapped as U[]).splice(k, 1);
+					if (spliceArray) (mapped as U[]).splice(k, 1);
 					else delete (mapped as U[])[k];
 				},
 				onNewEntry: (v,k) => {
@@ -139,15 +142,35 @@ export function map<T, U, O extends 'array'|'map' = 'array'>(iterable: Iterable<
  * @param if_true value selected if true
  * @param if_false value selected if false
  */
-export function select<T extends primitive>(value:RefOrValue<boolean>, if_true:T, if_false:T):MinimalJSRef<T>
-export function select<T>(value:RefOrValue<boolean>, if_true:T, if_false:T):MinimalJSRef<T>
-export function select<T>(value:RefOrValue<boolean>, if_true:T, if_false:T) {
-    return transform([value], v=>v?<any>if_true:<any>if_false, `
+export function check<T extends primitive>(value:RefOrValue<boolean>, if_true:T, if_false:T):MinimalJSRef<T>
+export function check<T>(value:RefOrValue<boolean>, if_true:T, if_false:T):MinimalJSRef<T>
+export function check<T>(value:RefOrValue<boolean>, if_true:T, if_false:T) {
+    return transform([value], v=>v?<any>if_true:<any>if_false, 
+	// dx transforms not working correctly (with uix)
+	/*`
     always (
         if (${Runtime.valueToDatexString(value)}) (${Runtime.valueToDatexString(if_true)}) 
         else (${Runtime.valueToDatexString(if_false)})
-    )`);
+    )`*/);
 }
+
+/**
+ * @deprecated, use check()
+ */
+export const select = check;
+
+
+/**
+ * Returns a pointer representing a === b
+ * @param a input value
+ * @param b input value
+ */
+export function equals(a:unknown, b: unknown):Datex.Ref<boolean> {
+    return transform([a, b], (a,b) =>  a === b, 
+	// dx transforms not working correctly (with uix)
+		/*`always (${Runtime.valueToDatexString(a)} === ${Runtime.valueToDatexString(b)})`*/) as any;
+}
+
 
 /**
  * Selects a property from an object

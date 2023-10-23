@@ -145,11 +145,13 @@ export class Function<T extends (...args: any) => any = (...args: any) => any> e
             // get external_variables dependencies from use() statement
             if (this.is_async) {
                 (async () => {
-                    this.external_variables = await getDeclaredExternalVariablesAsync(this.fn!)
+                    const {vars, flags} = await getDeclaredExternalVariablesAsync(this.fn!)
+                    this.external_variables = vars;
                 })();
             }
             else {
-                this.external_variables = getDeclaredExternalVariables(this.fn)
+                const {vars, flags} = getDeclaredExternalVariables(this.fn)
+                this.external_variables = vars;
             }
             
         }

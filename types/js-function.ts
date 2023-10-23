@@ -14,7 +14,7 @@ export class JSTransferableFunction extends ExtensibleFunction {
 	#fn: (...args:unknown[])=>unknown
 
 	// deno-lint-ignore constructor-super
-	private constructor(intermediateFn: (...args:unknown[])=>unknown, public deps: Record<string,unknown>, public source: string, options?: JSTransferableFunctionOptions) {
+	private constructor(intermediateFn: (...args:unknown[])=>unknown, public deps: Record<string,unknown>, public source: string, public flags?: string[], options?: JSTransferableFunctionOptions) {
 		if (options?.errorOnOriginContext) {
 			const invalidIntermediateFunction = () => {throw options.errorOnOriginContext};
 			super(invalidIntermediateFunction);
@@ -55,8 +55,8 @@ export class JSTransferableFunction extends ExtensibleFunction {
 	 * @param fn 
 	 */
 	static create<T extends (...args:unknown[])=>unknown>(fn: T, options?:JSTransferableFunctionOptions): JSTransferableFunction & Callable<Parameters<T>, ReturnType<T>> {
-        const dependencies = getDeclaredExternalVariables(fn);
-		return this.#createTransferableFunction(getSourceWithoutUsingDeclaration(fn), dependencies, options) as any;
+        const {vars, flags} = getDeclaredExternalVariables(fn);
+		return this.#createTransferableFunction(getSourceWithoutUsingDeclaration(fn), vars, flags, options) as any;
 	}
 
 	/**
@@ -65,8 +65,8 @@ export class JSTransferableFunction extends ExtensibleFunction {
 	 * @param fn 
 	 */
 	static async createAsync<T extends (...args:unknown[])=>Promise<unknown>>(fn: T, options?:JSTransferableFunctionOptions): Promise<JSTransferableFunction & Callable<Parameters<T>, ReturnType<T>>> {
-		const dependencies = await getDeclaredExternalVariablesAsync(fn)	
-		return this.#createTransferableFunction(getSourceWithoutUsingDeclaration(fn), dependencies, options) as any;
+		const {vars, flags} = await getDeclaredExternalVariablesAsync(fn)	
+		return this.#createTransferableFunction(getSourceWithoutUsingDeclaration(fn), vars, flags, options) as any;
 	}
 
 	/**
@@ -78,9 +78,9 @@ export class JSTransferableFunction extends ExtensibleFunction {
 		return this.#createTransferableFunction(source, dependencies)
 	}
 
-	static #createTransferableFunction(source: string, dependencies: Record<string, unknown>, options?:JSTransferableFunctionOptions) {
+	static #createTransferableFunction(source: string, dependencies: Record<string, unknown>, flags?: string[], options?:JSTransferableFunctionOptions) {
         const intermediateFn = createFunctionWithDependencyInjections(source, dependencies);
-		return new JSTransferableFunction(intermediateFn, dependencies, source, options);
+		return new JSTransferableFunction(intermediateFn, dependencies, source, flags, options);
 	}
 
 }

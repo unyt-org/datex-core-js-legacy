@@ -1490,6 +1490,8 @@ export class Pointer<T = any> extends Ref<T> {
     #shadow_object: WeakRef<{[key:string]:unknown}>|T // object to make changes and get values from without triggering DATEX updates
     #type:Type // type of the value
 
+    #unwrapped_transform_type?: Type
+
     #loaded = false
 
     get value_initialized() {return this.#loaded}
@@ -1717,7 +1719,7 @@ export class Pointer<T = any> extends Ref<T> {
     public unsubscribeFromPointerUpdates() {
         if (!this.#subscribed) return; // already unsubscribed
         const endpoint = this.origin;
-        logger.info("unsubscribing from " + this + " ("+endpoint+")");
+        logger.info("unsubscribing from " + this.idString() + " ("+endpoint+")");
         Runtime.datexOut(['#origin </= ?', [this]], endpoint);
         this.#subscribed = false;
     }
@@ -2053,18 +2055,20 @@ export class Pointer<T = any> extends Ref<T> {
         
         const transformMethod = transform instanceof Function ? transform : ()=>transform.execute(Runtime.endpoint);
 
-        if (transform instanceof Scope) this.#transform_scope = transform; // store transform scope
-        else if (persistent_datex_transform) await this.setDatexTransform(persistent_datex_transform) // TODO: only workaround
-
         const initialValue = await (observe_values.length==1 ? transformMethod(...<CollapsedDatexObjectWithRequiredProperties<V>>[Ref.collapseValue(observe_values[0], true, true)]) : transformMethod(...<CollapsedDatexObjectWithRequiredProperties<V>>observe_values.map(v=>Ref.collapseValue(v, true, true)))); // transform current value
         if (initialValue === VOID) throw new ValueError("initial tranform value cannot be void");
-        this.setVal(initialValue, true, true);
+        this.setInitialTransformValue(initialValue);
         
+        if (transform instanceof Scope) this.#transform_scope = transform; // store transform scope
+        else if (persistent_datex_transform) {
+            await this.setDatexTransform(persistent_datex_transform) // TODO: only workaround
+        }
+
         // transform updates
         for (const value of observe_values) {
             if (value instanceof Ref) value.observe(async ()=>{
                 const newValue = await (observe_values.length==1 ? transformMethod(...<CollapsedDatexObjectWithRequiredProperties<V>>[Ref.collapseValue(observe_values[0], true, true)]) : transformMethod(...<CollapsedDatexObjectWithRequiredProperties<V>>observe_values.map(v=>Ref.collapseValue(v, true, true)))); // update value
-                if (newValue !== VOID) this.setVal(newValue, true, true)
+                if (newValue !== VOID) this.updateTransformValue(newValue)
             });
         }
         return <Pointer<T&R>>this;
@@ -2073,21 +2077,35 @@ export class Pointer<T = any> extends Ref<T> {
     protected handleTransform<R,V extends TransformFunctionInputs>(observe_values:V, transform:TransformFunction<V,T&R>, persistent_datex_transform?:string): Pointer<R> {     
         const initialValue = observe_values.length==1 ? transform(...<CollapsedDatexObjectWithRequiredProperties<V>>[Ref.collapseValue(observe_values[0], true, true)]) : transform(...<CollapsedDatexObjectWithRequiredProperties<V>>observe_values.map(v=>Ref.collapseValue(v, true, true))); // transform current value
         if (initialValue === VOID) throw new ValueError("initial tranform value cannot be void");
-        this.setVal(initialValue, true, true);
+        this.setInitialTransformValue(initialValue);
         
-        if (persistent_datex_transform) this.setDatexTransform(persistent_datex_transform) // TODO: only workaround
+        if (persistent_datex_transform) {
+            this.setDatexTransform(persistent_datex_transform) // TODO: only workaround
+        }
 
         // transform updates
         for (const value of observe_values) {
             if (value instanceof Ref) value.observe(()=>{
                 const newValue = observe_values.length==1 ? transform(...<CollapsedDatexObjectWithRequiredProperties<V>>[Ref.collapseValue(observe_values[0], true, true)]) : transform(...<CollapsedDatexObjectWithRequiredProperties<V>>observe_values.map(v=>Ref.collapseValue(v, true, true))); // update value
                 // await promise (should avoid in non-async transform)
-                if (newValue instanceof Promise) newValue.then((val)=>this.val=val);
-                else if (newValue !== VOID) this.setVal(newValue, true, true);
+                if (newValue instanceof Promise) newValue.then((val)=>this.updateTransformValue(val));
+                else if (newValue !== VOID) this.updateTransformValue(newValue);
             });
         }
 
         return this as unknown as Pointer<R>;
+    }
+
+    protected setInitialTransformValue(val: T) {
+        const type = Type.ofValue(val);
+        this.#unwrapped_transform_type = type;
+        if (type.interface_config?.wrap_transform) val = type.interface_config.wrap_transform(val);
+        this.setVal(val, true, true);
+    }
+
+    protected updateTransformValue(val: T) {
+        if (this.type.interface_config?.handle_transform) this.type.interface_config.handle_transform(val, this)
+        else this.setVal(val, true, true);
     }
 
     protected smartTransform<R>(transform:SmartTransformFunction<T&R>, persistent_datex_transform?:string, forceLive = false): Pointer<R> {
@@ -2170,7 +2188,8 @@ export class Pointer<T = any> extends Ref<T> {
 
     // TODO: JUST A WORKAROUND - if transform is a JS function, a DATEX Script can be provided to be stored as a transform method
     async setDatexTransform(datex_transform:string) {
-        this.#transform_scope = (await Runtime.executeDatexLocally(datex_transform)).transform_scope;
+        // TODO: fix and reenable
+        // this.#transform_scope = (await Runtime.executeDatexLocally(datex_transform)).transform_scope;
     }
 
 
@@ -2223,7 +2242,7 @@ export class Pointer<T = any> extends Ref<T> {
     }
 
     get type():Type{
-        return this.#type;
+        return this.#unwrapped_transform_type ?? this.#type;
     }
 
 
@@ -2303,7 +2322,7 @@ export class Pointer<T = any> extends Ref<T> {
         if (!this.#subscribers) {
             if (Runtime.subscriber_cache?.has(this.id)) {
                 this.#subscribers = new Disjunction(...Runtime.subscriber_cache.get(this.id)!)
-                logger.info("restored subscriber cache for " + this.idString() + ":",this.#subscribers)
+                logger.debug("restored subscriber cache for " + this.idString() + ":",this.#subscribers)
             }
             else this.#subscribers = new Disjunction();
         }
@@ -3096,7 +3115,7 @@ export class Pointer<T = any> extends Ref<T> {
             if (!this.#exclude_origin_from_updates) this.handleDatexUpdate(null, '? -= ?', [this, value], this.origin)
         }
         else if (this.is_origin && this.update_endpoints.size) {
-            logger.info("forwarding delete to subscribers " + this.update_endpoints);
+            logger.debug("forwarding delete to subscribers " + this.update_endpoints);
             this.handleDatexUpdate(null, '? -= ?', [this, value], this.update_endpoints)
         }
 

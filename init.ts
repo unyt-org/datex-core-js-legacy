@@ -62,6 +62,8 @@ export async function init() {
 	// set runtime endpoint
 	Runtime._setEndpoint(LOCAL_ENDPOINT)
 
+	// precompiled dxb
+	await Runtime.precompile();
 
 	// set Runtime ENV (not persistent if globalThis.NO_INIT)
 	Runtime.ENV = globalThis.NO_INIT ? getDefaultEnv() : await Storage.loadOrCreate("Datex.Runtime.ENV", getDefaultEnv);
@@ -103,7 +105,7 @@ export async function init() {
 
 
 	if (!globalThis.NO_INIT) {
-		await Runtime.init();
+		Runtime.init();
 
 		// @ts-ignore
 		globalThis.print = Runtime.STD_STATIC_SCOPE.print

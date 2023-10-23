@@ -36,7 +36,7 @@ import { Function as DatexFunction } from "../types/function.ts";
 import { Storage } from "../runtime/storage.ts";
 import { Observers } from "../utils/observers.ts";
 import { BinaryCode } from "../compiler/binary_codes.ts";
-import type { compile_info, datex_scope, dxb_header, routing_info } from "../utils/global_types.ts";
+import type { compile_info, datex_meta, datex_scope, dxb_header, routing_info } from "../utils/global_types.ts";
 import { Markdown } from "../types/markdown.ts";
 import { Type } from "../types/type.ts";
 import { Tuple } from "../types/tuple.ts";
@@ -230,7 +230,9 @@ export class Runtime {
     
     public static getLocalString(local_map:{[lang:string]:string}):Pointer<string> {
         return Pointer.createTransform([PointerProperty.get(Runtime.ENV, 'LANG')],
-            (lang:string) => local_map[lang] ?? this.getTranslatedLocalString(local_map['en'], lang), // sync js mapping
+            (lang:string) => {
+                return local_map[lang] ?? this.getTranslatedLocalString(local_map['en'], lang)
+            }, // sync js mapping
             `
             var lang = #env->LANG; 
             var local_map = ${Runtime.valueToDatexString(local_map)};
@@ -774,8 +776,8 @@ export class Runtime {
      * @param context_location context in which the script should be executed (URL)
      * @returns evaluated DATEX result
      */
-    public static async executeDatexLocally(datex:string|PrecompiledDXB, data?:unknown[], options?:compiler_options, context_location?:URL):Promise<unknown> {
-        return Runtime.executeDXBLocally(<ArrayBuffer> await Compiler.compile(datex, data, {sign:false, encrypt:false, context_location, ...options}), context_location)
+    public static async executeDatexLocally(datex:string|PrecompiledDXB, data?:unknown[], options?:compiler_options & { __overrideMeta?: Partial<datex_meta> }, context_location?:URL):Promise<unknown> {
+        return Runtime.executeDXBLocally(<ArrayBuffer> await Compiler.compile(datex, data, {sign:false, encrypt:false, context_location, ...options}), context_location, options?.__overrideMeta)
     }
 
     /**
@@ -784,7 +786,7 @@ export class Runtime {
      * @param context_location context in which the script should be executed (URL)
      * @returns evaluated DATEX result
      */
-    public static async executeDXBLocally(dxb:ArrayBuffer, context_location?:URL):Promise<any> {
+    public static async executeDXBLocally(dxb:ArrayBuffer, context_location?:URL, overrideMeta?: Partial<datex_meta>):Promise<any> {
         // generate new header using executor scope header
         let header:dxb_header;
         let dxb_body:ArrayBuffer;
@@ -797,11 +799,19 @@ export class Runtime {
         else {
             throw new DatexError("Cannot execute dxb locally, the receiver defined in the header is external")
         }
+           
+        // override meta
+        if (overrideMeta) {
+            Object.assign(header, overrideMeta)
+        }
 
         // create scope
         const scope = Runtime.createNewInitialScope(header, undefined, undefined, undefined, context_location);
+    
         // set dxb as scope buffer
         Runtime.updateScope(scope, dxb_body, header)
+
+
         // execute scope
         return Runtime.simpleScopeExecution(scope)
     }
@@ -1009,19 +1019,7 @@ export class Runtime {
         this.datexOut(datex, null, dxb_header.sid, false, false, null, true, exclude);
     }
 
-    /**
-     * Creates default static scopes
-     * + other async initializations
-     * @param endpoint initial local endpoint
-     * @returns 
-     */
-    public static async init(endpoint?:Endpoint) {
-
-        if (endpoint) Runtime.endpoint = endpoint;
-
-        if (this.initialized) return;
-        this.initialized = true;
-
+    public static async precompile() {
         // precompile dxb
         this.PRECOMPILED_DXB = {
             SET_PROPERTY:   await PrecompiledDXB.create('?.? = ?'),
@@ -1032,6 +1030,21 @@ export class Runtime {
             // PROPERTY_SUB:   await PrecompiledDXB.create('? -= ?'),
             STREAM:         await PrecompiledDXB.create('? << ?'),
         }
+    }
+
+    /**
+     * Creates default static scopes
+     * + other async initializations
+     * @param endpoint initial local endpoint
+     * @returns 
+     */
+    public static init(endpoint?:Endpoint) {
+
+        if (endpoint) Runtime.endpoint = endpoint;
+
+        if (this.initialized) return;
+        this.initialized = true;
+
 
         // default labels:
         Pointer.createLabel({
