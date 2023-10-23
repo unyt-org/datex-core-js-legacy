@@ -217,6 +217,12 @@ export class Runtime {
 
     static mime_type_classes = new Map(Object.entries(this.MIME_TYPE_MAPPING).map(x=>[('class' in x[1] && typeof x[1].class == "function") ? x[1].class : x[1], x[0]])) 
 
+
+    /**
+     * List of endpoints that are allowed to create js:Functions that are executable on this endpoint
+     */
+    public static remoteJSCodeExecutionAllowed = new Set()
+
     public static ENV: ObjectRef<{LANG:string, DATEX_VERSION:string, [key:string]:string}>
     public static VERSION = "beta";
 
@@ -228,6 +234,12 @@ export class Runtime {
     static #saved_local_strings = new WeakMap<local_text_map, Map<RefOrValue<string>, Pointer<string>>>();
     static #not_loaded_local_strings = new WeakMap<local_text_map, Set<RefOrValue<string>>>();
     
+
+    public static addPermissionForRemoteJSCode(endpoint:Endpoint) {
+        logger.debug("Remote JS code execution allowed for " + endpoint);
+        this.remoteJSCodeExecutionAllowed.add(endpoint);
+    }
+
     public static getLocalString(local_map:{[lang:string]:string}):Pointer<string> {
         return Pointer.createTransform([PointerProperty.get(Runtime.ENV, 'LANG')],
             (lang:string) => {

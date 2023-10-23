@@ -2,6 +2,8 @@
  * Represents a JS function with source code that can be transferred between endpoints
  */
 
+import { Pointer } from "../runtime/pointers.ts";
+import { Runtime } from "../runtime/runtime.ts";
 import { ExtensibleFunction, getDeclaredExternalVariables, getDeclaredExternalVariablesAsync, createFunctionWithDependencyInjections, getSourceWithoutUsingDeclaration, Callable } from "./function-utils.ts";
 
 
@@ -21,8 +23,19 @@ export class JSTransferableFunction extends ExtensibleFunction {
 			this.#fn = invalidIntermediateFunction;
 		}
 		else {
-			super(intermediateFn);
-			this.#fn = intermediateFn;
+			let ptr: Pointer|undefined;
+			const fn = (...args:unknown[]) => {
+				if (!ptr) ptr = Pointer.getByValue(this);
+				if (!ptr) throw new Error("Cannot execute js:Function, must be bound to a pointer");
+				const origin = ptr.origin;
+				if (origin !== Runtime.endpoint && !Runtime.remoteJSCodeExecutionAllowed.has(ptr.origin)) {
+					throw new Error("Cannot execute js:Function, origin "+ptr.origin+" has no permission to execute js source code on this endpoint");
+				}
+				console.log("call trans", Pointer.getByValue(this)?.idString())
+				return intermediateFn(...args)
+			}
+			super(fn);
+			this.#fn = fn;
 		}
 		
 		this.source = source;

@@ -307,6 +307,11 @@ export abstract class Ref<T = any> extends EventTarget {
 
 
     protected static capturedGetters = new Map<Ref, Set<Ref>>()
+
+    /**
+     * true if currently capturing pointer getters in always function
+     */
+    public static isCapturing = false;
     
     /**
      * Used for handling smart transforms
@@ -314,12 +319,14 @@ export abstract class Ref<T = any> extends EventTarget {
      * get a list of all dependencies
      */
     protected static captureGetters(referrer: Ref) {
+        this.isCapturing = true;
         this.capturedGetters.set(referrer, new Set());
     }
 
     protected static getCapturedGetters(referrer: Ref) {
         const captured = this.capturedGetters.get(referrer);
         this.capturedGetters.delete(referrer)
+        if (!this.capturedGetters.size) this.isCapturing = false;
         return captured;
     }
 
@@ -336,6 +343,10 @@ export abstract class Ref<T = any> extends EventTarget {
     #liveTransform = false;
     #forceLiveTransform = false;
     #transformSource?: TransformSource
+
+    protected set _liveTransform(val: boolean) {
+        this.#liveTransform = val;
+    }
 
     /**
      * add a new transform source
@@ -381,12 +392,12 @@ export abstract class Ref<T = any> extends EventTarget {
         this.#transformSource!.disableLive();
     }
 
-    protected setForcedLiveTransform(forced: boolean) {
+    protected setForcedLiveTransform(forced: boolean, update = true) {
         if (!this.#transformSource) return; // not relevant, no transform source
         // console.log("forced live:",forced)
         this.#forceLiveTransform = forced;
         // always enable if forced
-        if (forced) this.#transformSource.enableLive();
+        if (forced) this.#transformSource.enableLive(update);
         // disable if no observers left
         else if (!this.#observerCount) this.disableLiveTransforms();
     }
@@ -409,7 +420,7 @@ export type TransformSource = {
      * called to indicate that the the .val should now always be
      * automatically updated when dependencies change
      */
-    enableLive: ()=>void
+    enableLive: (update?: boolean)=>void
     /**
      * called to indicate that the transformed value should now
      * only be calculated when update() is called
@@ -1869,7 +1880,10 @@ export class Pointer<T = any> extends Ref<T> {
      */
     protected initializeValue(v:RefOrValue<T>, is_transform?:boolean) {
 
-        const val = Ref.collapseValue(v,true,true);
+        let val = Ref.collapseValue(v,true,true);
+
+        // get transform wrapper
+        if (is_transform) val = this.getInitialTransformValue(val)
 
         // Save reference to original
         this.#type = Type.ofValue(val);
@@ -1941,7 +1955,7 @@ export class Pointer<T = any> extends Ref<T> {
             }
 
             // always use live transforms for non-primitive pointers:
-            this.setForcedLiveTransform(true)
+            if (!is_transform) this.setForcedLiveTransform(true)
             
             // update registry
             Pointer.primitive_pointers.delete(this.#id); 
@@ -1989,7 +2003,7 @@ export class Pointer<T = any> extends Ref<T> {
     protected updateValue(v:RefOrValue<T>, trigger_observers = true, is_transform?:boolean) {
         const val = <T> Ref.collapseValue(v,true,true);
         const newType = Type.ofValue(val);
-        
+
         // not changed (relevant for primitive values)
         if (this.current_val === val) {
             return;
@@ -2001,10 +2015,12 @@ export class Pointer<T = any> extends Ref<T> {
 
         // set primitive value, reference not required
         if (this.is_js_primitive) {
-            updatePromise = super.setVal(val, trigger_observers, is_transform);
+            const didCustomUpdate = this.customTransformUpdate(val)
+            if (!didCustomUpdate) updatePromise = super.setVal(val, trigger_observers, is_transform);
         }
         else {
-            this.type.updateValue(this.original_value, val);
+            const didCustomUpdate = this.customTransformUpdate(val)
+            if (!didCustomUpdate) this.type.updateValue(this.original_value, val);
             if (trigger_observers) updatePromise = this.triggerValueInitEvent(is_transform); // super.value setter is not called, trigger value INIT seperately
         }
 
@@ -2057,7 +2073,7 @@ export class Pointer<T = any> extends Ref<T> {
 
         const initialValue = await (observe_values.length==1 ? transformMethod(...<CollapsedDatexObjectWithRequiredProperties<V>>[Ref.collapseValue(observe_values[0], true, true)]) : transformMethod(...<CollapsedDatexObjectWithRequiredProperties<V>>observe_values.map(v=>Ref.collapseValue(v, true, true)))); // transform current value
         if (initialValue === VOID) throw new ValueError("initial tranform value cannot be void");
-        this.setInitialTransformValue(initialValue);
+        this.setVal(initialValue, true, true);
         
         if (transform instanceof Scope) this.#transform_scope = transform; // store transform scope
         else if (persistent_datex_transform) {
@@ -2068,7 +2084,7 @@ export class Pointer<T = any> extends Ref<T> {
         for (const value of observe_values) {
             if (value instanceof Ref) value.observe(async ()=>{
                 const newValue = await (observe_values.length==1 ? transformMethod(...<CollapsedDatexObjectWithRequiredProperties<V>>[Ref.collapseValue(observe_values[0], true, true)]) : transformMethod(...<CollapsedDatexObjectWithRequiredProperties<V>>observe_values.map(v=>Ref.collapseValue(v, true, true)))); // update value
-                if (newValue !== VOID) this.updateTransformValue(newValue)
+                if (newValue !== VOID) this.setVal(newValue, true, true)
             });
         }
         return <Pointer<T&R>>this;
@@ -2077,7 +2093,7 @@ export class Pointer<T = any> extends Ref<T> {
     protected handleTransform<R,V extends TransformFunctionInputs>(observe_values:V, transform:TransformFunction<V,T&R>, persistent_datex_transform?:string): Pointer<R> {     
         const initialValue = observe_values.length==1 ? transform(...<CollapsedDatexObjectWithRequiredProperties<V>>[Ref.collapseValue(observe_values[0], true, true)]) : transform(...<CollapsedDatexObjectWithRequiredProperties<V>>observe_values.map(v=>Ref.collapseValue(v, true, true))); // transform current value
         if (initialValue === VOID) throw new ValueError("initial tranform value cannot be void");
-        this.setInitialTransformValue(initialValue);
+        this.setVal(initialValue, true, true);
         
         if (persistent_datex_transform) {
             this.setDatexTransform(persistent_datex_transform) // TODO: only workaround
@@ -2088,24 +2104,28 @@ export class Pointer<T = any> extends Ref<T> {
             if (value instanceof Ref) value.observe(()=>{
                 const newValue = observe_values.length==1 ? transform(...<CollapsedDatexObjectWithRequiredProperties<V>>[Ref.collapseValue(observe_values[0], true, true)]) : transform(...<CollapsedDatexObjectWithRequiredProperties<V>>observe_values.map(v=>Ref.collapseValue(v, true, true))); // update value
                 // await promise (should avoid in non-async transform)
-                if (newValue instanceof Promise) newValue.then((val)=>this.updateTransformValue(val));
-                else if (newValue !== VOID) this.updateTransformValue(newValue);
+                if (newValue instanceof Promise) newValue.then((val)=>this.setVal(val, true, true));
+                else if (newValue !== VOID) this.setVal(newValue, true, true);
             });
         }
 
         return this as unknown as Pointer<R>;
     }
 
-    protected setInitialTransformValue(val: T) {
+    protected getInitialTransformValue(val: T) {
         const type = Type.ofValue(val);
         this.#unwrapped_transform_type = type;
         if (type.interface_config?.wrap_transform) val = type.interface_config.wrap_transform(val);
-        this.setVal(val, true, true);
+        return val;
     }
 
-    protected updateTransformValue(val: T) {
-        if (this.type.interface_config?.handle_transform) this.type.interface_config.handle_transform(val, this)
-        else this.setVal(val, true, true);
+
+    protected customTransformUpdate(val: T) {
+        if (this.type.interface_config?.handle_transform) {
+            this.type.interface_config.handle_transform(val, this)
+            return true;
+        }
+        else return false;
     }
 
     protected smartTransform<R>(transform:SmartTransformFunction<T&R>, persistent_datex_transform?:string, forceLive = false): Pointer<R> {
@@ -2143,6 +2163,12 @@ export class Pointer<T = any> extends Ref<T> {
                 finally {
                     getters = Ref.getCapturedGetters(this)!;
                 }
+
+                // set isLive to true, if not primitive
+                if (!this.#is_js_primitive) {
+                    isLive = true;
+                    this._liveTransform = true
+                }
     
                 // update value
                 this.setVal(val, true, true);
@@ -2155,6 +2181,12 @@ export class Pointer<T = any> extends Ref<T> {
                 if (isLive) {
                     // observe newly discovered dependencies
                     for (const getter of getters) {
+                        // // remove returned value from getters
+                        // if (Ref.collapseValue(getter, true, true) === val) {
+                        //     console.log("ignore",val);
+                        //     continue;
+                        // }
+
                         if (deps.has(getter)) continue;
                         deps.add(getter)
                         getter.observe(update, this);
@@ -2166,10 +2198,10 @@ export class Pointer<T = any> extends Ref<T> {
 
         // set transform source with TransformSource interface
         this.setTransformSource({
-            enableLive: () => {
+            enableLive: (doUpdate = true) => {
                 isLive = true;
                 // get current value and automatically reenable observers
-                update(); 
+                if (doUpdate) update(); 
             },
             disableLive: () => {
                 isLive = false;
