@@ -2009,7 +2009,13 @@ export class Pointer<T = any> extends Ref<T> {
             return;
         }
 
-        if (!Type.matchesType(newType, this.type)) throw new ValueError("Invalid value type for pointer "+this.idString()+": " + newType + " - must be " + this.type);
+        if (this.type?.interface_config?.allow_transform_value) {
+            let error:string|boolean
+            if ((error = this.type.interface_config.allow_transform_value(newType, this)) !== true) {
+                throw new ValueError("Invalid value type for transform pointer "+this.idString()+": " + newType + (error ? " - " + error : ""));
+            }
+        }
+        else if (!Type.matchesType(newType, this.type)) throw new ValueError("Invalid value type for pointer "+this.idString()+": " + newType + " - must be " + this.type);
 
         let updatePromise: Promise<any>|void;
 

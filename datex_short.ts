@@ -5,6 +5,8 @@ import { baseURL, Runtime, PrecompiledDXB, Type, Pointer, Ref, PointerProperty, 
 
 /** make decorators global */
 import {property as _property, sync as _sync, endpoint as _endpoint, template as _template, jsdoc as _jsdoc} from "./datex_all.ts";
+import { always as _always, check as _check } from "./functions.ts";
+export * from "./functions.ts";
 import { NOT_EXISTING, DX_SLOTS, SLOT_GET, SLOT_SET } from "./runtime/constants.ts";
 import { AssertionError } from "./types/errors.ts";
 import { getCallerFile, getCallerInfo, getMeta } from "./utils/caller_metadata.ts";
@@ -16,6 +18,8 @@ declare global {
     const jsdoc: typeof _property;
 	const sync: typeof _sync;
 	const endpoint: typeof _endpoint;
+    const always: typeof _always;
+    const check: typeof _check;
     // conflict with UIX.template (confusing)
 	// const template: typeof _template; 
 }
@@ -322,19 +326,6 @@ export function local_text(local_map: { [lang: string]: string; }) {
     return Runtime.getLocalString(local_map)
 }
 
-/**
- * @deprecated use functions from unyt_core/function.ts
- */
-export function transform<T,V extends TransformFunctionInputs>(observe_values:V, transform:TransformFunction<V,T>, persistent_datex_transform?:string) {
-    return Ref.collapseValue(Pointer.createTransform(observe_values, transform, persistent_datex_transform));
-}
-/**
- * @deprecated use functions from unyt_core/function.ts
- */
-export async function transformAsync<T,V extends TransformFunctionInputs>(observe_values:V, transform:AsyncTransformFunction<V,T>, persistent_datex_transform?:string) {
-    return Ref.collapseValue(await Pointer.createTransformAsync(observe_values, transform, persistent_datex_transform));
-}
-
 
 // map boolean to two values
 /**
@@ -356,119 +347,6 @@ export function select<T>(value:RefOrValue<boolean>, if_true:T, if_false:T) {
         if (${Runtime.valueToDatexString(value)}) (${Runtime.valueToDatexString(if_true)}) 
         else (${Runtime.valueToDatexString(if_false)})
     )`);
-}
-
-
-// boolean shortcut transforms
-/**
- * @deprecated use functions from unyt_core/function.ts
- */
-export function not(value:RefOrValue<boolean>): BooleanRef {
-    return transform([value], v=>!v);
-}
-/**
- * @deprecated use functions from unyt_core/function.ts
- */
-export function and(...values:RefOrValue<boolean>[]): BooleanRef {
-    return transform(values, (...values)=>{
-        for (const v of values) {
-            if (!v) return false;
-        }
-        return true;
-    });
-}
-/**
- * @deprecated use functions from unyt_core/function.ts
- */
-export function or(...values:RefOrValue<boolean>[]): BooleanRef {
-    return transform(values, (...values)=>{
-        for (const v of values) {
-            if (v) return true;
-        }
-        return false;
-    });
-}
-
-
-// math operations
-
-/**
- * @deprecated use functions from unyt_core/function.ts
- */
-export function add<T>(...values:RefOrValue<T>[]): MinimalJSRef<T>
-/**
- * @deprecated use functions from unyt_core/function.ts
- */
-export function add(...args:any[]) {
-    return transform([...args], (...args) => args.reduce((a, b) => a + b, 0));
-}
-/**
- * @deprecated use functions from unyt_core/function.ts
- */
-export function sub(...numbers:RefOrValue<bigint>[]): MinimalJSRef<bigint>
-export function sub(...numbers:RefOrValue<number>[]): MinimalJSRef<number>
-export function sub(...args:any[]) {
-    return transform([...args], (...args) => args.slice(1).reduce((a, b) => a - b, args[0]));
-}
-/**
- * @deprecated use functions from unyt_core/function.ts
- */
-export function mul(...numbers:RefOrValue<bigint>[]): MinimalJSRef<bigint>
-export function mul(...numbers:RefOrValue<number>[]): MinimalJSRef<number>
-export function mul(...args:any[]) {
-    return transform([...args], (...args) => args.reduce((a, b) => a * b, 1));
-}
-/**
- * @deprecated use functions from unyt_core/function.ts
- */
-export function div(...numbers:RefOrValue<bigint>[]): MinimalJSRef<bigint>
-export function div(...numbers:RefOrValue<number>[]): MinimalJSRef<number>
-export function div(...args:any[]) {
-    return transform([...args], (...args) => args.slice(1).reduce((a, b) => a / b, args[0]));
-}
-/**
- * @deprecated use functions from unyt_core/function.ts
- */
-export function pow(...numbers:RefOrValue<bigint>[]): MinimalJSRef<bigint>
-export function pow(...numbers:RefOrValue<number>[]): MinimalJSRef<number>
-export function pow(...args:any[]) {
-    return transform([...args], (...args) => args.slice(1).reduce((a, b) => a ** b, args[0]));
-}
-
-
-/**
- * @deprecated use functions from unyt_core/function.ts
- * "always" transform function, creates a new pointer containing the result of the callback function.
- * At any point in time, the pointer is the result of the callback function. 
- * If the function has pointers as parameters, as soon as a value of one of the parameters changes,
- * the transformed pointer value is also updated:
- * ```ts
- * const x = $$(10);
- * const y = always (() => x * 2);
- * y.val // 20
- * x.val = 5;
- * y.val // 10
- * ```
- */
-export function always<const T,V extends TransformFunctionInputs>(transform:SmartTransformFunction<T>): CollapsedValueAdvanced<Pointer<T>, false, false, CollapsedValue<Pointer<T>>> // return signature from Value.collapseValue(Pointer.smartTransform())
-
-/**
- * @deprecated use functions from unyt_core/function.ts
- *
- * Shortcut for datex `always (...)`
- * @param script 
- * @param vars 
- */
-export function always<T=unknown>(script:TemplateStringsArray, ...vars:any[]): Promise<MinimalJSRef<T>>
-/**
- * @deprecated use functions from unyt_core/function.ts
- *
- * 
- */
-export function always(scriptOrJSTransform:TemplateStringsArray|SmartTransformFunction<any>, ...vars:any[]) {
-    if (typeof scriptOrJSTransform == "function") return Ref.collapseValue(Pointer.createSmartTransform(scriptOrJSTransform));
-    // datex script
-    else return (async ()=>Ref.collapseValue(await _datex(`always (${scriptOrJSTransform.raw.join(INSERT_MARK)})`, vars)))()
 }
 
 
@@ -631,8 +509,9 @@ export function translocate<T extends Map<unknown,unknown>|Set<unknown>|Array<un
 
 
 
-
 Object.defineProperty(globalThis, 'once', {value:once, configurable:false})
+Object.defineProperty(globalThis, 'always', {value:_always, configurable:false})
+Object.defineProperty(globalThis, 'check', {value:_check, configurable:false})
 
 
 // @ts-ignore
