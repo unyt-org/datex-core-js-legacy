@@ -137,7 +137,7 @@ export type datex_variables_scope = { [key: string]: any } & { // all available 
     __encrypted: boolean,
 }
 
-export type datex_meta = {encrypted?:boolean, signed?:boolean, sender:Endpoint, timestamp:Date, type:ProtocolDataType};
+export type datex_meta = {encrypted?:boolean, signed?:boolean, sender:Endpoint, timestamp:Date, type:ProtocolDataType, local?:boolean};
 
 
 export type datex_scope = {

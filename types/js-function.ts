@@ -28,10 +28,9 @@ export class JSTransferableFunction extends ExtensibleFunction {
 				if (!ptr) ptr = Pointer.getByValue(this);
 				if (!ptr) throw new Error("Cannot execute js:Function, must be bound to a pointer");
 				const origin = ptr.origin;
-				if (origin !== Runtime.endpoint && !Runtime.remoteJSCodeExecutionAllowed.has(ptr.origin)) {
+				if (origin !== Runtime.endpoint && !Runtime.trustedEndpoints.get(ptr.origin)?.includes("remote-js-execution")) {
 					throw new Error("Cannot execute js:Function, origin "+ptr.origin+" has no permission to execute js source code on this endpoint");
 				}
-				console.log("call trans", Pointer.getByValue(this)?.idString())
 				return intermediateFn(...args)
 			}
 			super(fn);

@@ -2,7 +2,7 @@ import { Pointer, Ref } from "../runtime/pointers.ts";
 import { Runtime } from "../runtime/runtime.ts";
 import { logger } from "../utils/global_values.ts";
 import { StreamConsumer, ValueConsumer } from "./abstract_types.ts";
-import { Endpoint, endpoint_name, LOCAL_ENDPOINT, target_clause } from "./addressing.ts";
+import { BROADCAST, Endpoint, endpoint_name, LOCAL_ENDPOINT, target_clause } from "./addressing.ts";
 import { Markdown } from "./markdown.ts";
 import { Scope } from "./scope.ts";
 import { Tuple } from "./tuple.ts";
@@ -26,11 +26,21 @@ import { Callable, ExtensibleFunction, getDeclaredExternalVariables, getDeclared
 export function getDefaultLocalMeta(){
     return Object.seal({
         sender: Runtime.endpoint,
-        current: Runtime.endpoint,
         timestamp: new Date(),
         signed: true,
+        encrypted: false,
         type: ProtocolDataType.LOCAL,
         local: true // set true if function was executed locally, not via DATEX (not a DATEX variable)
+    })
+}
+
+export function getUnknownMeta(){
+    return Object.seal({
+        sender: BROADCAST,
+        timestamp: new Date(),
+        signed: false,
+        encrypted: false,
+        type: ProtocolDataType.REQUEST
     })
 }
 

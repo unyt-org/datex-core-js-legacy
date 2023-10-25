@@ -314,7 +314,7 @@ export class Decorators {
 
     }
 
-    /** @jsdoc: add a field as a template property */
+    /** @jsdoc parse jsdoc comments and use as docs for DATEX type*/
     // TODO: only works with real js decorators, otherwise line numbers don't match
     static jsdoc(value:any, name:context_name, kind:context_kind, is_static:boolean, is_private:boolean, setMetadata:context_meta_setter, getMetadata:context_meta_getter, params:[]) {
 

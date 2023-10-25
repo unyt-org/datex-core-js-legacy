@@ -1,6 +1,6 @@
 // deno-lint-ignore-file no-namespace
 import { Endpoint, endpoints, endpoint_name, IdEndpoint, Person, Target, target_clause, LOCAL_ENDPOINT } from "../types/addressing.ts";
-import { NetworkError, PointerError, RuntimeError, ValueError } from "../types/errors.ts";
+import { NetworkError, PermissionError, PointerError, RuntimeError, ValueError } from "../types/errors.ts";
 import { Compiler, PrecompiledDXB } from "../compiler/compiler.ts";
 import { DX_PTR, DX_VALUE, INVALID, NOT_EXISTING, SET_PROXY, SHADOW_OBJECT, UNKNOWN_TYPE, VOID } from "./constants.ts";
 import { Runtime, UnresolvedValue } from "./runtime.ts";
@@ -15,13 +15,14 @@ import { primitive } from "../types/abstract_types.ts";
 import { Function as DatexFunction } from "../types/function.ts";
 import { Quantity } from "../types/quantity.ts";
 import { buffer2hex, hex2buffer } from "../utils/utils.ts";
-import { Conjunction, Disjunction } from "../types/logic.ts";
+import { Conjunction, Disjunction, Logical } from "../types/logic.ts";
 import { ProtocolDataType } from "../compiler/protocol_types.ts";
 import { Scope } from "../types/scope.ts";
 import { Time } from "../types/time.ts";
 import "../types/native_types.ts"; // getAutoDefault
 import { displayFatalError } from "./display.ts";
 import { JSTransferableFunction } from "../types/js-function.ts";
+import { IFrameCommunicationInterface } from "unyt_core/iframes/iframe-com-interface.ts";
 
 export type observe_handler<K=any, V extends Ref = any> = (value:V extends Ref<infer T> ? T : V, key?:K, type?:Ref.UPDATE_TYPE, transform?:boolean, is_child_update?:boolean)=>void|boolean
 export type observe_options = {types?:Ref.UPDATE_TYPE[], ignore_transforms?:boolean, recursive?:boolean}
@@ -1217,8 +1218,10 @@ export class Pointer<T = any> extends Ref<T> {
 
         loading_pointers?.delete(id_string);
 
-        return pointer;
+        // check read permissions (works if PROTECT_POINTERS enabled)
+        pointer.assertEndpointCanRead(SCOPE?.sender)
 
+        return pointer;
     }
 
     // create/get DatexPointer for value if possible (not primitive) and return value
@@ -1546,6 +1549,23 @@ export class Pointer<T = any> extends Ref<T> {
     get labels(){return this.#labels}
     get pointer_type(){return this.#pointer_type}
 
+    /**
+     * Throws if endpoint is not in allowed_access list and not a trusted endpoint with protected-pointer-access.
+     * Never throws if Runtime.OPTIONS.PROTECT_POINTERS is set to false
+     * @param endpoint 
+     * @returns 
+     */
+    public assertEndpointCanRead(endpoint?: Endpoint) {
+        if (
+            Runtime.OPTIONS.PROTECT_POINTERS 
+            && !(endpoint == Runtime.endpoint)
+            && this.is_origin 
+            && (!endpoint || !Logical.matches(endpoint, this.allowed_access, Target))
+            && (endpoint && !Runtime.trustedEndpoints.get(endpoint)?.includes("protected-pointer-access"))
+        ) {
+            throw new PermissionError("Endpoint has no read permissions for this pointer")
+        }
+    }
 
     private set origin(origin:Endpoint){
         this.#origin = origin

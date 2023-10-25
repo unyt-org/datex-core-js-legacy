@@ -494,7 +494,7 @@ class WebsocketClientInterface extends CommonInterface {
         const host = this.endpoint.getInterfaceChannelInfo("websocket");
         if (host instanceof URL) {
             if (host.protocol == "http:") this.protocol = "ws"; // assume ws as websocket protocol, if host is http
-            this.host = host.hostname; // convert https://xy -> xy
+            this.host = host.host; // convert https://xy -> xy
         }
         else this.host = host;
 

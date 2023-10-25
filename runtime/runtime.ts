@@ -194,11 +194,17 @@ type mime_type_definition<T> = (new(...args:any[])=>T) | {class:(new(...args:any
 
 type Source = '_source'|{};
 
+/**
+ * available permission that can be given to trusted endpoints
+ */
+export type trustedEndpointPermission = "remote-js-execution" | "protected-pointer-access";
+
 export class Runtime {
 
 
     // can be changed
     public static OPTIONS = {
+        PROTECT_POINTERS: false, // explicit permissions are required for remote endpoints to read/write pointers (current default: false)
         DEFAULT_REQUEST_TIMEOUT: 5000, // default timeout for DATEX requests in ms
         GARBAGE_COLLECTION_TIMEOUT: 1000, // time after which a value can get garbage collected
         USE_BIGINTS: true,  // DATEX integers are interpreted as JS BigInts 
@@ -221,7 +227,7 @@ export class Runtime {
     /**
      * List of endpoints that are allowed to create js:Functions that are executable on this endpoint
      */
-    public static remoteJSCodeExecutionAllowed = new Set()
+    public static trustedEndpoints = new Map<Endpoint, trustedEndpointPermission[]>()
 
     public static ENV: ObjectRef<{LANG:string, DATEX_VERSION:string, [key:string]:string}>
     public static VERSION = "beta";
@@ -234,10 +240,19 @@ export class Runtime {
     static #saved_local_strings = new WeakMap<local_text_map, Map<RefOrValue<string>, Pointer<string>>>();
     static #not_loaded_local_strings = new WeakMap<local_text_map, Set<RefOrValue<string>>>();
     
-
-    public static addPermissionForRemoteJSCode(endpoint:Endpoint) {
-        logger.debug("Remote JS code execution allowed for " + endpoint);
-        this.remoteJSCodeExecutionAllowed.add(endpoint);
+    /**
+     * Add a trusted endpoints with special permissions (default: all permissions enabled):
+     *  - `"protected-pointer-access"`: allows this endpoint to access all pointers, even if the PROTECT_POINTERS runtime flag is set
+     *  - `"remote-js-execution"`: allows local execution of <js:Function> values (containing JS source code) that were created by this endpoint
+     * @param endpoint 
+     * @param permissions 
+     */
+    public static addTrustedEndpoint(endpoint:Endpoint, permissions:trustedEndpointPermission[] = ["protected-pointer-access", "remote-js-execution"]) {
+        if (this.trustedEndpoints.has(endpoint))
+            logger.debug("Updated permissions for trusted endpoint " + endpoint + ": " + permissions.join(", "));
+        else 
+            logger.debug("Added trusted endpoint " + endpoint + " with permissions: " + permissions.join(", "));
+        this.trustedEndpoints.set(endpoint, permissions);
     }
 
     public static getLocalString(local_map:{[lang:string]:string}):Pointer<string> {
@@ -561,7 +576,7 @@ export class Runtime {
         let result:any;
 
         if (url.protocol == "https:" || url.protocol == "http:" || url.protocol == "blob:") {
-            let response:Response;
+            let response:Response|undefined = undefined;
 
             let doFetch = true;
 
@@ -574,11 +589,11 @@ export class Runtime {
                         doFetch = false; // no body fetch required, can directly import() module
                     }
                 }
-                catch {
-                    response.ok = false;
+                catch (e) {
+                    if (!response) console.error(e);
                 }
-                if (!response.ok) {
-                    throw new RuntimeError("Cannot get content of '"+url_string+"' (" + response.status + ")");
+                if (!response?.ok) {
+                    throw new RuntimeError("Cannot get content of '"+url_string+"' (" + response?.status??"unknown" + ")");
                 }
             }
 
@@ -586,11 +601,11 @@ export class Runtime {
                 try {
                     response = await fetch(url);
                 }
-                catch {
-                    response.ok = false;
+                catch (e) {
+                    if (!response) console.error(e);
                 }
-                if (!response.ok) {
-                    throw new RuntimeError("Cannot get content of '"+url_string+"' (" + response.status + ")");
+                if (!response?.ok) {
+                    throw new RuntimeError("Cannot get content of '"+url_string+"' (" + response?.status??"unknown" + ")");
                 }
             }
             
@@ -2605,7 +2620,7 @@ export class Runtime {
         checkValueReadPermission: (SCOPE: datex_scope, parent: any, key: string) => void,
         checkValueUpdatePermission: (SCOPE: datex_scope, parent: any, key: string) => void,
         countValue: (value: any) => bigint,
-        getReferencedProperty: (parent: any, key: any) => PointerProperty<any>,
+        getReferencedProperty: (SCOPE: datex_scope, parent: any, key: any) => PointerProperty<any>,
         getProperty: (SCOPE: datex_scope, parent: any, key: any) => any,
         has: (SCOPE: datex_scope, parent: any, key: any) => Promise<boolean>,
         getKeys: (value: any, array_indices_as_numbers?:boolean) => Iterator<any>,
@@ -3038,9 +3053,11 @@ export class Runtime {
         },
 
         // get parent[key] as DatexPointerProperty if possible
-        getReferencedProperty(parent:any, key:any){
+        getReferencedProperty(SCOPE: datex_scope, parent:any, key:any){
             const pointer = Pointer.createOrGet(parent);
             if (pointer) {
+                pointer.assertEndpointCanRead(SCOPE?.sender)
+
                 return PointerProperty.get(pointer, key);
             }
             else throw new RuntimeError("Could not get a child reference");
@@ -3052,6 +3069,9 @@ export class Runtime {
             if (parent instanceof UnresolvedValue) parent = parent[DX_VALUE];
 
             if (parent === undefined) throw new ValueError("void has no properties (trying to read property "+key+")");
+
+            const o_parent:Pointer = Pointer.pointerifyValue(parent);
+            if (o_parent instanceof Pointer) o_parent.assertEndpointCanRead(SCOPE?.sender)
 
             key = Ref.collapseValue(key,true,true);
 
@@ -3160,6 +3180,7 @@ export class Runtime {
 
             let o_parent:Pointer = Pointer.pointerifyValue(parent);
             if (!(o_parent instanceof Pointer)) o_parent = null;
+            else o_parent.assertEndpointCanRead(SCOPE?.sender)
 
             key = Ref.collapseValue(key,true,true);
             
@@ -3326,6 +3347,7 @@ export class Runtime {
 
             let o_parent:Pointer = Pointer.pointerifyValue(current_val);
             if (!(o_parent instanceof Pointer)) o_parent = null;
+            else o_parent.assertEndpointCanRead(SCOPE?.sender)
 
             key = Ref.collapseValue(key,true,true);
 
@@ -3914,7 +3936,7 @@ export class Runtime {
 
             // handle child get (referenced child if pointer)
             else if (INNER_SCOPE.waiting_for_child == 2) {
-                el = Runtime.runtime_actions.getReferencedProperty(INNER_SCOPE.active_value, el);
+                el = Runtime.runtime_actions.getReferencedProperty(SCOPE, INNER_SCOPE.active_value, el);
                 delete INNER_SCOPE.active_value; // no longer exists
                 INNER_SCOPE.waiting_for_child = 0;
                 // ... continue (insert new el)
@@ -5815,7 +5837,7 @@ export class Runtime {
                     break;
                 }
 
-                // URL
+                // get
                 case BinaryCode.GET: {
                     SCOPE.inner_scope.get = true;
                     break;

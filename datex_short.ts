@@ -1,11 +1,11 @@
 
 // shortcut functions
 // import { Datex } from "./datex.ts";
-import { baseURL, Runtime, PrecompiledDXB, Type, Pointer, Ref, PointerProperty, primitive, any_class, Target, IdEndpoint, TransformFunctionInputs, AsyncTransformFunction, TransformFunction, TextRef, Markdown, DecimalRef, BooleanRef, IntegerRef, MinimalJSRef, RefOrValue, PartialRefOrValueObject, datex_meta, ObjectWithDatexValues, Compiler, endpoint_by_endpoint_name, endpoint_name, Storage, compiler_scope, datex_scope, DatexResponse, target_clause, ValueError, logger, Class, getDefaultLocalMeta, Endpoint, INSERT_MARK, CollapsedValueAdvanced, CollapsedValue, SmartTransformFunction, compiler_options, activePlugins, METADATA, handleDecoratorArgs, RefOrValueObject, PointerPropertyParent, InferredPointerProperty } from "./datex_all.ts";
+import { baseURL, Runtime, PrecompiledDXB, Type, Pointer, Ref, PointerProperty, primitive, any_class, Target, IdEndpoint, TransformFunctionInputs, AsyncTransformFunction, TransformFunction, TextRef, Markdown, DecimalRef, BooleanRef, IntegerRef, MinimalJSRef, RefOrValue, PartialRefOrValueObject, datex_meta, ObjectWithDatexValues, Compiler, endpoint_by_endpoint_name, endpoint_name, Storage, compiler_scope, datex_scope, DatexResponse, target_clause, ValueError, logger, Class, getUnknownMeta, Endpoint, INSERT_MARK, CollapsedValueAdvanced, CollapsedValue, SmartTransformFunction, compiler_options, activePlugins, METADATA, handleDecoratorArgs, RefOrValueObject, PointerPropertyParent, InferredPointerProperty } from "./datex_all.ts";
 
 /** make decorators global */
 import {property as _property, sync as _sync, endpoint as _endpoint, template as _template, jsdoc as _jsdoc} from "./datex_all.ts";
-import { always as _always, check as _check } from "./functions.ts";
+import { always as _always, toggle as _toggle } from "./functions.ts";
 export * from "./functions.ts";
 import { NOT_EXISTING, DX_SLOTS, SLOT_GET, SLOT_SET } from "./runtime/constants.ts";
 import { AssertionError } from "./types/errors.ts";
@@ -15,11 +15,11 @@ import { eternals, getLazyEternal, waitingEternals, waitingLazyEternals } from "
 
 declare global {
 	const property: typeof _property;
-    const jsdoc: typeof _property;
+    const jsdoc: typeof _jsdoc;
 	const sync: typeof _sync;
 	const endpoint: typeof _endpoint;
     const always: typeof _always;
-    const check: typeof _check;
+    const toggle: typeof _toggle;
     // conflict with UIX.template (confusing)
 	// const template: typeof _template; 
 }
@@ -115,19 +115,14 @@ function _datex(dx:string|TemplateStringsArray|PrecompiledDXB, data?:unknown[], 
 }
 
 // add datex.meta
-Object.defineProperty(_datex, 'meta', {get:()=>{
-    const meta = getMeta();
-    // if (!meta) throw new Error("Function was called locally - no datex.meta available");
-    return meta;
-}, set:()=>{}, configurable:false})
+Object.defineProperty(_datex, 'meta', {get:()=>getMeta()??getUnknownMeta(), set:()=>{}, configurable:false})
 // add datex.get
 Object.defineProperty(_datex, 'get', {value:(res:string, type?:Class|Type, location?:URL, plugins?:string[])=>get(res,type,location ?? getCallerFile(),plugins), configurable:false})
-Object.defineProperty(_datex, 'localMeta', {get:()=>getDefaultLocalMeta(), configurable:false})
 
 // add globalThis.meta
 // Object.defineProperty(globalThis, 'meta', {get:()=>getMeta(), set:()=>{}, configurable:false})
 
-export const datex = <typeof _datex & {meta?:datex_meta, localMeta:ReturnType<typeof getDefaultLocalMeta>, get:typeof get}><unknown>_datex;
+export const datex = <typeof _datex & {meta:datex_meta, get:typeof get}><unknown>_datex;
 // @ts-ignore global datex
 globalThis.datex = datex;
 // global access to datex and meta
@@ -508,10 +503,9 @@ export function translocate<T extends Map<unknown,unknown>|Set<unknown>|Array<un
 // }
 
 
-
 Object.defineProperty(globalThis, 'once', {value:once, configurable:false})
 Object.defineProperty(globalThis, 'always', {value:_always, configurable:false})
-Object.defineProperty(globalThis, 'check', {value:_check, configurable:false})
+Object.defineProperty(globalThis, 'toggle', {value:_toggle, configurable:false})
 
 
 // @ts-ignore
