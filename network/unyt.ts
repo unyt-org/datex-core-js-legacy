@@ -15,7 +15,6 @@ import { ComInterface, CommonInterface } from "./client.ts";
 import { Runtime } from "../runtime/runtime.ts";
 import { Supranet } from "./supranet.ts";
 import { Endpoint } from "../types/addressing.ts";
-import { client_type } from "../utils/constants.ts";
 
 const logger = new Logger("unyt");
 
@@ -34,7 +33,10 @@ export interface AppInfo {
     stage?: string
     backend?: Endpoint,
     host?: Endpoint,
-    domains?: string[]
+    dynamicData?: {
+        domains?: string[]
+    }
+    
 }
 
 export interface EndpointInfo {
@@ -71,10 +73,10 @@ export class Unyt {
 
     public static endpointDomains() {
         const info = this.endpoint_info;
-        const urlEndpoint = (client_type == "browser" ? info.app?.backend : info.endpoint);
-        const endpointURLs = urlEndpoint ? [this.formatEndpointURL(urlEndpoint)] : [];
-        if (info.app?.domains) endpointURLs.unshift(...info.app.domains.map(d=>'https://'+d))
-        return [...new Set(endpointURLs)];
+        // const urlEndpoint = (client_type == "browser" ? info.app?.backend : info.endpoint);
+        // const endpointURLs = urlEndpoint ? [this.formatEndpointURL(urlEndpoint)] : [];
+        // if (info.app?.domains) endpointURLs.unshift(...info.app.domains.map(d=>'https://'+d))
+        return info.app?.dynamicData?.domains ? info.app.dynamicData.domains.map(d=>'https://'+d) : [];
     }
 
     // TODO add colored logo dark - light mode
@@ -135,10 +137,5 @@ ${content}
         return Runtime.valueToDatexStringExperimental(endpoint,false,true);
     }
 
-    public static formatEndpointURL(endpoint:Endpoint) {
-        const endpointName = endpoint.toString();
-        if (endpointName.startsWith("@+")) return `https://${endpointName.replace("@+","")}.unyt.app`
-        else if (endpointName.startsWith("@@")) return `https://${endpointName.replace("@@","")}.unyt.app`
-        else if (endpointName.startsWith("@")) return `https://${endpointName.replace("@","")}.unyt.me`
-    }
+
 }

@@ -237,7 +237,7 @@ export class Storage {
         // also save deno localstorage file, also if no local storage location set, metadata must stil be stored
         if (localStorage.saveFile) localStorage.saveFile();
 
-        console.log("\nexit - state saved in cache");
+        logger.debug("\nexit - state saved in cache");
     }
 
 
