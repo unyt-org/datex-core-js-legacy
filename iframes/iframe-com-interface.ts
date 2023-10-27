@@ -28,10 +28,9 @@ export class IFrameCommunicationInterface extends CommonInterface<[HTMLIFrameEle
             // init iframe
             this.iframe.setAttribute("sandbox", "allow-scripts allow-same-origin")
             this.otherOrigin = new URL(this.iframe.src).origin;
-
             this.logger.info("initializing as parent window, iframe origin: " + this.otherOrigin)
 
-            if (this.iframe.contentDocument?.readyState !== "complete") {
+            if (this.iframe.contentDocument && this.iframe.contentDocument.readyState !== "complete") {
                 await new Promise(resolve => this.iframe!.addEventListener("load", resolve));
             }
         }
@@ -44,13 +43,10 @@ export class IFrameCommunicationInterface extends CommonInterface<[HTMLIFrameEle
 
         }
 		else {
-			console.log("no IFrame or Window provided for IFrameCommunicationInterface");
+			this.logger.error("no IFrame or Window provided for IFrameCommunicationInterface");
 			return false;
 		}
-
-
         globalThis.addEventListener("message", (event) => {
-            // console.log("message",event.data)
             if (event.origin == this.otherOrigin) {
                 const data = event.data;
 
@@ -59,7 +55,7 @@ export class IFrameCommunicationInterface extends CommonInterface<[HTMLIFrameEle
                 }
 
                 else if (data?.type == "INIT") {
-                    this.endpoint = Target.get(data.endpoint)
+                    this.endpoint = Target.get(data.endpoint) as Datex.Endpoint;
 
                     // if in parent: send INIT to iframe after initialized
                     if (this.iframe) this.sendInit();
@@ -69,7 +65,8 @@ export class IFrameCommunicationInterface extends CommonInterface<[HTMLIFrameEle
         })
         
         // if in ifram: send INIT to parent immediately
-        if (this.parentDocument) this.sendInit();
+        if (this.parentDocument)
+            this.sendInit();
 
         return true;
     }
@@ -86,7 +83,13 @@ export class IFrameCommunicationInterface extends CommonInterface<[HTMLIFrameEle
         return (this.parentDocument??this.iframe?.contentWindow)!
     }
 
+    // FIXME
+    i = 0;
     protected sendBlock(datex: ArrayBuffer) {
+        if (this.i > 1000)
+            return;
+        if (new Uint8Array(datex.slice(0, 2)).toString() === "1,100")
+            this.i++;
         this.other.postMessage(datex, this.otherOrigin);
     }
 

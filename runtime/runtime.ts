@@ -1558,6 +1558,29 @@ export class Runtime {
     }
 
 
+    // keep track of last received messages endpoint:sid:inc:returnindex
+    private static receivedMessagesHistory:string[] = []
+
+    private static checkDuplicate(header: dxb_header) {
+        const identifier = `${header.sender}:${header.sid}:${header.inc}:${header.return_index}`;
+
+        let isDuplicate = false;
+        // is duplicate
+        if (this.receivedMessagesHistory.includes(identifier)) {
+            console.log("duplicate " + identifier, header.type);
+            isDuplicate = true;
+        }
+
+        // add to history
+        this.receivedMessagesHistory.push(identifier);
+        
+        // remove after 20s
+        setTimeout(()=> {
+            this.receivedMessagesHistory.shift();
+        }, 20_000)
+
+        return isDuplicate;
+    }
 
     /**
      * handle incoming DATEX Binary
@@ -1586,6 +1609,8 @@ export class Runtime {
         // normal request
         if (res instanceof Array) {
             [header, data_uint8] = res;
+            if (this.checkDuplicate(header)) return header;
+
             // + flood, exclude last_endpoint - don't send back in flooding tree
             if (header.routing.flood) {
                 this.floodDatex(dxb, last_endpoint??header.sender, header.routing.ttl-1); // exclude the node this was sent from, assume it is header.sender if no last_endpoint was provided
@@ -1599,6 +1624,7 @@ export class Runtime {
 
         // needs to be redirected 
         else {
+            if (this.checkDuplicate(res)) return res;
 
             // redirect as crypto proxy: sign
             if (res.sender && this.#cryptoProxies.has(res.sender)) {
@@ -1825,7 +1851,9 @@ export class Runtime {
             if (return_value) {
                 try {
                     let keys_updated = await Crypto.bindKeys(header.sender, ...<[ArrayBuffer,ArrayBuffer]>return_value);
-                    logger.debug("HELLO from " + header.sender +  ", keys "+(keys_updated?"":"not ")+"updated");
+                    if (header.routing?.ttl)
+                        header.routing.ttl--;
+                    logger.debug("HELLO ("+header.sid+"/" + header.inc+ "/" + header.return_index + ") from " + header.sender +  ", keys "+(keys_updated?"":"not ")+"updated", header.routing?.ttl ?? 0);
                 }
                 catch (e) {
                     logger.error("Invalid HELLO keys");
