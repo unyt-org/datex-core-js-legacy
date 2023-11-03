@@ -103,7 +103,10 @@ export class Function<T extends (...args: any) => any = (...args: any) => any> e
         meta_index?:number
     ):Function<(...args:Parameters<T>)=>ReturnType<T>> & Callable<Parameters<T>, ReturnType<T>> {
        
-        if (ntarget.name.startsWith("bound ")) throw new Error("Cannot convert a bound function to a DATEX function");
+        if (ntarget.name.startsWith("bound ")) {
+            console.log(ntarget);
+            throw new Error("Cannot convert a bound function to a DATEX function");
+        }
 
         // already a DATEX Function
         if (ntarget instanceof Function) return ntarget;

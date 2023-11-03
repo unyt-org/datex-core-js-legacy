@@ -16,6 +16,7 @@ export class Deferred<T>  {
         this.#sender = sender;
     }
 
+    // TODO: getter not working
     value():Promise<T> {
         if (!this.#promise) {
             this.#promise = new Promise(async (resolve, reject)=>{
@@ -34,7 +35,7 @@ export class Deferred<T>  {
 }
 
 // only temporary, remove
-Type.get("std:def").setJSInterface({
+Type.get("std:Deferred").setJSInterface({
     class: Deferred,
 
     is_normal_object: true,

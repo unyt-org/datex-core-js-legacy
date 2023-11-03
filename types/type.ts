@@ -277,7 +277,7 @@ export class Type<T = any> extends ExtensibleFunction {
 
         // initialize properties, if not [INIT_PROPS] yet called inside constructor
         if (!is_constructor) propertyInitializer[INIT_PROPS](instance);
-        
+
         // call DATEX construct methods and create pointer
         return this.construct(instance, args, is_constructor, make_pointer);
     }
@@ -433,7 +433,14 @@ export class Type<T = any> extends ExtensibleFunction {
             Object.assign(ref, Runtime.serializeValue(value))
         }
 
-        else throw new ValueError("Cannot update value of type " + this.toString());
+        // js function, no change? should not happen
+        else if (this as Type<any> == Type.js.TransferableFunction && ref?.toString?.() === value?.toString?.()) {
+            console.log("no chagne fn", value)
+        }
+
+        else {
+            throw new ValueError("Cannot update value of type " + this.toString());
+        }
     }
 
     public handleOperatorAdd(first:any, second:any) {
@@ -777,10 +784,10 @@ export class Type<T = any> extends ExtensibleFunction {
             if (value instanceof URL) return <Type<T>>Type.std.url;
 
             // loose function check: normal Functions are also considered std.Functions, because they get converted anyways once they get in touch with DATEX (also required for correct pointer type recognition when setting the value)
+            if (value instanceof Type) return <Type<T>>Type.std.Type;
             if (value instanceof Function) return <Type<T>>Type.std.Function;
             if (value instanceof DatexFunction) return <Type<T>>Type.std.Function;
             if (value instanceof Stream) return <Type<T>>Type.std.Stream;
-            if (value instanceof Type) return <Type<T>>Type.std.Type;
             if (value instanceof Endpoint) return <Type<T>>Type.std.endpoint;
             if (value instanceof Target) return <Type<T>>Type.std.target;
             if (value instanceof Scope) return <Type<T>>Type.std.Scope;
@@ -845,9 +852,10 @@ export class Type<T = any> extends ExtensibleFunction {
             if (_forClass ==  Time || Time.isPrototypeOf(_forClass)) return <Type<T>>Type.std.time;
             if (_forClass ==  URL || URL.isPrototypeOf(_forClass)) return <Type<T>>Type.std.url;
 
-            if (_forClass ==  DatexFunction || DatexFunction.isPrototypeOf(_forClass)) return <Type<T>>Type.std.Function;
-            if (_forClass ==  Stream || Stream.isPrototypeOf(_forClass)) return <Type<T>>Type.std.Stream;
             if (_forClass ==  Type || Type.isPrototypeOf(_forClass)) return <Type<T>>Type.std.Type;
+            if (_forClass ==  DatexFunction || DatexFunction.isPrototypeOf(_forClass)) return <Type<T>>Type.std.Function;
+            if (_forClass ==  Function || Function.isPrototypeOf(_forClass)) return <Type<T>>Type.js.Function;
+            if (_forClass ==  Stream || Stream.isPrototypeOf(_forClass)) return <Type<T>>Type.std.Stream;
             if (_forClass ==  Endpoint || Endpoint.isPrototypeOf(_forClass)) return <Type<T>>Type.std.endpoint;
             if (_forClass ==  Target || Target.isPrototypeOf(_forClass)) return <Type<T>>Type.std.target;
             if (_forClass ==  Scope || Scope.isPrototypeOf(_forClass)) return <Type<T>>Type.std.Scope;
@@ -880,7 +888,7 @@ export class Type<T = any> extends ExtensibleFunction {
      */
     static js = {
         NativeObject: Type.get<object>("js:Object"), // special object type for non-plain objects (objects with prototype) - no automatic children pointer initialization
-        TransferableFunction: Type.get<JSTransferableFunction>("js:TransferableFunction")
+        TransferableFunction: Type.get<JSTransferableFunction>("js:Function")
     }
 
     /**
@@ -947,6 +955,8 @@ export class Type<T = any> extends ExtensibleFunction {
         Type: Type.get<Type>("std:Type"),
         Function: Type.get<Function>("std:Function"),
         Stream: Type.get<Stream>("std:Stream"),
+
+        Deferred: Type.get<Stream>("std:Deferred"),
 
         Negation: Type.get<Negation<any>>("std:Negation"),
         Conjunction: Type.get<Conjunction<any>>("std:Conjunction"),

@@ -1053,23 +1053,50 @@ export class Pointer<T = any> extends Ref<T> {
         sorted.forEach((s)=>this.#pointer_sources.add(s));
     }
 
-    private static loading_pointers:WeakMap<datex_scope, Set<string>> = new WeakMap();
+    private static loading_pointers:Map<string, {promise: Promise<Pointer>, scopeList: WeakSet<datex_scope>}> = new Map();
 
     // load from storage or request from remote endpoint if pointer not yet loaded
-    static async load(id:string|Uint8Array, SCOPE?:datex_scope, only_load_local = false, sender_knows_pointer = true, allow_failure = false): Promise<Pointer>{
+    static load(id:string|Uint8Array, SCOPE?:datex_scope, only_load_local = false, sender_knows_pointer = true, allow_failure = false): Promise<Pointer>|Pointer{
 
         const id_string = Pointer.normalizePointerId(id);
 
-        if (SCOPE && !this.loading_pointers.has(SCOPE)) this.loading_pointers.set(SCOPE, new Set())
-        const loading_pointers = SCOPE ? this.loading_pointers.get(SCOPE) : undefined;
-
-        // recursive pointer loading! TODO
-        if (loading_pointers?.has(id_string)) {
-            logger.error("recursive pointer loading: $"+ id_string);
-            throw new PointerError("recursive pointer loading: $"+ id_string);//return null;
+        if (SCOPE) {
+            // recursive pointer loading! TODO
+            if (this.loading_pointers.get(id_string)?.scopeList.has(SCOPE)) {
+                logger.error("recursive pointer loading: $"+ id_string);
+                // return Pointer.create(id, {x:42});
+                throw new PointerError("recursive pointer loading: $"+ id_string);//return null;
+            }
         }
 
-        loading_pointers?.add(id_string);
+        if (this.loading_pointers.has(id_string)) {
+            console.log("pararal loading", SCOPE, this.loading_pointers.get(id_string)!.promise, this.loading_pointers)
+            if (SCOPE) this.loading_pointers.get(id_string)!.scopeList.add(SCOPE);
+            return this.loading_pointers.get(id_string)!.promise;
+        }
+
+
+        this.loading_pointers.set(id_string, null as any);
+        const loadPromise = this.handleLoad(id_string, id, SCOPE, only_load_local, sender_knows_pointer, allow_failure);
+
+        // only add load data if load not already finished
+        if (this.loading_pointers.has(id_string)) {
+            this.addLoadingPointerPromise(id_string, loadPromise, SCOPE);
+        }
+
+        return loadPromise;
+    }
+
+    /**
+     * called for pointer init blocks
+     */
+    static addLoadingPointerPromise(id: string|Uint8Array, loadedPromise: Promise<Pointer>, scope?: datex_scope) {
+        const id_string = Pointer.normalizePointerId(id);
+        this.loading_pointers.set(id_string, {promise: loadedPromise, scopeList: new WeakSet()});
+        if (scope) this.loading_pointers.get(id_string)!.scopeList.add(scope);
+    }
+
+    private static async handleLoad(id_string: string, id:string|Uint8Array, SCOPE:datex_scope|undefined, only_load_local:boolean, sender_knows_pointer:boolean, allow_failure:boolean) {
 
         // get pointer or create new
         let pointer:Pointer<any> = Pointer.create(id);
@@ -1077,7 +1104,7 @@ export class Pointer<T = any> extends Ref<T> {
         // logger.debug("loading pointer: " + pointer.idString() +  " origin = " + pointer.origin, pointer.#loaded)
         // not allowed: anonymous pointer
         if (pointer.is_anonymous) {
-            loading_pointers?.delete(id_string);
+            this.loading_pointers.delete(id_string);
             throw new PointerError("The anonymous pointer has no value", SCOPE)
         }
 
@@ -1120,7 +1147,7 @@ export class Pointer<T = any> extends Ref<T> {
                 try {
                     pointer = await pointer.subscribeForPointerUpdates(Runtime.main_node); // TODO relay node?
                 } catch (e) {
-                    loading_pointers?.delete(id_string);
+                    this.loading_pointers.delete(id_string);
                     // could not subscribe, remove pointer again
                     pointer.delete();
                     throw e;
@@ -1132,11 +1159,11 @@ export class Pointer<T = any> extends Ref<T> {
 
                 // waiting subscribe / unsubscribe ! should not happen TODO improve 
                 if (SCOPE?.sync) {
-                    loading_pointers?.delete(id_string);
+                    this.loading_pointers.delete(id_string);
                     throw new RuntimeError("Cannot subscribe to non-existing pointer", SCOPE);
                 }
                 else if (SCOPE?.unsubscribe) {
-                    loading_pointers?.delete(id_string);
+                    this.loading_pointers.delete(id_string);
                     throw new RuntimeError("Cannot unsubscribe from non-existing pointer", SCOPE)
                 }
 
@@ -1152,7 +1179,7 @@ export class Pointer<T = any> extends Ref<T> {
                 } catch (e) {
                     // cannot request from sender endpoint, doesn't know the pointer either
                     if (!sender_knows_pointer) {
-                        loading_pointers?.delete(id_string);
+                        this.loading_pointers.delete(id_string);
                         pointer.delete();
                         if (e instanceof NetworkError) {
                             if (!allow_failure) displayFatalError('pointer-unresolvable');
@@ -1167,7 +1194,7 @@ export class Pointer<T = any> extends Ref<T> {
                         logger.debug("could not subscribe to origin, requesting pointer from "+SCOPE?.sender+": " + pointer.idString());
                         pointer = await pointer.subscribeForPointerUpdates(SCOPE?.sender);
                     } catch {
-                        loading_pointers?.delete(id_string);
+                        this.loading_pointers.delete(id_string);
                         pointer.delete();
                         throw e;
                     }
@@ -1181,7 +1208,7 @@ export class Pointer<T = any> extends Ref<T> {
 
                 // cannot request from sender endpoint, doesn't know the pointer either
                 if (!sender_knows_pointer) {
-                    loading_pointers?.delete(id_string);
+                    this.loading_pointers.delete(id_string);
                     pointer.delete();
                     throw new PointerError("Neither the owner (self) nor the requesting endpoint could find the pointer $" + id_string)
                 }
@@ -1190,7 +1217,7 @@ export class Pointer<T = any> extends Ref<T> {
                     logger.debug("could not find local pointer, requesting pointer from "+SCOPE?.sender+": " + pointer.idString());
                     pointer = await pointer.subscribeForPointerUpdates(SCOPE?.sender, undefined, true);
                 } catch  {
-                    loading_pointers?.delete(id_string);
+                    this.loading_pointers.delete(id_string);
                     // could not subscribe, remove pointer again
                     pointer.delete();
                     if (!allow_failure) displayFatalError('owned-pointer-unresolvable');
@@ -1200,13 +1227,13 @@ export class Pointer<T = any> extends Ref<T> {
 
             // intentionally not loaded
             else if (only_load_local) {
-                loading_pointers?.delete(id_string);
+                this.loading_pointers.delete(id_string);
                 throw new PointerError("Pointer $"+id_string+" was not found locally", SCOPE);
             }
 
             // pointer does not exist / has no value
             else  {
-                loading_pointers?.delete(id_string);
+                this.loading_pointers.delete(id_string);
                 console.warn("perror")
                 // if (globalThis.UIX) UIX.State.resetPage(); // this should not happen
                 // else
@@ -1215,7 +1242,7 @@ export class Pointer<T = any> extends Ref<T> {
             }
         }
 
-        loading_pointers?.delete(id_string);
+        this.loading_pointers.delete(id_string);
 
         // check read permissions (works if PROTECT_POINTERS enabled)
         pointer.assertEndpointCanRead(SCOPE?.sender)

@@ -1567,7 +1567,7 @@ export class Runtime {
         let isDuplicate = false;
         // is duplicate
         if (this.receivedMessagesHistory.includes(identifier)) {
-            console.log("duplicate " + identifier, header.type);
+            // console.debug("duplicate " + identifier, header.type);
             isDuplicate = true;
         }
 
@@ -2818,11 +2818,16 @@ export class Runtime {
                 for (const p of INNER_SCOPE.waiting_ptrs) {
                     try {
                         if (SCOPE.header.type==ProtocolDataType.UPDATE) p[0].excludeEndpointFromUpdates(SCOPE.sender); 
-                        if (p[1] == undefined) {  // is set / init
+                        if (typeof p[1] == "object" || p[1] == undefined) {  // is set / init
                             const ptr = p[0].setValue(el);
                             // remote pointer value was set - subscribe to updates per default
                             if (!ptr.is_origin) {
                                 ptr.subscribeForPointerUpdates();
+                            }
+                            // resolve
+                            if (p[1]?.resolve) {
+                                p[1].resolve(ptr)
+                                Pointer.loading_pointers.delete(ptr.id); // TODO: only workaround, automaticall handle delete, but leads to promise rejection errors
                             }
                         }
                         else await Runtime.runtime_actions.handleAssignAction(SCOPE, p[1], null, null, el, p[0]); // other action on pointer
@@ -6463,7 +6468,7 @@ export class Runtime {
 
                     const ptr = await Pointer.load(id, SCOPE, false, knows_pointer?true:false);
                     await this.runtime_actions.insertToScope(SCOPE, ptr);
-    
+
                     break;
                 }
 
@@ -6513,14 +6518,17 @@ export class Runtime {
                         const only_load_local = true; //pointer.is_origin || SCOPE.sender?.equals(pointer.origin);
                         pointer = await Pointer.load(id, SCOPE, only_load_local, knows_pointer?true:false);
                         // console.log("has $" + Pointer.normalizePointerId(id), jmp_index, buffer2hex(SCOPE.buffer_views.uint8.slice(jmp_index), " "));
-                        pointer.is_persistant = true;
+                        // pointer.is_persistant = true;
                         SCOPE.current_index += init_block_size; // jump to end of init block
                     }
                     // does not exist - init
                     catch (e) {
                         if (!SCOPE.inner_scope.waiting_ptrs) SCOPE.inner_scope.waiting_ptrs = new Set();
                         const tmp_ptr = Pointer.create(id);
-                        SCOPE.inner_scope.waiting_ptrs.add([tmp_ptr]); // assign next value to pointer;
+                        // add pointer init promise for recursive init
+                        const {promise, resolve, reject} = Promise.withResolvers<Pointer>()
+                        Pointer.addLoadingPointerPromise(id, promise, SCOPE);
+                        SCOPE.inner_scope.waiting_ptrs.add([tmp_ptr, {resolve, reject}]); // assign next value to pointer;
                     }
 
                     break;

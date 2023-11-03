@@ -23,5 +23,29 @@ export * from "./datex_short.ts";
 
 export {init} from "./init.ts";
 
+
+/**
+ * Polyfills
+ */
+Object.defineProperty(globalThis.Promise, "withResolvers", {value: function withResolvers() {
+	if (!this) throw new TypeError("Promise.withResolvers called on non-object")
+	const out: any = {}
+	out.promise = new this((resolve_:any, reject_:any) => {
+		out.resolve = resolve_
+		out.reject = reject_
+	})
+	return out
+}})
+
+declare global {
+	interface PromiseConstructor {
+		withResolvers<T>(): {
+			promise: Promise<T>,
+			resolve: (r:T) => void,
+			reject: (e:unknown) => void
+		};
+	}
+}
+
 if ((globalThis as any).Datex) throw new Error(`The datex-core-js-legacy library was imported more than once from different sources`);// (v${Datex.Runtime?.VERSION??'X'} from ${Datex.libURL??'unknown'} and v${globalThis.Datex?.Runtime?.VERSION??'X'} from ${globalThis.Datex?.libURL??'unknown'}). Check your imports!`)
 (globalThis as any).Datex = Datex;

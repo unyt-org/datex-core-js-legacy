@@ -23,7 +23,7 @@ import { Error as DatexError, ValueError } from "../types/errors.ts";
 import { Function as DatexFunction } from "../types/function.ts";
 import { DatexObject } from "../types/object.ts";
 import { Tuple } from "../types/tuple.ts";
-import { DX_PERMISSIONS, DX_TYPE } from "../runtime/constants.ts";
+import { DX_PERMISSIONS, DX_TYPE, INIT_PROPS } from "../runtime/constants.ts";
 import { type Class } from "../utils/global_types.ts";
 import { Conjunction, Disjunction, Logical } from "../types/logic.ts";
 import { client_type } from "../utils/constants.ts";
@@ -347,7 +347,9 @@ export class Decorators {
     }
 
 
-    /** @template: create DATEX Type template for a class */
+    /** 
+     * @deprecated use \@sync
+     */
     static template(value:any, name:context_name, kind:context_kind, is_static:boolean, is_private:boolean, setMetadata:context_meta_setter, getMetadata:context_meta_getter, params:[(string|Type)?] = []) {
         if (kind != "class") logger.error("@template can only be used as a class decorator");
 
@@ -1167,7 +1169,14 @@ export function proxyClass<T extends { new(...args: any[]): any;}>(original_clas
                 return type.cast(new Tuple(args), undefined, undefined, auto_sync);
             }
             // just return new instance
-            else return Reflect.construct(target, args, newTarget);
+            else {
+                const instance:any = Reflect.construct(target, args, newTarget);
+                if (args[0]?.[INIT_PROPS]) {
+                    console.log("auto init props");
+                    args[0][INIT_PROPS](instance);
+                }
+                return instance;
+            }
         },
         getPrototypeOf(target) {
             return original_class

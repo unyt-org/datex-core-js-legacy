@@ -523,7 +523,7 @@ class WebsocketClientInterface extends CommonInterface {
                 // Connection opened
                 this.socket!.addEventListener('open', () => {
                     this.connecting = false;
-                    if (this.protocol == 'ws') this.logger.warn(`unsecure websocket connection to ${this.host}`)
+                    if (this.protocol == 'ws' && this.host !== "localhost") this.logger.warn(`unsecure websocket connection to ${this.host}`)
                     resolve(true);
                 });
 

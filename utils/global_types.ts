@@ -35,7 +35,7 @@ export type datex_sub_scope = {
     waiting_key?: number|bigint|string, // key of an object waiting to be assigned, null if currently in array
     waiting_internal_slot?: number, // index of internal slot waiting to be assigned
     waiting_vars?: Set<[name:string|number,action?:BinaryCode]>, // variable waiting for a value
-    waiting_ptrs?: Set<[ptr:Pointer,action?:BinaryCode]>, // new Pointer waiting for a value
+    waiting_ptrs?: Set<[ptr:Pointer,action?:BinaryCode|{resolve:(r:Pointer)=>void, reject:(e:unknown)=>void}]>, // new Pointer waiting for a value
     waiting_internal_vars?: Set<[name:string|number,action?:BinaryCode,persistant_meory?:boolean]>, // internal variable waiting for a value
 
     waiting_ext_type?: Type, // waiting for type parameters 

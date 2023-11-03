@@ -234,8 +234,13 @@ export function sync(...args:any[]): any {
     return handleDecoratorArgs(args, Decorators.sync);
 }
 
-
+/** 
+ * @deprecated use \@sync
+ */
 export function template(type:string|Type):any
+/** 
+ * @deprecated use \@sync
+ */
 export function template(target: any, name?: string, method?:any):any
 export function template(...args:any[]): any {
     return handleDecoratorArgs(args, Decorators.template);

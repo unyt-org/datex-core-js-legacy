@@ -2047,7 +2047,7 @@ export class Compiler {
         },
 
 
-        // for internal vars / pointers / labels innit 
+        // for internal vars / pointers / labels init 
         // assumes that uint32 gap is left before b_index to be set to jmp index
         addInitBlock: async (SCOPE:compiler_scope, brackets = false) => {
 
@@ -2076,14 +2076,15 @@ export class Compiler {
 
             // > max uint8
             if (compiled.byteLength > 0xff_ff_ff_ff) throw new CompilerError("pointer init block it too large");
-
+         
             // insert scope block
             Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+Uint32Array.BYTES_PER_ELEMENT+compiled.byteLength, SCOPE);
-                        
+                            
             SCOPE.data_view.setUint32(SCOPE.b_index, compiled.byteLength, true);
             SCOPE.b_index += Uint32Array.BYTES_PER_ELEMENT; // leave space for JMP
             SCOPE.uint8.set(new Uint8Array(compiled), SCOPE.b_index)
             SCOPE.b_index += compiled.byteLength;
+
         },
 
 
@@ -2145,24 +2146,31 @@ export class Compiler {
         },
 
         // ($aabb := [...]; $aabb)
-        addPreemptivePointer: (SCOPE:compiler_scope|extract_var_scope, id:string|Uint8Array)=>{
+        addPreemptivePointer: (SCOPE:compiler_scope|extract_var_scope, id:string|Uint8Array, defer = false)=>{
             const normalized_id = Pointer.normalizePointerId(id);
             const ptr = Pointer.get(normalized_id);
 
-            let alreadyInitializing = false;
-            let currentScope:compiler_scope|extract_var_scope|undefined = SCOPE;
-            while (currentScope) {
-                if (currentScope.preemptive_pointers.has(normalized_id)) {
-                    alreadyInitializing = true;
-                    break;
-                }
-                currentScope = currentScope.options.parent_scope;
+            let parentScope:compiler_scope|extract_var_scope = SCOPE;
+            while (parentScope.options.parent_scope) {
+                parentScope = parentScope.options.parent_scope;
             }
+            const alreadyInitializing = parentScope.preemptive_pointers.has(normalized_id) ?? false;
+
+            // defer = true;
+            let deferSizeIndex = -1;
 
             // preemptive value already exists and was not yet initialized in scope
             if (ptr?.value_initialized && !alreadyInitializing) {
-                SCOPE.preemptive_pointers.add(normalized_id);
+                parentScope.preemptive_pointers.add(normalized_id);
                 Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+1, SCOPE);
+
+                if (defer) {
+                    SCOPE.uint8[SCOPE.b_index++] = BinaryCode.DEFER;
+                    SCOPE.uint8[SCOPE.b_index++] = BinaryCode.SCOPE_BLOCK;
+                    deferSizeIndex = SCOPE.b_index;
+                    SCOPE.b_index += Uint32Array.BYTES_PER_ELEMENT;
+                }
+
                 SCOPE.uint8[SCOPE.b_index++] = BinaryCode.SUBSCOPE_START;
                 Compiler.builder.addPointerNormal(SCOPE, id, ACTION_TYPE.INIT, undefined, true, ptr.val); // sync
                 Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+1, SCOPE);
@@ -2170,6 +2178,8 @@ export class Compiler {
                 Compiler.builder.addPointerNormal(SCOPE, id, ACTION_TYPE.GET); // sync
                 Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+1, SCOPE);
                 SCOPE.uint8[SCOPE.b_index++] = BinaryCode.SUBSCOPE_END;
+
+                if (defer) SCOPE.data_view.setUint32(deferSizeIndex, SCOPE.b_index-deferSizeIndex-Uint32Array.BYTES_PER_ELEMENT, true);
             }
             // just add normal pointer
             else {
