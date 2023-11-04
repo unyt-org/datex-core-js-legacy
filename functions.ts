@@ -4,7 +4,7 @@
  */
 
 
-import { AsyncTransformFunction, BooleanRef, CollapsedValue, CollapsedValueAdvanced, Decorators, INSERT_MARK, METADATA, MinimalJSRef, Pointer, Ref, RefOrValue, Runtime, SmartTransformFunction, TransformFunction, TransformFunctionInputs, handleDecoratorArgs, primitive } from "./datex_all.ts";
+import { AsyncTransformFunction, BooleanRef, CollapsedValue, CollapsedValueAdvanced, Decorators, INSERT_MARK, METADATA, MaybeObjectRef, MinimalJSRef, Pointer, Ref, RefOrValue, Runtime, SmartTransformFunction, TransformFunction, TransformFunctionInputs, handleDecoratorArgs, primitive } from "./datex_all.ts";
 import { Datex } from "./mod.ts";
 import { IterableHandler } from "./utils/iterable-handler.ts";
 
@@ -67,7 +67,7 @@ export async function transformAsync<T,V extends TransformFunctionInputs>(depend
 }
 
 
-export function map<T, U, O extends 'array'|'map' = 'array'>(iterable: Iterable<T>, mapFn: (value: T, index: number, array: Iterable<T>) => U, options?: {outType: O}): O extends "array" ? U[] : Map<number, U> {
+export function map<T, U, O extends 'array'|'map' = 'array'>(iterable: Iterable<T>, mapFn: (value: MaybeObjectRef<T>, index: number, array: Iterable<T>) => U, options?: {outType: O}): O extends "array" ? U[] : Map<number, U> {
 	let mapped:U[]|Map<number, U>
 	
 	// live map

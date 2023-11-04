@@ -6,6 +6,7 @@ export async function enableCLI() {
 		const InputLoop = (await import("https://deno.land/x/input@2.0.3/index.ts")).default;
 		const logger = new Logger("CLI");
 		const input = new InputLoop();
+		
 		while (true) {
 			const cmd = await input.question('> ', false);
 	

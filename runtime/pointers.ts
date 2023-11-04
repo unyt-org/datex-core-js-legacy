@@ -22,6 +22,7 @@ import { Time } from "../types/time.ts";
 import "../types/native_types.ts"; // getAutoDefault
 import { displayFatalError } from "./display.ts";
 import { JSTransferableFunction } from "../types/js-function.ts";
+import { map } from "../functions.ts";
 
 export type observe_handler<K=any, V extends Ref = any> = (value:V extends Ref<infer T> ? T : V, key?:K, type?:Ref.UPDATE_TYPE, transform?:boolean, is_child_update?:boolean)=>void|boolean
 export type observe_options = {types?:Ref.UPDATE_TYPE[], ignore_transforms?:boolean, recursive?:boolean}
@@ -96,10 +97,10 @@ export abstract class Ref<T = any> extends EventTarget {
     }
 
     private handle$(force_pointer_properties=true, setter=true, transform_functions=true): Proxy$<T> {
-        const handler:ProxyHandler<(...args:unknown[])=>unknown> = {};
+        const handler:ProxyHandler<any> = {};
 
         // deno-lint-ignore no-this-alias
-        let pointer:Ref = this;
+        let pointer:Pointer = this;
 
         // double pointer property..TODO: improve, currently tries to collapse current value
         if (pointer instanceof PointerProperty) {
@@ -107,11 +108,44 @@ export abstract class Ref<T = any> extends EventTarget {
             if (!pointer) throw new Error("Nested pointer properties are currently not supported");
         }
 
+        handler.ownKeys = () => {
+            return Reflect.ownKeys(pointer.val);
+        }
+        handler.getOwnPropertyDescriptor = (_target: T, p: string | symbol) => {
+            return Reflect.getOwnPropertyDescriptor(pointer.val, p);
+        }
+
+        const arrayFunctions:Record<string,Function> = {};
+        if (pointer.val instanceof Array) {
+            arrayFunctions.map = function(handler:(value: unknown, index: number, array: Iterable<unknown>) => unknown) {
+                return map(pointer.val, handler)
+            }
+        }
+
         handler.get = (_, key) => {
+            // array iterator
+            if (key === Symbol.iterator) {
+                // array
+                if (pointer.val instanceof Array) return function* () {
+                    for (const key of Object.keys(pointer.val)) yield handler.get!(pointer.val, key, undefined);
+                }
+                // map
+                else if (pointer.val instanceof Map) return function* () {
+                    for (const key of pointer.val.keys()) yield [key, handler.get!(pointer.val, key, undefined)];
+                }
+                else throw new Error("Cannot iterate over pointer properties");
+            }
+
+            // special array $ methods (map, ...)
+            if (pointer.val instanceof Array) {
+                if (typeof key == "string" && key in arrayFunctions) return arrayFunctions[key];
+            }
+            
+
             if (force_pointer_properties) return PointerProperty.get(pointer, <keyof typeof pointer>key, true);
             else {
                 // TODO: handle typeof key == "symbol" (currently not supported in DATEX)
-                if (!(key in Object(pointer.val))) {
+                if (!(pointer.val instanceof Array) && ![...pointer.getKeys()].includes(key)) {
                     throw new ValueError("Property "+key.toString()+" does not exist in value");
                 }
                 if (pointer instanceof Pointer && Pointer.pointerifyValue(pointer.shadow_object?.[key]) instanceof Ref) return Pointer.pointerifyValue(pointer.shadow_object?.[key]);
@@ -119,8 +153,9 @@ export abstract class Ref<T = any> extends EventTarget {
             } 
         }
 
+        const useFunction = transform_functions && typeof this.val == "function";
         // handle function as transform
-        if (transform_functions) {
+        if (useFunction) {
             handler.apply = (_target, thisRef, args) => {
                 const thisVal = Ref.collapseValue(thisRef, true, true);
                 if (typeof thisVal != "function") throw new Error("Cannot create a reference transform, not a function"); 
@@ -146,7 +181,7 @@ export abstract class Ref<T = any> extends EventTarget {
             return false;
         }
         
-        return <Proxy$<T>> new Proxy(function(){}, handler);
+        return <Proxy$<T>> new Proxy(this.val!, handler);
     }
 
 
@@ -613,8 +648,27 @@ export type PrimitiveToClass<T> =
 
 
 type _Proxy$Function<T> = (T extends (...args: any) => any ? ((...args: Parameters<T>)=>Pointer<ReturnType<T>>) : unknown) // map all function properties to special transform functions that return a reference
-type _Proxy$<T>         = _Proxy$Function<T> & {[K in keyof T]: Ref<T[K]>}  // map properties to generic value references
-type _PropertyProxy$<T> = _Proxy$Function<T> & {readonly [K in keyof T]: PointerProperty<T[K]>} // always map properties to pointer property references
+
+type _Proxy$<T>         = _Proxy$Function<T> &
+    T extends Array<infer V> ? 
+    // array
+    {
+        [key: number]: Ref<V>, 
+        map<U>(callbackfn: (value: MaybeObjectRef<V>, index: number, array: V[]) => U, thisArg?: any): Pointer<U[]>
+    }
+    // normal object
+    : {readonly [K in keyof T]: Ref<T[K]>} // always map properties to pointer property references
+
+type _PropertyProxy$<T> = _Proxy$Function<T> & 
+    T extends Array<infer V> ? 
+    // array
+    {
+        [key: number]: PointerProperty<V>, 
+        map<U>(callbackfn: (value: MaybeObjectRef<V>, index: number, array: V[]) => U, thisArg?: any): Pointer<U[]>
+    }
+    // normal object
+    : {readonly [K in keyof T]: PointerProperty<T[K]>} // always map properties to pointer property references
+
 export type Proxy$<T> = _Proxy$<PrimitiveToClass<T>>
 export type PropertyProxy$<T> = _PropertyProxy$<PrimitiveToClass<T>>
 
@@ -622,6 +676,8 @@ export type ObjectRef<T> = T & {
     $:Proxy$<T> // reference to value (might generate pointer property, if no underlying pointer reference)
     $$:PropertyProxy$<T> // always returns a pointer property reference
 };
+
+export type MaybeObjectRef<T> = T extends primitive ? T : ObjectRef<T>
 
 /**
  * @deprecated use ObjectRef
@@ -638,9 +694,10 @@ export type JSValueWith$<T> = ObjectRef<T>;
 // convert from any JS/DATEX value to minimal representation with reference
 export type MinimalJSRefGeneralTypes<T, _C = CollapsedValue<T>> = 
     JSPrimitiveToDatexRef<_C> extends never ? ObjectRef<_C> : JSPrimitiveToDatexRef<_C>
-// same as MinimalJSRefGeneralTypes, but returns Pointer<2|5> instead of IntergerRef
+// same as MinimalJSRefGeneralTypes, but returns Pointer<2|5> instead of IntegerRef
 export type MinimalJSRef<T, _C = CollapsedValue<T>> = 
     JSPrimitiveToDatexRef<_C> extends never ? ObjectRef<_C> : (Pointer<_C> & _C)
+
 
 export type CollapsedValueAdvanced<T extends RefOrValue<unknown>, COLLAPSE_POINTER_PROPERTY extends boolean|undefined = true, COLLAPSE_PRIMITIVE_POINTER extends boolean|undefined = true, _C = CollapsedValue<T>> = 
     // if
@@ -1953,7 +2010,8 @@ export class Pointer<T = any> extends Ref<T> {
                 // TODO: is this required somewhere?
                 // add reference to this DatexPointer to the original value
                 if (!this.is_anonymous) {
-                    try {val[DX_PTR] = this;
+                    try {
+                        Object.defineProperty(val, DX_PTR, {value: this, enumerable: false})
                     } catch(e) {}
                 }
     

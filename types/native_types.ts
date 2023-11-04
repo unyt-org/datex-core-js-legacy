@@ -129,7 +129,7 @@ Type.std.Map.setJSInterface({
             return entries()
         }, writable:false, enumerable:false});
 
-        Object.defineProperty(value, Symbol.iterator, {value: value.entries, writable:false, enumerable:false});
+        Object.defineProperty(value, Symbol.iterator, {value: value.entries, writable:true, enumerable:false});
 
         return value;
     },
@@ -215,7 +215,7 @@ Type.std.Set.setJSInterface({
             return entries()
         }, writable:false, enumerable:false});
 
-        Object.defineProperty(value, Symbol.iterator, {value: value.values, writable:false, enumerable:false});
+        Object.defineProperty(value, Symbol.iterator, {value: value.values, writable:true, enumerable:false});
 
         return value;
     },
