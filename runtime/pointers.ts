@@ -1064,13 +1064,11 @@ export class Pointer<T = any> extends Ref<T> {
             // recursive pointer loading! TODO
             if (this.loading_pointers.get(id_string)?.scopeList.has(SCOPE)) {
                 logger.error("recursive pointer loading: $"+ id_string);
-                // return Pointer.create(id, {x:42});
-                throw new PointerError("recursive pointer loading: $"+ id_string);//return null;
+                throw new PointerError("recursive pointer loading: $"+ id_string);
             }
         }
 
         if (this.loading_pointers.has(id_string)) {
-            console.log("pararal loading", SCOPE, this.loading_pointers.get(id_string)!.promise, this.loading_pointers)
             if (SCOPE) this.loading_pointers.get(id_string)!.scopeList.add(SCOPE);
             return this.loading_pointers.get(id_string)!.promise;
         }
@@ -1773,11 +1771,14 @@ export class Pointer<T = any> extends Ref<T> {
     }
 
 
-    public unsubscribeFromPointerUpdates() {
+    public async unsubscribeFromPointerUpdates() {
         if (!this.#subscribed) return; // already unsubscribed
         const endpoint = this.origin;
         logger.info("unsubscribing from " + this.idString() + " ("+endpoint+")");
-        Runtime.datexOut(['#origin </= ?', [this]], endpoint);
+        try {
+            await Runtime.datexOut(['#origin </= ?', [this]], endpoint, undefined, true);
+        }
+        catch {}
         this.#subscribed = false;
     }
 

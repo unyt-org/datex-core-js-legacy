@@ -49,10 +49,10 @@ const data = $$([1,2,3]);
 
 // create a js:TransferableFunction
 const transferableFn = JSTransferableFunction.create(() => {
-	use (data);
+    use (data);
 
-	console.log(data);
-	// ...
+    console.log(data);
+    // ...
 })
 
 // call function on another endpoint (endpoint must have arbitrary source code execution permission)
@@ -91,14 +91,14 @@ import { struct } from "datex-core-legacy/types/struct.ts";
 
 // struct definition
 const MyStruct = struct({
-	a: string, // short name for Datex.Type.std.text
-	b: Set, // JavaScript 'Set' class, equivalent to Datex.Type.std.Set
-	c: Array<number>, // generic Array class (generic type argument has no effect at runtime!)
-	// nested struct
-	x: {
-		xx: string,
-		yy: Map<string, string>
-	}
+    a: string, // short name for Datex.Type.std.text
+    b: Set, // JavaScript 'Set' class, equivalent to Datex.Type.std.Set
+    c: Array<number>, // generic Array class (generic type argument has no effect at runtime!)
+    // nested struct
+    x: {
+        xx: string,
+        yy: Map<string, string>
+    }
 })
 
 // inferred TS definition:
@@ -107,25 +107,25 @@ type MyStruct = inferType<typeof MyStruct>
 //      | 
 //      V
 {
-	a: string,
-	b: Set<any>,
-	c: Array<number>,
-	x: {
-		xx: string,
-		yy: Map<string, string>
-	}
+    a: string,
+    b: Set<any>,
+    c: Array<number>,
+    x: {
+        xx: string,
+        yy: Map<string, string>
+    }
 }
 // -------------------------------------------------
  
 // instantiation (throws a runtime error if it doesn't match the struct definition)
 const myStruct: MyStruct = MyStruct({
-	a: "aaaaaa",
-	b: new Set(),
-	c: [1,2,3],
-	x: {
-		xx: "xxxxxxx",
-		yy: new Set(['1','2'])
-	}
+    a: "aaaaaa",
+    b: new Set(),
+    c: [1,2,3],
+    x: {
+        xx: "xxxxxxx",
+        yy: new Set(['1','2'])
+    }
 })
 ```
 

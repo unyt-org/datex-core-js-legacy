@@ -3952,7 +3952,7 @@ export class Runtime {
                     // workaround to get pointer that the new cast value will be assigned to
                     const waitingPtr = [...INNER_SCOPE.waiting_ptrs??[]][0];
                     let ptrId: string|undefined;
-                    if (waitingPtr && waitingPtr[1] == undefined) ptrId = waitingPtr[0].id;
+                    if (waitingPtr && (typeof waitingPtr[1] == "object" || waitingPtr[1] == undefined)) ptrId = waitingPtr[0].id;
                     el = await Runtime.castValue(type, el, INNER_SCOPE.ctx_intern, SCOPE.context_location, SCOPE.origin, undefined, ptrId)
                 }
             }

@@ -133,7 +133,7 @@ type extract_var_scope = {
     inner_scope: compiler_sub_scope,
     inserted_values: Map<unknown, [number]>,
     dynamic_indices: [number][],
-    preemptive_pointers: Set<string>
+    preemptive_pointers: Map<string, compiler_scope|extract_var_scope>
     options: compiler_options,
     assignment_end_indices: Set<number>,
     var_index?: number,
@@ -152,7 +152,7 @@ export type compiler_scope = {
     data?: unknown[],
     options: compiler_options,
 
-    preemptive_pointers: Set<string>,
+    preemptive_pointers: Map<string, compiler_scope|extract_var_scope>,
     
     jmp_label_indices:  {[label:string]:[number]}, // jmp label -> binary index
     indices_waiting_for_jmp_lbl: {[label:string]:[number][]}, // jmp instructions waiting for resolved label indices
@@ -2146,31 +2146,27 @@ export class Compiler {
         },
 
         // ($aabb := [...]; $aabb)
-        addPreemptivePointer: (SCOPE:compiler_scope|extract_var_scope, id:string|Uint8Array, defer = false)=>{
+        addPreemptivePointer: (SCOPE:compiler_scope|extract_var_scope, id:string|Uint8Array)=>{
             const normalized_id = Pointer.normalizePointerId(id);
             const ptr = Pointer.get(normalized_id);
 
             let parentScope:compiler_scope|extract_var_scope = SCOPE;
+            const ancestorScopes = new Set<compiler_scope|extract_var_scope>()
             while (parentScope.options.parent_scope) {
                 parentScope = parentScope.options.parent_scope;
+                ancestorScopes.add(parentScope)
             }
             const alreadyInitializing = parentScope.preemptive_pointers.has(normalized_id) ?? false;
 
-            // defer = true;
             let deferSizeIndex = -1;
+
+            // TODO: enable
+            const defer = false // alreadyInitializing && ancestorScopes.has(parentScope.preemptive_pointers.get(normalized_id)!); // defer if already loading pointer in direct ancestor
 
             // preemptive value already exists and was not yet initialized in scope
             if (ptr?.value_initialized && !alreadyInitializing) {
-                parentScope.preemptive_pointers.add(normalized_id);
+                parentScope.preemptive_pointers.set(normalized_id, SCOPE);
                 Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+1, SCOPE);
-
-                if (defer) {
-                    SCOPE.uint8[SCOPE.b_index++] = BinaryCode.DEFER;
-                    SCOPE.uint8[SCOPE.b_index++] = BinaryCode.SCOPE_BLOCK;
-                    deferSizeIndex = SCOPE.b_index;
-                    SCOPE.b_index += Uint32Array.BYTES_PER_ELEMENT;
-                }
-
                 SCOPE.uint8[SCOPE.b_index++] = BinaryCode.SUBSCOPE_START;
                 Compiler.builder.addPointerNormal(SCOPE, id, ACTION_TYPE.INIT, undefined, true, ptr.val); // sync
                 Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+1, SCOPE);
@@ -2178,12 +2174,17 @@ export class Compiler {
                 Compiler.builder.addPointerNormal(SCOPE, id, ACTION_TYPE.GET); // sync
                 Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+1, SCOPE);
                 SCOPE.uint8[SCOPE.b_index++] = BinaryCode.SUBSCOPE_END;
-
-                if (defer) SCOPE.data_view.setUint32(deferSizeIndex, SCOPE.b_index-deferSizeIndex-Uint32Array.BYTES_PER_ELEMENT, true);
             }
             // just add normal pointer
             else {
+                if (defer) {
+                    SCOPE.uint8[SCOPE.b_index++] = BinaryCode.DEFER;
+                    SCOPE.uint8[SCOPE.b_index++] = BinaryCode.SCOPE_BLOCK;
+                    deferSizeIndex = SCOPE.b_index;
+                    SCOPE.b_index += Uint32Array.BYTES_PER_ELEMENT;
+                }
                 Compiler.builder.addPointerNormal(SCOPE, id, ACTION_TYPE.GET); // sync
+                if (defer) SCOPE.data_view.setUint32(deferSizeIndex, SCOPE.b_index-deferSizeIndex-Uint32Array.BYTES_PER_ELEMENT, true);
             }
         },
 
@@ -5507,7 +5508,7 @@ export class Compiler {
             inserted_values: new Map(),
 
             jmp_label_indices: {},
-            preemptive_pointers: new Set(),
+            preemptive_pointers: new Map(),
             indices_waiting_for_jmp_lbl: {},
             assignment_end_indices: new Set(),
             used_lbls: [],
@@ -5577,7 +5578,7 @@ export class Compiler {
                 inner_scope: {},
                 dynamic_indices: [],
                 inserted_values: new Map(),
-                preemptive_pointers: new Set(),
+                preemptive_pointers: new Map(),
                 assignment_end_indices: new Set(),
                 options: {}
             }
@@ -5630,7 +5631,7 @@ export class Compiler {
             inserted_values: new Map(),
 
             jmp_label_indices: {},
-            preemptive_pointers: new Set(),
+            preemptive_pointers: new Map(),
             indices_waiting_for_jmp_lbl: {},
             assignment_end_indices: new Set(),
             used_lbls: [],

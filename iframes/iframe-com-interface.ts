@@ -35,7 +35,7 @@ export class IFrameCommunicationInterface extends CommonInterface<[HTMLIFrameEle
             }
         }
         // is a parent document with a window
-        else if (this.initial_arguments[0]?.[0] instanceof Window) {
+        else if (this.initial_arguments[0]) {
             this.parentDocument = this.initial_arguments[0]
             this.otherOrigin = new URL(document.referrer).origin;
         
