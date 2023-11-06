@@ -46,4 +46,4 @@ const admin = f `@exampleAdmin`
 }
 ```
 
-This can be used to restrict permissions to certain functionalities to specific endpoints or implement rate limiting.
+This can be used to restrict permissions for certain functionalities to specific endpoints or implement rate limiting.
