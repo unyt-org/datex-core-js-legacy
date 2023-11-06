@@ -696,7 +696,7 @@ export type MinimalJSRefGeneralTypes<T, _C = CollapsedValue<T>> =
     JSPrimitiveToDatexRef<_C> extends never ? ObjectRef<_C> : JSPrimitiveToDatexRef<_C>
 // same as MinimalJSRefGeneralTypes, but returns Pointer<2|5> instead of IntegerRef
 export type MinimalJSRef<T, _C = CollapsedValue<T>> = 
-    JSPrimitiveToDatexRef<_C> extends never ? ObjectRef<_C> : (Pointer<_C> & _C)
+    JSPrimitiveToDatexRef<_C> extends never ? ObjectRef<_C> : (Pointer<_C> & (_C extends boolean ? unknown : _C))
 
 
 export type CollapsedValueAdvanced<T extends RefOrValue<unknown>, COLLAPSE_POINTER_PROPERTY extends boolean|undefined = true, COLLAPSE_PRIMITIVE_POINTER extends boolean|undefined = true, _C = CollapsedValue<T>> = 
@@ -2011,7 +2011,7 @@ export class Pointer<T = any> extends Ref<T> {
                 // add reference to this DatexPointer to the original value
                 if (!this.is_anonymous) {
                     try {
-                        Object.defineProperty(val, DX_PTR, {value: this, enumerable: false})
+                        Object.defineProperty(val, DX_PTR, {value: this, enumerable: false, writable: true, configurable: true})
                     } catch(e) {}
                 }
     

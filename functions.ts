@@ -142,8 +142,8 @@ export function map<T, U, O extends 'array'|'map' = 'array'>(iterable: Iterable<
  * @param if_true value selected if true
  * @param if_false value selected if false
  */
-export function toggle<T extends primitive>(value:Ref<boolean>, if_true:T, if_false:T):MinimalJSRef<T>
-export function toggle<T>(value:Ref<boolean>, if_true:T, if_false:T):MinimalJSRef<T>
+// export function toggle<T extends primitive>(value:Ref<boolean>, if_true:T, if_false:T):Pointer<T>
+export function toggle<T>(value:Ref<boolean>, if_true:T, if_false:T): CollapsedValueAdvanced<Pointer<T>, false, false, CollapsedValue<Pointer<T>>>
 export function toggle<T>(value:Ref<boolean>, if_true:T, if_false:T) {
     return transform([value], v=>v?<any>if_true:<any>if_false, 
 	// dx transforms not working correctly (with uix)
@@ -154,8 +154,9 @@ export function toggle<T>(value:Ref<boolean>, if_true:T, if_false:T) {
     )`*/);
 }
 
+
 /**
- * @deprecated, use check()
+ * @deprecated, use toggle()
  */
 export const select = toggle;
 
