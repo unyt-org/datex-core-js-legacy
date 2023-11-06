@@ -321,10 +321,14 @@ export function md(value:RefOrValue<string>|TemplateStringsArray = "", ...vars:a
 
 
 // get string transform matching the current Runtime.ENV language
-export function local_text(local_map: { [lang: string]: string; }) {
+export function localtext(local_map: { [lang: string]: string; }) {
     return Runtime.getLocalString(local_map)
 }
 
+/**
+ * @deprecated use localtext
+ */
+export const local_text = localtext
 
 // map boolean to two values
 /**
@@ -523,6 +527,8 @@ globalThis.script = script
 globalThis.instance = instance;
 // @ts-ignore
 globalThis.md = md;
+// @ts-ignore
+globalThis.localtext = localtext;
 // @ts-ignore
 globalThis.local_text = local_text;
 // @ts-ignore

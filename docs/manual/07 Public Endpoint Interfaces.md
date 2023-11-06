@@ -8,12 +8,12 @@ Public functions and properties can be exposed under a namespace by creating a c
 await Datex.Supranet.connect();
 
 @endpoint class MyAPI {
-	@property static exampleFunction(a: number, b: string) {
-		// ... do some stuff
-		return c
-	}
+    @property static exampleFunction(a: number, b: string) {
+        // ... do some stuff
+        return c
+    }
 
-	@property static version = "0.1.1"
+    @property static version = "0.1.1"
 }
 ```
 
@@ -32,17 +32,17 @@ to find out which endpoint called the function:
 const admin = f `@exampleAdmin`
 
 @endpoint class MyAPI {
-	@property static exampleFunction(a: number, b: string) {
-		// the endpoint that called with function:
-		const callerEndpoint = datex.meta.sender;
-		
-		if (callerEndpoint === admin) {
-			console.log("doing admin stuff")
-		}
-		else {
-			// ...
-		}
-	}
+    @property static exampleFunction(a: number, b: string) {
+        // the endpoint that called with function:
+        const callerEndpoint = datex.meta.sender;
+        
+        if (callerEndpoint === admin) {
+            console.log("doing admin stuff")
+        }
+        else {
+            // ...
+        }
+    }
 }
 ```
 
