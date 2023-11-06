@@ -27,8 +27,8 @@ const colorB = $$("green");
 const c = $$(1);
 
 const result: Datex.Ref<string> = always(()=>{
-	if (c > 0) return `The color is ${colorA}`;
-	else return `The color is ${colorB}`
+    if (c > 0) return `The color is ${colorA}`;
+    else return `The color is ${colorB}`
 })
 
 // initial value
