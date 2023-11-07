@@ -6518,7 +6518,7 @@ export class Runtime {
                         const only_load_local = true; //pointer.is_origin || SCOPE.sender?.equals(pointer.origin);
                         pointer = await Pointer.load(id, SCOPE, only_load_local, knows_pointer?true:false);
                         // console.log("has $" + Pointer.normalizePointerId(id), jmp_index, buffer2hex(SCOPE.buffer_views.uint8.slice(jmp_index), " "));
-                        // pointer.is_persistant = true;
+                        // pointer.is_persistent = true;
                         SCOPE.current_index += init_block_size; // jump to end of init block
                     }
                     // does not exist - init

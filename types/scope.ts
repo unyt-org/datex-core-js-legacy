@@ -27,7 +27,7 @@ export class Scope<T=any> {
         // make internal vars persistent even if currently not loaded in JS (TODO: how to handle this case in the future?)
         for (const internal_var of this.internal_vars) {
             if (internal_var instanceof Pointer) {
-                internal_var.is_persistant = true;
+                internal_var.is_persistent = true;
             }
         }
 

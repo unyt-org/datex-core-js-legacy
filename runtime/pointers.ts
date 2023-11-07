@@ -478,7 +478,7 @@ export class PointerProperty<T=any> extends Ref<T> {
     private constructor(public pointer: Pointer, public key: any, leak_js_properties = false) {
         super();
         this.#leak_js_properties = leak_js_properties;
-        pointer.is_persistant = true; // TODO: make unpersistant when pointer property deleted
+        pointer.is_persistent = true; // TODO: make unpersistant when pointer property deleted
         PointerProperty.synced_pairs.get(pointer)!.set(key, this); // save in map
     }
 
@@ -1626,7 +1626,7 @@ export class Pointer<T = any> extends Ref<T> {
     get is_js_primitive(){return this.#is_js_primitive} // true if js primitive (number, boolean, ...) or 'single instance' class (Type, Endpoint) that cannot be directly addressed by reference
     get is_anonymous(){return this.#is_anonymous}
     get origin(){return this.#origin}
-    get is_persistant() { return this.#is_persistent;}
+    get is_persistent() { return this.#is_persistent;}
     get labels(){return this.#labels}
     get pointer_type(){return this.#pointer_type}
 
@@ -1654,7 +1654,7 @@ export class Pointer<T = any> extends Ref<T> {
     }
 
     // change the persistant state of this pointer
-    set is_persistant(persistant:boolean) {
+    set is_persistent(persistant:boolean) {
         if (persistant && !this.#is_persistent) {
             super.val = <any>this.current_val;
             this.#is_persistent = true;
@@ -1717,7 +1717,7 @@ export class Pointer<T = any> extends Ref<T> {
     public addLabel(label: string|number){
         if (Pointer.pointer_label_map.has(label)) throw new PointerError("Label " + Runtime.formatVariableName(label, '$') + " is already assigned to a pointer");
         this.#labels.add(label);
-        this.is_persistant = true; // make pointer persistant
+        this.is_persistent = true; // make pointer persistant
         Pointer.pointer_label_map.set(label, this)
 
         // add to globalThis
@@ -1894,7 +1894,7 @@ export class Pointer<T = any> extends Ref<T> {
         if (!this.value_initialized && (Object(v) !== v || v instanceof ArrayBuffer)) {
             Pointer.pointers.delete(this.id); // force remove previous non-primitive pointer (assume it has not yet been used)
             Pointer.primitive_pointers.delete(this.id)
-            return <any>Pointer.create(this.id, v, this.sealed, this.origin, this.is_persistant, this.is_anonymous, false, this.allowed_access, this.datex_timeout)
+            return <any>Pointer.create(this.id, v, this.sealed, this.origin, this.is_persistent, this.is_anonymous, false, this.allowed_access, this.datex_timeout)
         }
         //placeholder replacement
         if (Pointer.pointer_value_map.has(v)) {
@@ -1918,7 +1918,7 @@ export class Pointer<T = any> extends Ref<T> {
             throw new PointerError("Cannot get value of uninitialized pointer")
         }
         // deref and check if not garbage collected
-        if (!this.is_persistant && !this.is_js_primitive && super.val instanceof WeakRef) {
+        if (!this.is_persistent && !this.is_js_primitive && super.val instanceof WeakRef) {
             const val = super.val.deref();
             // seems to be garbage collected
             if (val === undefined && this.#loaded && !this.#is_js_primitive) {
@@ -1946,7 +1946,7 @@ export class Pointer<T = any> extends Ref<T> {
             throw new PointerError("Cannot get value of uninitialized pointer")
         }
         // deref and check if not garbage collected
-        if (!this.is_persistant && !this.is_js_primitive && super.current_val instanceof WeakRef) {
+        if (!this.is_persistent && !this.is_js_primitive && super.current_val instanceof WeakRef) {
             const val = super.current_val.deref();
             // seems to be garbage collected
             if (val === undefined && this.#loaded && !this.#is_js_primitive) {
@@ -2336,7 +2336,7 @@ export class Pointer<T = any> extends Ref<T> {
     }
 
 
-    // enable / disable garbage collection based on subscribers & is_persistant
+    // enable / disable garbage collection based on subscribers & is_persistent
     updateGarbageCollection(){
 
         // primitive value cannot be garbage collected
@@ -2345,7 +2345,7 @@ export class Pointer<T = any> extends Ref<T> {
         }
 
         // remove WeakRef (keep value) if persistant, or has subscribers
-        else if (this.is_persistant || this.subscribers?.size != 0 || this.is_js_primitive) {
+        else if (this.is_persistent || this.subscribers?.size != 0 || this.is_js_primitive) {
             //logger.warn("blocking " + this + " from beeing garbage collected")
             this.#garbage_collectable = false;
             if (super.val instanceof WeakRef) super.setVal(super.val.deref(), false);
