@@ -6727,12 +6727,13 @@ RuntimePerformance.createMeasureGroup("compile time", [
 
 
 // automatically sync newly added pointers if they are in the storage
-Pointer.onPointerAdded(async (pointer)=>{
-    if (await Storage.hasPointer(pointer)) {
-        console.log("auto sync " + pointer.idString())
-        Storage.syncPointer(pointer);
-    }
-})
+// TODO: enable?
+// Pointer.onPointerAdded(async (pointer)=>{
+//     if (await Storage.hasPointer(pointer)) {
+//         console.log("auto sync " + pointer.idString())
+//         Storage.syncPointer(pointer);
+//     }
+// })
 
 RuntimePerformance.marker("pseudoclass loading time", "pseudo_classes_loaded", "main_runtime_loaded");
 RuntimePerformance.marker("runtime initialization time", "initialized", "main_runtime_loaded");

@@ -847,6 +847,7 @@ export class Storage {
 			if (onlyLocation == undefined || location === onlyLocation) {
 				this.deleteSaveTime(location);
 				this.clearDirtyState(location)
+                console.log("clear",location)
 				await location.clear()
 			}
 		}

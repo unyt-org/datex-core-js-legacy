@@ -48,7 +48,7 @@ export abstract class Ref<T = any> extends EventTarget {
     }
 
     public get val(): T|undefined {
-        this.handleValueGet();
+        this.handleBeforeValueGet();
         return this.#val;
     }
     public set val(value: T|undefined) {
@@ -342,7 +342,7 @@ export abstract class Ref<T = any> extends EventTarget {
 
 
 
-    protected static capturedGetters = new Map<Ref, Set<Ref>>()
+    protected static capturedGetters? = new Set<Ref>()
 
     /**
      * true if currently capturing pointer getters in always function
@@ -354,26 +354,37 @@ export abstract class Ref<T = any> extends EventTarget {
      * captureGetters must be called before transform, getCaptuedGetters after to
      * get a list of all dependencies
      */
-    protected static captureGetters(referrer: Ref) {
+    protected static captureGetters() {
         this.isCapturing = true;
-        this.capturedGetters.set(referrer, new Set());
+        this.capturedGetters = new Set()
     }
 
-    protected static getCapturedGetters(referrer: Ref) {
-        const captured = this.capturedGetters.get(referrer);
-        this.capturedGetters.delete(referrer)
-        if (!this.capturedGetters.size) this.isCapturing = false;
+    protected static getCapturedGetters() {
+        const captured = this.capturedGetters;
+        this.capturedGetters = undefined;
+        this.isCapturing = false;
         return captured;
     }
 
     /**
-     * must be called each time the current value of the Ref is requested
-     * to keeo track of dependencies and update transform
+     * must be called each time before the current value of the Ref is requested
+     * to keep track of dependencies and update transform
      */
-    handleValueGet() {
+    handleBeforeValueGet() {
+        // remember previous capture state
+        const previousGetters = Ref.capturedGetters;
+        const previousCapturing = Ref.isCapturing;
+
         // trigger transform update if not live
-        if (this.#transformSource && !this.#liveTransform && !this.#forceLiveTransform) this.#transformSource.update();
-        for (const list of Ref.capturedGetters.values()) list.add(this);
+        if (this.#transformSource && !this.#liveTransform && !this.#forceLiveTransform) {
+            Ref.capturedGetters = new Set();
+            this.#transformSource.update();
+        }
+        if (previousCapturing) {
+            Ref.isCapturing = true;
+            Ref.capturedGetters = previousGetters ?? new Set();
+            Ref.capturedGetters.add(this);
+        }
     }
 
     #liveTransform = false;
@@ -420,10 +431,10 @@ export abstract class Ref<T = any> extends EventTarget {
      * Should be called when live transforms are needed,
      * i.e. when oberservers for this value are active
      */
-    protected enableLiveTransforms() {
+    protected enableLiveTransforms(triggerUpdate = true) {
         if (this.#forceLiveTransform) return;
         this.#liveTransform = true;
-        this.#transformSource!.enableLive();
+        this.#transformSource!.enableLive(triggerUpdate);
     }
 
     /**
@@ -517,7 +528,7 @@ export class PointerProperty<T=any> extends Ref<T> {
 
     // get current pointer property
     public override get val():T {
-        this.handleValueGet();
+        this.handleBeforeValueGet();
         return this.pointer.getProperty(this.key, this.#leak_js_properties);
     }
 
@@ -1375,8 +1386,8 @@ export class Pointer<T = any> extends Ref<T> {
      * @param persistent_datex_transform 
      * @returns 
      */
-    static createSmartTransform<const T>(transform:SmartTransformFunction<T>, persistent_datex_transform?:string, force_live = false):Pointer<T> {
-        return Pointer.create(undefined, NOT_EXISTING).smartTransform(transform, persistent_datex_transform, force_live);
+    static createSmartTransform<const T>(transform:SmartTransformFunction<T>, persistent_datex_transform?:string, forceLive = false, ignoreReturnValue = false):Pointer<T> {
+        return Pointer.create(undefined, NOT_EXISTING).smartTransform(transform, persistent_datex_transform, forceLive, ignoreReturnValue);
     }
 
     static createTransformAsync<const T,V extends TransformFunctionInputs>(observe_values:V, transform:AsyncTransformFunction<V,T>, persistent_datex_transform?:string):Promise<Pointer<T>>
@@ -1666,7 +1677,20 @@ export class Pointer<T = any> extends Ref<T> {
     get is_js_primitive(){return this.#is_js_primitive} // true if js primitive (number, boolean, ...) or 'single instance' class (Type, Endpoint) that cannot be directly addressed by reference
     get is_anonymous(){return this.#is_anonymous}
     get origin(){return this.#origin}
+
     get is_persistent() { return this.#is_persistent;}
+    // change the persistant state of this pointer
+    set is_persistent(persistant:boolean) {
+        if (persistant && !this.#is_persistent) {
+            this.#is_persistent = true;
+            this.updateGarbageCollection()
+        }
+        else if (!persistant && this.#is_persistent){
+            this.#is_persistent = false;
+            this.updateGarbageCollection()
+        }
+    }
+
     get labels(){return this.#labels}
     get pointer_type(){return this.#pointer_type}
 
@@ -1698,19 +1722,7 @@ export class Pointer<T = any> extends Ref<T> {
         this.#is_origin = !!Runtime.endpoint?.equals(this.#origin);
     }
 
-    // change the persistant state of this pointer
-    set is_persistent(persistant:boolean) {
-        if (persistant && !this.#is_persistent) {
-            super.val = <any>this.current_val;
-            this.#is_persistent = true;
-            this.updateGarbageCollection()
-        }
-        else if (!persistant && this.#is_persistent){
-            if (!this.#is_js_primitive) super.val = <any>new WeakRef(<any>this.current_val);
-            this.#is_persistent = false;
-            this.updateGarbageCollection()
-        }
-    }
+
 
 
     /**
@@ -1971,7 +1983,7 @@ export class Pointer<T = any> extends Ref<T> {
             const val = super.val.deref();
             // seems to be garbage collected
             if (val === undefined && this.#loaded && !this.#is_js_primitive) {
-                this.handleGarbageCollected()
+                Pointer.handleGarbageCollected(this)
                 throw new PointerError("Pointer was garbage collected");
             }
             // can be returned
@@ -1999,7 +2011,7 @@ export class Pointer<T = any> extends Ref<T> {
             const val = super.current_val.deref();
             // seems to be garbage collected
             if (val === undefined && this.#loaded && !this.#is_js_primitive) {
-                this.handleGarbageCollected()
+                Pointer.handleGarbageCollected(this)
                 throw new PointerError("Pointer was garbage collected");
             }
             // can be returned
@@ -2288,7 +2300,7 @@ export class Pointer<T = any> extends Ref<T> {
         else return false;
     }
 
-    protected smartTransform<R>(transform:SmartTransformFunction<T&R>, persistent_datex_transform?:string, forceLive = false): Pointer<R> {
+    protected smartTransform<R>(transform:SmartTransformFunction<T&R>, persistent_datex_transform?:string, forceLive = false, ignoreReturnValue = false): Pointer<R> {
         if (persistent_datex_transform) this.setDatexTransform(persistent_datex_transform) // TODO: only workaround
 
         const deps = new Set<Ref>();
@@ -2309,7 +2321,7 @@ export class Pointer<T = any> extends Ref<T> {
                 let val!: T
                 let getters!: Set<Ref>;
     
-                Ref.captureGetters(this);
+                Ref.captureGetters();
     
                 try {
                     val = transform() as T;
@@ -2321,10 +2333,10 @@ export class Pointer<T = any> extends Ref<T> {
                 }
                 // always cleanup capturing
                 finally {
-                    getters = Ref.getCapturedGetters(this)!;
+                    getters = Ref.getCapturedGetters()!;
                 }
 
-                if (!this.value_initialized) {
+                if (!ignoreReturnValue && !this.value_initialized) {
                     if (val == undefined) this.#is_js_primitive = true;
                     else this.#updateIsJSPrimitive(Ref.collapseValue(val,true,true));
                 }
@@ -2336,10 +2348,10 @@ export class Pointer<T = any> extends Ref<T> {
                 }
     
                 // update value
-                this.setVal(val, true, true);
+                if (!ignoreReturnValue) this.setVal(val, true, true);
 
                 // no dependencies, will never change, this is not the intention of the transform
-                if (!getters.size) {
+                if (!ignoreReturnValue && !getters.size) {
                     logger.warn("The transform value for " + this.idString() + " is a static value:", val);
                 }
 
@@ -2377,7 +2389,7 @@ export class Pointer<T = any> extends Ref<T> {
             update
         })
 
-        if (forceLive) this.enableLiveTransforms();
+        if (forceLive) this.enableLiveTransforms(false);
 
         return this as unknown as Pointer<R>;
     }
@@ -2392,17 +2404,32 @@ export class Pointer<T = any> extends Ref<T> {
     #registeredCollector?: MockPointer
     static #persistentPrimitivePointers = new Set<Pointer>();
 
+    #updatePersistent() {
+        if (this.is_persistent) {
+            // make sure complex pointer value is persisted
+            if (super.val instanceof WeakRef) super.setVal(super.val.deref(), false);
+            // make sure primitive pointer is persisted
+            if (this.#is_js_primitive) Pointer.#persistentPrimitivePointers.add(this);
+        }
+        else {
+            // make sure complex pointer value is not persisted (add WeakRef if not yet added)
+            if (!this.is_js_primitive && !(super.val instanceof WeakRef)) super.setVal(<any>new WeakRef(<any>super.val), false);
+            // make sure primitive pointer is not persisted
+            if (this.#is_js_primitive) Pointer.#persistentPrimitivePointers.delete(this);  
+        }
+    }
+
     // enable / disable garbage collection based on subscribers & is_persistant
     updateGarbageCollection(){
+        if (!this.value_initialized) return;
+
         // remove WeakRef (keep value) if persistant, or has subscribers
         if (this.is_persistent || this.subscribers?.size != 0) {
             //logger.warn("blocking " + this + " from beeing garbage collected")
             this.#garbage_collectable = false;
 
-            // make sure complex pointer value is persisted
-            if (super.val instanceof WeakRef) super.setVal(super.val.deref(), false);
-            // make sure primitive pointer is persisted
-            if (this.#is_js_primitive) Pointer.#persistentPrimitivePointers.add(this);
+            // make sure persistent state is up to date
+            this.#updatePersistent();
 
             if (this.#registeredCollector) {
                 logger.debug("disabled garbage collection for " + this.id);
@@ -2413,21 +2440,19 @@ export class Pointer<T = any> extends Ref<T> {
         // register finaliztion register (only once)
         else if (!this.#registeredCollector) {
 
-            // make sure complex pointer value is not persisted (add WeakRef if not yet added)
-            if (!this.is_js_primitive && !(super.val instanceof WeakRef)) super.setVal(<any>new WeakRef(<any>super.val), false);
-            // make sure primitive pointer is not persisted
-            if (this.#is_js_primitive) Pointer.#persistentPrimitivePointers.delete(this);
+            // make sure persistent state is up to date
+            this.#updatePersistent();
 
             // add to garbage collection after timeout
             const _keep = this.current_val;
             setTimeout(()=>{
-                if (!this.garbage_collected && this.value_initialized) {
+                if (!this.garbage_collected && this.value_initialized && !(this.is_persistent || this.subscribers?.size != 0)) {
                     _keep; // prevent garbage collection until timeout finished
                     // logger.success("giving " + this.idString() + " free for garbage collection")
                     this.#garbage_collectable = true;
                     try {
                         this.#registeredCollector = {id: this.id, origin: this.origin, is_origin: this.is_origin};
-                        console.log("reigster",(this.is_js_primitive ? this : this.current_val), this.#registeredCollector)
+                        console.warn("register collector" +  this.id, this.#registeredCollector)
                         Pointer.garbage_registry.register(<object><unknown>(this.is_js_primitive ? this : this.current_val), this.#registeredCollector)
                     }
                     catch (e){
@@ -2806,9 +2831,9 @@ export class Pointer<T = any> extends Ref<T> {
                         this.handleSet(name, val);
                     },
                     get: () => { 
-                        this.handleValueGet();
+                        this.handleBeforeValueGet();
                         // important: reference shadow_object, not this.shadow_object here, otherwise it might get garbage collected
-                        return Ref.collapseValue(shadow_object[name], true, true)
+                        return Ref.collapseValue(shadow_object[name], true, true);
                     }
                 });
             
@@ -2839,7 +2864,7 @@ export class Pointer<T = any> extends Ref<T> {
 
 			const proxy = new Proxy(<any>obj, {
                 get: (_target, key) => {
-                    this.handleValueGet();
+                    this.handleBeforeValueGet();
                     if (key == DX_PTR) return this;
                     if (this.#custom_prop_getter && (!this.shadow_object || !(key in this.shadow_object)) && !(typeof key == "symbol")) return this.#custom_prop_getter(key);
                     const val:any = Ref.collapseValue(this.shadow_object?.[key], true, true);
@@ -2862,8 +2887,7 @@ export class Pointer<T = any> extends Ref<T> {
                         }
                         return val.bind(_target);
                     }
-                    else return val
-                    
+                    else return val;
                 },
                 set: (target, val_name: keyof any, val: any) => {
                     if (this.#custom_prop_setter) {

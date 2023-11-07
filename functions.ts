@@ -57,7 +57,7 @@ export function always(scriptOrJSTransform:TemplateStringsArray|SmartTransformFu
  * ```
  */
 export function effect<const T>(transform:SmartTransformFunction<T>): {dispose: () => void} {
-    const ptr = Pointer.createSmartTransform(transform, undefined, true);
+    const ptr = Pointer.createSmartTransform(transform, undefined, true, true);
 	ptr.is_persistent = true;
 	return {
 		dispose() {
