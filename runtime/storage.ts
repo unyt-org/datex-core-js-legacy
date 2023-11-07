@@ -133,8 +133,7 @@ export class Storage {
 
     static meta_prefix = "dxmeta::"+site_suffix+"::"
 
-
-    static #storage_active_pointers = new Set<Pointer>();
+    static #storage_active_pointers = new Set<WeakRef<Pointer>>();
     static #storage_active_pointer_ids = new Set<string>();
 
     static DEFAULT_INTERVAL = 60; // 60s
@@ -264,7 +263,12 @@ export class Storage {
             }
 
             // update pointers
-            for (const ptr of this.#storage_active_pointers) {
+            for (const ptrRef of [...this.#storage_active_pointers]) {
+                const ptr = ptrRef.deref();
+                if (!ptr) {
+                    this.#storage_active_pointers.delete(ptrRef);
+                    continue;
+                }
                 try {
                     c++;
                     this.setPointer(ptr, true, location);
@@ -404,8 +408,10 @@ export class Storage {
     public static setPointer(pointer:Pointer, listen_for_changes = true, location:StorageLocation|undefined = this.#primary_location, partialUpdateKey: unknown = NOT_EXISTING): Promise<boolean>|boolean {
 
         if (!pointer.value_initialized) {
-            logger.warn("pointer value " + pointer.idString() + " not available, cannot save in storage");
-            this.#storage_active_pointers.delete(pointer);
+            // logger.warn("pointer value " + pointer.idString() + " not available, cannot save in storage");
+            for (const ref of this.#storage_active_pointers) {
+                if (ref.deref() === pointer) this.#storage_active_pointers.delete(ref)
+            }
             this.#storage_active_pointer_ids.delete(pointer.id)
             return false
         }
@@ -431,7 +437,7 @@ export class Storage {
         // listen for changes
         if (listen_for_changes) this.syncPointer(pointer, location);
 
-        this.#storage_active_pointers.add(pointer);
+        this.#storage_active_pointers.add(new WeakRef(pointer));
     
         return true;
     }
@@ -454,7 +460,7 @@ export class Storage {
         // listen for changes
         if (listen_for_changes) this.syncPointer(pointer, location);
 
-        this.#storage_active_pointers.add(pointer);
+        this.#storage_active_pointers.add(new WeakRef(pointer));
 
         return true;
     }
@@ -467,7 +473,7 @@ export class Storage {
     }
 
 
-    private static synced_pointers = new Set<Pointer>();
+    private static synced_pointers = new WeakSet<Pointer>();
 
     static syncPointer(pointer: Pointer, location: StorageLocation|undefined = this.#primary_location) {
         if (!this.#auto_sync_enabled) return;
@@ -627,7 +633,7 @@ export class Storage {
             else pointer = Pointer.create(pointer_id, val, false, Runtime.endpoint);
 
             this.syncPointer(pointer);
-            this.#storage_active_pointers.add(pointer);
+            this.#storage_active_pointers.add(new WeakRef(pointer));
             if (pointer.is_js_primitive) return pointer;
             else return pointer.val;
         }

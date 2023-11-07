@@ -31,13 +31,41 @@ export function always<const T,V extends TransformFunctionInputs>(transform:Smar
  */
 export function always<T=unknown>(script:TemplateStringsArray, ...vars:any[]): Promise<MinimalJSRef<T>>
 export function always(scriptOrJSTransform:TemplateStringsArray|SmartTransformFunction<any>, ...vars:any[]) {
-
     // js function
     if (typeof scriptOrJSTransform == "function") return Ref.collapseValue(Pointer.createSmartTransform(scriptOrJSTransform));
     // datex script
     else return (async ()=>Ref.collapseValue(await datex(`always (${scriptOrJSTransform.raw.join(INSERT_MARK)})`, vars)))()
 }
 
+
+/**
+ * Runs each time a dependency reference value changes.
+ * Dependency references are automatically detected.
+ * ```ts
+ * const x = $$(10);
+ * effect (() => console.log("x is " + x));
+ * x.val = 5; // logs "x is 5"
+ * ```
+ * 
+ * Disposing effects:
+ * ```ts
+ * const x = $$(10);
+ * const {dispose} = effect (() => console.log("x is " + x));
+ * x.val = 5; // logs "x is 5"
+ * dispose();
+ * x.val = 6; // no log
+ * ```
+ */
+export function effect<const T>(transform:SmartTransformFunction<T>): {dispose: () => void} {
+    const ptr = Pointer.createSmartTransform(transform, undefined, true);
+	ptr.is_persistent = true;
+	return {
+		dispose() {
+			ptr.is_persistent = false;
+			ptr.delete()
+		}
+	}
+}
 
 /**
  * A generic transform function, creates a new pointer containing the result of the callback function.

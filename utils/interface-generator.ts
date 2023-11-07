@@ -187,7 +187,7 @@ function getValueTSCode(module_name:string, name:string, value: any, no_pointer 
 
 	// disable garbage collection
 	const ptr = <Datex.Pointer> Datex.Pointer.getByValue(value);
-	if (ptr) ptr.is_persistant = true;
+	if (ptr) ptr.is_persistent = true;
 
 	const loader = value?.[DX_SOURCE] ? `await datex.get('${value[DX_SOURCE]}')` : `await datex('${Datex.Runtime.valueToDatexStringExperimental(value)}')`
 	code += `${name =='default' ? 'export default' : 'export const ' + name + ' ='} ${loader}${types ? ` as ${getValueTSType(value)}` : ''};\n`;
