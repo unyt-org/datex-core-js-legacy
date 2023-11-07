@@ -23,7 +23,6 @@ import "../types/native_types.ts"; // getAutoDefault
 import { displayFatalError } from "./display.ts";
 import { JSTransferableFunction } from "../types/js-function.ts";
 import { map } from "../functions.ts";
-import { Datex } from "unyt_core/mod.ts";
 
 export type observe_handler<K=any, V extends Ref = any> = (value:V extends Ref<infer T> ? T : V, key?:K, type?:Ref.UPDATE_TYPE, transform?:boolean, is_child_update?:boolean)=>void|boolean
 export type observe_options = {types?:Ref.UPDATE_TYPE[], ignore_transforms?:boolean, recursive?:boolean}
@@ -1780,8 +1779,8 @@ export class Pointer<T = any> extends Ref<T> {
         const id = this.id;
         // add to globalThis
         Object.defineProperty(globalThis, Runtime.formatVariableName(label, '$'), {
-            get: function() {return Datex.Pointer.get(id)!.val}, 
-            set: function(value) {Datex.Pointer.get(id)!.val=value}, 
+            get: function() {return Pointer.get(id)!.val}, 
+            set: function(value) {Pointer.get(id)!.val=value}, 
             configurable:true
         })
     }
@@ -2452,7 +2451,7 @@ export class Pointer<T = any> extends Ref<T> {
                     this.#garbage_collectable = true;
                     try {
                         this.#registeredCollector = {id: this.id, origin: this.origin, is_origin: this.is_origin};
-                        console.warn("register collector" +  this.id, this.#registeredCollector)
+                        // console.warn("register collector" +  this.id, this.#registeredCollector)
                         Pointer.garbage_registry.register(<object><unknown>(this.is_js_primitive ? this : this.current_val), this.#registeredCollector)
                     }
                     catch (e){
