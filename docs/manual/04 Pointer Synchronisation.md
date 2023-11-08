@@ -32,7 +32,7 @@ After a successful initialization, you should see the connection info printed to
 ### Creating a pointer
 
 As explained in the chapter [Pointers](./03%20Pointers.md),
-you can now create a new pointer with a number value.
+you can now create a new pointer containing a number value.
 
 ```ts
 const x = $$(42)
@@ -68,7 +68,7 @@ await import("https://cdn.unyt.org/datex-core-js-legacy/datex.js")
 await Datex.Supranet.connect()
 ```
 
-Now, we can use the `$` shortcut to load the pointer with the id:
+You can use the `$` shortcut to load the remote pointer with the previously determined id, e.g.:
 
 ```ts
 const x = await $.D5A3CB02310Dx480B651422749F9x40C85600300
