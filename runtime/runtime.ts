@@ -581,7 +581,7 @@ export class Runtime {
             let doFetch = true;
 
             // possible js module import: fetch headers first and check content type:
-            if (url_string.endsWith("js") || url_string.endsWith("ts") || url_string.endsWith("tsx") || url_string.endsWith("jsx") || url_string.endsWith("dx")  || url_string.endsWith("dxb")) {
+            if (!raw && (url_string.endsWith("js") || url_string.endsWith("ts") || url_string.endsWith("tsx") || url_string.endsWith("jsx") || url_string.endsWith("dx")  || url_string.endsWith("dxb"))) {
                 try {
                     response = await fetch(url, {method: 'HEAD'});
                     const type = response.headers.get('content-type');
@@ -963,7 +963,8 @@ export class Runtime {
 
             // flood exclude flood_exclude receiver
             if (flood) {
-                this.datex_out(dxb, flood_exclude, true, source)?.catch(e=>reject(e));
+                this.datex_out(dxb, flood_exclude, true, source)
+                    .catch(e=>reject(e));
             }           
             // send to receivers
             else if (to) {
@@ -973,7 +974,8 @@ export class Runtime {
                     // check offline status (async), immediately reject if offline
                     this._handleEndpointOffline(to_endpoint, reject)
                     // send dxb
-                    this.datex_out(dxb, to_endpoint, undefined, source)?.catch(e=>reject(e));
+                    this.datex_out(dxb, to_endpoint, undefined, source)
+                        .catch(e=>reject(e));
                 }
             }
 
@@ -1027,7 +1029,7 @@ export class Runtime {
 
         datex = Compiler.setHeaderTTL(datex, header.routing.ttl-1);
             
-        logger.debug("redirect " + header.sid + " > " + Runtime.valueToDatexString(header.routing.receivers));
+        logger.debug("redirect " + (ProtocolDataType[header.type]) + " " + header.sid + " > " + Runtime.valueToDatexString(header.routing.receivers) + ", ttl="+ (header.routing.ttl-1));
 
         let res = await this.datexOut(datex, header.routing.receivers, header.sid, wait_for_result, undefined, undefined, undefined, undefined, undefined, source);
         return res;
@@ -1043,6 +1045,9 @@ export class Runtime {
         datex = Compiler.setHeaderTTL(datex, ttl);
 
         let [dxb_header] = <dxb_header[]> this.parseHeaderSynchronousPart(datex);
+        
+        logger.debug("flood " + (ProtocolDataType[dxb_header.type]) + " " + dxb_header.sid + ", ttl="+ (dxb_header.routing?.ttl));
+
         this.datexOut(datex, null, dxb_header.sid, false, false, null, true, exclude);
     }
 
@@ -1853,13 +1858,13 @@ export class Runtime {
                     let keys_updated = await Crypto.bindKeys(header.sender, ...<[ArrayBuffer,ArrayBuffer]>return_value);
                     if (header.routing?.ttl)
                         header.routing.ttl--;
-                    logger.debug("HELLO ("+header.sid+"/" + header.inc+ "/" + header.return_index + ") from " + header.sender +  ", keys "+(keys_updated?"":"not ")+"updated", header.routing?.ttl ?? 0);
+                    logger.debug("HELLO ("+header.sid+"/" + header.inc+ "/" + header.return_index + ") from " + header.sender +  ", keys "+(keys_updated?"":"not ")+"updated, ttl = " + header.routing?.ttl);
                 }
                 catch (e) {
                     logger.error("Invalid HELLO keys");
                 }
             }
-            else logger.debug("HELLO from " + header.sender +  ", no keys");
+            else logger.debug("HELLO from " + header.sender +  ", no keys, ttl = " + header.routing?.ttl);
         }
         
         else if (header.type == ProtocolDataType.DEBUGGER) {

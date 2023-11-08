@@ -19,6 +19,7 @@ import type { dxb_header } from "../utils/global_types.ts";
 import { client_type } from "../utils/constants.ts";
 import { Disjunction } from "../types/logic.ts";
 import { Pointer } from "../runtime/pointers.ts";
+import { logger } from "../utils/global_values.ts";
 
 
 
@@ -38,7 +39,7 @@ export interface ComInterface {
 
 
 /** common class for all client interfaces (WebSockets, TCP Sockets, GET Requests, ...)*/
-export abstract class CommonInterface<Args extends unknown[] = []> implements ComInterface {
+export abstract class CommonInterface<Args extends T[] = []> implements ComInterface {
 
     // endpoint interface mapping
     protected static endpoint_connection_points = new Map<Target, Set<ComInterface>>();
@@ -759,6 +760,7 @@ export class InterfaceManager {
         }
         // send
         else {
+            logger.debug("sending to " + to + " (interface " + comInterface.type + " / " + comInterface.endpoint + ")");
             return await comInterface.send(addressed_datex, to); // send to first available interface (todo)
         }
 

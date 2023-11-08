@@ -8,6 +8,7 @@ import { client_type } from "./constants.ts";
  */
 export async function blobifyFile(path: string|URL) {
 	const [script] = await Datex.Runtime.getURLContent(path.toString(), true, true) as [string, string];
+	console.log("script", script)
 	return blobifyScript(script);
 }
 
