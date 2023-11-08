@@ -302,7 +302,3 @@ const valX: number = val(refX);
 ```
 
 If a non-reference value (e.g. a normal `number` or object) is passed to the `val` function, the value is just returned, so that it is guaranteed to always return a normal JavaScript value.
-
-
-
-
