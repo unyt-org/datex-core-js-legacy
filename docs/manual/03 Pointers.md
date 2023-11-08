@@ -179,7 +179,7 @@ id.val = 35; // triggers the fetch effect again
 
 > [!WARNING]
 > Keep in mind that effect handler are only triggered by pointer updates.
-> Updating the value of a plain JavaScript variable does not have an effect:
+> Updating the value of a plain JavaScript variable does not work:
 > ```ts
 > let id = 10;
 > effect(() => console.log("id: " + id));
@@ -188,7 +188,7 @@ id.val = 35; // triggers the fetch effect again
 
 ### Clearing effects
 
-The `effect` function returns an object with a `dispose()` method that can be called to clear the effect.
+The `effect()` function returns an object with a `dispose()` method that can be called to clear the effect.
 
 ```ts
 function task() {
@@ -205,7 +205,7 @@ function task() {
 }
 ```
 
-Alternatively, effects can be restricted to the livetime of a scope with the `using` keyword.
+Alternatively, effects can be restricted to the lifetime of a scope with the `using` keyword.
 ```ts
 function task() {
     const x = $$(0);
