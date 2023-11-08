@@ -4,6 +4,7 @@ Every DATEX pointer can be shared and synchronized between multiple endpoints.
 
 This chapter serves as an introduction to shared pointers and explains the concepts behind pointer synchronisation.
 
+<p></p><br>
 
 ## Learn by example: Pointer synchronisation between two clients
 
