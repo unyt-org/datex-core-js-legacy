@@ -5,7 +5,7 @@ import { baseURL, Runtime, PrecompiledDXB, Type, Pointer, Ref, PointerProperty, 
 
 /** make decorators global */
 import {property as _property, sync as _sync, endpoint as _endpoint, template as _template, jsdoc as _jsdoc} from "./datex_all.ts";
-import { always as _always, toggle as _toggle, map as _map, equals as _equals, selectProperty as _selectProperty, not as _not } from "./functions.ts";
+import { effect as _effect, always as _always, toggle as _toggle, map as _map, equals as _equals, selectProperty as _selectProperty, not as _not } from "./functions.ts";
 export * from "./functions.ts";
 import { NOT_EXISTING, DX_SLOTS, SLOT_GET, SLOT_SET } from "./runtime/constants.ts";
 import { AssertionError } from "./types/errors.ts";
@@ -24,6 +24,11 @@ declare global {
     const equals: typeof _equals;
     const selectProperty: typeof _selectProperty;
     const not: typeof _not;
+    const effect: typeof _effect;
+    const observe: typeof Ref.observe
+    const observeAndInit: typeof Ref.observeAndInit
+    const unobserve: typeof Ref.unobserve
+
     // conflict with UIX.template (confusing)
 	// const template: typeof _template; 
 }
@@ -267,6 +272,27 @@ export function pointer<T>(value:RefOrValue<T>, property?:unknown): unknown {
 
 export const $$ = pointer;
 
+type $type = Record<string, Pointer<unknown>|Promise<Pointer<unknown>>>;
+
+/**
+ * Used as shortcut for debugging, returns a Pointer or Promise<Pointer>
+ * for a given id:
+ * ```ts
+ * const ptr: Pointer = $.AFEFEF3282389FEFAxE2;
+ * ```
+ * 
+ */
+export const $ = new Proxy({} as $type, {
+    get(_target,p,_receiver) {
+        if (typeof p == "string") {
+            const ptr = Pointer.get(p);
+            if (ptr) return ptr;
+            else return Pointer.load(p)
+        }
+    },
+})
+
+
 /**
  * val shortcut function, collapses all ref value (pointers, pointer properties)
  * @param val 
@@ -402,6 +428,8 @@ declare global {
     const eternal: undefined
     const lazyEternal: undefined    
     const $$: typeof pointer
+    const $: $type
+
     const val: val
 
     const eternalVar: (customIdentifier:string)=>undefined
@@ -518,6 +546,10 @@ Object.defineProperty(globalThis, 'map', {value:_map, configurable:false})
 Object.defineProperty(globalThis, 'equals', {value:_equals, configurable:false})
 Object.defineProperty(globalThis, 'selectProperty', {value:_selectProperty, configurable:false})
 Object.defineProperty(globalThis, 'not', {value:_not, configurable:false})
+Object.defineProperty(globalThis, 'effect', {value:_effect, configurable:false})
+Object.defineProperty(globalThis, 'observe', {value:Ref.observe, configurable:false})
+Object.defineProperty(globalThis, 'observeAndInit', {value:Ref.observeAndInit, configurable:false})
+Object.defineProperty(globalThis, 'unobserve', {value:Ref.unobserve, configurable:false})
 
 // @ts-ignore
 globalThis.get = get
@@ -535,6 +567,8 @@ globalThis.local_text = local_text;
 globalThis.label = label;
 // @ts-ignore
 globalThis.$$ = $$;
+// @ts-ignore
+globalThis.$ = $;
 // @ts-ignore
 globalThis.val = val;
 // @ts-ignore

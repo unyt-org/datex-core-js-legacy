@@ -1884,8 +1884,6 @@ export class Runtime {
     }
 
     // Persistant Scope Memory
-
-    // TODO save permanently in storage
     static persistent_memory:AutoMap<string,{[key:number|string]:any}>;
 
     // Persistent Pointer subscriber cache (ptr id -> subscribers)

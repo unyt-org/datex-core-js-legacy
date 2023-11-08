@@ -9,8 +9,6 @@ import { Datex } from "./mod.ts";
 import { IterableHandler } from "./utils/iterable-handler.ts";
 
 
-
-
 /**
  * A generic transform function, creates a new pointer containing the result of the callback function.
  * At any point in time, the pointer is the result of the callback function.
@@ -37,6 +35,41 @@ export function always(scriptOrJSTransform:TemplateStringsArray|SmartTransformFu
     // datex script
     else return (async ()=>Ref.collapseValue(await datex(`always (${scriptOrJSTransform.raw.join(INSERT_MARK)})`, vars)))()
 }
+
+
+/**
+ * Runs each time a dependency reference value changes.
+ * Dependency references are automatically detected.
+ * ```ts
+ * const x = $$(10);
+ * effect (() => console.log("x is " + x));
+ * x.val = 5; // logs "x is 5"
+ * ```
+ * 
+ * Disposing effects:
+ * ```ts
+ * const x = $$(10);
+ * const {dispose} = effect (() => console.log("x is " + x));
+ * x.val = 5; // logs "x is 5"
+ * dispose();
+ * x.val = 6; // no log
+ * ```
+ */
+export function effect(handler:() => void): {dispose: () => void, [Symbol.dispose]: () => void} {
+    const ptr = Pointer.createSmartTransform(handler, undefined, true, true);
+	ptr.is_persistent = true;
+	return {
+		[Symbol.dispose||Symbol.for("Symbol.dispose")]() {
+			ptr.is_persistent = false;
+			ptr.delete()
+		},
+		dispose() {
+			ptr.is_persistent = false;
+			ptr.delete()
+		}
+	}
+}
+
 
 
 /**

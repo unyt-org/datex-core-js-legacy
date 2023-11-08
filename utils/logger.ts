@@ -13,6 +13,7 @@ import type { Runtime } from "../runtime/runtime.ts";
 import type { Type } from "../types/type.ts";
 import type { Pointer } from "../runtime/pointers.ts";
 import { console as console_ansi } from "./ansi_compat.ts";
+import { hasDebugCookie } from "./debug-cookie.ts";
 
 let _Runtime:typeof Runtime; // to circular imports logger - Runtime
 let _Type:typeof Type; // to circular imports logger - Type
@@ -856,6 +857,7 @@ export class Logger {
     
  
     // set log levels for development / production
+    // only enable debug logs for devlopment logs if cookie set
     static #development_log_level = LOG_LEVEL.VERBOSE;
     static #production_log_level = LOG_LEVEL.VERBOSE;
 
@@ -913,9 +915,8 @@ Logger.registerLogFormatter(new TextFormatter);
 // @ts-ignore set global logger for dev console
 globalThis.logger = new Logger("main");
 
-
 // set log level (browser default true, deno default false)
-Logger.development_log_level = client_type === "deno" ? LOG_LEVEL.DEFAULT : LOG_LEVEL.VERBOSE
+Logger.development_log_level = client_type === "deno" ? LOG_LEVEL.DEFAULT : (hasDebugCookie() ? LOG_LEVEL.VERBOSE : LOG_LEVEL.DEFAULT)
 Logger.production_log_level = client_type === "deno" ? LOG_LEVEL.DEFAULT : LOG_LEVEL.VERBOSE;
 
 if (client_type === "deno") (async ()=> {

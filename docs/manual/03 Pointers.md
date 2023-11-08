@@ -144,29 +144,95 @@ const result = (refX * refY) + 6; // = 12 (a normal JS primitive value)
 
 ### Transform functions
 
-The `always` function automatically determines all dependency values and recalculates when one of the dependencies changes.
+The `always()` function automatically determines all dependency values and recalculates when one of the dependencies changes.
 For this reason, this function is very flexible and can be used for simple calculations or more complex functions.
-The `always` function is just one of a group of so-called *Transform functions*.
+The `always()` function is just one of a group of so-called *Transform functions*.
 
 There exist multiple transform functions that are optimizied for specific use cases like mathematical calculations
-and can be used instead of a generic `always` function.
+and can be used instead of a generic `always()` function.
 Read more about transform functions in the chapter [Functional Programming](./09%20Functional%20Programming.md).
 
+## Using effects
+
+With transform functions, value can be defined declaratively.
+Still, there are some scenarios where the actual pointer value change event must be handled with custom logic.
+For this scenario, the `effect()` function can be used.
+
+On the first glance, the `effect()` function works similarly to the `always()` function:
+
+It is called every time a dependency value changes, 
+but in contrast to the `always()` function, it does not create a new pointer.
+
+An `effect()` handler can also have side-*effects* (hence the name).
+
+```ts
+const id = $$(42);
+
+// define a new effect (is immediately invoked)
+effect(() => {
+    console.log("new id:" + id);
+    fetch(`https://api.example.com?id=${id}`).then(...)
+})
+
+id.val = 35; // triggers the fetch effect again
+```
+
+> [!WARNING]
+> Keep in mind that effect handler are only triggered by pointer updates.
+> Updating the value of a plain JavaScript variable does not have an effect:
+> ```ts
+> let id = 10;
+> effect(() => console.log("id: " + id));
+> id = 12; // does not trigger the effect
+> ```
+
+### Clearing effects
+
+The `effect` function returns an object with a `dispose()` method that can be called to clear the effect.
+
+```ts
+function task() {
+    const x = $$(0);
+    // effect is run every time x changes
+    const {dispose} = effect(() => console.log("x = " + x));
+
+    for await (x of y) {
+        x.val++;
+    }
+
+    // dispose effect
+    dispose();
+}
+```
+
+Alternatively, effects can be restricted to the livetime of a scope with the `using` keyword.
+```ts
+function task() {
+    const x = $$(0);
+    // effect is run every time x changes
+    using e1 = effect(() => console.log("x = " + x));
+
+    for await (x of y) {
+        x.val++;
+    }
+
+    // effect is automatically disposed at the end of this scope
+}
+```
 
 ## Observing pointer changes
 
-With transform functions, many value changes can be defined declaratively.
-Still, there are some scenarios where the actual pointer value change event must be handled.
-
-In this case, the `Datex.Ref.observe()` function can be used:
+For more fine grained control, the `observe()` function can be used to handle pointer value updates.
+In contrast to `effect()`, the `observe()` function does not automatically determine dependency values -
+they are explicitly specified. 
 
 ```ts
 const ptr = $$(10);
 
 // log on value change
-Datex.Ref.observe(ptr, value => console.log(`ptr value is now ${value}`));
+observe(ptr, value => console.log(`ptr value is now ${value}`));
 
-// equivalent instance method for primitive pointers:
+// equivalent: instance method for primitive pointers
 ptr.observe(nr, value => console.log(`ptr value is now ${value}`));
 
 ptr.val++; // logs "ptr value is now 11"
@@ -204,7 +270,7 @@ enum Ref.UPDATE_TYPE {
 
 
 ### Canceling observers
-Calling `Datex.Ref.unobserve()` with the same callback function that was passed to `Datex.Ref.observe()`
+Calling `unobserve()` with the same callback function that was passed to `observe()`
 removes the observer.
 
 ```ts
@@ -213,11 +279,11 @@ const ptr = $$(10);
 const observer = value => console.log(`ptr value is now ${value}`);
 
 // enable observer
-Datex.Ref.observe(ptr, observer);
+observe(ptr, observer);
 nr.val++; // logs "nr value is now 11"
 
 // disable observer
-Datex.Ref.unobserve(ptr, observer);
+unobserve(ptr, observer);
 nr.val++; // observer not triggered
 ```
 

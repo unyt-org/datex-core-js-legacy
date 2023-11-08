@@ -404,7 +404,7 @@ export class Storage {
     public static setPointer(pointer:Pointer, listen_for_changes = true, location:StorageLocation|undefined = this.#primary_location, partialUpdateKey: unknown = NOT_EXISTING): Promise<boolean>|boolean {
 
         if (!pointer.value_initialized) {
-            logger.warn("pointer value " + pointer.idString() + " not available, cannot save in storage");
+            // logger.warn("pointer value " + pointer.idString() + " not available, cannot save in storage");
             this.#storage_active_pointers.delete(pointer);
             this.#storage_active_pointer_ids.delete(pointer.id)
             return false
@@ -604,9 +604,11 @@ export class Storage {
             return pointer.val; // pointer still exists in runtime
         }
 
+
         // load from storage
-		let val = location.getPointerValue(pointer_id, !!bind);
-		if (val == NOT_EXISTING) return NOT_EXISTING;
+		let val = await location.getPointerValue(pointer_id, !!bind);
+
+        if (val == NOT_EXISTING) return NOT_EXISTING;
 
         // bind serialized val to existing value
         if (bind) {

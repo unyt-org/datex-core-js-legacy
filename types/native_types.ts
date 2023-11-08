@@ -101,7 +101,7 @@ Type.std.Map.setJSInterface({
                 return pointer.handleDelete(el);
             }, writable:false, enumerable:false});
 
-        /**** override getters to trigger handleValueGet(): ****/
+        /**** override getters to trigger handleBeforeValueGet(): ****/
 
         // original getters
         const getSize = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(value), "size")!.get!.bind(value);
@@ -110,22 +110,22 @@ Type.std.Map.setJSInterface({
         const entries = value.entries.bind(value);
 
         Object.defineProperty(value, "size", {get() {
-            pointer.handleValueGet();
+            pointer.handleBeforeValueGet();
             return getSize();
         }, enumerable:false});
 
         Object.defineProperty(value, "values", {value: () => {
-            pointer.handleValueGet();
+            pointer.handleBeforeValueGet();
             return values()
         }, writable:false, enumerable:false});
 
         Object.defineProperty(value, "keys", {value: () => {
-            pointer.handleValueGet();
+            pointer.handleBeforeValueGet();
             return keys()
         }, writable:false, enumerable:false});
 
         Object.defineProperty(value, "entries", {value: () => {
-            pointer.handleValueGet();
+            pointer.handleBeforeValueGet();
             return entries()
         }, writable:false, enumerable:false});
 
@@ -188,7 +188,7 @@ Type.std.Set.setJSInterface({
                 return pointer.handleRemove(el);
             }, writable:false, enumerable:false});
 
-        /**** override getters to trigger handleValueGet(): ****/
+        /**** override getters to trigger handleBeforeValueGet(): ****/
 
         // original getters
         const getSize = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(value), "size")!.get!.bind(value);
@@ -196,22 +196,22 @@ Type.std.Set.setJSInterface({
         const entries = value.entries.bind(value);
 
         Object.defineProperty(value, "size", {get() {
-            pointer.handleValueGet();
+            pointer.handleBeforeValueGet();
             return getSize();
         }, enumerable:false});
 
         Object.defineProperty(value, "values", {value: () => {
-            pointer.handleValueGet();
+            pointer.handleBeforeValueGet();
             return values()
         }, writable:false, enumerable:false});
 
         Object.defineProperty(value, "keys", {value: () => {
-            pointer.handleValueGet();
+            pointer.handleBeforeValueGet();
             return values()
         }, writable:false, enumerable:false});
 
         Object.defineProperty(value, "entries", {value: () => {
-            pointer.handleValueGet();
+            pointer.handleBeforeValueGet();
             return entries()
         }, writable:false, enumerable:false});
 

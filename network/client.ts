@@ -39,7 +39,7 @@ export interface ComInterface {
 
 
 /** common class for all client interfaces (WebSockets, TCP Sockets, GET Requests, ...)*/
-export abstract class CommonInterface<Args extends T[] = []> implements ComInterface {
+export abstract class CommonInterface<Args extends unknown[] = []> implements ComInterface {
 
     // endpoint interface mapping
     protected static endpoint_connection_points = new Map<Target, Set<ComInterface>>();

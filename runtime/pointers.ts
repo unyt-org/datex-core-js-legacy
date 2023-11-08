@@ -47,7 +47,7 @@ export abstract class Ref<T = any> extends EventTarget {
     }
 
     public get val(): T|undefined {
-        this.handleValueGet();
+        this.handleBeforeValueGet();
         return this.#val;
     }
     public set val(value: T|undefined) {
@@ -341,7 +341,7 @@ export abstract class Ref<T = any> extends EventTarget {
 
 
 
-    protected static capturedGetters = new Map<Ref, Set<Ref>>()
+    protected static capturedGetters? = new Set<Ref>()
 
     /**
      * true if currently capturing pointer getters in always function
@@ -353,26 +353,37 @@ export abstract class Ref<T = any> extends EventTarget {
      * captureGetters must be called before transform, getCaptuedGetters after to
      * get a list of all dependencies
      */
-    protected static captureGetters(referrer: Ref) {
+    protected static captureGetters() {
         this.isCapturing = true;
-        this.capturedGetters.set(referrer, new Set());
+        this.capturedGetters = new Set()
     }
 
-    protected static getCapturedGetters(referrer: Ref) {
-        const captured = this.capturedGetters.get(referrer);
-        this.capturedGetters.delete(referrer)
-        if (!this.capturedGetters.size) this.isCapturing = false;
+    protected static getCapturedGetters() {
+        const captured = this.capturedGetters;
+        this.capturedGetters = undefined;
+        this.isCapturing = false;
         return captured;
     }
 
     /**
-     * must be called each time the current value of the Ref is requested
-     * to keeo track of dependencies and update transform
+     * must be called each time before the current value of the Ref is requested
+     * to keep track of dependencies and update transform
      */
-    handleValueGet() {
+    handleBeforeValueGet() {
+        // remember previous capture state
+        const previousGetters = Ref.capturedGetters;
+        const previousCapturing = Ref.isCapturing;
+
         // trigger transform update if not live
-        if (this.#transformSource && !this.#liveTransform && !this.#forceLiveTransform) this.#transformSource.update();
-        for (const list of Ref.capturedGetters.values()) list.add(this);
+        if (this.#transformSource && !this.#liveTransform && !this.#forceLiveTransform) {
+            Ref.capturedGetters = new Set();
+            this.#transformSource.update();
+        }
+        if (previousCapturing) {
+            Ref.isCapturing = true;
+            Ref.capturedGetters = previousGetters ?? new Set();
+            Ref.capturedGetters.add(this);
+        }
     }
 
     #liveTransform = false;
@@ -408,18 +419,26 @@ export abstract class Ref<T = any> extends EventTarget {
     }
 
     /**
+     * only used for garbage collection
+     * @param count
+     */
+    protected forceSetObserverCount(count: number) {
+        this.#observerCount = count;
+    }
+
+    /**
      * Should be called when live transforms are needed,
      * i.e. when oberservers for this value are active
      */
-    protected enableLiveTransforms() {
+    protected enableLiveTransforms(triggerUpdate = true) {
         if (this.#forceLiveTransform) return;
         this.#liveTransform = true;
-        this.#transformSource!.enableLive();
+        this.#transformSource!.enableLive(triggerUpdate);
     }
 
     /**
      * Should be called when live transforms are not needed,
-     * i.e. when there are no oberservers for this value
+     * i.e. when there are no observers for this value
      */
     protected disableLiveTransforms() {
         if (this.#forceLiveTransform) return;
@@ -478,7 +497,7 @@ export class PointerProperty<T=any> extends Ref<T> {
     private constructor(public pointer: Pointer, public key: any, leak_js_properties = false) {
         super();
         this.#leak_js_properties = leak_js_properties;
-        pointer.is_persistent = true; // TODO: make unpersistant when pointer property deleted
+        pointer.is_persistent = true; // TODO: make unpersistent when pointer property deleted
         PointerProperty.synced_pairs.get(pointer)!.set(key, this); // save in map
     }
 
@@ -494,7 +513,7 @@ export class PointerProperty<T=any> extends Ref<T> {
      */
     public static get<const Key, Parent extends PointerPropertyParent<Key,unknown>>(parent: Parent|Pointer<Parent>, key: Key, leak_js_properties = false): PointerProperty<Parent extends Map<unknown, infer MV> ? MV : Parent[Key&keyof Parent]> {
         
-        if (Pointer.isReference(key)) throw new Error("Cannot use a reference as a pointer property key");
+        if (Pointer.isRef(key)) throw new Error("Cannot use a reference as a pointer property key");
         
         let pointer:Pointer;
         if (parent instanceof Pointer) pointer = parent;
@@ -508,7 +527,7 @@ export class PointerProperty<T=any> extends Ref<T> {
 
     // get current pointer property
     public override get val():T {
-        this.handleValueGet();
+        this.handleBeforeValueGet();
         return this.pointer.getProperty(this.key, this.#leak_js_properties);
     }
 
@@ -874,6 +893,8 @@ export class UpdateScheduler {
 
 export type pointer_type = number;
 
+// mock pointer used for garbage collection
+type MockPointer = {id: string, origin: Endpoint, is_origin: boolean} 
 
 /** Wrapper class for all pointer values ($xxxxxxxx) */
 export class Pointer<T = any> extends Ref<T> {
@@ -987,12 +1008,14 @@ export class Pointer<T = any> extends Ref<T> {
     }
 
     static #is_local = true;
-    static #local_pointers = new Set<Pointer>();
+    static #local_pointers = new Set<WeakRef<Pointer>>();
     public static set is_local(local: boolean) {
         this.#is_local = local;
         // update pointer ids if no longer local
         if (!this.#is_local) {
-            for (const pointer of this.#local_pointers) {
+            for (const pointerRef of this.#local_pointers) {
+                const pointer = pointerRef.deref();
+                if (!pointer) continue;
                 pointer.id = Pointer.getUniquePointerID(pointer);
             }
             this.#local_pointers.clear();
@@ -1051,7 +1074,7 @@ export class Pointer<T = any> extends Ref<T> {
 
         // add to local pointers list if no global endpoint id yet -> update pointer id as soon as global id available
         if (Pointer.is_local) {
-            this.#local_pointers.add(forPointer)
+            this.#local_pointers.add(new WeakRef(forPointer))
         }
 
         return id;
@@ -1113,7 +1136,7 @@ export class Pointer<T = any> extends Ref<T> {
     private static loading_pointers:Map<string, {promise: Promise<Pointer>, scopeList: WeakSet<datex_scope>}> = new Map();
 
     // load from storage or request from remote endpoint if pointer not yet loaded
-    static load(id:string|Uint8Array, SCOPE?:datex_scope, only_load_local = false, sender_knows_pointer = true, allow_failure = false): Promise<Pointer>|Pointer{
+    static load(id:string|Uint8Array, SCOPE?:datex_scope, only_load_local = false, sender_knows_pointer = true, allow_failure = true): Promise<Pointer>|Pointer{
 
         const id_string = Pointer.normalizePointerId(id);
 
@@ -1215,10 +1238,12 @@ export class Pointer<T = any> extends Ref<T> {
                 // waiting subscribe / unsubscribe ! should not happen TODO improve 
                 if (SCOPE?.sync) {
                     this.loading_pointers.delete(id_string);
+                    pointer.delete();
                     throw new RuntimeError("Cannot subscribe to non-existing pointer", SCOPE);
                 }
                 else if (SCOPE?.unsubscribe) {
                     this.loading_pointers.delete(id_string);
+                    pointer.delete();
                     throw new RuntimeError("Cannot unsubscribe from non-existing pointer", SCOPE)
                 }
 
@@ -1273,6 +1298,7 @@ export class Pointer<T = any> extends Ref<T> {
                     pointer = await pointer.subscribeForPointerUpdates(SCOPE?.sender, undefined, true);
                 } catch  {
                     this.loading_pointers.delete(id_string);
+                    pointer.delete();
                     // could not subscribe, remove pointer again
                     pointer.delete();
                     if (!allow_failure) displayFatalError('owned-pointer-unresolvable');
@@ -1283,16 +1309,17 @@ export class Pointer<T = any> extends Ref<T> {
             // intentionally not loaded
             else if (only_load_local) {
                 this.loading_pointers.delete(id_string);
+                pointer.delete();
                 throw new PointerError("Pointer $"+id_string+" was not found locally", SCOPE);
             }
 
             // pointer does not exist / has no value
             else  {
                 this.loading_pointers.delete(id_string);
-                console.warn("perror")
                 // if (globalThis.UIX) UIX.State.resetPage(); // this should not happen
                 // else
                 if (!allow_failure) displayFatalError('pointer-not-found');
+                pointer.delete();
                 throw new PointerError("Pointer $"+id_string+" has no assigned value", SCOPE);
             }
         }
@@ -1362,8 +1389,8 @@ export class Pointer<T = any> extends Ref<T> {
      * @param persistent_datex_transform 
      * @returns 
      */
-    static createSmartTransform<const T>(transform:SmartTransformFunction<T>, persistent_datex_transform?:string):Pointer<T> {
-        return Pointer.create(undefined, NOT_EXISTING).smartTransform(transform, persistent_datex_transform);
+    static createSmartTransform<const T>(transform:SmartTransformFunction<T>, persistent_datex_transform?:string, forceLive = false, ignoreReturnValue = false):Pointer<T> {
+        return Pointer.create(undefined, NOT_EXISTING).smartTransform(transform, persistent_datex_transform, forceLive, ignoreReturnValue);
     }
 
     static createTransformAsync<const T,V extends TransformFunctionInputs>(observe_values:V, transform:AsyncTransformFunction<V,T>, persistent_datex_transform?:string):Promise<Pointer<T>>
@@ -1470,15 +1497,34 @@ export class Pointer<T = any> extends Ref<T> {
      */
 
 
-    private static garbage_registry = new FinalizationRegistry<string>(pointer_id => {
-        // clean up after garbage collection:
-        Pointer.pointers.get(pointer_id)?.handleGarbageCollected()
+    private static garbage_registry = new FinalizationRegistry<MockPointer>((mockPtr) => {
+        this.handleGarbageCollected(mockPtr)
     });
 
-    private handleGarbageCollected(){
-        logger.debug(this.idString() + " was garbage collected");
-        this.#garbage_collected = true;
-        this.delete()
+    // clean up after garbage collection:
+    private static handleGarbageCollected(mockPtr: MockPointer){
+        logger.debug("$" + mockPtr.id + " was garbage collected");
+
+        // cleanup for complex pointer that still has an instance
+        const pointer = Pointer.get(mockPtr.id);
+        if (pointer) {
+            pointer.#garbage_collected = true;
+            pointer.delete()
+        }
+        else {
+            this.cleanup(mockPtr)
+        }
+    
+    }
+    
+    // cleanup for primitive and complex pointer
+    private static cleanup(mockPtr: MockPointer) {
+        // unsubscribe
+        const doUnsubscribe = !!(!mockPtr.is_origin && mockPtr.origin)
+        if (doUnsubscribe) this.unsubscribeFromPointerUpdates(mockPtr.origin, mockPtr.id);
+
+        // remove subscriber cache
+        Runtime.subscriber_cache?.delete(mockPtr.id);
     }
 
 
@@ -1549,11 +1595,11 @@ export class Pointer<T = any> extends Ref<T> {
     
     // delete pointer again (reset everything) if not needed
     public delete() {
-        // if (this.is_anonymous) logger.info("Deleting anoynmous pointer");
-        // else logger.error("Deleting pointer " + this.idString());
+        
+        // common pointer cleanup
+        Pointer.cleanup(this)
 
-        // unsubscribe from pointer if remote origin
-        if (!this.is_origin && this.origin) this.unsubscribeFromPointerUpdates();
+        // special complex pointer-specific cleanup:
 
         // delete from maps
         if (this.#loaded && !this.#garbage_collected && this.current_val) {
@@ -1565,22 +1611,29 @@ export class Pointer<T = any> extends Ref<T> {
         }
         this.#loaded = false;
 
-        // remove subscriber cache
-        Runtime.subscriber_cache?.delete(this.id);
+        // disable transform source
+        this.forceSetObserverCount(0) // make sure observer counter is 0
+        this.setForcedLiveTransform(false);
+
+        // remove property observers
+        for (const [value,handler] of this.#active_property_observers.values()) {
+            Ref.unobserve(value, handler, this);
+        }
 
         // delete labels
         for (const label of this.labels??[]) Pointer.pointer_label_map.delete(label);
         
         Pointer.pointers.delete(this.#id);
         Pointer.primitive_pointers.delete(this.#id)
-        delete globalThis[this.idString()];
 
-        // call remove listeners
+        // call remove listeners (todo: also for primitive pointers)
         if (!this.is_anonymous) for (const l of Pointer.pointer_remove_listeners) l(this);
+    }
 
+    [Symbol.dispose]() {
+        this.delete()
     }
     
-
     #original_value: T extends {[key:string]:unknown} ? WeakRef<T> : void //  weak ref to original value (not proxyfied)
     #shadow_object: WeakRef<{[key:string]:unknown}>|T // object to make changes and get values from without triggering DATEX updates
     #type:Type // type of the value
@@ -1626,9 +1679,27 @@ export class Pointer<T = any> extends Ref<T> {
     get is_js_primitive(){return this.#is_js_primitive} // true if js primitive (number, boolean, ...) or 'single instance' class (Type, Endpoint) that cannot be directly addressed by reference
     get is_anonymous(){return this.#is_anonymous}
     get origin(){return this.#origin}
-    get is_persistent() { return this.#is_persistent;}
+
+    get is_persistent() { return this.#is_persistent || this.subscribers?.size != 0}
+    // change the persistant state of this pointer
+    set is_persistent(persistant:boolean) {
+        if (persistant && !this.#is_persistent) {
+            this.#is_persistent = true;
+            this.updateGarbageCollection()
+        }
+        else if (!persistant && this.#is_persistent){
+            this.#is_persistent = false;
+            this.updateGarbageCollection()
+        }
+    }
+
     get labels(){return this.#labels}
     get pointer_type(){return this.#pointer_type}
+
+    #updateIsJSPrimitive(val:any = this.val) {
+        const type = this.#type ?? Type.ofValue(val);
+        this.#is_js_primitive = !(Object(val) === val && !type.is_js_pseudo_primitive && !(type == Type.js.NativeObject && globalThis.Element && val instanceof globalThis.Element))
+    }
 
     /**
      * Throws if endpoint is not in allowed_access list and not a trusted endpoint with protected-pointer-access.
@@ -1653,19 +1724,7 @@ export class Pointer<T = any> extends Ref<T> {
         this.#is_origin = !!Runtime.endpoint?.equals(this.#origin);
     }
 
-    // change the persistant state of this pointer
-    set is_persistent(persistant:boolean) {
-        if (persistant && !this.#is_persistent) {
-            super.val = <any>this.current_val;
-            this.#is_persistent = true;
-            this.updateGarbageCollection()
-        }
-        else if (!persistant && this.#is_persistent){
-            super.val = <any>new WeakRef(<any>this.current_val);
-            this.#is_persistent = false;
-            this.updateGarbageCollection()
-        }
-    }
+
 
 
     /**
@@ -1720,8 +1779,7 @@ export class Pointer<T = any> extends Ref<T> {
         this.is_persistent = true; // make pointer persistant
         Pointer.pointer_label_map.set(label, this)
 
-        // add to globalThis
-        Object.defineProperty(globalThis, Runtime.formatVariableName(label, '$'), {get:()=>this.val, set:(value)=>this.val=value, configurable:true})
+        const id = this.id;
     }
 
 
@@ -1830,14 +1888,18 @@ export class Pointer<T = any> extends Ref<T> {
 
     public async unsubscribeFromPointerUpdates() {
         if (!this.#subscribed) return; // already unsubscribed
-        const endpoint = this.origin;
-        logger.info("unsubscribing from " + this.idString() + " ("+endpoint+")");
-        try {
-            await Runtime.datexOut(['#origin </= ?', [this]], endpoint, undefined, true);
-        }
-        catch {}
+        await Pointer.unsubscribeFromPointerUpdates(this.origin, this.id)
         this.#subscribed = false;
     }
+
+    public static async unsubscribeFromPointerUpdates(endpoint: Endpoint, pointerId: string) {
+        logger.debug("unsubscribing from " + pointerId + " ("+endpoint+")");
+        try {
+            await Runtime.datexOut(['#origin </= $' + pointerId], endpoint, undefined, true);
+        }
+        catch {}
+    }
+
 
     // make normal pointer from placeholder
     unPlaceholder(id?:string|Uint8Array) {
@@ -1852,9 +1914,9 @@ export class Pointer<T = any> extends Ref<T> {
     get id():string{ return this.#id }
     
     set id (id:Uint8Array|string) {
-        if (!this.is_placeholder && this.id !== undefined && !Pointer.#local_pointers.has(this)) {
-            // console.log("TODO: pointer transfer map")
-        }
+        // if (!this.is_placeholder && this.id !== undefined && !Pointer.#local_pointers.has(this)) {
+        //     // console.log("TODO: pointer transfer map")
+        // }
 
         if (typeof id == "string") {
             // convert string to buffer
@@ -1870,16 +1932,6 @@ export class Pointer<T = any> extends Ref<T> {
 
         // get pointer type
         this.#pointer_type = this.#id_buffer[0];
-
-        // set global
-        if (!this.is_anonymous) {
-            const id = this.id;
-            Object.defineProperty(globalThis, this.idString(), {
-                get() {return Pointer.get(id)?.val}, 
-                set(value) {Pointer.get(id)!.val=value},
-                configurable:true
-            })
-        }
 
         // add to pointer list
         if (!this.is_anonymous) {
@@ -1922,7 +1974,7 @@ export class Pointer<T = any> extends Ref<T> {
             const val = super.val.deref();
             // seems to be garbage collected
             if (val === undefined && this.#loaded && !this.#is_js_primitive) {
-                this.handleGarbageCollected()
+                Pointer.handleGarbageCollected(this)
                 throw new PointerError("Pointer was garbage collected");
             }
             // can be returned
@@ -1950,7 +2002,7 @@ export class Pointer<T = any> extends Ref<T> {
             const val = super.current_val.deref();
             // seems to be garbage collected
             if (val === undefined && this.#loaded && !this.#is_js_primitive) {
-                this.handleGarbageCollected()
+                Pointer.handleGarbageCollected(this)
                 throw new PointerError("Pointer was garbage collected");
             }
             // can be returned
@@ -1994,8 +2046,11 @@ export class Pointer<T = any> extends Ref<T> {
 
         // console.log("loaded : "+ this.id + " - " + this.#type, val)
 
+        if (val == undefined) this.#is_js_primitive = true;
+        else this.#updateIsJSPrimitive(val);
+        
         // init proxy value for non-JS-primitives value (also treat non-uix HTML Elements as primitives)
-        if (Object(val) === val && !this.#type.is_js_pseudo_primitive && !(this.#type == Type.js.NativeObject && globalThis.Element && val instanceof globalThis.Element)) {
+        if (!this.is_js_primitive) {
 
             // already an existing non-primitive pointer
             if (Pointer.getByValue(val)) {
@@ -2069,13 +2124,15 @@ export class Pointer<T = any> extends Ref<T> {
 
         // init value for JS-primitives value 
         else {
-            this.#is_js_primitive = true;
             this.#loaded = true; // this.value exists
             super.setVal(val, true, is_transform)
 
             // update registry
             Pointer.primitive_pointers.set(this.#id, new WeakRef(this)); 
             Pointer.pointers.delete(this.#id); 
+
+            // adds garbage collection listener
+            this.updateGarbageCollection(); 
         }
        
     
@@ -2120,7 +2177,7 @@ export class Pointer<T = any> extends Ref<T> {
                 throw new ValueError("Invalid value type for transform pointer "+this.idString()+": " + newType + (error ? " - " + error : ""));
             }
         }
-        else if (!Type.matchesType(newType, this.type)) throw new ValueError("Invalid value type for pointer "+this.idString()+": " + newType + " - must be " + this.type);
+        else if ((v!==null&&v!==undefined) && !Type.matchesType(newType, this.type)) throw new ValueError("Invalid value type for pointer "+this.idString()+": " + newType + " - must be " + this.type);
 
         let updatePromise: Promise<any>|void;
 
@@ -2154,15 +2211,6 @@ export class Pointer<T = any> extends Ref<T> {
     protected afterFirstValueSet(){
         // custom timeout from type?
         if (this.type.timeout!=undefined && this.datex_timeout==undefined) this.datex_timeout = this.type.timeout
-        // set global variable (direct reference does not allow garbage collector to remove the value)
-        if (this.id && !this.is_anonymous) {
-            const id = this.id;
-            Object.defineProperty(globalThis, this.idString(), {
-                get() {return Pointer.get(id)?.val}, 
-                set(value) {Pointer.get(id)!.val=value},
-                configurable:true
-            })
-        }
         setTimeout(()=>{for (const l of Pointer.pointer_add_listeners) l(this)},0);
         Object.freeze(this);
     }
@@ -2239,7 +2287,7 @@ export class Pointer<T = any> extends Ref<T> {
         else return false;
     }
 
-    protected smartTransform<R>(transform:SmartTransformFunction<T&R>, persistent_datex_transform?:string, forceLive = false): Pointer<R> {
+    protected smartTransform<R>(transform:SmartTransformFunction<T&R>, persistent_datex_transform?:string, forceLive = false, ignoreReturnValue = false): Pointer<R> {
         if (persistent_datex_transform) this.setDatexTransform(persistent_datex_transform) // TODO: only workaround
 
         const deps = new Set<Ref>();
@@ -2260,7 +2308,7 @@ export class Pointer<T = any> extends Ref<T> {
                 let val!: T
                 let getters!: Set<Ref>;
     
-                Ref.captureGetters(this);
+                Ref.captureGetters();
     
                 try {
                     val = transform() as T;
@@ -2272,20 +2320,25 @@ export class Pointer<T = any> extends Ref<T> {
                 }
                 // always cleanup capturing
                 finally {
-                    getters = Ref.getCapturedGetters(this)!;
+                    getters = Ref.getCapturedGetters()!;
                 }
 
+                if (!ignoreReturnValue && !this.value_initialized) {
+                    if (val == undefined) this.#is_js_primitive = true;
+                    else this.#updateIsJSPrimitive(Ref.collapseValue(val,true,true));
+                }
+                
                 // set isLive to true, if not primitive
-                if (!this.#is_js_primitive) {
+                if (!this.is_js_primitive) {
                     isLive = true;
                     this._liveTransform = true
                 }
     
                 // update value
-                this.setVal(val, true, true);
+                if (!ignoreReturnValue) this.setVal(val, true, true);
 
                 // no dependencies, will never change, this is not the intention of the transform
-                if (!getters.size) {
+                if (!ignoreReturnValue && !getters.size) {
                     logger.warn("The transform value for " + this.idString() + " is a static value:", val);
                 }
 
@@ -2323,7 +2376,7 @@ export class Pointer<T = any> extends Ref<T> {
             update
         })
 
-        if (forceLive) this.enableLiveTransforms(true);
+        if (forceLive) this.enableLiveTransforms(false);
 
         return this as unknown as Pointer<R>;
     }
@@ -2335,35 +2388,59 @@ export class Pointer<T = any> extends Ref<T> {
         // this.#transform_scope = (await Runtime.executeDatexLocally(datex_transform)).transform_scope;
     }
 
+    #registeredForGC = false;
+    static #persistentPrimitivePointers = new Set<Pointer>();
 
-    // enable / disable garbage collection based on subscribers & is_persistent
-    updateGarbageCollection(){
-
-        // primitive value cannot be garbage collected
-        if (this.is_js_primitive) {
-            this.#garbage_collectable = false;
-        }
-
-        // remove WeakRef (keep value) if persistant, or has subscribers
-        else if (this.is_persistent || this.subscribers?.size != 0 || this.is_js_primitive) {
-            //logger.warn("blocking " + this + " from beeing garbage collected")
-            this.#garbage_collectable = false;
+    #updatePersistent() {
+        if (this.is_persistent) {
+            // make sure complex pointer value is persisted
             if (super.val instanceof WeakRef) super.setVal(super.val.deref(), false);
+            // make sure primitive pointer is persisted
+            if (this.#is_js_primitive) Pointer.#persistentPrimitivePointers.add(this);
         }
         else {
-           
-            // add WeakRef if not yet added
-            if (!(super.val instanceof WeakRef)) super.setVal(<any>new WeakRef(<any>super.val), false);
+            // make sure complex pointer value is not persisted (add WeakRef if not yet added)
+            if (!this.is_js_primitive && !(super.val instanceof WeakRef)) super.setVal(<any>new WeakRef(<any>super.val), false);
+            // make sure primitive pointer is not persisted
+            if (this.#is_js_primitive) Pointer.#persistentPrimitivePointers.delete(this);  
+        }
+    }
+
+    // enable / disable garbage collection based on subscribers & is_persistant
+    updateGarbageCollection(){
+        if (!this.value_initialized) return;
+
+        // remove WeakRef (keep value) if persistant, or has subscribers
+        if (this.is_persistent) {
+            //logger.warn("blocking " + this + " from beeing garbage collected")
+            this.#garbage_collectable = false;
+
+            // make sure persistent state is up to date
+            this.#updatePersistent();
+
+            if (this.#registeredForGC) {
+                logger.debug("disabled garbage collection for " + this.id);
+                Pointer.garbage_registry.unregister(this)
+                this.#registeredForGC = false;
+            }
+        }
+        // register finaliztion register (only once)
+        else if (!this.#registeredForGC) {
 
             // add to garbage collection after timeout
             const _keep = this.current_val;
             setTimeout(()=>{
-                if (!this.garbage_collected && this.value_initialized) {
+                if (!this.garbage_collected && this.value_initialized && !this.is_persistent) {
                     _keep; // prevent garbage collection until timeout finished
-                    // logger.success("giving " + this.idString() + " free for garbage collection")
+                    
+                    // make sure persistent state is up to date
+                    this.#updatePersistent();
+
                     this.#garbage_collectable = true;
                     try {
-                        Pointer.garbage_registry.register(<object><unknown>this.current_val, this.id)
+                        const mockPointer = {id: this.id, origin: this.origin, is_origin: this.is_origin};
+                        this.#registeredForGC = true;
+                        Pointer.garbage_registry.register(<object><unknown>(this.is_js_primitive ? this : this.current_val), mockPointer, this)
                     }
                     catch (e){
                         console.log(e)
@@ -2741,9 +2818,9 @@ export class Pointer<T = any> extends Ref<T> {
                         this.handleSet(name, val);
                     },
                     get: () => { 
-                        this.handleValueGet();
+                        this.handleBeforeValueGet();
                         // important: reference shadow_object, not this.shadow_object here, otherwise it might get garbage collected
-                        return Ref.collapseValue(shadow_object[name], true, true)
+                        return Ref.collapseValue(shadow_object[name], true, true);
                     }
                 });
             
@@ -2774,7 +2851,7 @@ export class Pointer<T = any> extends Ref<T> {
 
 			const proxy = new Proxy(<any>obj, {
                 get: (_target, key) => {
-                    this.handleValueGet();
+                    this.handleBeforeValueGet();
                     if (key == DX_PTR) return this;
                     if (this.#custom_prop_getter && (!this.shadow_object || !(key in this.shadow_object)) && !(typeof key == "symbol")) return this.#custom_prop_getter(key);
                     const val:any = Ref.collapseValue(this.shadow_object?.[key], true, true);
@@ -2797,8 +2874,7 @@ export class Pointer<T = any> extends Ref<T> {
                         }
                         return val.bind(_target);
                     }
-                    else return val
-                    
+                    else return val;
                 },
                 set: (target, val_name: keyof any, val: any) => {
                     if (this.#custom_prop_setter) {
@@ -3310,7 +3386,7 @@ export class Pointer<T = any> extends Ref<T> {
 
     }
 
-    #active_property_observers = new Map<string, [Ref, Function]>();
+    #active_property_observers = new Map<string, [Ref, observe_handler<unknown, Ref<any>>]>();
 
     // set observer for internal changes in property value reference
     protected initShadowObjectPropertyObserver(key:string, value:Ref){
@@ -3318,8 +3394,7 @@ export class Pointer<T = any> extends Ref<T> {
 
         // remove previous observer for property
         if (this.#active_property_observers.has(key)) {
-            const [value,handler] = this.#active_property_observers.get(key)!;
-            // TODO: is this working correctly?
+            const [value, handler] = this.#active_property_observers.get(key)!;
             Ref.unobserve(value, handler, this);
         }
 
@@ -3354,7 +3429,6 @@ export class Pointer<T = any> extends Ref<T> {
     public override observe<K=unknown>(handler:observe_handler<K, this>, bound_object?:object, key?:K, options?:observe_options):void {
         if (!handler) throw new ValueError("Missing observer handler")
         
-
         // TODO handle bound_object in pointer observers/unobserve
         // observe all changes
         if (key == undefined) {
@@ -3457,6 +3531,7 @@ export class Pointer<T = any> extends Ref<T> {
 
 }
 
+
 export namespace Ref {
     export enum UPDATE_TYPE {
         INIT, // set (initial) reference
@@ -3470,10 +3545,6 @@ export namespace Ref {
         BEFORE_REMOVE
     }
 }
-
-globalThis["p"] = Pointer.pointers;
-globalThis["DatexPointer"] = Pointer;
-
 
 // js primitives
 export class TextRef<T extends string = string> extends Pointer<T> {}
