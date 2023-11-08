@@ -26,7 +26,8 @@ After a successful initialization, you should see the connection info printed to
 ![Supranet connection info](./assets/supranet-init.png)
 
 
-> [!INFO] You can learn more about supranet connections in the chapter [Supranet Networking](./06%20Supranet%20Networking.md).
+> [!NOTE] 
+> You can learn more about supranet connections in the chapter [Supranet Networking](./06%20Supranet%20Networking.md).
 
 ### Creating a pointer
 
