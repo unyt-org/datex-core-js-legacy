@@ -41,7 +41,12 @@ console.log(refSum.val) // 10
 When you compare this code with the [example code](./02%20Important%20DATEX%20Concepts.md#references-and-pointers) from the DATEX introduction chapter, 
 you can see how the DATEX concepts are adopted in JavaScript in a very straightforward way.
 
-To learn more about DATEX pointers in JavaScript, check out the chapters [Pointers](./03%20Pointers.md).
+To learn more about DATEX pointers in JavaScript, check out the chapter [Pointers](./03%20Pointers.md).
+
+### Pointer synhronisation
+
+Check out the chapter [Pointer Synchronisation](./04%20Pointer%20Synchronisation.md) to understand
+how pointers are synchronized between endpoints.
 
 ### Creating DATEX-compatible classes
 

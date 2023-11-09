@@ -6,6 +6,17 @@ This chapter serves as an introduction to shared pointers and explains the conce
 
 <p></p><br>
 
+## Shared memory in the Supranet
+
+The Supranet can be regarded as one continuously running global process that has access to a *shared memory*.
+Endpoints within the Supranet are running separate *threads* within this global process. 
+They all have (limited) access to the data within the shared memory.
+
+Every DATEX pointer that is created on an endpoint becomes part of this globally shared memory.
+This does not mean that pointers are automatically sent to other endpoints when they are created, but they
+can always be accessed by other endpoints when needed (as long as the endpoint has the required permissions to access the pointer).
+
+
 ## Learn by example: Pointer synchronisation between two clients
 
 ### Setup
