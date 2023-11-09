@@ -86,7 +86,7 @@ export class Unyt {
         let content = "";
 
         const endpoint = info.endpoint ? await this.formatEndpoint(info.endpoint) : undefined;
-        const endpointURLs = await this.endpointDomains();
+        const endpointURLs = this.endpointDomains();
         const host = info.app?.host ? await this.formatEndpoint(info.app.host) : undefined;
 
         const backend = info.app?.backend ? await this.formatEndpoint(info.app.backend) : undefined;
@@ -116,7 +116,7 @@ export class Unyt {
         content += `${ESCAPE_SEQUENCES.UNYT_GREY}© ${new Date().getFullYear().toString()} unyt.org`
 
         logger.plain `#image(70,'unyt')${console_theme == "dark" ? this.logo_dark : this.logo_light}
-Connected to the supranet via ${info.node} ${info.interface ? `(${info.interface.type}${info.interface.host?` to ${ESCAPE_SEQUENCES.UNYT_GREY}${info.interface.host}`:''}${ESCAPE_SEQUENCES.WHITE})` : ''} 
+Connected to the Supranet via ${info.node} ${info.interface ? `(${info.interface.type}${info.interface.host?` to ${ESCAPE_SEQUENCES.UNYT_GREY}${info.interface.host}`:''}${ESCAPE_SEQUENCES.WHITE})` : ''} 
 
 ${content}
 `
@@ -132,7 +132,7 @@ ${content}
                 return `${alias} (${Runtime.valueToDatexStringExperimental(endpoint,false,true)}${ESCAPE_SEQUENCES.COLOR_DEFAULT})`
             }
         }
-        catch (e){}
+        catch {}
         // @@2134565, @endpoint
         return Runtime.valueToDatexStringExperimental(endpoint,false,true);
     }

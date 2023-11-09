@@ -24,6 +24,7 @@ import { buffer2hex } from "../utils/utils.ts";
 import { endpoint_config } from "../runtime/endpoint_config.ts";
 import { endpoint_name, UnresolvedEndpointProperty } from "../datex_all.ts";
 import { Datex } from "../mod.ts";
+import { Storage } from "../runtime/storage.ts";
 const logger = new Logger("DATEX Supranet");
 
 // entry point to connect to the datex network
@@ -81,17 +82,61 @@ export class Supranet {
 
         // already connected to endpoint during init
         if (this.#connected && endpoint === Runtime.endpoint) {
+            const switched = await this.handleSwitchToInstance()
             logger.success("Connected to the supranet as " + endpoint)
-            for (const i of InterfaceManager.active_interfaces) {
-                if (i.type != "local") this.sayHello(i.endpoint)
-            }
+            if (!switched) this.sayHelloToAllInterfaces();
             return true;
-        } 
+        }
 
-        return this._connect(via_node);
+        const connected = await this._connect(via_node, !this.shouldSwitchInstance());
+        await this.handleSwitchToInstance()
+
+        return connected;
     }
 
-    private static async _connect(via_node?:Endpoint) {
+    private static sayHelloToAllInterfaces() {
+        for (const i of InterfaceManager.active_interfaces) {
+            if (i.type != "local") this.sayHello(i.endpoint)
+        }
+    }
+
+    private static shouldSwitchInstance() {
+        return false;
+        // TODO: enable
+        return Runtime.endpoint.main === Runtime.endpoint && Runtime.Blockchain
+    }
+
+    /**
+     * Finds an available instance and switches endpoint
+     * @returns true if switched to new instance (and hello sent)
+     */
+    private static async handleSwitchToInstance() {
+        if (this.shouldSwitchInstance()) {
+            if (!Runtime.Blockchain) {
+                logger.error("Cannot determine endpoint instance, blockchain not available")
+            }
+            else {
+                const hash = (await Storage.loadOrCreate("Datex.Supranet.ENDPOINT_INSTANCE_HASH", () => Math.random().toString(36).substring(2,18)))
+                try {
+                    const instance = (await Runtime.Blockchain.getEndpointInstance(Runtime.endpoint, hash.toString()))!;
+                    // set endpoint to instace
+                    Runtime.init(instance);
+                    endpoint_config.endpoint = instance;
+                    endpoint_config.save();
+                    this.sayHelloToAllInterfaces();
+                    logger.success("Switched to endpoint instance " + instance)
+                    this.onConnect();
+                    return true;
+                }
+                catch {
+                    logger.error("Could not determine endpoint instance (request error)");
+                }
+            }
+        }
+        return false;
+    }
+
+    private static async _connect(via_node?:Endpoint, handleOnConnect = true) {
         // find node for available channel
         const [node, channel_type] = await this.getNode(via_node)
 
@@ -101,7 +146,7 @@ export class Supranet {
         Runtime.setMainNode(node);
 
         if (!connected) logger.error("connectionn failed")
-        else if (this.onConnect) this.onConnect();
+        else if (this.onConnect && handleOnConnect) this.onConnect();
 
         this.#connected = connected;
 
@@ -148,15 +193,21 @@ export class Supranet {
             await this._connect();
             const res = await endpoint.resolve(); 
             // use fallback tmp_endpoint if endpoint property is void
+
+            const verificationCode = "macjiosdfohnfeioaDSgdb" // TODO: generate
+            const unytAuthURL = `https://auth.unyt.org/register-sub-endpoint?id=${tmp_endpoint}&code=${verificationCode}`
+
             if (res === undefined) {
                 logger.success `
-    Created a new endpoint (${tmp_endpoint}) intended to be used as ${endpoint.parent}.${endpoint.property}.
+    Creating new endpoint ${endpoint.parent}.${endpoint.property} (${tmp_endpoint}).
     If you have write access to ${endpoint.parent}, you can set ${endpoint.parent}.${endpoint.property} = ${tmp_endpoint}.
-    If you are the owner of ${endpoint.parent}, you can create a certificate for ${tmp_endpoint} with the public keys:
+    If you are the owner of ${endpoint.parent}, you can create a certificate for ${tmp_endpoint}.
     
-    🔑 VERIFY: ${Crypto.getOwnPublicKeysExported()[0]}
-    🔑 ENCRYPT: ${Crypto.getOwnPublicKeysExported()[1]}
+    🔑 Register with unyt Auth: #color(white)${unytAuthURL}
     `
+    // 🔑 VERIFY: ${Crypto.getOwnPublicKeysExported()[0]}
+    // 🔑 ENCRYPT: ${Crypto.getOwnPublicKeysExported()[1]}
+
                 return tmp_endpoint; // already connected to tmp_endpoint
             }
             else if (!(res instanceof Endpoint)) {
@@ -197,7 +248,7 @@ export class Supranet {
         endpoint_config.save();
 
         // start runtime + set endpoint
-        await Runtime.init(endpoint);
+        Runtime.init(endpoint);
 
         // save own keys
         await Crypto.loadOwnKeys(...sign_keys, ...enc_keys);

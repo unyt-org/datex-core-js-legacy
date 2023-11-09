@@ -38,8 +38,9 @@ export class Scope<T=any> {
                 this._decompiled_f = decompile(new Uint8Array(this.compiled), true, false, true);
                 this._decompiled   = decompile(new Uint8Array(this.compiled), false, false, true);
             }
-            catch (e) {
-                console.error("could not generated decompiled scope script")
+            catch {
+                // TODO: fix, happens with old endpoint format in datex-core
+                // logger.debug("could not generated decompiled scope script")
             }
             
         }

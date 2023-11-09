@@ -1407,7 +1407,6 @@ export class Runtime {
                 const signature = header_buffer.subarray(j, j + Compiler.signature_size);
                 const content = new Uint8Array(dxb).subarray(j + Compiler.signature_size);
                 j += Compiler.signature_size;
-                
                 const valid = await Crypto.verify(content, signature, header.sender);
 
                 if (!valid) {
@@ -1427,7 +1426,7 @@ export class Runtime {
                     throw [header, e];
                 }
             }
-                        
+                  
             // header data , body buffer, header buffer, original (encrypted) body buffer
             return [header, data_buffer, header_buffer, res[1]];
 
@@ -1444,7 +1443,7 @@ export class Runtime {
 
     // get handler function for dxb binary input
     public static getDatexInputHandler(full_scope_callback?:(sid:number, scope:datex_scope|Error)=>void) {
-        let handler = (dxb: ArrayBuffer|ReadableStreamDefaultReader<Uint8Array> | {dxb:ArrayBuffer|ReadableStreamDefaultReader<Uint8Array>, variables?:any, header_callback?:(header:dxb_header)=>void}, last_endpoint?:Endpoint, source?:Source): Promise<dxb_header|void>=>{
+        const handler = (dxb: ArrayBuffer|ReadableStreamDefaultReader<Uint8Array> | {dxb:ArrayBuffer|ReadableStreamDefaultReader<Uint8Array>, variables?:any, header_callback?:(header:dxb_header)=>void}, last_endpoint?:Endpoint, source?:Source): Promise<dxb_header|void>=>{
             if (dxb instanceof ArrayBuffer) return this.handleDatexIn(dxb, last_endpoint, full_scope_callback, undefined, undefined, source); 
             else if (dxb instanceof ReadableStreamDefaultReader) return this.handleContinuousBlockStream(dxb, full_scope_callback, undefined, undefined, last_endpoint, source)
             else {
@@ -1610,25 +1609,26 @@ export class Runtime {
             this.handleScopeError(e[0], e[1]);
             return;
         }
-
+        
         // normal request
         if (res instanceof Array) {
+
             [header, data_uint8] = res;
             if (this.checkDuplicate(header)) return header;
 
             // + flood, exclude last_endpoint - don't send back in flooding tree
-            if (header.routing.flood) {
+            if (header.routing && header.routing.flood) {
                 this.floodDatex(dxb, last_endpoint??header.sender, header.routing.ttl-1); // exclude the node this was sent from, assume it is header.sender if no last_endpoint was provided
             }
 
             // callback for header info
             if (header_callback instanceof globalThis.Function) header_callback(header);
 
-
         }
 
         // needs to be redirected 
         else {
+
             if (this.checkDuplicate(res)) return res;
 
             // redirect as crypto proxy: sign

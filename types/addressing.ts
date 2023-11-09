@@ -135,7 +135,6 @@ export class Endpoint extends Target {
 	#binary = new Uint8Array(18) // 18 bytes
 	#instance?:string
 	#instance_binary:Uint8Array // 2 bytes
-	#main?: Target // without instance
 	#alias?: string
 	#certifier?: Endpoint
 
@@ -150,7 +149,7 @@ export class Endpoint extends Target {
 	get instance_binary() {return this.#instance_binary}
 	get prefix() {return (<typeof Endpoint>this.constructor).prefix}
 	get type() {return (<typeof Endpoint>this.constructor).type}
-	get main() {return this.#main}
+	get main() {return this.getInstance("")} // target without instance
 	get binary() {return this.#binary}
 	get alias() {return this.#alias}
 	get certifier() {return this.#certifier}
@@ -192,12 +191,12 @@ export class Endpoint extends Target {
 			this.#instance = buffer2hex(instance);
 		}
 		else if (typeof instance == "number") {
-			this.#instance_binary = new Uint8Array(new Uint16Array([instance??0]));
+			this.#instance_binary = new Uint8Array([(instance>>8) & 0xff, instance & 0xff]);
 			this.#instance = buffer2hex(this.#instance_binary);
 		}
 		else if (typeof instance == "string" && instance) {
 			this.#instance_binary = hex2buffer(instance);
-			this.#instance = instance;
+			this.#instance = instance.toUpperCase();
 		}
 		else {
 			this.#instance_binary = Endpoint.DEFAULT_INSTANCE;
@@ -280,7 +279,9 @@ export class Endpoint extends Target {
 		try {
 			this.#alias = <string | undefined> await Runtime.Blockchain.resolveAlias(this);
 		}
-		catch {}
+		catch (e){
+			// console.debug("failed to resolve alias for " + this, e)
+		}
 		return this.#alias
 	}
 
@@ -296,7 +297,7 @@ export class Endpoint extends Target {
 
 	
 	/** returns a certain instance of an existing filter */
-	public getInstance(instance:string|number|Uint8Array){
+	public getInstance(instance:string|number|Uint8Array): Endpoint {
 		return Target.get(this.name, instance, <any> this.constructor);
 	}
 	

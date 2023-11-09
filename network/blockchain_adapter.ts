@@ -72,10 +72,25 @@ export type BCData<T extends BCEntryType> =
 	@property declare creator?:Endpoint
 	@property declare signature?:ArrayBuffer
 
+	constructor(data?: {
+		index: entry_index,
+		type:T,
+		data:BCData<T>,
+		creator?:Endpoint,
+		signature?:ArrayBuffer
+	}) {
+		if (data?.index) this.index = data.index;
+		if (data?.type) this.type = data.type;
+		if (data?.data) this.data = data.data;
+		if (data?.creator) this.creator = data.creator;
+		if (data?.signature) this.signature = data.signature;
+	}
+
 	public async sign(){
 		const data_dx = Datex.Compiler.encodeValue(this.data);
 		this.creator = Datex.Runtime.endpoint;
 		this.signature = await Datex.Crypto.sign(data_dx);
+		return this;
 	}
 }
 
@@ -110,7 +125,8 @@ export type BCData<T extends BCEntryType> =
 	@property static getPointerEntry(id: number): Datex.Return<BCEntry<BCEntryType.POINTER>> {}
 	// traces backe the alias name of an endpoint or object (e.g. @@3456677564 -> get @unyt )
 	@property static resolveAlias(target: Endpoint|BCEntry<BCEntryType.POINTER|BCEntryType.ENDPOINT_REGISTRATION>): Datex.Return<string|undefined> {}
-
+	// returns an existing registered endpoint instances, if hash is registered, otherwise finds an available instance and returns
+	@property static getEndpointInstance(endpoint: Endpoint, hash: string): Datex.Return<Endpoint> {}
 	/**
 	 * implemented blockchain util methods (validation, ...)
 	 */

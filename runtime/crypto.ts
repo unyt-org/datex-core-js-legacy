@@ -132,6 +132,7 @@ export class Crypto {
 
     // returns the public verify + encrypt keys for an endpoint (from cache or from network)
     static getKeysForEndpoint(endpoint:Endpoint):Promise<[CryptoKey?, CryptoKey?]>|[CryptoKey?, CryptoKey?] {
+        endpoint = endpoint.main;
         if (this.public_keys.has(endpoint)) return <[CryptoKey, CryptoKey]>this.public_keys.get(endpoint);
         // keys not found, request from network
         else return this.requestKeys(endpoint); 
