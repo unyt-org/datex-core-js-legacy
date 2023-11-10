@@ -26,7 +26,7 @@ export class IFrameCommunicationInterface extends CommonInterface<[HTMLIFrameEle
             this.iframe = this.initial_arguments[0];
 
             // init iframe
-            this.iframe.setAttribute("sandbox", "allow-scripts allow-same-origin")
+            this.iframe.setAttribute("sandbox", "allow-scripts allow-same-origin allow-popups-to-escape-sandbox")
             this.otherOrigin = new URL(this.iframe.src).origin;
             this.logger.info("initializing as parent window, iframe origin: " + this.otherOrigin)
 
