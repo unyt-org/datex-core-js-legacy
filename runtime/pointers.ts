@@ -1295,7 +1295,7 @@ export class Pointer<T = any> extends Ref<T> {
 
                 try {
                     logger.debug("could not find local pointer, requesting pointer from "+SCOPE?.sender+": " + pointer.idString());
-                    pointer = await pointer.subscribeForPointerUpdates(SCOPE?.sender, undefined, true);
+                    pointer = await pointer.subscribeForPointerUpdates(SCOPE?.sender, undefined, false);
                 } catch  {
                     this.loading_pointers.delete(id_string);
                     pointer.delete();
@@ -1893,7 +1893,9 @@ export class Pointer<T = any> extends Ref<T> {
                     }
                 }
             }
-            if (!foundFallback) logger.error("pointer origin " + origin  + " for "+ptrId+" is offline, could not find a trusted fallback endpoint for pointer synchronisation")
+            if (!foundFallback) {
+                logger.debug("pointer origin " + origin  + " for "+ptrId+" is offline, could not find a trusted fallback endpoint for pointer synchronisation")
+            }
         }
         origin.online.observe(handler)
     }
