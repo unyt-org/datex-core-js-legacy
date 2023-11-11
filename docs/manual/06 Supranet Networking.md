@@ -18,6 +18,22 @@ await Datex.Supranet.connectTemporary()
 ```
 
 
+## Debugging
+
+### Network traces
+
+The `printTrace` function can be used  to create a network trace report for debugging purposes.
+`printTrace` also collects and shows additional relevant data like round-trip time and endpoint interface types.
+To create a network trace, DATEX `TRACE` and `TRACE_BACK` messages are routed through the network to the destination endpoint and back.
+
+![Network Trace Report](./assets/network_trace.png)
+
+The raw trace output can be retrieved by calling the `.trace()` method on an endpoint:
+
+```ts
+const trace = await f('@+unyt2').trace()
+```
+
 ## Creating custom DATEX channels with the ComInterface
 
 [TODO]

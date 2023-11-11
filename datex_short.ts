@@ -459,6 +459,16 @@ export function f<T extends endpoint_name>(name:[T]|T):endpoint_by_endpoint_name
     return <any>Target.get((typeof name == "string" ? name : name[0]));
 }
 
+export function printTrace(endpoint: string|Endpoint) {
+    endpoint = typeof endpoint == "string" ? Target.get(endpoint) as Endpoint : endpoint;
+    return endpoint.printTrace()
+}
+
+type printTraceT = typeof printTrace;
+declare global {
+    const printTrace: printTraceT;
+}
+
 
 export function syncedValue(parent:any|Pointer, key?:any):PointerProperty {
     return PointerProperty.get(parent, key); 
@@ -575,5 +585,7 @@ globalThis.val = val;
 globalThis.static_pointer = static_pointer;
 // @ts-ignore
 globalThis.f = f;
+// @ts-ignore
+globalThis.printTrace = printTrace;
 // @ts-ignore
 globalThis.props = props;

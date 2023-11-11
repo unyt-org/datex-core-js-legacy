@@ -2,14 +2,15 @@ import { BinaryCode } from "../compiler/binary_codes.ts";
 import { Pointer } from "../runtime/pointers.ts";
 import { ValueConsumer } from "./abstract_types.ts";
 import { ValueError } from "./errors.ts";
-import { Compiler } from "../compiler/compiler.ts";
-import type { datex_scope } from "../utils/global_types.ts";
+import { Compiler, ProtocolDataTypesMap } from "../compiler/compiler.ts";
+import type { datex_scope, dxb_header } from "../utils/global_types.ts";
 import { buffer2hex, hex2buffer } from "../utils/utils.ts";
 import { clause, Disjunction } from "./logic.ts";
 import { Runtime, StaticScope } from "../runtime/runtime.ts";
 import { logger } from "../utils/global_values.ts";
 import { Datex } from "../mod.ts";
 import { ProtocolDataType } from "../compiler/protocol_types.ts";
+import { ESCAPE_SEQUENCES } from "../utils/logger.ts";
 
 type target_prefix_person = "@";
 type target_prefix_id = "@@";
@@ -290,10 +291,68 @@ export class Endpoint extends Target {
 	 * Generates a network trace
 	 * (for routing debugging)
 	 */
-	public async trace() {
-		const res = await Runtime.datexOut(['[]', [], {type:ProtocolDataType.REQUEST, sign:false}], this, undefined, true);
+	public async trace(previous?: {header: dxb_header, trace: any[], source?: any}):Promise<{endpoint: Endpoint, timestamp: Date, interface: {type?: string, description?:string}}[]> {
+		if (previous) {
+			console.log(ProtocolDataTypesMap[previous.header.type??ProtocolDataType.TRACE]+" from " + previous.header.sender + " to " + this);
+		}
+		const trace = previous?.trace ?? [];
+		trace.push({endpoint:Runtime.endpoint, interface: {type: previous?.source?.type, description: previous?.source?.description}, timestamp: new Date()});
+
+		const res = await Runtime.datexOut(['?', [trace], {type:previous?.header?.type ?? ProtocolDataType.TRACE, sign:false}], this, previous?.header?.sid, true, false, undefined, false, undefined, 60_000);
 		return res;
 	}
+
+	public async printTrace() {
+		const format = (val:any) => Runtime.valueToDatexStringExperimental(val, true, true);
+
+		let trace: {endpoint: Endpoint, timestamp: Date, interface: {type?: string, description?:string}}[]
+		try {
+			trace = await this.trace();
+		}
+		catch {
+			let title = `${ESCAPE_SEQUENCES.BOLD}DATEX Network Trace\n${ESCAPE_SEQUENCES.RESET}`;
+			title += `${format(Runtime.endpoint)}${ESCAPE_SEQUENCES.RESET} -> ${format(this)}${ESCAPE_SEQUENCES.RESET}\n\n`
+			title += `${ESCAPE_SEQUENCES.RED}Error: Endpoint not reachable`
+			console.log(title);
+			return;
+		}
+
+		if (!trace) throw new Error("Invalid trace");
+
+		const resolvedEndpointData = trace.find((data) => trace.indexOf(data)!=0 && (data.endpoint == this || data.endpoint.main == this || (data.endpoint == Runtime.endpoint && (this as any)==Datex.LOCAL_ENDPOINT)))!;
+		const resolveEndpointIndex = trace.indexOf(resolvedEndpointData);
+		const resolvedEndpoint = resolvedEndpointData.endpoint;
+		const hopsToDest = resolveEndpointIndex;
+		const hopsFromDest = trace.length - resolveEndpointIndex - 1;
+
+		let title = `${ESCAPE_SEQUENCES.BOLD}DATEX Network Trace\n${ESCAPE_SEQUENCES.RESET}`;
+		title += `${format(Runtime.endpoint)}${ESCAPE_SEQUENCES.RESET} -> ${format(resolvedEndpoint)}${ESCAPE_SEQUENCES.RESET}\n\n`
+		let pre = ''
+		let logs = ''
+		const rtt = trace.at(-1).timestamp.getTime() - trace.at(0).timestamp.getTime();
+
+		pre += `-----------------------------\n`
+		pre += `${ESCAPE_SEQUENCES.BOLD}Round-Trip Time:       ${ESCAPE_SEQUENCES.RESET}${rtt}ms\n`
+		pre += `${ESCAPE_SEQUENCES.BOLD}Hops to Destination:   ${ESCAPE_SEQUENCES.RESET}${hopsToDest}\n`
+		pre += `${ESCAPE_SEQUENCES.BOLD}Hops from Destination: ${ESCAPE_SEQUENCES.RESET}${hopsFromDest}\n`
+		pre += `-----------------------------\n\n`
+
+		pre += `\n${ESCAPE_SEQUENCES.BOLD}Hops:${ESCAPE_SEQUENCES.RESET}\n\n`;
+
+		for (let i = 0; i<trace.length; i++) {
+			const current = trace[i];
+			const next = trace[i+1];
+			if (!next) break;
+
+			if (i == hopsToDest) pre += `\n${ESCAPE_SEQUENCES.BOLD}Return Trip:${ESCAPE_SEQUENCES.RESET}\n\n`;
+
+			pre += `${ESCAPE_SEQUENCES.BOLD} #${(i%hopsToDest)+1} ${ESCAPE_SEQUENCES.RESET}(${next.interface.type??'unknown'}${next.interface.description ? ' ' + next.interface.description : ''})${ESCAPE_SEQUENCES.RESET}:\n  ${format(current.endpoint)}${ESCAPE_SEQUENCES.RESET} -> ${format(next.endpoint)}${ESCAPE_SEQUENCES.RESET}\n\n`
+		}
+
+
+		console.log(title+pre+logs)
+	}
+
 
 	public async getCertifier(){
 		// resolve alias from Blockchain

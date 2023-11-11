@@ -27,9 +27,11 @@ import { logger } from "../utils/global_values.ts";
 // general interface for all "datex interfaces" (client or server/router)
 export interface ComInterface {
     type: string
+    description?: string
     persistent?: boolean // can be disconnected?
     endpoint?: Endpoint // connected directly to a single endpoint
     endpoints?: Set<Endpoint> // multiple endpoints
+    is_bidirectional_hub?: boolean, // allow the same block to go in and out eg a -> this interface -> this runtime -> this interface again -> b
     in: boolean // can receive data
     out: boolean // can send data
     global?: boolean // has a connection to the global network, use as a default interface if possible
@@ -253,6 +255,7 @@ export abstract class CommonInterface<Args extends unknown[] = []> implements Co
 
 
 /** HTTP interface */
+// @deprecated
 class HttpClientInterface extends CommonInterface {
 
     override type = "http"
@@ -508,6 +511,10 @@ class WebsocketClientInterface extends CommonInterface {
     override in = true
     override out = true
     override type = "websocket"
+
+    get description() {
+        return `${this.protocol}://${this.host}`
+    }
 
     private protocol:'ws'|'wss' = 'wss'; // use wss or ws
     private is_first_try = true
@@ -780,7 +787,7 @@ export class InterfaceManager {
             return InterfaceManager.handleNoRedirectFound(to);
         }
         // error: loopback
-        else if (source == comInterface) {
+        else if (!source?.is_bidirectional_hub && source == comInterface) {
             return InterfaceManager.handleNoRedirectFound(to);
         }
         // send

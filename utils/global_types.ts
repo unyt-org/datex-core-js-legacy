@@ -146,6 +146,8 @@ export type datex_scope = {
     sender: Endpoint, // sender of the scope
     origin: Endpoint, // origin to use for pointers / casting (default is sender)
 
+    source?: any // original source (com interface) from which this scope was received
+
     current_index: number,
     start_index: number, // keep track of index to jump back to
     index_offset: number, // current_index + index_offset = actual index, everything left of the index_offset is no longer cached in the buffer

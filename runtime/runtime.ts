@@ -811,14 +811,16 @@ export class Runtime {
      * Executes a DATEX Binary locally and returns the result
      * @param dxb DATEX Binary
      * @param context_location context in which the script should be executed (URL)
+     * @param overrideMeta custom override header metadata
+     * @param forceLocalExecution execute block even if receiver is external (default false)
      * @returns evaluated DATEX result
      */
-    public static async executeDXBLocally(dxb:ArrayBuffer, context_location?:URL, overrideMeta?: Partial<datex_meta>):Promise<any> {
+    public static async executeDXBLocally(dxb:ArrayBuffer, context_location?:URL, overrideMeta?: Partial<datex_meta>, forceLocalExecution = false):Promise<any> {
         // generate new header using executor scope header
         let header:dxb_header;
         let dxb_body:ArrayBuffer;
 
-        const res = await this.parseHeader(dxb)
+        const res = await this.parseHeader(dxb, undefined, false, forceLocalExecution)
         if (res instanceof Array) {
             header = res[0];
             dxb_body = res[1].buffer;
@@ -1078,14 +1080,14 @@ export class Runtime {
 
 
         // default labels:
-        Pointer.createLabel({
-            REQUEST:ProtocolDataType.REQUEST,
-            RESPONSE:ProtocolDataType.RESPONSE,
-            DATA:ProtocolDataType.DATA,
-            HELLO:ProtocolDataType.HELLO,
-            LOCAL:ProtocolDataType.LOCAL,
-            UPDATE:ProtocolDataType.UPDATE,
-        }, "TYPE");
+        // Pointer.createLabel({
+        //     REQUEST:ProtocolDataType.REQUEST,
+        //     RESPONSE:ProtocolDataType.RESPONSE,
+        //     DATA:ProtocolDataType.DATA,
+        //     HELLO:ProtocolDataType.HELLO,
+        //     LOCAL:ProtocolDataType.LOCAL,
+        //     UPDATE:ProtocolDataType.UPDATE,
+        // }, "TYPE");
 
         // create std static scope
         this.STD_STATIC_SCOPE = {};
@@ -1391,7 +1393,7 @@ export class Runtime {
     }
 
     // returns header info and dxb body, or routing information if not directed to own endpoint
-    static async parseHeader(dxb:ArrayBuffer, force_sym_enc_key?:CryptoKey, force_only_header_info = false):Promise<[dxb_header, Uint8Array, Uint8Array, Uint8Array]|dxb_header> {
+    static async parseHeader(dxb:ArrayBuffer, force_sym_enc_key?:CryptoKey, force_only_header_info = false, force_no_redirect = false):Promise<[dxb_header, Uint8Array, Uint8Array, Uint8Array]|dxb_header> {
 
         const res = this.parseHeaderSynchronousPart(dxb);
 
@@ -1402,7 +1404,8 @@ export class Runtime {
             iv: Uint8Array,
             encrypted_key: ArrayBuffer;
 
-        if (!res[0].redirect && !force_only_header_info) {
+        // no redirect
+        if ((!res[0].redirect && !force_only_header_info) || force_no_redirect) {
             [header, data_buffer, header_buffer, signature_start, iv, encrypted_key] = res;
 
             // save encrypted key?
@@ -1443,7 +1446,7 @@ export class Runtime {
 
         }
 
-        // only return header
+        // only return header (for redirect)
         else return res[0];
 
     }
@@ -1605,7 +1608,7 @@ export class Runtime {
      * @param header_callback callback method returning information for the evaluated header before executing the dxb
      * @returns header information (after executing the dxb)
      */
-    private static async handleDatexIn(dxb:ArrayBuffer, last_endpoint:Endpoint, full_scope_callback?:(sid:number, scope:any, error?:boolean)=>void, _?:any, header_callback?:(header:dxb_header)=>void, source: Source): Promise<dxb_header> {
+    private static async handleDatexIn(dxb:ArrayBuffer, last_endpoint:Endpoint, full_scope_callback?:(sid:number, scope:any, error?:boolean)=>void, _?:any, header_callback?:(header:dxb_header)=>void, source?: Source): Promise<dxb_header> {
 
         let header:dxb_header, data_uint8:Uint8Array;
 
@@ -1649,7 +1652,23 @@ export class Runtime {
                 console.log("TODO: handle proxy sign for " + res.sender)
             }
 
+            // propagate TRACE message
             try {
+                const to = [...(res.routing?.receivers??[])][0];
+                if (res.type == ProtocolDataType.TRACE || res.type == ProtocolDataType.TRACE_BACK) {
+                    const trace = await this.executeDXBLocally(dxb, undefined, undefined, true);
+                    if (to instanceof Endpoint && trace instanceof Array) {
+                        try {
+                            await to.trace({header: res, source, trace})
+                        }
+                        catch {}
+                        return {};
+                    }
+                    else {
+                        logger.error("Invalid TRACE message")
+                    }
+                }
+
                 await this.redirectDatex(dxb, res, false, source);
             }
             catch (e) {
@@ -1683,6 +1702,7 @@ export class Runtime {
 
             // get existing scope or create new
             let scope = scope_map?.scope ?? this.createNewInitialScope(header);
+            scope.source = source;
 
             // those values can change later in the while loop
             let _header = header;
@@ -1812,6 +1832,7 @@ export class Runtime {
         else if (
             header.type == ProtocolDataType.RESPONSE || 
             header.type == ProtocolDataType.DATA ||
+            header.type == ProtocolDataType.TRACE_BACK ||
             header.type == ProtocolDataType.LOCAL) 
         {
             const unique_sid = header.sid+"-"+header.return_index;
@@ -1839,7 +1860,7 @@ export class Runtime {
 
     }
 
-    private static async handleScopeResult(header:dxb_header, scope: datex_scope, return_value:any){
+    private static async handleScopeResult(header:dxb_header, scope: datex_scope, return_value:any, source?: Source){
         
         const unique_sid = header.sid+"-"+header.return_index;
         
@@ -1854,8 +1875,14 @@ export class Runtime {
         // handle response
         else if (header.type == ProtocolDataType.RESPONSE ||
             header.type == ProtocolDataType.DATA ||
+            header.type == ProtocolDataType.TRACE_BACK ||
             header.type == ProtocolDataType.LOCAL)
         {
+
+            if (header.type == ProtocolDataType.TRACE_BACK) {
+                return_value.push({endpoint:Runtime.endpoint, interface: {type: scope.source?.type, description: scope.source?.description}, timestamp: new Date()});
+            }
+
             // handle result
             if (this.callbacks_by_sid.has(unique_sid)) {
                 this.callbacks_by_sid.get(unique_sid)[0](return_value);      
@@ -1909,7 +1936,15 @@ export class Runtime {
                 logger.error("ignoring unsigned GOODBYE message")
             }
         }
-            
+
+        else if (header.type == ProtocolDataType.TRACE) {
+            const sender = return_value[0].endpoint;
+
+            console.log("TRACE request from " + sender);
+            return_value.push({endpoint:Runtime.endpoint, interface: {type: scope.source?.type, description: scope.source?.description}, timestamp: new Date()});
+
+            this.datexOut(["?", [return_value], {type:ProtocolDataType.TRACE_BACK, to:sender, return_index:header.return_index, encrypt:header.encrypted, sign:header.signed}], sender, header.sid, false);
+        }
         
         else if (header.type == ProtocolDataType.DEBUGGER) {
             logger.success("DEBUGGER ?", return_value)
