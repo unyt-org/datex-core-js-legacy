@@ -341,6 +341,17 @@ export class Endpoint extends Target {
 		this.#onlinePointer.onGargabeCollection(()=> clearInterval(interval));
 		return this.#onlinePointer;
 	}
+
+	/**
+	 * Override online state (e.g. when retrieving a GOODBYE or other message)
+	 * @param online 
+	 */
+	public setOnline(online = true) {
+		this.#online = new Promise(resolve => resolve(online));
+		this.#current_online = online;
+		if (this.#onlinePointer) this.#onlinePointer.val = online;
+	}
+
 	// returns (cached) online status
 	public async isOnline(): Promise<boolean> {
 		if (Runtime.endpoint.equals(this) || Runtime.main_node?.equals(this) || this as Endpoint === LOCAL_ENDPOINT) return true; // is own endpoint or main node

@@ -1796,6 +1796,10 @@ export class Runtime {
             console.log("Scope error occured, cannot get the original error here!");
             return;
         }
+
+        // assume sender endpoint is online now
+        if (header.sender && header.signed) header.sender.setOnline(true)
+
         // return error to sender (if request)
         if (header.type == ProtocolDataType.REQUEST) {
             // is not a DatexError -> convert to DatexError
@@ -1839,6 +1843,9 @@ export class Runtime {
         
         const unique_sid = header.sid+"-"+header.return_index;
         
+        // assume sender endpoint is online now
+        if (header.sender && header.signed) header.sender.setOnline(true)
+
         // return global result to sender (if request)
         if (header.type == ProtocolDataType.REQUEST) {
             this.datexOut(["?", [return_value], {type:ProtocolDataType.RESPONSE, to:header.sender, return_index:header.return_index, encrypt:header.encrypted, sign:header.signed}], header.sender, header.sid, false);
@@ -1871,19 +1878,38 @@ export class Runtime {
 
         // hello (also temp: get public keys)
         else if (header.type == ProtocolDataType.HELLO) {
-            if (return_value) {
+            if (!header.sender) logger.error("Invalid HELLO message, no sender");
+            else if (return_value) {
                 try {
-                    let keys_updated = await Crypto.bindKeys(header.sender, ...<[ArrayBuffer,ArrayBuffer]>return_value);
+                    const keys_updated = await Crypto.bindKeys(header.sender, ...<[ArrayBuffer,ArrayBuffer]>return_value);
                     if (header.routing?.ttl)
                         header.routing.ttl--;
+                    
+                    // set online to true (even if HELLO message not signed)
+                    header.sender.setOnline(true)
                     logger.debug("HELLO ("+header.sid+"/" + header.inc+ "/" + header.return_index + ") from " + header.sender +  ", keys "+(keys_updated?"":"not ")+"updated, ttl = " + header.routing?.ttl);
                 }
                 catch (e) {
                     logger.error("Invalid HELLO keys");
                 }
             }
-            else logger.debug("HELLO from " + header.sender +  ", no keys, ttl = " + header.routing?.ttl);
+            else {
+                // set online to true (even if HELLO message not signed)
+                header.sender.setOnline(true)
+                logger.debug("HELLO from " + header.sender +  ", no keys, ttl = " + header.routing?.ttl);
+            }
         }
+
+        else if (header.type == ProtocolDataType.GOODBYE) {
+            if (header.signed && header.sender) {
+                logger.debug("GOODBYE from " + header.sender)
+                header.sender.setOnline(false)
+            }
+            else {
+                logger.error("ignoring unsigned GOODBYE message")
+            }
+        }
+            
         
         else if (header.type == ProtocolDataType.DEBUGGER) {
             logger.success("DEBUGGER ?", return_value)
@@ -5015,7 +5041,7 @@ export class Runtime {
                     catch {}
                 }).filter(o => o && !(o.equals(Runtime.endpoint) || o.equals(SCOPE.sender))))
             ];
-            if (origins.length > 2) {
+            if (origins.length > 1) {
                 logger.debug("pre-fetching online state for "+ origins.length + " endpoints")
                 await Promise.race([
                     Promise.all(origins.map(origin => origin.isOnline())),

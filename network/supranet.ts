@@ -25,6 +25,7 @@ import { endpoint_config } from "../runtime/endpoint_config.ts";
 import { endpoint_name, UnresolvedEndpointProperty } from "../datex_all.ts";
 import { Datex } from "../mod.ts";
 import { Storage } from "../runtime/storage.ts";
+import { sendDatexViaHTTPChannel } from "./datex-http-channel.ts";
 const logger = new Logger("DATEX Supranet");
 
 // entry point to connect to the datex network
@@ -151,6 +152,12 @@ export class Supranet {
         // validate current keys against official public keys in network 
         // TODO: (does not work because response never reaches endpoint if valid endpoint already exists in network)
         // Crypto.validateOwnKeysAgainstNetwork();
+
+        // send goodbye on process close
+        const byeDatex = <ArrayBuffer> await Datex.Compiler.compile("", [], {type:Datex.ProtocolDataType.GOODBYE, sign:true, flood:true, __routing_ttl:10})
+        globalThis.addEventListener("beforeunload", () => {
+            sendDatexViaHTTPChannel(byeDatex);
+        })
 
         return connected;
     }

@@ -79,7 +79,7 @@ export class DatexResponse<T> {
 
 
 export const ProtocolDataTypesMap = [
-    "REQUEST", "RESPONSE", "DATA", "TMP_SCOPE", "LOCAL", "HELLO", "DEBUGGER", "SOURCE_MAP", "UPDATE"
+    "REQUEST", "RESPONSE", "DATA", "TMP_SCOPE", "LOCAL", "HELLO", "DEBUGGER", "SOURCE_MAP", "UPDATE", "GOODBYE"
 ]
 
 

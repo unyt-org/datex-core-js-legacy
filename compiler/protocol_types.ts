@@ -11,4 +11,5 @@ export enum ProtocolDataType {
     DEBUGGER    = 6, // get a debugger for a scope
     SOURCE_MAP  = 7, // send a source map for a scope
     UPDATE      = 8, // like normal request, but don't propgate updated pointer values back to sender (prevent recursive loop)
+    GOODBYE     = 9, // info message that endpoint is offline
 }
