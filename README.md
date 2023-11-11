@@ -1,4 +1,4 @@
-# DATEX Core JS (Legacy)
+# DATEX Core JS
 
 Includes
  * [DATEX](https://github.com/unyt-org/datex-specification) Runtime for JavaScript
