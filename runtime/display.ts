@@ -14,6 +14,7 @@ const errorReset = async ()=> {
 	catch {
 		localStorage.clear(); // last resort, clear localStorage - TODO: also clear indexeddb?
 	}
+	if (globalThis.Deno) Deno.exit(1);
 }
 // @ts-ignore
 globalThis.errorReset = errorReset

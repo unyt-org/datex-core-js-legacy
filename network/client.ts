@@ -55,12 +55,37 @@ export abstract class CommonInterface<Args extends unknown[] = []> implements Co
         for (const handler of this._endpointRegisteredHandlers.get(com_interface.type)??[]) handler(endpoint)
     }
     // does an endpoint have an explicit (direct) interface on this endpoint
-    public static hasDirectInterfaceForEndpoint(endpoint:Endpoint):boolean {
-        return this.endpoint_connection_points.has(endpoint) && this.endpoint_connection_points.get(endpoint)?.size != 0;
+    public static hasDirectInterfaceForEndpoint(endpoint:Endpoint): boolean {
+        return this.hasEndpoint(this.endpoint_connection_points, endpoint) && this.getEndpoint(this.endpoint_connection_points, endpoint)?.size != 0;
     }
     // get a list of all currently available direct interfaces for an endpoint
     public static getInterfacesForEndpoint(endpoint:Endpoint, interface_type?:string) {
-        return this.endpoint_connection_points.get(endpoint) || new Set();
+        return this.getEndpoint(this.endpoint_connection_points, endpoint) || new Set();
+    }
+
+    /**
+     * returns true if has endpoint or instance endpoint of endpoint
+     */
+    private static hasEndpoint(set:Map<Target,unknown>|Set<Target>, endpoint:Target) {
+        if (set.has(endpoint)) return true;
+        else {
+            for (const e of set.keys()) {
+                if (e instanceof Endpoint && e.main === endpoint) return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * returns interface for endpoint or matching instance endpoint of endpoint
+     */
+    private static getEndpoint(set:Map<Target,Set<ComInterface>>, endpoint:Target) {
+        if (set.has(endpoint)) return set.get(endpoint);
+        else {
+            for (const [e, interf] of set.entries()) {
+                if (e instanceof Endpoint && e.main === endpoint) return interf;
+            }
+        }
     }
 
 
@@ -79,11 +104,11 @@ export abstract class CommonInterface<Args extends unknown[] = []> implements Co
     }
     // is an endpoint reachable via a specific endpoint (indirectly)
     public static isEndpointReachableViaInterface(endpoint:Target):boolean {
-        return this.indirect_endpoint_connection_points.has(endpoint) && this.indirect_endpoint_connection_points.get(endpoint)?.size != 0;
+        return this.hasEndpoint(this.indirect_endpoint_connection_points, endpoint) && this.indirect_endpoint_connection_points.get(endpoint)?.size != 0;
     }
     // get a list of all currently available indirect interfaces for an endpoint
     public static getIndirectInterfacesForEndpoint(endpoint:Target, interface_type?:string) {
-        return this.indirect_endpoint_connection_points.get(endpoint) || new Set();
+        return this.getEndpoint(this.indirect_endpoint_connection_points, endpoint) || new Set();
     }
 
 
@@ -96,7 +121,7 @@ export abstract class CommonInterface<Args extends unknown[] = []> implements Co
     }
     // get a list of all currently available virtual interfaces for an endpoint
     public static getVirtualInterfacesForEndpoint(endpoint:Target, interface_type?:string) {
-        return this.virtual_endpoint_connection_points.get(endpoint) || new Set();
+        return this.getEndpoint(this.virtual_endpoint_connection_points, endpoint) || new Set();
     }
 
 
@@ -213,8 +238,8 @@ export abstract class CommonInterface<Args extends unknown[] = []> implements Co
 
 
     protected addEndpoint(endpoint:Endpoint) {
-    this.endpoints.add(endpoint);
-    CommonInterface.addInterfaceForEndpoint(endpoint, this);
+        this.endpoints.add(endpoint);
+        CommonInterface.addInterfaceForEndpoint(endpoint, this);
     }
 
     //private datex_generators = new Set<AsyncGenerator<ArrayBuffer, ArrayBuffer>>();
@@ -733,7 +758,7 @@ export class InterfaceManager {
         const addressed_datex = Compiler.updateHeaderReceiver(datex, new Disjunction(to))!; // set right receiver
         
         // is self
-        if (to instanceof Endpoint && (Runtime.endpoint.equals(to) || to === LOCAL_ENDPOINT)) {
+        if (to instanceof Endpoint && (Runtime.endpoint.equals(to) || Runtime.endpoint.main.equals(to) || to === LOCAL_ENDPOINT)) {
             await InterfaceManager.datex_in_handler(addressed_datex, Runtime.endpoint);
             return;
         }

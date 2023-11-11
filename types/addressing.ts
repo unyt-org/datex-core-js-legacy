@@ -9,6 +9,7 @@ import { clause, Disjunction } from "./logic.ts";
 import { Runtime, StaticScope } from "../runtime/runtime.ts";
 import { logger } from "../utils/global_values.ts";
 import { Datex } from "../mod.ts";
+import { ProtocolDataType } from "../compiler/protocol_types.ts";
 
 type target_prefix_person = "@";
 type target_prefix_id = "@@";
@@ -149,7 +150,7 @@ export class Endpoint extends Target {
 	get instance_binary() {return this.#instance_binary}
 	get prefix() {return (<typeof Endpoint>this.constructor).prefix}
 	get type() {return (<typeof Endpoint>this.constructor).type}
-	get main() {return this.getInstance("")} // target without instance
+	get main():Endpoint {return (this.#instance == "0000" || !this.#instance) ? this : this.getInstance("")} // target without instance
 	get binary() {return this.#binary}
 	get alias() {return this.#alias}
 	get certifier() {return this.#certifier}
@@ -283,6 +284,15 @@ export class Endpoint extends Target {
 			// console.debug("failed to resolve alias for " + this, e)
 		}
 		return this.#alias
+	}
+
+	/**
+	 * Generates a network trace
+	 * (for routing debugging)
+	 */
+	public async trace() {
+		const res = await Runtime.datexOut(['[]', [], {type:ProtocolDataType.REQUEST, sign:false}], this, undefined, true);
+		return res;
 	}
 
 	public async getCertifier(){

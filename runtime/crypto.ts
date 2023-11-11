@@ -1,10 +1,12 @@
 // deno-lint-ignore-file no-async-promise-executor
 import { logger } from "../utils/global_values.ts";
-import { Endpoint } from "../types/addressing.ts";
+import { Endpoint, Target } from "../types/addressing.ts";
 import { SecurityError, ValueError } from "../types/errors.ts";
 import { NetworkUtils } from "../network/network_utils.ts";
 import { Storage } from "../runtime/storage.ts";
 import { Runtime } from "./runtime.ts";
+import { displayFatalError } from "./display.ts";
+import { Supranet } from "../network/supranet.ts";
 
 // crypto
 export const crypto = globalThis.crypto
@@ -172,6 +174,27 @@ export class Crypto {
     }
 
     static #waiting_key_requests = new Map<Endpoint, Promise<[CryptoKey, CryptoKey]>>();
+
+    /**
+     * Checks if the current public keys match the offical public keys for this endpoint
+     */
+    static async validateOwnKeysAgainstNetwork() {
+        try {
+            const ownKeys = await Promise.all(
+                this.getOwnPublicKeys().map(k => this.exportPublicKeyBase64(k))
+            )
+            const networkKeys = await Promise.all(
+                (await this.requestKeys(Runtime.endpoint)).map(k => k ? this.exportPublicKeyBase64(k) : null)
+            );
+            if (ownKeys[0] !== networkKeys[0] || ownKeys[1] !== networkKeys[1]) {
+                logger.error `The local keys for ${Runtime.endpoint} do not match the registered public keys.`
+                displayFatalError("invalid-local-keys")
+            }
+        }
+        catch {
+            logger.debug("Could not validate local keys against registered public keys")
+        }
+    }
     
     // loads keys from network or cache
     static requestKeys(endpoint:Endpoint):Promise<[CryptoKey?, CryptoKey?]> {
@@ -191,10 +214,19 @@ export class Crypto {
             }
             if (!exported_keys) {
                 logger.debug("requesting keys for " + endpoint);
-                exported_keys = await Runtime.Blockchain.getEndpointPublicKeys(endpoint);
-                if (!exported_keys) exported_keys =  await NetworkUtils.get_keys(endpoint);
-                if (exported_keys) await Storage.setItem("keys_"+endpoint, exported_keys);
-                else {
+                // get endpoint public keys
+                // TODO: don't sign?, does not work when running as @+unyt2: await datex('#public.Blockchain.getEndpointPublicKeys(?)', [endpoint], Target.get('@+unyt2'), false)
+                try {
+                    exported_keys = await Runtime.Blockchain.getEndpointPublicKeys(endpoint);
+                    if (!exported_keys) exported_keys = await NetworkUtils.get_keys(endpoint);
+                    if (exported_keys) await Storage.setItem("keys_"+endpoint, exported_keys);
+                    else {
+                        reject(new Error("could not get keys from network"));
+                        this.#waiting_key_requests.delete(endpoint); // remove from key promises
+                        return;
+                    }
+                }
+                catch (e) {
                     reject(new Error("could not get keys from network"));
                     this.#waiting_key_requests.delete(endpoint); // remove from key promises
                     return;

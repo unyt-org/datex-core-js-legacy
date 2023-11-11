@@ -302,7 +302,7 @@ export class Function<T extends (...args: any) => any = (...args: any) => any> e
             // is proxy function: call remote, only if has impersonation permission!
             if (this.proxy_fn) {
                 if (SCOPE.impersonation_permission) return this.proxy_fn(value);
-                else throw new PermissionError("No permission to execute functions on external endpoints", SCOPE)
+                else throw new PermissionError("No permission to execute functions on external endpoints ("+this.name+","+this.proxy_fn.name+")", SCOPE)
             }
             // else local call ...
             meta = SCOPE.meta;

@@ -70,7 +70,6 @@ export class Supranet {
     // TODO problem: using same keys as stored endpoint!
     public static async connect(endpoint?:Endpoint|UnresolvedEndpointProperty, local_cache?: boolean, sign_keys?:[ArrayBuffer|CryptoKey,ArrayBuffer|CryptoKey], enc_keys?:[ArrayBuffer|CryptoKey,ArrayBuffer|CryptoKey], via_node?:Endpoint) {
 
-
         if (this.#connected && (!endpoint || endpoint === Runtime.endpoint)) {
             // logger.info("already connected as", Runtime.endpoint);
             return true;
@@ -101,8 +100,7 @@ export class Supranet {
     }
 
     private static shouldSwitchInstance() {
-        return false;
-        // TODO: enable
+        // return false;
         return Runtime.endpoint.main === Runtime.endpoint && Runtime.Blockchain
     }
 
@@ -145,10 +143,14 @@ export class Supranet {
 
         Runtime.setMainNode(node);
 
-        if (!connected) logger.error("connectionn failed")
+        if (!connected) logger.error("connection failed")
         else if (this.onConnect && handleOnConnect) this.onConnect();
 
         this.#connected = connected;
+
+        // validate current keys against official public keys in network 
+        // TODO: (does not work because response never reaches endpoint if valid endpoint already exists in network)
+        // Crypto.validateOwnKeysAgainstNetwork();
 
         return connected;
     }

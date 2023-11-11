@@ -894,7 +894,7 @@ export class UpdateScheduler {
 export type pointer_type = number;
 
 // mock pointer used for garbage collection
-type MockPointer = {id: string, origin: Endpoint, is_origin: boolean} 
+type MockPointer = {id: string, origin: Endpoint, subscribed?: Endpoint|false, is_origin: boolean} 
 
 /** Wrapper class for all pointer values ($xxxxxxxx) */
 export class Pointer<T = any> extends Ref<T> {
@@ -1521,7 +1521,7 @@ export class Pointer<T = any> extends Ref<T> {
     private static cleanup(mockPtr: MockPointer) {
         // unsubscribe
         const doUnsubscribe = !!(!mockPtr.is_origin && mockPtr.origin)
-        if (doUnsubscribe) this.unsubscribeFromPointerUpdates(mockPtr.origin, mockPtr.id);
+        if (doUnsubscribe && mockPtr.subscribed) this.unsubscribeFromPointerUpdates(mockPtr.subscribed, mockPtr.id);
 
         // remove subscriber cache
         Runtime.subscriber_cache?.delete(mockPtr.id);
@@ -1581,7 +1581,8 @@ export class Pointer<T = any> extends Ref<T> {
         // get origin based on pointer id if no origin provided
         // TODO different pointer address formats / types
         if (!this.origin && id && !anonymous && this.#id_buffer && (this.pointer_type == Pointer.POINTER_TYPE.ENDPOINT || this.pointer_type == Pointer.POINTER_TYPE.ENDPOINT_PERSONAL || this.pointer_type == Pointer.POINTER_TYPE.ENDPOINT_INSTITUTION)) {
-            this.origin = <Endpoint>Target.get(this.#id_buffer.slice(1,19), this.#id_buffer.slice(19,21), this.pointer_type);
+            this.origin = Pointer.getOriginFromPointerId(this.#id_buffer);
+            // <Endpoint>Target.get(this.#id_buffer.slice(1,19), this.#id_buffer.slice(19,21), this.pointer_type);
             //console.log("pointer origin based on id: " + this.toString() + " -> " + this.origin)
         }
         else if (!this.origin) this.origin = Runtime.endpoint; // default origin is local endpoint
@@ -1591,6 +1592,20 @@ export class Pointer<T = any> extends Ref<T> {
 
         // set update_endpoint and trigger suscribers getter (get from cache)
         this.#update_endpoints = this.subscribers
+    }
+
+    /**
+     * extracts the origin from a pointer id
+     * @param id_buffer 
+     * @returns 
+     */
+    static getOriginFromPointerId(id_buffer: Uint8Array|string) {
+        if (typeof id_buffer == "string") {
+            try {id_buffer = hex2buffer(id_buffer, Pointer.MAX_POINTER_ID_SIZE, true);}
+            catch (e) {throw new SyntaxError('Invalid pointer id: $' + id_buffer.slice(0, 48));}
+        }
+        const pointer_type = id_buffer[0];
+        return <Endpoint>Target.get(id_buffer.slice(1,19), id_buffer.slice(19,21), pointer_type);
     }
     
     // delete pointer again (reset everything) if not needed
@@ -1657,7 +1672,9 @@ export class Pointer<T = any> extends Ref<T> {
     #id_buffer:Uint8Array
     #origin: Endpoint
     #is_origin = true;
-    #subscribed: boolean
+    #subscribed: boolean|Endpoints = false
+
+    get subscribed() {return this.#subscribed}
 
     //readonly:boolean = false; // can the value ever be changed?
     sealed:boolean = false; // can the value be changed from the client side? (otherwise, it can only be changed via DATEX calls)
@@ -1713,7 +1730,7 @@ export class Pointer<T = any> extends Ref<T> {
             && !(endpoint == Runtime.endpoint)
             && this.is_origin 
             && (!endpoint || !Logical.matches(endpoint, this.allowed_access, Target))
-            && (endpoint && !Runtime.trustedEndpoints.get(endpoint)?.includes("protected-pointer-access"))
+            && (endpoint && !Runtime.trustedEndpoints.get(endpoint.main)?.includes("protected-pointer-access"))
         ) {
             throw new PermissionError("Endpoint has no read permissions for this pointer")
         }
@@ -1820,7 +1837,7 @@ export class Pointer<T = any> extends Ref<T> {
             if (pointer_value === VOID) { // TODO: could be allowed, but is currently considered a bug
                 throw new RuntimeError("pointer value "+this.idString()+" was resolved to void");
             }
-            this.#subscribed = true;
+            this.#subscribed = endpoint;
 
             // // set function receiver
             // if (pointer_value instanceof Function) {
@@ -1828,30 +1845,57 @@ export class Pointer<T = any> extends Ref<T> {
             // }
             if (!keep_pointer_origin) this.origin = endpoint;
 
+            // fall back to trusted endpoint when origin is offline, if not already a override endpoint 
+            if (!override_endpoint) {
+                Pointer.observeOriginOnline(this.origin, this.id);
+            }
+
             if (!this.#loaded) return this.setValue(pointer_value); // set value
             else return this;
-            // }
-            // // probably not the right origin TODO: remove, no longer required
-            // catch (e) {
-            //     if (pass_error) throw e;
-
-            //     // logger.error(`${e}`)
-
-            //     // find origin and subscribe
-            //     const origin:Endpoint = await Runtime.datexOut(['origin ?', [this]], endpoint) 
-            //     if (origin instanceof Endpoint && !endpoint.equals(origin)) return this.subscribeForPointerUpdates(origin, get_value);
-            //     else throw e; // origin wasnt the problem throw orignal error
-            // }
         }
 
         // value already cached, don't wait for it, no response
         else {
             Pointer.addToSubscriberPool(this, endpoint);
-            this.#subscribed = true;
+            this.#subscribed = endpoint;
             this.origin = endpoint;
             return this;
         }
     
+    }
+
+    /**
+     * Observes online state of pointer origin and subscribes to fallback endpoint if origin is offline
+     * @param origin
+     * @param ptrId 
+     */
+    private static observeOriginOnline(origin: Endpoint, ptrId: string) {
+        const handler = async function(online: boolean) {
+            const ptr = Pointer.get(ptrId);
+            // pointer no longer exists, unobserve
+            if (!ptr) {
+                logger.debug("unobserving pointer origin online state for " + ptrId);
+                origin.online.unobserve(handler);
+                return;
+            }
+            let foundFallback = false;
+            for (const [trustedEndpoint, permissions] of Runtime.trustedEndpoints) {
+                if (permissions.includes("fallback-pointer-source")) {
+                    logger.debug(origin  + " is offline, subscribing to trusted endpoint " + trustedEndpoint)
+                    ptr.#subscribed = false;
+                    try {
+                        await ptr.subscribeForPointerUpdates(trustedEndpoint);
+                        foundFallback = true;
+                        break;
+                    }
+                    catch (e) {
+                        console.log(e)
+                    }
+                }
+            }
+            if (!foundFallback) logger.error("pointer origin " + origin  + " for "+ptrId+" is offline, could not find a trusted fallback endpoint for pointer synchronisation")
+        }
+        origin.online.observe(handler)
     }
 
     static #subscriber_pool = new Map<Endpoint, Set<Pointer>>().setAutoDefault(Set)
@@ -1888,7 +1932,7 @@ export class Pointer<T = any> extends Ref<T> {
 
     public async unsubscribeFromPointerUpdates() {
         if (!this.#subscribed) return; // already unsubscribed
-        await Pointer.unsubscribeFromPointerUpdates(this.origin, this.id)
+        await Pointer.unsubscribeFromPointerUpdates(this.#subscribed, this.id)
         this.#subscribed = false;
     }
 
@@ -2196,7 +2240,7 @@ export class Pointer<T = any> extends Ref<T> {
         if (this.origin && !this.is_origin) {
             if (!this.#exclude_origin_from_updates) this.handleDatexUpdate(null, '#0=?;? = #0', [this.current_val, this], this.origin, true)
         }
-        else if (this.is_origin && this.subscribers.size) {
+        if (this.update_endpoints.size) {
             logger.debug("forwarding update to subscribers", this.update_endpoints);
             // console.log(this.#update_endpoints);
             this.handleDatexUpdate(null, '#0=?;? = #0', [this.current_val, this], this.update_endpoints, true)
@@ -2438,7 +2482,8 @@ export class Pointer<T = any> extends Ref<T> {
 
                     this.#garbage_collectable = true;
                     try {
-                        const mockPointer = {id: this.id, origin: this.origin, is_origin: this.is_origin};
+                        // TODO: update #subscribed of mockPointer when changed
+                        const mockPointer = {id: this.id, origin: this.origin, is_origin: this.is_origin, subscribed: this.#subscribed};
                         this.#registeredForGC = true;
                         Pointer.garbage_registry.register(<object><unknown>(this.is_js_primitive ? this : this.current_val), mockPointer, this)
                     }
@@ -3066,7 +3111,7 @@ export class Pointer<T = any> extends Ref<T> {
         if (this.origin && !this.is_origin) {
             if (!this.#exclude_origin_from_updates) this.handleDatexUpdate(key, Runtime.PRECOMPILED_DXB.SET_PROPERTY, [this, key, value], this.origin)
         }
-        else if (this.is_origin && this.update_endpoints.size) {
+        if (this.update_endpoints.size) {
             this.handleDatexUpdate(key, Runtime.PRECOMPILED_DXB.SET_PROPERTY, [this, key, value], this.update_endpoints)
         }
 
@@ -3118,7 +3163,7 @@ export class Pointer<T = any> extends Ref<T> {
         if (this.origin && !this.is_origin) {
             if (!this.#exclude_origin_from_updates) this.handleDatexUpdate(null, '? += ?', [this, value], this.origin)
         }
-        else if (this.is_origin && this.update_endpoints.size) {
+        if (this.update_endpoints.size) {
             this.handleDatexUpdate(null, '? += ?', [this, value], this.update_endpoints)
         }
         
@@ -3150,7 +3195,7 @@ export class Pointer<T = any> extends Ref<T> {
             logger.info("streaming to parent " + this.origin);
             if (!this.#exclude_origin_from_updates) this.handleDatexUpdate(null, '? << ?'/*DatexRuntime.PRECOMPILED_DXB.STREAM*/, [this, obj], this.origin)
         }
-        else if (this.is_origin && this.update_endpoints.size) {
+        if (this.update_endpoints.size) {
             logger.info("streaming to subscribers " + this.update_endpoints);
             this.handleDatexUpdate(null, '? << ?'/*DatexRuntime.PRECOMPILED_DXB.STREAM*/, [this, obj], this.update_endpoints)
         }
@@ -3183,7 +3228,7 @@ export class Pointer<T = any> extends Ref<T> {
         if (this.origin && !this.is_origin) {
             if (!this.#exclude_origin_from_updates) this.handleDatexUpdate(null, Runtime.PRECOMPILED_DXB.CLEAR_WILDCARD, [this], this.origin)
         }
-        else if (this.is_origin && this.update_endpoints.size) {
+        if (this.update_endpoints.size) {
             this.handleDatexUpdate(null, Runtime.PRECOMPILED_DXB.CLEAR_WILDCARD, [this], this.update_endpoints)
         }
 
@@ -3239,7 +3284,7 @@ export class Pointer<T = any> extends Ref<T> {
                 else this.handleDatexUpdate(null, '#0=?0;#0.(?4..?1) = void; #0.(?2..((count #0) + ?3)) = #0.(?4..(count #0));#0.(?4..?5) = ?6;', [this, end, start-size+replace_length, replace_length, start, start+replace_length, replace], this.origin) // insert
             }
         }
-        else if (this.is_origin && this.update_endpoints.size) {
+        if (this.update_endpoints.size) {
             if (!replace?.length) this.handleDatexUpdate(null, '#0 = ?0; #1 = count #0;#0.(?1..?2) = void;#0.(?1..#1) = #0.(?3..#1);', [this, start, end, start+size], this.update_endpoints) // no insert
             else  this.handleDatexUpdate(null, '#0=?0;#0.(?4..?1) = void; #0.(?2..((count #0) + ?3)) = #0.(?4..(count #0));#0.(?4..?5) = ?6;', [this, end, start-size+replace_length, replace_length, start, start+replace_length, replace], this.update_endpoints) // insert
         }
@@ -3294,7 +3339,7 @@ export class Pointer<T = any> extends Ref<T> {
         if (this.origin && !this.is_origin) {
             if (!this.#exclude_origin_from_updates) this.handleDatexUpdate(null, '?.? = void', [this, key], this.origin)
         }
-        else if (this.is_origin && this.update_endpoints.size) {
+        if (this.update_endpoints.size) {
             this.handleDatexUpdate(null, '?.? = void', [this, key], this.update_endpoints)
         }
         
@@ -3333,7 +3378,7 @@ export class Pointer<T = any> extends Ref<T> {
         if (this.origin && !this.is_origin) {
             if (!this.#exclude_origin_from_updates) this.handleDatexUpdate(null, '? -= ?', [this, value], this.origin)
         }
-        else if (this.is_origin && this.update_endpoints.size) {
+        if (this.update_endpoints.size) {
             logger.debug("forwarding delete to subscribers " + this.update_endpoints);
             this.handleDatexUpdate(null, '? -= ?', [this, value], this.update_endpoints)
         }
@@ -3564,12 +3609,12 @@ export class URLRef extends Pointer<URL> {}
 
 export function getProxyFunction(method_name:string, params:{filter:target_clause, dynamic_filter?: target_clause, sign?:boolean, scope_name?:string, timeout?:number}):(...args:any[])=>Promise<any> {
     return function(...args:any[]) {
-        let filter = params.dynamic_filter ? new Conjunction(params.filter, params.dynamic_filter) : params.filter;
+        const filter = params.dynamic_filter ? new Conjunction(params.filter, params.dynamic_filter) : params.filter;
 
-        let params_proto = Object.getPrototypeOf(params);
+        const params_proto = Object.getPrototypeOf(params);
         if (params_proto!==Object.prototype) params_proto.dynamic_filter = undefined; // reset, no longer needed for call
 
-        let compile_info:compile_info = [`#public.${params.scope_name}.${method_name} ?`, [new Tuple(args)], {to:filter, sign:params.sign}];
+        const compile_info:compile_info = [`#public.${params.scope_name}.${method_name} ?`, [new Tuple(args)], {to:filter, sign:params.sign}];
         return Runtime.datexOut(compile_info, filter, undefined, true, undefined, undefined, false, undefined, params.timeout);
     }
 }
@@ -3582,7 +3627,7 @@ export function getProxyStaticValue(name:string, params:{filter?:target_clause, 
         let params_proto = Object.getPrototypeOf(params);
         if (params_proto!==Object.prototype) params_proto.dynamic_filter = undefined; // reset, no longer needed for call
 
-        let compile_info:compile_info = [`#public.${params.scope_name}.${name}`, [], {to:filter, sign:params.sign}];
+        const compile_info:compile_info = [`#public.${params.scope_name}.${name}`, [], {to:filter, sign:params.sign}];
         return Runtime.datexOut(compile_info, filter, undefined, true, undefined, undefined, false, undefined, params.timeout);
     }
 }

@@ -197,7 +197,7 @@ type Source = '_source'|{};
 /**
  * available permission that can be given to trusted endpoints
  */
-export type trustedEndpointPermission = "remote-js-execution" | "protected-pointer-access";
+export type trustedEndpointPermission = "remote-js-execution" | "protected-pointer-access" | "fallback-pointer-source";
 
 export class Runtime {
 
@@ -247,7 +247,7 @@ export class Runtime {
      * @param endpoint 
      * @param permissions 
      */
-    public static addTrustedEndpoint(endpoint:Endpoint, permissions:trustedEndpointPermission[] = ["protected-pointer-access", "remote-js-execution"]) {
+    public static addTrustedEndpoint(endpoint:Endpoint, permissions:trustedEndpointPermission[] = ["protected-pointer-access", "remote-js-execution", "fallback-pointer-source"]) {
         if (this.trustedEndpoints.has(endpoint))
             logger.debug("Updated permissions for trusted endpoint " + endpoint + ": " + permissions.join(", "));
         else 
@@ -948,8 +948,7 @@ export class Runtime {
 
     // handle sending a single dxb block out
     private static datexOutSingleBlock(dxb:ArrayBuffer, to:Disjunction<Endpoint>, sid:number, unique_sid:string, data:compile_info, wait_for_result=true, encrypt=false, detailed_result_callback?:(scope:datex_scope, header:dxb_header, error:Error)=>void, flood = false, flood_exclude?:Endpoint, timeout?:number, source?:Source) {
-        
-       
+              
         // empty filter?
         if (to?.size == 0) {
             throw new NetworkError("No valid receivers");
@@ -998,7 +997,7 @@ export class Runtime {
                 if (timeout > 0 && Number.isFinite(timeout)) {
                     setTimeout(()=>{
                         // reject if response wasn't already received (might still be processed, and resolve not yet called)
-                        if (!this.callbacks_by_sid.get(unique_sid)?.[2]) reject(new NetworkError("DATEX request timeout after "+timeout+"ms: " + unique_sid));
+                        if (!this.callbacks_by_sid.get(unique_sid)?.[2]) reject(new NetworkError("DATEX request timeout after "+timeout+"ms: " + unique_sid +  " to " + Runtime.valueToDatexStringExperimental(to)));
                     }, timeout);
                 }
             }
@@ -1340,7 +1339,19 @@ export class Runtime {
         // foreign endpoint (if receiver not self or force eating this response) //////////
         // handle result
         // TODO better check for && !routing_info.receivers.equals(Runtime.endpoint)
-        if (routing_info.receivers && !(routing_info.receivers instanceof Disjunction && routing_info.receivers.size == 1 && (Runtime.endpoint.equals([...routing_info.receivers][0]) ||[...routing_info.receivers][0] == LOCAL_ENDPOINT))) {
+        if (
+            routing_info.receivers && // has receivers
+            // not for local endpoint:
+            !(
+                routing_info.receivers instanceof Disjunction && 
+                routing_info.receivers.size == 1 && // single receiver
+                (
+                    Runtime.endpoint.equals([...routing_info.receivers][0]) || // endpoint instance equals receiver
+                    Runtime.endpoint.main.equals([...routing_info.receivers][0]) || // endpoint main equals receiver
+                    [...routing_info.receivers][0] == LOCAL_ENDPOINT // receiver is @@local
+                )
+            )
+        ) {
             header.redirect = true;
         }
         ///////////////////////////////////////////////////////////////////
@@ -1565,8 +1576,8 @@ export class Runtime {
     // keep track of last received messages endpoint:sid:inc:returnindex
     private static receivedMessagesHistory:string[] = []
 
-    private static checkDuplicate(header: dxb_header) {
-        const identifier = `${header.sender}:${header.sid}:${header.inc}:${header.return_index}`;
+    private static async checkDuplicate(header: dxb_header) {
+        const identifier = `${header.sender}:${header.sid}:${header.inc}:${header.return_index}:${await Compiler.getValueHashString(header.routing?.receivers)}`;
 
         let isDuplicate = false;
         // is duplicate
@@ -1605,16 +1616,16 @@ export class Runtime {
         catch (e) {
             // e is [dxb_header, Error]
             //throw e
-            console.error(e)
+            console.error(e[1])
             this.handleScopeError(e[0], e[1]);
             return;
         }
-        
+
         // normal request
         if (res instanceof Array) {
 
             [header, data_uint8] = res;
-            if (this.checkDuplicate(header)) return header;
+            if (await this.checkDuplicate(header)) return header;
 
             // + flood, exclude last_endpoint - don't send back in flooding tree
             if (header.routing && header.routing.flood) {
@@ -1629,7 +1640,7 @@ export class Runtime {
         // needs to be redirected 
         else {
 
-            if (this.checkDuplicate(res)) return res;
+            if (await this.checkDuplicate(res)) return res;
 
             // redirect as crypto proxy: sign
             if (res.sender && this.#cryptoProxies.has(res.sender)) {
@@ -1638,7 +1649,12 @@ export class Runtime {
                 console.log("TODO: handle proxy sign for " + res.sender)
             }
 
-            this.redirectDatex(dxb, res, false, source);
+            try {
+                await this.redirectDatex(dxb, res, false, source);
+            }
+            catch (e) {
+                console.log("redirect failed", e)
+            }
 
             // callback for header info
             if (header_callback instanceof globalThis.Function) header_callback(res);
@@ -1653,7 +1669,7 @@ export class Runtime {
             else this.active_datex_scopes.set(header.sender, new Map());
         }
         // modified sid: negative for own responses to differentiate
-        const sid = Runtime.endpoint.equals(header.sender) && header.type == ProtocolDataType.RESPONSE ? -header.sid : header.sid;
+        const sid = (Runtime.endpoint.equals(header.sender) || Runtime.endpoint.main.equals(header.sender)) && header.type == ProtocolDataType.RESPONSE ? -header.sid : header.sid;
         // create map for this sid if not yet created
         let sender_map = this.active_datex_scopes.get(header.sender);
         if (sender_map && !sender_map.has(sid)) {
@@ -1663,6 +1679,7 @@ export class Runtime {
 
         // this is the next block or the only block (immediately closed)
         if (!scope_map || (scope_map.next == header.inc)) {
+
 
             // get existing scope or create new
             let scope = scope_map?.scope ?? this.createNewInitialScope(header);
@@ -1774,6 +1791,7 @@ export class Runtime {
 
 
     private static handleScopeError(header:dxb_header, e: any, scope?:datex_scope) {
+     
         if (header?.type == undefined) {
             console.log("Scope error occured, cannot get the original error here!");
             return;
@@ -1785,7 +1803,7 @@ export class Runtime {
                 e = DatexError.fromJSError(e);
                 if (scope) e.addScopeToStack(scope);
             }
-            this.datexOut(["yeet ?", [e], {type:ProtocolDataType.RESPONSE, to:header.sender, return_index:header.return_index, sign:header.signed}], header.sender,  header.sid, false);
+            this.datexOut(["yeet ?", [e], {type:ProtocolDataType.RESPONSE, to:header.sender, return_index:header.return_index, sign:header.signed}], header.sender, header.sid, false);
         }
         else if (
             header.type == ProtocolDataType.RESPONSE || 
@@ -4984,6 +5002,28 @@ export class Runtime {
 
     /** parses a datex block, keeps track of the current scope, executes actions */
     static async run(SCOPE:datex_scope):Promise<void> {
+
+        // workaround using decompiler:
+        // pre-extract all pointers from script and pre-fetch pointer origin online states
+        try {
+            const content = MessageLogger.decompile(SCOPE.buffer_views.buffer, false, false)
+            const origins = [
+                ...new Set(content.match(/\$((?:[A-Fa-f0-9]{2}|[xX][A-Fa-f0-9]){1,26})/gm)?.map(p => {
+                    try {
+                        return Pointer.getOriginFromPointerId(p.replace("$",""));
+                    }
+                    catch {}
+                }).filter(o => o && !(o.equals(Runtime.endpoint) || o.equals(SCOPE.sender))))
+            ];
+            if (origins.length > 2) {
+                logger.debug("pre-fetching online state for "+ origins.length + " endpoints")
+                await Promise.race([
+                    Promise.all(origins.map(origin => origin.isOnline())),
+                    new Promise(resolve => setTimeout(resolve, 10_000))
+                ])
+            }
+        }
+        catch {}
     
         // loop through instructions
         while (true) {
