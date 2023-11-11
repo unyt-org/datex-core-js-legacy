@@ -32,6 +32,7 @@ export interface ComInterface {
     endpoint?: Endpoint // connected directly to a single endpoint
     endpoints?: Set<Endpoint> // multiple endpoints
     is_bidirectional_hub?: boolean, // allow the same block to go in and out eg a -> this interface -> this runtime -> this interface again -> b
+    isEqualSource?:(source: Partial<ComInterface>, to: Endpoint) => boolean
     in: boolean // can receive data
     out: boolean // can send data
     global?: boolean // has a connection to the global network, use as a default interface if possible
@@ -697,13 +698,13 @@ export class InterfaceManager {
     }
 
     static async disconnect(){
-    CommonInterface.default_interface = null;
-    CommonInterface.resetEndpointConnectionPoints();
+        CommonInterface.default_interface = null;
+        CommonInterface.resetEndpointConnectionPoints();
 
-    for (const interf of this.active_interfaces || []) {
-        await interf.disconnect()
-        this.active_interfaces.delete(interf);
-    } 
+        for (const interf of this.active_interfaces || []) {
+            await interf.disconnect()
+            this.active_interfaces.delete(interf);
+        } 
     }
 
     // create a new connection with a interface type (e.g. websocket, relayed...)
@@ -754,7 +755,10 @@ export class InterfaceManager {
     // TODO: replace to with Disjunction<Endpoint>
     static async send(datex:ArrayBuffer, to:Endpoint, flood = false, source?:ComInterface) {
 
-        if (!InterfaceManager.checkRedirectPermission(to)) return;
+        if (!InterfaceManager.checkRedirectPermission(to)) {
+            logger.error(to + " has no redirect permission")
+            return;
+        }
 
         // flooding instead of sending to a receiver
         if (flood) {
@@ -786,16 +790,17 @@ export class InterfaceManager {
         if (!comInterface) {
             return InterfaceManager.handleNoRedirectFound(to);
         }
+
         // error: loopback
-        else if (!source?.is_bidirectional_hub && source == comInterface) {
-            return InterfaceManager.handleNoRedirectFound(to);
-        }
-        // send
-        else {
-            logger.debug("sending to " + to + " (interface " + comInterface.type + " / " + comInterface.endpoint + ")");
-            return await comInterface.send(addressed_datex, to); // send to first available interface (todo)
+        if (source && !source?.is_bidirectional_hub && (source == comInterface || comInterface.isEqualSource?.(source, to))) {
+            // fallback to default interface
+            if (CommonInterface.default_interface && comInterface !== CommonInterface.default_interface) comInterface = CommonInterface.default_interface;
+            else return InterfaceManager.handleNoRedirectFound(to);
         }
 
+        // send
+        logger.debug("sending to " + to + " (interface " + comInterface.type + " / " + comInterface.endpoint + ")");
+        return await comInterface.send(addressed_datex, to); // send to first available interface (todo)
     }
 
     // flood to all currently directly connected nodes (only nodes!)

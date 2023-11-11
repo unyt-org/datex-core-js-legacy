@@ -21,6 +21,7 @@ export const DX_PERMISSIONS_R: unique symbol = Symbol("DX_PERMISSIONS_R");
 export const DX_PERMISSIONS_U: unique symbol = Symbol("DX_PERMISSIONS_U");
 export const DX_PERMISSIONS_X: unique symbol = Symbol("DX_PERMISSIONS_X");
 export const DX_IGNORE: unique symbol = Symbol("DX_IGNORE"); // ignore in DX (when serializing, only works for elements in array-like values)
+export const DX_PREEMPTIVE: unique symbol = Symbol("DX_PREEMPTIVE"); // used to override the default loading behaviour for a pointer (fetching by id). Can be an arbitrary DATEX Script that can be resolved with datex.get. Currently only used by the interface generator for JS modules.
 
 export const INIT_PROPS: unique symbol = Symbol("INIT_PROPS"); // key for init props function passed to constructor to initialize properties of pointer immediately
 

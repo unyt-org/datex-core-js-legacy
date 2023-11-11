@@ -1581,7 +1581,6 @@ export class Runtime {
 
     private static async checkDuplicate(header: dxb_header) {
         const identifier = `${header.sender}:${header.sid}:${header.inc}:${header.return_index}:${await Compiler.getValueHashString(header.routing?.receivers)}`;
-
         let isDuplicate = false;
         // is duplicate
         if (this.receivedMessagesHistory.includes(identifier)) {
@@ -1619,7 +1618,7 @@ export class Runtime {
         catch (e) {
             // e is [dxb_header, Error]
             //throw e
-            console.error(e[1])
+            console.error(e[1]??e)
             this.handleScopeError(e[0], e[1]);
             return;
         }
@@ -1658,6 +1657,20 @@ export class Runtime {
                 if (res.type == ProtocolDataType.TRACE || res.type == ProtocolDataType.TRACE_BACK) {
                     const trace = await this.executeDXBLocally(dxb, undefined, undefined, true);
                     if (to instanceof Endpoint && trace instanceof Array) {
+                        let destinationReached = false;
+                        let localHops = 0;
+                        
+                        for (const entry of trace) {
+                            if (entry.endpoint === to || entry.endpoint.main === to) {
+                                destinationReached = true;
+                            }
+                            if (entry.endpoint === Runtime.endpoint) localHops++;
+                            
+                            if ((destinationReached && localHops>2) || (!destinationReached && localHops>1)) {
+                                console.error(trace);
+                                throw new Error("Circular " + ProtocolDataTypesMap[res.type])
+                            }
+                        }
                         try {
                             await to.trace({header: res, source, trace})
                         }
@@ -1940,8 +1953,8 @@ export class Runtime {
         else if (header.type == ProtocolDataType.TRACE) {
             const sender = return_value[0].endpoint;
 
+            return_value.push({endpoint:Runtime.endpoint, destReached:true, interface: {type: scope.source?.type, description: scope.source?.description}, timestamp: new Date()});
             console.log("TRACE request from " + sender);
-            return_value.push({endpoint:Runtime.endpoint, interface: {type: scope.source?.type, description: scope.source?.description}, timestamp: new Date()});
 
             this.datexOut(["?", [return_value], {type:ProtocolDataType.TRACE_BACK, to:sender, return_index:header.return_index, encrypt:header.encrypted, sign:header.signed}], sender, header.sid, false);
         }

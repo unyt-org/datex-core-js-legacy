@@ -5347,8 +5347,19 @@ export class Compiler {
         return this.compileValue(value, {inserted_ptrs, collapse_pointers:deep_clone, collapse_injected_pointers:collapse_injected_pointers, collapse_first_inserted:collapse_first_inserted, no_create_pointers:no_create_pointers, keep_first_transform:keep_first_transform, no_duplicate_value_optimization}, add_command_end)
     }
 
+    /** also adds preemptive pointers */
+    static encodeValueAsync(value:any, inserted_ptrs?:Set<Pointer>, add_command_end = true, deep_clone = false, collapse_first_inserted = false, no_create_pointers = false, keep_first_transform = true, collapse_injected_pointers = false, no_duplicate_value_optimization = false):ArrayBuffer {
+        // add_command_end -> end_of_scope -> add ; at the end
+        return this.compileValue(value, {preemptive_pointer_init: true, inserted_ptrs, collapse_pointers:deep_clone, collapse_injected_pointers:collapse_injected_pointers, collapse_first_inserted:collapse_first_inserted, no_create_pointers:no_create_pointers, keep_first_transform:keep_first_transform, no_duplicate_value_optimization}, add_command_end)
+    }
+
     static encodeValueBase64(value:any, inserted_ptrs?:Set<Pointer>, add_command_end = true, deep_clone = false, collapse_first_inserted = false, no_create_pointers = false, keep_first_transform = true, collapse_injected_pointers = false):string {
         return arrayBufferToBase64(this.encodeValue(value, inserted_ptrs, add_command_end, deep_clone, collapse_first_inserted, no_create_pointers, keep_first_transform, collapse_injected_pointers));
+    }
+
+    /** also adds preemptive pointers */
+    static async encodeValueBase64Async(value:any, inserted_ptrs?:Set<Pointer>, add_command_end = true, deep_clone = false, collapse_first_inserted = false, no_create_pointers = false, keep_first_transform = true, collapse_injected_pointers = false):string {
+        return arrayBufferToBase64(await this.encodeValueAsync(value, inserted_ptrs, add_command_end, deep_clone, collapse_first_inserted, no_create_pointers, keep_first_transform, collapse_injected_pointers));
     }
 
     // creates a unique hash for a given value

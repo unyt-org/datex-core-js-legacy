@@ -129,6 +129,8 @@ export class Supranet {
                 }
                 catch {
                     logger.error("Could not determine endpoint instance (request error)");
+                    this.sayHelloToAllInterfaces();
+                    this.onConnect();
                 }
             }
         }

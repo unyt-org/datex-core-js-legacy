@@ -298,7 +298,7 @@ export class Endpoint extends Target {
 		const trace = previous?.trace ?? [];
 		trace.push({endpoint:Runtime.endpoint, interface: {type: previous?.source?.type, description: previous?.source?.description}, timestamp: new Date()});
 
-		const res = await Runtime.datexOut(['?', [trace], {type:previous?.header?.type ?? ProtocolDataType.TRACE, sign:false}], this, previous?.header?.sid, true, false, undefined, false, undefined, 60_000);
+		const res = await Runtime.datexOut(['?', [trace], {type:previous?.header?.type ?? ProtocolDataType.TRACE, sign:false}], this, previous?.header?.sid, true, false, undefined, false, undefined, 60_000, previous?.source);
 		return res;
 	}
 

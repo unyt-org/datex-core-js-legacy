@@ -134,10 +134,12 @@ export class Crypto {
 
     // returns the public verify + encrypt keys for an endpoint (from cache or from network)
     static getKeysForEndpoint(endpoint:Endpoint):Promise<[CryptoKey?, CryptoKey?]>|[CryptoKey?, CryptoKey?] {
-        endpoint = endpoint.main;
-        if (this.public_keys.has(endpoint)) return <[CryptoKey, CryptoKey]>this.public_keys.get(endpoint);
+        if (this.public_keys.has(endpoint) || this.public_keys.has(endpoint.main)) return <[CryptoKey, CryptoKey]>(this.public_keys.get(endpoint)||this.public_keys.get(endpoint.main));
         // keys not found, request from network
-        else return this.requestKeys(endpoint); 
+        else {
+            return this.requestKeys(endpoint.main)
+                .catch(() => this.requestKeys(endpoint))
+        }
     }
 
     static async getExportedKeysForEndpoint(endpoint:Endpoint):Promise<[ArrayBuffer?, ArrayBuffer?]> {
@@ -198,7 +200,7 @@ export class Crypto {
     
     // loads keys from network or cache
     static requestKeys(endpoint:Endpoint):Promise<[CryptoKey?, CryptoKey?]> {
-        
+        console.log("request keys ", endpoint)
         // already requesting/loading keys for this endpoint
         if (this.#waiting_key_requests.has(endpoint)) return <Promise<[CryptoKey, CryptoKey]>>this.#waiting_key_requests.get(endpoint);
 
@@ -227,7 +229,7 @@ export class Crypto {
                     }
                 }
                 catch (e) {
-                    reject(new Error("could not get keys from network"));
+                    reject(new Error("could not get keys for " + endpoint + " from network"));
                     this.#waiting_key_requests.delete(endpoint); // remove from key promises
                     return;
                 }
