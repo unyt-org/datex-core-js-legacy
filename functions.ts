@@ -4,7 +4,7 @@
  */
 
 
-import { AsyncTransformFunction, BooleanRef, CollapsedValue, CollapsedValueAdvanced, Decorators, INSERT_MARK, METADATA, MaybeObjectRef, MinimalJSRef, Pointer, Ref, RefOrValue, Runtime, SmartTransformFunction, TransformFunction, TransformFunctionInputs, handleDecoratorArgs, primitive } from "./datex_all.ts";
+import { AsyncTransformFunction, BooleanRef, CollapsedValue, CollapsedValueAdvanced, Decorators, INSERT_MARK, METADATA, MaybeObjectRef, MinimalJSRef, Pointer, Ref, RefLike, RefOrValue, Runtime, SmartTransformFunction, TransformFunction, TransformFunctionInputs, handleDecoratorArgs, primitive } from "./datex_all.ts";
 import { Datex } from "./mod.ts";
 import { IterableHandler } from "./utils/iterable-handler.ts";
 
@@ -21,7 +21,7 @@ import { IterableHandler } from "./utils/iterable-handler.ts";
  * y.val // 10
  * ```
  */
-export function always<const T,V extends TransformFunctionInputs>(transform:SmartTransformFunction<T>): CollapsedValueAdvanced<Pointer<T>, false, false, CollapsedValue<Pointer<T>>> // return signature from Value.collapseValue(Pointer.smartTransform())
+export function always<T>(transform:SmartTransformFunction<T>): MinimalJSRef<T> // return signature from Value.collapseValue(Pointer.smartTransform())
 /**
  * Shortcut for datex `always (...)`
  * @param script 
@@ -175,16 +175,14 @@ export function map<T, U, O extends 'array'|'map' = 'array'>(iterable: Iterable<
  * @param if_true value selected if true
  * @param if_false value selected if false
  */
-// export function toggle<T extends primitive>(value:Ref<boolean>, if_true:T, if_false:T):Pointer<T>
-export function toggle<T>(value:Ref<boolean>, if_true:T, if_false:T): CollapsedValueAdvanced<Pointer<T>, false, false, CollapsedValue<Pointer<T>>>
-export function toggle<T>(value:Ref<boolean>, if_true:T, if_false:T) {
+export function toggle<T>(value:RefLike<boolean>, if_true:T, if_false:T): MinimalJSRef<T> {
     return transform([value], v=>v?<any>if_true:<any>if_false, 
 	// dx transforms not working correctly (with uix)
 	/*`
     always (
         if (${Runtime.valueToDatexString(value)}) (${Runtime.valueToDatexString(if_true)}) 
         else (${Runtime.valueToDatexString(if_false)})
-    )`*/);
+    )`*/).js_value;
 }
 
 
@@ -199,7 +197,7 @@ export const select = toggle;
  * @param a input value
  * @param b input value
  */
-export function equals(a:unknown, b: unknown):Datex.Ref<boolean> {
+export function equals<T,V>(a:RefLike<T>|T, b: RefLike<V>|V): T extends V ? (V extends T ? Datex.Pointer<boolean> : Datex.Pointer<false>) : Datex.Pointer<false> {
     return transform([a, b], (a,b) =>  Datex.Ref.collapseValue(a, true, true) === Datex.Ref.collapseValue(b, true, true), 
 	// dx transforms not working correctly (with uix)
 		/*`always (${Runtime.valueToDatexString(a)} === ${Runtime.valueToDatexString(b)})`*/) as any;
@@ -212,7 +210,7 @@ export function equals(a:unknown, b: unknown):Datex.Ref<boolean> {
  * @param object the reference object
  * @returns 
  */
-export function selectProperty<K extends string|number, V>(property:Ref<K>, object:Readonly<Record<K, V>>):MinimalJSRef<V> {
+export function selectProperty<K extends string|number, V>(property:RefLike<K>, object:Readonly<Record<K, V>>):MinimalJSRef<V> {
     return <MinimalJSRef<V>> transform([property], (v)=><any>object[<K>v]);
 }
 

@@ -18,7 +18,7 @@ import { Logger } from "../utils/logger.ts";
 import { Endpoint, endpoint_name, IdEndpoint, LOCAL_ENDPOINT, Target, target_clause } from "../types/addressing.ts";
 import { context_kind, context_meta_getter, context_meta_setter, context_name } from "./legacy_decorators.ts";
 import { Type } from "../types/type.ts";
-import { getProxyFunction, getProxyStaticValue, Pointer, UpdateScheduler } from "../runtime/pointers.ts";
+import { getProxyFunction, getProxyStaticValue, ObjectRef, Pointer, UpdateScheduler } from "../runtime/pointers.ts";
 import { Error as DatexError, ValueError } from "../types/errors.ts";
 import { Function as DatexFunction } from "../types/function.ts";
 import { DatexObject } from "../types/object.ts";
@@ -38,6 +38,16 @@ const CONSTRUCT_OPTIONS = Symbol("CONSTRUCT_OPTIONS");
 // create metadata symbol
 if (!Symbol['metadata']) Symbol['metadata'] = Symbol('metadata');
 export const METADATA:unique symbol = Symbol['metadata'];
+
+
+// generate a instance of a JS class / DATEX Type by casting
+export function instance<T>(fromClass:{new(...params:any[]):T}, properties?:PartialRefOrValueObject<T>): T
+export function instance<T>(fromType:Type<T>, properties?:PartialRefOrValueObject<T>): T
+export function instance<T>(fromClassOrType:{new(...params:any[]):T}|Type<T>, properties?:PartialRefOrValueObject<T>): T {
+    if (fromClassOrType instanceof Type) return fromClassOrType.cast(properties);
+    else return Type.getClassDatexType(fromClassOrType).cast(properties)
+}
+
 
 /**
  * List of decorators
@@ -1146,13 +1156,16 @@ interface DatexClass<T extends Object = any> {
     room_id?: number;
 }
 
-type dc<T> = DatexClass<T> & T;
+type dc<T extends Record<string,any>&{new (...args:unknown[]):unknown}> = DatexClass<T> & T & ((struct:InstanceType<T>) => InstanceType<T>);
 
-export function datex_advanced<T>(_class:T) {
-    return <dc<T>> _class;
+export function datexClass<T extends Record<string,any>&{new (...args:unknown[]):unknown}>(_class:T) {
+    return <dc<ObjectRef<T>>> _class;
 }
 
-
+/**
+ * @deprecated use datexClass
+ */
+export const datex_advanced = datexClass;
 
 // extend a given class to create a auto-sync a class which autmatically creates synced objects (does not create a DATEX pseudo type configuration)
 // if no type is provided, <ext:ClassName> is created as type by default
@@ -1177,6 +1190,9 @@ export function proxyClass<T extends { new(...args: any[]): any;}>(original_clas
                 }
                 return instance;
             }
+        },
+        apply(target,_thisArg,argArray) {
+            return  Pointer.createOrGet(instance(target, argArray[0])).js_value
         },
         getPrototypeOf(target) {
             return original_class

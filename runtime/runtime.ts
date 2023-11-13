@@ -28,7 +28,7 @@ Symbol.prototype.toJSON = function(){return globalThis.String(this)}
 
 /***** imports */
 import { Compiler, compiler_options, PrecompiledDXB, ProtocolDataTypesMap, DatexResponse} from "../compiler/compiler.ts"; // Compiler functions
-import { DecimalRef, IntegerRef, Pointer, PointerProperty, RefOrValue, Ref, TextRef, BooleanRef, ObjectWithDatexValues, JSValueWith$, MinimalJSRef, ObjectRef} from "./pointers.ts";
+import { DecimalRef, IntegerRef, Pointer, PointerProperty, RefOrValue, Ref, TextRef, BooleanRef, ObjectWithDatexValues, JSValueWith$, MinimalJSRef, ObjectRef, RefLike} from "./pointers.ts";
 import { Endpoint, endpoints, IdEndpoint, LOCAL_ENDPOINT, Target, target_clause, WildcardTarget } from "../types/addressing.ts";
 import { RuntimePerformance } from "./performance_measure.ts";
 import { NetworkError, PermissionError, PointerError, RuntimeError, SecurityError, ValueError, Error as DatexError, CompilerError, TypeError, SyntaxError, AssertionError } from "../types/errors.ts";
@@ -71,6 +71,7 @@ import { JSTransferableFunction } from "../types/js-function.ts";
 import { createFunctionWithDependencyInjections } from "../types/function-utils.ts";
 import type { Blockchain } from "../network/blockchain_adapter.ts";
 import { AutoMap } from "../utils/auto_map.ts";
+import { Supranet } from "../network/supranet.ts";
 
 const mime = client_type === "deno" ? (await import("https://deno.land/x/mimetypes@v1.0.0/mod.ts")).mime : null;
 
@@ -287,7 +288,7 @@ export class Runtime {
         else {
             const keyVal = Ref.collapseValue(key, true, true);
             const value_available = !local_map[Runtime.ENV.LANG] || (keyVal in local_map[Runtime.ENV.LANG]); // in map or auto translate
-            const transformValues:Ref<string>[] = [PointerProperty.get(Runtime.ENV, 'LANG')];
+            const transformValues:RefLike<string>[] = [PointerProperty.get(Runtime.ENV, 'LANG')];
             if (key instanceof Ref) transformValues.push(key)
 
             const string_transform = Pointer.createTransform(transformValues, 
@@ -5079,26 +5080,29 @@ export class Runtime {
 
         // workaround using decompiler:
         // pre-extract all pointers from script and pre-fetch pointer origin online states
-        try {
-            const content = MessageLogger.decompile(SCOPE.buffer_views.buffer, false, false)
-            const origins = [
-                ...new Set(content.match(/\$((?:[A-Fa-f0-9]{2}|[xX][A-Fa-f0-9]){1,26})/gm)?.map(p => {
-                    try {
-                        return Pointer.getOriginFromPointerId(p.replace("$",""));
-                    }
-                    catch {}
-                }).filter(o => o && !(o.equals(Runtime.endpoint) || o.equals(SCOPE.sender))))
-            ];
-            if (origins.length > 1) {
-                logger.debug("pre-fetching online state for "+ origins.length + " endpoints")
-                await Promise.race([
-                    Promise.all(origins.map(origin => origin.isOnline())),
-                    new Promise(resolve => setTimeout(resolve, 10_000))
-                ])
+        if (Supranet.connected) {
+            try {
+                const content = MessageLogger.decompile(SCOPE.buffer_views.buffer, false, false)
+                const origins = [
+                    ...new Set(content.match(/\$((?:[A-Fa-f0-9]{2}|[xX][A-Fa-f0-9]){1,26})/gm)?.map(p => {
+                        try {
+                            return Pointer.getOriginFromPointerId(p.replace("$",""));
+                        }
+                        catch {}
+                    }).filter(o => o && !(o.equals(Runtime.endpoint) || o.equals(SCOPE.sender))))
+                ];
+                if (origins.length > 1) {
+                    logger.debug("pre-fetching online state for "+ origins.length + " endpoints", content)
+                    await Promise.race([
+                        Promise.all(origins.map(origin => origin.isOnline())),
+                        new Promise(resolve => setTimeout(resolve, 10_000))
+                    ])
+                }
             }
+            catch {}
         }
-        catch {}
-    
+        
+
         // loop through instructions
         while (true) {
 

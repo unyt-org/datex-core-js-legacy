@@ -1,6 +1,6 @@
-import { Datex } from "datex-core-legacy/mod.ts";
-import InterfaceManager, { CommonInterface } from "datex-core-legacy/network/client.ts";
-import { Target } from "datex-core-legacy/types/addressing.ts";
+import { Datex } from "../mod.ts";
+import InterfaceManager, { CommonInterface } from "../network/client.ts";
+import { Target } from "../types/addressing.ts";
 
 type ParentDocument = [Window] & {postMessage:(data:unknown,origin:string)=>void};
 
@@ -39,28 +39,29 @@ export class WindowCommunicationInterface extends CommonInterface<[Window, strin
 			this.logger.error("no Window provided for WindowCommunicationInterface");
 			return false;
 		}
-        globalThis.addEventListener("message", (event) => {
-            if (event.origin == this.otherOrigin) {
-                const data = event.data;
-
-                if (data instanceof ArrayBuffer) {
-                    InterfaceManager.handleReceiveBlock(data, this.endpoint, this);
-                }
-
-                else if (data?.type == "INIT") {
-                    this.endpoint = Target.get(data.endpoint) as Datex.Endpoint;
-
-                    // if in parent: send INIT to window after initialized
-                    if (this.window) this.sendInit();
-                }
-            }
-        })
-        
+        globalThis.addEventListener("message", this.onReceive);
         // if in sub window: send INIT to parent immediately
         if (this.parentDocument)
             this.sendInit();
 
         return true;
+    }
+
+    private onReceive = (event: MessageEvent) => {
+        if (event.origin == this.otherOrigin) {
+            const data = event.data;
+
+            if (data instanceof ArrayBuffer) {
+                InterfaceManager.handleReceiveBlock(data, this.endpoint, this);
+            }
+
+            else if (data?.type == "INIT") {
+                this.endpoint = Target.get(data.endpoint) as Datex.Endpoint;
+
+                // if in parent: send INIT to window after initialized
+                if (this.window) this.sendInit();
+            }
+        }
     }
 
     private sendInit() {

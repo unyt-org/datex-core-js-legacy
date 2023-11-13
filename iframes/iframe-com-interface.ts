@@ -46,23 +46,7 @@ export class IFrameCommunicationInterface extends CommonInterface<[HTMLIFrameEle
 			this.logger.error("no IFrame or Window provided for IFrameCommunicationInterface");
 			return false;
 		}
-        globalThis.addEventListener("message", (event) => {
-            if (event.origin == this.otherOrigin) {
-                const data = event.data;
-
-                if (data instanceof ArrayBuffer) {
-                    InterfaceManager.handleReceiveBlock(data, this.endpoint, this);
-                }
-
-                else if (data?.type == "INIT") {
-                    this.endpoint = Target.get(data.endpoint) as Datex.Endpoint;
-
-                    // if in parent: send INIT to iframe after initialized
-                    if (this.iframe) this.sendInit();
-                }
-            }
-        
-        })
+        globalThis.addEventListener("message", this.onReceive);
         
         // if in ifram: send INIT to parent immediately
         if (this.parentDocument)
@@ -71,12 +55,28 @@ export class IFrameCommunicationInterface extends CommonInterface<[HTMLIFrameEle
         return true;
     }
 
+    onReceive = (event: MessageEvent) => {
+        if (event.origin == this.otherOrigin) {
+            const data = event.data;
+            if (data instanceof ArrayBuffer) {
+                InterfaceManager.handleReceiveBlock(data, this.endpoint, this);
+            }
+            else if (data?.type == "INIT") {
+                this.endpoint = Target.get(data.endpoint) as Datex.Endpoint;
+
+                // if in parent: send INIT to iframe after initialized
+                if (this.iframe) this.sendInit();
+            }
+        }
+        
+    }
+
     private sendInit() {
         this.other.postMessage({type:"INIT", endpoint:Datex.Runtime.endpoint.toString()}, this.otherOrigin);
     }
 
     public override disconnect() {
-        
+        globalThis.removeEventListener("message", this.onReceive);
     }
 
     get other() {

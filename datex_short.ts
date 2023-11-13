@@ -1,7 +1,7 @@
 
 // shortcut functions
 // import { Datex } from "./datex.ts";
-import { baseURL, Runtime, PrecompiledDXB, Type, Pointer, Ref, PointerProperty, primitive, any_class, Target, IdEndpoint, TransformFunctionInputs, AsyncTransformFunction, TransformFunction, TextRef, Markdown, DecimalRef, BooleanRef, IntegerRef, MinimalJSRef, RefOrValue, PartialRefOrValueObject, datex_meta, ObjectWithDatexValues, Compiler, endpoint_by_endpoint_name, endpoint_name, Storage, compiler_scope, datex_scope, DatexResponse, target_clause, ValueError, logger, Class, getUnknownMeta, Endpoint, INSERT_MARK, CollapsedValueAdvanced, CollapsedValue, SmartTransformFunction, compiler_options, activePlugins, METADATA, handleDecoratorArgs, RefOrValueObject, PointerPropertyParent, InferredPointerProperty } from "./datex_all.ts";
+import { baseURL, Runtime, PrecompiledDXB, Type, Pointer, Ref, PointerProperty, primitive, any_class, Target, IdEndpoint, TransformFunctionInputs, AsyncTransformFunction, TransformFunction, TextRef, Markdown, DecimalRef, BooleanRef, IntegerRef, MinimalJSRef, RefOrValue, PartialRefOrValueObject, datex_meta, ObjectWithDatexValues, Compiler, endpoint_by_endpoint_name, endpoint_name, Storage, compiler_scope, datex_scope, DatexResponse, target_clause, ValueError, logger, Class, getUnknownMeta, Endpoint, INSERT_MARK, CollapsedValueAdvanced, CollapsedValue, SmartTransformFunction, compiler_options, activePlugins, METADATA, handleDecoratorArgs, RefOrValueObject, PointerPropertyParent, InferredPointerProperty, RefLike } from "./datex_all.ts";
 
 /** make decorators global */
 import {property as _property, sync as _sync, endpoint as _endpoint, template as _template, jsdoc as _jsdoc} from "./datex_all.ts";
@@ -12,6 +12,8 @@ import { AssertionError } from "./types/errors.ts";
 import { getCallerFile, getCallerInfo, getMeta } from "./utils/caller_metadata.ts";
 import { eternals, getLazyEternal, waitingEternals, waitingLazyEternals } from "./utils/eternals.ts";
 
+import {instance} from "./js_adapter/js_class_adapter.ts";
+export {instance} from "./js_adapter/js_class_adapter.ts";
 
 declare global {
 	const property: typeof _property;
@@ -214,27 +216,19 @@ export async function script(dx:string|TemplateStringsArray|PrecompiledDXB, data
 }
 
 
-// generate a instance of a JS class / DATEX Type by casting
-export function instance<T>(fromClass:{new(...params:any[]):T}, properties?:PartialRefOrValueObject<T>): T
-export function instance<T>(fromType:Type<T>, properties?:PartialRefOrValueObject<T>): T
-export function instance<T>(fromClassOrType:{new(...params:any[]):T}|Type<T>, properties?:PartialRefOrValueObject<T>): T {
-    if (fromClassOrType instanceof Type) return fromClassOrType.cast(properties);
-    else return Type.getClassDatexType(fromClassOrType).cast(properties)
-}
-
 // generate a pointer for an object and returns the proxified object or the primitive pointer
 /**
  * Returns a pointer property (live ref that points to the property of a Map or Object)
  * @param parentValue Map or Object
  * @param property property name
  */
-export function pointer<Key, Parent extends PointerPropertyParent<Key,unknown>>(parentValue:Ref<Parent>, property:Key): PointerProperty<Parent extends Map<unknown, infer MV> ? MV : Parent[Key&keyof Parent]> // defined 2x with Ref<Parent> and Parent for correct type inference
+export function pointer<Key, Parent extends PointerPropertyParent<Key,unknown>>(parentValue:RefLike<Parent>, property:Key): PointerProperty<Parent extends Map<unknown, infer MV> ? MV : Parent[Key&keyof Parent]> // defined 2x with Ref<Parent> and Parent for correct type inference
 export function pointer<Key, Parent extends PointerPropertyParent<Key,unknown>>(parentValue:Parent, property:Key): PointerProperty<Parent extends Map<unknown, infer MV> ? MV : Parent[Key&keyof Parent]>
 /**
  * Creates a new pointer from a value
  * @param value 
  */
-export function pointer<T>(value:Ref<T>): MinimalJSRef<T> // defined 2x with Ref<T> and T for correct type inference
+export function pointer<T>(value:RefLike<T>): MinimalJSRef<T> // defined 2x with Ref<T> and T for correct type inference
 export function pointer<T>(value:T): MinimalJSRef<T>
 export function pointer<T>(value:RefOrValue<T>, property?:unknown): unknown {
 

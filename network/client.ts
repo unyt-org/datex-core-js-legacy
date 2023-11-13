@@ -557,7 +557,7 @@ class WebsocketClientInterface extends CommonInterface {
                 // Connection opened
                 this.socket!.addEventListener('open', () => {
                     this.connecting = false;
-                    if (this.protocol == 'ws' && this.host !== "localhost") this.logger.warn(`unsecure websocket connection to ${this.host}`)
+                    if (this.protocol == 'ws' && !this.host.match(/localhost(:\d+)?/)) this.logger.warn(`unsecure websocket connection to ${this.host}`)
                     resolve(true);
                 });
 
@@ -708,7 +708,7 @@ export class InterfaceManager {
     }
 
     // create a new connection with a interface type (e.g. websocket, relayed...)
-    static async connect(channel_type:string, endpoint?:Endpoint, init_args?:any[], set_as_default_interface = true):Promise<boolean> {
+    static async connect(channel_type:string, endpoint?:Endpoint, init_args?:any[], set_as_default_interface = true, callback?: (interf: ComInterface, connected: boolean)=>void):Promise<boolean> {
         this.logger.debug("connecting via interface: " + channel_type);
 
         await this.init();
@@ -727,6 +727,8 @@ export class InterfaceManager {
 
         this.enable();
 
+        callback?.(c_interface, res);
+
         return res
     }
 
@@ -737,9 +739,23 @@ export class InterfaceManager {
         this.active_interfaces.add(i)
     }
     // remove an interface from the list
-    static removeInterface(i: ComInterface) {
+    static async removeInterface(i: ComInterface) {
         if (!this.active_interfaces) this.active_interfaces = Pointer.createOrGet(new Set<ComInterface>()).js_value;
         this.active_interfaces.delete(i)
+
+        for (const interfaces of CommonInterface.endpoint_connection_points.values()) {
+            interfaces.delete(i)
+        }
+        console.log(CommonInterface.endpoint_connection_points)
+
+        for (const interfaces of CommonInterface.indirect_endpoint_connection_points.values()) {
+            interfaces.delete(i)
+        }
+        for (const interfaces of CommonInterface.virtual_endpoint_connection_points.values()) {
+            interfaces.delete(i)
+        }
+     
+        await i.disconnect()
     }
 
     // disconnected
