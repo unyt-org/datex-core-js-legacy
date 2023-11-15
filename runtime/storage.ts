@@ -259,23 +259,25 @@ export class Storage {
             for (const [key, val] of Storage.cache) {
                 try {
                     c++;
-                    this.setItem(key, val, true, location);
-                } catch (e) {console.error(e)}
+                    const res = this.setItem(key, val, true, location);
+                    if (res instanceof Promise) res.catch(()=>{})
+                } catch (e) {}
             }
 
             // update pointers
             for (const ptr of this.#storage_active_pointers) {
                 try {
                     c++;
-                    this.setPointer(ptr, true, location);
-                } catch (e) {console.error(e)}
+                    const res = this.setPointer(ptr, true, location);
+                    if (res instanceof Promise) res.catch(()=>{})
+                } catch (e) {}
             }
             for (const id of this.#storage_active_pointer_ids) {
                 try {
                     c++;
                     const ptr = Pointer.get(id);
                     if (ptr?.value_initialized) this.setPointer(ptr, true, location);
-                } catch (e) {console.error(e)}
+                } catch (e) {}
             }
 
             this.updateSaveTime(location); // last full backup to this storage location

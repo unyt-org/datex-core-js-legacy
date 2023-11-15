@@ -80,16 +80,21 @@ export class Supranet {
         this.#connected = false;
         endpoint = await this.init(endpoint, local_cache, sign_keys, enc_keys)
 
+        const shouldSwitchInstance = this.shouldSwitchInstance(endpoint);
+
+        // switching from potentially instance to another instance, make sure current endpoint is not an already active instance
+        if (shouldSwitchInstance && endpoint !== endpoint.main) Runtime.init(endpoint.main);
+
         // already connected to endpoint during init
         if (this.#connected && endpoint === Runtime.endpoint) {
-            const switched = await this.handleSwitchToInstance()
+            const switched = shouldSwitchInstance ? await this.handleSwitchToInstance() : false;
             logger.success("Connected to the supranet as " + endpoint)
             if (!switched) this.sayHelloToAllInterfaces();
             return true;
         }
 
-        const connected = await this._connect(via_node, !this.shouldSwitchInstance());
-        await this.handleSwitchToInstance()
+        const connected = await this._connect(via_node, !shouldSwitchInstance);
+        if (shouldSwitchInstance) await this.handleSwitchToInstance()
 
         return connected;
     }
@@ -100,9 +105,9 @@ export class Supranet {
         }
     }
 
-    private static shouldSwitchInstance() {
+    private static shouldSwitchInstance(endpoint: Endpoint) {
         // return false;
-        return Runtime.endpoint.main === Runtime.endpoint && Runtime.Blockchain
+        return (endpoint.main === endpoint || Runtime.getActiveLocalStorageEndpoints().includes(endpoint)) && Runtime.Blockchain
     }
 
     /**
@@ -110,30 +115,47 @@ export class Supranet {
      * @returns true if switched to new instance (and hello sent)
      */
     private static async handleSwitchToInstance() {
-        if (this.shouldSwitchInstance()) {
-            if (!Runtime.Blockchain) {
-                logger.error("Cannot determine endpoint instance, blockchain not available")
+        if (!Runtime.Blockchain) {
+            logger.error("Cannot determine endpoint instance, blockchain not available")
+        }
+        else {
+            // existing locally available endpoint instances -> hashes
+            const hashes = await Storage.loadOrCreate("Datex.Supranet.ENDPOINT_INSTANCE_HASHES", () => new Map<Endpoint, string>())
+            
+            logger.debug("available cached instances: " + [...hashes.keys()].map(e=>e.toString()).join(", "))
+
+            const activeEndpoints = Runtime.getActiveLocalStorageEndpoints();
+            let hash: string|undefined = undefined;
+            let endpoint = Runtime.endpoint;
+            for (const [storedEndpoint, storedHash] of hashes) {
+                if (!activeEndpoints.includes(storedEndpoint)) {
+                    hash = storedHash;
+                    endpoint = storedEndpoint;
+                    break;
+                }
             }
-            else {
-                const hash = (await Storage.loadOrCreate("Datex.Supranet.ENDPOINT_INSTANCE_HASH", () => Math.random().toString(36).substring(2,18)))
-                try {
-                    const instance = (await Runtime.Blockchain.getEndpointInstance(Runtime.endpoint, hash.toString()))!;
-                    // set endpoint to instace
-                    Runtime.init(instance);
-                    endpoint_config.endpoint = instance;
-                    endpoint_config.save();
-                    this.sayHelloToAllInterfaces();
-                    logger.success("Switched to endpoint instance " + instance)
-                    this.onConnect();
-                    return true;
-                }
-                catch {
-                    logger.error("Could not determine endpoint instance (request error)");
-                    this.sayHelloToAllInterfaces();
-                    this.onConnect();
-                }
+            if (!hash) hash = Math.random().toString(36).substring(2,18);
+
+            try {
+                const instance = (await Runtime.Blockchain.getEndpointInstance(endpoint, hash))!;
+                // makes sure hash is set in cache
+                hashes.set(instance, hash);
+                // set endpoint to instace
+                Runtime.init(instance);
+                endpoint_config.endpoint = instance;
+                endpoint_config.save();
+                this.sayHelloToAllInterfaces();
+                logger.success("Switched to endpoint instance " + instance)
+                this.onConnect();
+                return true;
+            }
+            catch {
+                logger.error("Could not determine endpoint instance (request error)");
+                this.sayHelloToAllInterfaces();
+                this.onConnect();
             }
         }
+        
         return false;
     }
 
@@ -156,10 +178,7 @@ export class Supranet {
         // Crypto.validateOwnKeysAgainstNetwork();
 
         // send goodbye on process close
-        const byeDatex = <ArrayBuffer> await Datex.Compiler.compile("", [], {type:Datex.ProtocolDataType.GOODBYE, sign:true, flood:true, __routing_ttl:10})
-        globalThis.addEventListener("beforeunload", () => {
-            sendDatexViaHTTPChannel(byeDatex);
-        })
+        Runtime.goodbyeMessage = <ArrayBuffer> await Datex.Compiler.compile("", [], {type:Datex.ProtocolDataType.GOODBYE, sign:true, flood:true, __routing_ttl:10})
 
         return connected;
     }
@@ -338,6 +357,7 @@ export class Supranet {
     public static sayHello(node:Endpoint = Runtime.main_node){
         // TODO REPLACE, only temporary as placeholder to inform router about own public keys
         const keys = Crypto.getOwnPublicKeysExported();
+        // console.warn("saying hello " + Runtime.endpoint)
         Runtime.datexOut(['?', [keys], {type:ProtocolDataType.HELLO, sign:false, flood:true, __routing_ttl:10}], undefined, undefined, false, false)
         // send with plain endpoint id as sender
         // if (Runtime.endpoint.id_endpoint !== Runtime.endpoint) Runtime.datexOut(['?', [keys], {type:ProtocolDataType.HELLO, sign:false, flood:true, force_id:true, __routing_ttl:1}], undefined, undefined, false, false)

@@ -4,7 +4,7 @@
 import { baseURL, Runtime, PrecompiledDXB, Type, Pointer, Ref, PointerProperty, primitive, any_class, Target, IdEndpoint, TransformFunctionInputs, AsyncTransformFunction, TransformFunction, TextRef, Markdown, DecimalRef, BooleanRef, IntegerRef, MinimalJSRef, RefOrValue, PartialRefOrValueObject, datex_meta, ObjectWithDatexValues, Compiler, endpoint_by_endpoint_name, endpoint_name, Storage, compiler_scope, datex_scope, DatexResponse, target_clause, ValueError, logger, Class, getUnknownMeta, Endpoint, INSERT_MARK, CollapsedValueAdvanced, CollapsedValue, SmartTransformFunction, compiler_options, activePlugins, METADATA, handleDecoratorArgs, RefOrValueObject, PointerPropertyParent, InferredPointerProperty, RefLike } from "./datex_all.ts";
 
 /** make decorators global */
-import {property as _property, sync as _sync, endpoint as _endpoint, template as _template, jsdoc as _jsdoc} from "./datex_all.ts";
+import { validate as _validate, property as _property, sync as _sync, endpoint as _endpoint, template as _template, jsdoc as _jsdoc} from "./datex_all.ts";
 import { effect as _effect, always as _always, toggle as _toggle, map as _map, equals as _equals, selectProperty as _selectProperty, not as _not } from "./functions.ts";
 export * from "./functions.ts";
 import { NOT_EXISTING, DX_SLOTS, SLOT_GET, SLOT_SET } from "./runtime/constants.ts";
@@ -17,6 +17,8 @@ export {instance} from "./js_adapter/js_class_adapter.ts";
 
 declare global {
 	const property: typeof _property;
+    const validate: typeof _validate;
+
     const jsdoc: typeof _jsdoc;
 	const sync: typeof _sync;
 	const endpoint: typeof _endpoint;
@@ -37,6 +39,9 @@ declare global {
 
 // @ts-ignore global
 globalThis.property = _property;
+// @ts-ignore global
+globalThis.validate = _validate;
+
 // @ts-ignore global
 globalThis.sync = _sync;
 // @ts-ignore global

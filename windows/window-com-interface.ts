@@ -73,7 +73,7 @@ export class WindowCommunicationInterface extends CommonInterface<[Window, strin
     }
 
     public override disconnect() {
-        
+        globalThis.removeEventListener("message", this.onReceive);
     }
 
     get other() {

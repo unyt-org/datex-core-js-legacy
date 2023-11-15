@@ -21,12 +21,13 @@ export class StorageWeakMap<K,V> {
 	#prefix?: string;
 
 	constructor(){
-		Pointer.proxifyValue(this)
+		// TODO: does not work with eternal pointers!
+		// Pointer.proxifyValue(this)
 	}
 
 
 	static async from<K,V>(entries: readonly (readonly [K, V])[]){
-		const map = new StorageWeakMap<K,V>();
+		const map = $$(new StorageWeakMap<K,V>());
 		for (const [key, value] of entries) await map.set(key, value);
 		return map;
 	}
@@ -101,7 +102,7 @@ export class StorageWeakMap<K,V> {
 export class StorageMap<K,V> extends StorageWeakMap<K,V> {
 
 	static override async from<K,V>(entries: readonly (readonly [K, V])[]){
-		const map = new StorageMap<K,V>();
+		const map = $$(new StorageMap<K,V>());
 		for (const [key, value] of entries) await map.set(key, value);
 		return map;
 	}

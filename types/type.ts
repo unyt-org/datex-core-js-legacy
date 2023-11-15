@@ -184,7 +184,7 @@ export class Type<T = any> extends ExtensibleFunction {
                     assign_to_object[key] = value[key];
                 }
                 // check value type
-                else if (key in value && required_type.matches(value[key])) {
+                else if (key in value && Type.matches(value[key], required_type)) {
                     assign_to_object[key] = value[key];
                 }
                 // JS number->bigint conversion
@@ -405,7 +405,7 @@ export class Type<T = any> extends ExtensibleFunction {
     public isPropertyValueAllowed(property:any, value:any) {
         if (!this.#template) return true;
         else if (typeof property !== "string") return true; // only strings handled by templates
-        else return (!this.#template[property] || this.#template[property].matches?.(value)) // check if value allowed
+        else return (!this.#template[property] || Type.matches(value, this.#template[property])) // check if value allowed
     }
 
     // get type for value in template
@@ -640,8 +640,8 @@ export class Type<T = any> extends ExtensibleFunction {
 
     // type check (type is a subtype of matches_type)
     // TODO: swap arguments
-    public static matchesType(type:type_clause, against: type_clause) {
-        return Logical.matches(type, against, Type);
+    public static matchesType(type:type_clause, against: type_clause, assertionValue?:any) {
+        return Logical.matches(type, against, Type, assertionValue);
     }
 
 
@@ -669,11 +669,10 @@ export class Type<T = any> extends ExtensibleFunction {
             return value.length <= type.parameters[0];
         }
 
-        return Type.matchesType(Type.ofValue(value), type);
+        return Type.matchesType(Type.ofValue(value), type, value);
     }
 
     public static extends(type:Type, extends_type:type_clause){
-        console.log("extemds",type,extends_type)
         return type!=extends_type && Type.matchesType(type, extends_type);
     }
 

@@ -746,7 +746,6 @@ export class InterfaceManager {
         for (const interfaces of CommonInterface.endpoint_connection_points.values()) {
             interfaces.delete(i)
         }
-        console.log(CommonInterface.endpoint_connection_points)
 
         for (const interfaces of CommonInterface.indirect_endpoint_connection_points.values()) {
             interfaces.delete(i)

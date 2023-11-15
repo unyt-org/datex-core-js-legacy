@@ -72,6 +72,7 @@ import { createFunctionWithDependencyInjections } from "../types/function-utils.
 import type { Blockchain } from "../network/blockchain_adapter.ts";
 import { AutoMap } from "../utils/auto_map.ts";
 import { Supranet } from "../network/supranet.ts";
+import { sendDatexViaHTTPChannel } from "../network/datex-http-channel.ts";
 
 const mime = client_type === "deno" ? (await import("https://deno.land/x/mimetypes@v1.0.0/mod.ts")).mime : null;
 
@@ -1000,7 +1001,7 @@ export class Runtime {
                 if (timeout > 0 && Number.isFinite(timeout)) {
                     setTimeout(()=>{
                         // reject if response wasn't already received (might still be processed, and resolve not yet called)
-                        if (!this.callbacks_by_sid.get(unique_sid)?.[2]) reject(new NetworkError("DATEX request timeout after "+timeout+"ms: " + unique_sid +  " to " + Runtime.valueToDatexStringExperimental(to)));
+                        if (!this.callbacks_by_sid.get(unique_sid)?.[2]) reject(new NetworkError("DATEX request timeout after "+timeout+"ms: " + unique_sid +  " to " + Runtime.valueToDatexString(to)));
                     }, timeout);
                 }
             }
@@ -1066,6 +1067,74 @@ export class Runtime {
         }
     }
 
+    private static ownLastEndpoint?: Endpoint;
+    private static lastEndpointUnloadHandler?: EventListener
+
+    static goodbyeMessage?: ArrayBuffer // is set by supranet when connected
+
+    /**
+     * Adds endpoint to localStorage active lists
+     * Handles beforeunload (sending GOODBYE)
+     * @param endpoint 
+     */
+    static addActiveEndpoint(endpoint:Endpoint) {
+        let endpoints:string[] = [];
+        try {
+            endpoints = JSON.parse(localStorage['active_endpoints']) as string[]
+        }
+        catch {
+            localStorage['active_endpoints'] = ""
+        }
+        // remove previous local endpoint
+        if (this.ownLastEndpoint && endpoints.includes(this.ownLastEndpoint?.toString())) endpoints.splice(endpoints.indexOf(this.ownLastEndpoint?.toString()), 1);
+        
+        // remove previous goodbye
+        if (this.lastEndpointUnloadHandler) {
+            globalThis.removeEventListener("beforeunload", this.lastEndpointUnloadHandler)
+            this.lastEndpointUnloadHandler = undefined;
+        }
+
+        // endpoint already in active list (added from other tab?)
+        if (endpoints.includes(endpoint.toString())) {
+            logger.warn("Endpoint " + endpoint + " is already active");
+        }
+        // add endpoint to active list
+        else {
+            endpoints.push(endpoint.toString())
+            this.ownLastEndpoint = endpoint;
+
+            this.lastEndpointUnloadHandler = () => {
+                // send goodbye
+                if (this.goodbyeMessage) sendDatexViaHTTPChannel(this.goodbyeMessage);
+                try {
+                    // remove from localstorage list
+                    endpoints = JSON.parse(localStorage['active_endpoints']) as string[]
+                    if (endpoints.includes(endpoint?.toString())) endpoints.splice(endpoints.indexOf(endpoint?.toString()), 1);
+                    localStorage['active_endpoints'] = JSON.stringify(endpoints)
+                }
+                catch {
+                    localStorage['active_endpoints'] = ""
+                }
+            }
+            
+            // delete endpoint on exit
+            globalThis.addEventListener("beforeunload", this.lastEndpointUnloadHandler);
+        }
+
+        localStorage['active_endpoints'] = JSON.stringify(endpoints)
+    }
+
+    static getActiveLocalStorageEndpoints() {
+        try {
+            const endpoints = JSON.parse(localStorage['active_endpoints']) as string[]
+            return endpoints.map((e) => Target.get(e) as Endpoint).filter((e) => e!==this.ownLastEndpoint)
+        }
+        catch {
+            localStorage['active_endpoints'] = ""
+            return []
+        }
+    }
+
     /**
      * Creates default static scopes
      * + other async initializations
@@ -1073,6 +1142,10 @@ export class Runtime {
      * @returns 
      */
     public static init(endpoint?:Endpoint) {
+
+        // save all currently active endpoints for shared local storage (multiple tabs)
+        if (endpoint && endpoint != LOCAL_ENDPOINT && client_type == "browser") this.addActiveEndpoint(endpoint)
+
 
         if (endpoint) Runtime.endpoint = endpoint;
 
@@ -1581,7 +1654,7 @@ export class Runtime {
     private static receivedMessagesHistory:string[] = []
 
     private static async checkDuplicate(header: dxb_header) {
-        const identifier = `${header.sender}:${header.sid}:${header.inc}:${header.return_index}:${await Compiler.getValueHashString(header.routing?.receivers)}`;
+        const identifier = `${header.type}:${header.sender}:${header.sid}:${header.inc}:${header.return_index}:${await Compiler.getValueHashString(header.routing?.receivers)}`;
         let isDuplicate = false;
         // is duplicate
         if (this.receivedMessagesHistory.includes(identifier)) {

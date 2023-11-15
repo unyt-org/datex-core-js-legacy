@@ -291,6 +291,12 @@ export function type(...args:any[]): any {
     return handleDecoratorArgs(args, Decorators.type);
 }
 
+export function validate(assertion:(val:any)=>boolean):any
+export function validate(...args:any[]): any {
+    return handleDecoratorArgs(args, Decorators.validate, true);
+}
+
+
 export function from(type:string|Type):any
 export function from(...args:any[]): any {
     return handleDecoratorArgs(args, Decorators.from);

@@ -334,7 +334,7 @@ export class Function<T extends (...args: any) => any = (...args: any) => any> e
                     if (Number(key.toString()) < 0) logger.warn(Datex.Pointer.getByValue(this)?.idString() + ": Invalid function arguments: '" + key + "'");
                     else if (Number(key.toString()) >= this.params.size) {
                         // ignore if no params (TODO: just workaround to prevent errors)
-                        if (this.params.size !== 0) logger.warn(Datex.Pointer.getByValue(this)?.idString()+": Maximum number of function arguments is " + (this.params.size));
+                        // if (this.params.size !== 0) logger.warn(Datex.Pointer.getByValue(this)?.idString()+": Maximum number of function arguments is " + (this.params.size));
                     }
                     params[Number(key.toString())] = val;
                 }

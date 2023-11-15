@@ -27,6 +27,7 @@ import { DX_PERMISSIONS, DX_TYPE, INIT_PROPS } from "../runtime/constants.ts";
 import { type Class } from "../utils/global_types.ts";
 import { Conjunction, Disjunction, Logical } from "../types/logic.ts";
 import { client_type } from "../utils/constants.ts";
+import { Assertion } from "../types/assertion.ts";
 
 const { Reflect: MetadataReflect } = client_type == 'deno' ? await import("https://deno.land/x/reflect_metadata@v0.1.12/mod.ts") : {Reflect};
 
@@ -322,6 +323,18 @@ export class Decorators {
             else setMetadata(Decorators.PROPERTY, params?.[0] ?? name)
         }
 
+    }
+
+     /** @validate: add type assertion function */
+     static validate(value:any, name:context_name, kind:context_kind, is_static:boolean, is_private:boolean, setMetadata:context_meta_setter, getMetadata:context_meta_getter, params:[((value:any)=>boolean)?] = []) {
+        if (kind != "field" && kind != "getter" && kind != "setter" && kind != "method") logger.error("Invalid use of @validate decorator");
+        else {
+            if (typeof params[0] !== "function") logger.error("Invalid @validate decorator value, must be a function");
+            else {
+                const assertionType = new Conjunction(Assertion.get(undefined, params[0], false));
+                setMetadata(Decorators.FORCE_TYPE, assertionType)
+            }
+        }
     }
 
     /** @jsdoc parse jsdoc comments and use as docs for DATEX type*/
@@ -1158,9 +1171,21 @@ interface DatexClass<T extends Object = any> {
 
 type dc<T extends Record<string,any>&{new (...args:unknown[]):unknown}> = DatexClass<T> & T & ((struct:InstanceType<T>) => InstanceType<T>);
 
+/**
+ * Workaround to enable correct @sync class typing, until new decorators support it.
+ * Usage:
+ * ```ts
+ * @sync class _MyClass {}
+ * export const MyClass = datexClass(_MyClass)
+ * export type MyClass = datexClassType<typeof _MyClass>
+ * ```
+ */
 export function datexClass<T extends Record<string,any>&{new (...args:unknown[]):unknown}>(_class:T) {
     return <dc<ObjectRef<T>>> _class;
 }
+
+export type datexClassType<T extends abstract new (...args: any) => any> = ObjectRef<InstanceType<T>>
+
 
 /**
  * @deprecated use datexClass

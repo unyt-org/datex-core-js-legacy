@@ -17,11 +17,12 @@ export class StorageSet<V> {
 	#prefix?: string;
 
 	constructor(){
-		Pointer.proxifyValue(this)
+		// TODO: does not work with eternal pointers!
+		// Pointer.proxifyValue(this)
 	}
 
 	static async from<V>(values: readonly V[]) {
-		const set = new StorageSet<V>();
+		const set = $$(new StorageSet<V>());
 		for (const v of values) await set.add(v);
 		return set;
 	}

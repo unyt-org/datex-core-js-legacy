@@ -61,7 +61,7 @@ export class Logical<T> extends Set<T> {
 
 	// value clause matches against other clause
 	// if no atomic_class is provided, the first value clause literal is used to determine a atomic class
-    public static matches<T>(value:clause<T>, against:clause<T>, atomic_class?:Class<T>&LogicalComparator<T>): boolean {
+    public static matches<T>(value:clause<T>, against:clause<T>, atomic_class?:Class<T>&LogicalComparator<T>, assertionValue = value): boolean {
 
 		// TODO: empty - does not match?
 		if (against === undefined) return false;
@@ -111,11 +111,11 @@ export class Logical<T> extends Set<T> {
 		}
         
 		// default
-		return this.matchesSingle(<T>Ref.collapseValue(value, true, true), against, atomic_class);
+		return this.matchesSingle(<T>Ref.collapseValue(value, true, true), against, atomic_class, assertionValue);
         
     }
 
-    private static matchesSingle<T>(atomic_value:T, against: clause<T>, atomic_class:Class<T>&LogicalComparator<T>): boolean {
+    private static matchesSingle<T>(atomic_value:T, against: clause<T>, atomic_class:Class<T>&LogicalComparator<T>, assertionValue = atomic_value): boolean {
 
 		atomic_value = <T> Datex.Ref.collapseValue(atomic_value, true, true);
 		against = <clause<T>> Datex.Ref.collapseValue(against, true, true);
@@ -128,25 +128,25 @@ export class Logical<T> extends Set<T> {
 			//  TODO:empty disjunction == any?
 			if (against.size == 0) return true;
             for (const t of against) {
-                if (this.matchesSingle(atomic_value, t, atomic_class)) return true; // any type matches
+                if (this.matchesSingle(atomic_value, t, atomic_class, assertionValue)) return true; // any type matches
             }
             return false;
         }
         // and
         if (against instanceof Conjunction) {
             for (const t of against) {
-                if (!this.matchesSingle(atomic_value, t, atomic_class)) return false; // any type does not match
+                if (!this.matchesSingle(atomic_value, t, atomic_class, assertionValue)) return false; // any type does not match
             }
             return true;
         }
         // not
         if (against instanceof Negation) {
-            return !this.matchesSingle(atomic_value, against.not(), atomic_class)
+            return !this.matchesSingle(atomic_value, against.not(), atomic_class, assertionValue)
         }
 
 		// assertion
 		if (against instanceof Assertion) {
-			const res = against.assert(atomic_value, undefined, true);
+			const res = against.assert(assertionValue, undefined, true);
 			if (res instanceof Promise) throw new RuntimeError("async assertion cannot be evaluated in logical connective");
 			return res
 		}
