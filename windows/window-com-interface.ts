@@ -29,9 +29,8 @@ export class WindowCommunicationInterface extends CommonInterface<[Window, strin
         }
         // is the child 
         else if (this.initial_arguments[0]) {
-            this.parentDocument = this.initial_arguments[0]
-            this.otherOrigin = new URL(document.referrer).origin;
-        
+            this.parentDocument = this.initial_arguments[0];
+            this.otherOrigin = this.initial_arguments[1] ?? new URL(document.referrer).origin;
             this.logger.info("initializing as child window, parent window origin: " + this.otherOrigin)
 
         }
