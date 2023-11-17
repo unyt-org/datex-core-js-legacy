@@ -77,7 +77,7 @@ export async function get<T=unknown>(dx:string|URL|Endpoint, assert_type?:Type<T
     }
 
     // escape urls
-    if (dx.toString().startsWith('http://') || dx.toString().startsWith('https://') || dx.toString().startsWith('file://') || dx.toString().startsWith('blob:http://') || dx.toString().startsWith('blob:https://')) dx = `url '${dx}'`;
+    if (dx.toString().startsWith('http://') || dx.toString().startsWith('https://') || dx.toString().startsWith('file://') || dx.toString().startsWith('blob:http://') || dx.toString().startsWith('blob:https://')) dx = `url "${dx}"`;
 
     const res = <T> await _datex('get (' + dx + ' )', undefined, undefined, undefined, undefined, context_location, plugins);
     if (plugins) activePlugins.splice(0, activePlugins.length);

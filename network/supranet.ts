@@ -357,7 +357,7 @@ export class Supranet {
     public static sayHello(node:Endpoint = Runtime.main_node){
         // TODO REPLACE, only temporary as placeholder to inform router about own public keys
         const keys = Crypto.getOwnPublicKeysExported();
-        // console.warn("saying hello " + Runtime.endpoint)
+        logger.debug("saying hello as " + Runtime.endpoint)
         Runtime.datexOut(['?', [keys], {type:ProtocolDataType.HELLO, sign:false, flood:true, __routing_ttl:10}], undefined, undefined, false, false)
         // send with plain endpoint id as sender
         // if (Runtime.endpoint.id_endpoint !== Runtime.endpoint) Runtime.datexOut(['?', [keys], {type:ProtocolDataType.HELLO, sign:false, flood:true, force_id:true, __routing_ttl:1}], undefined, undefined, false, false)
