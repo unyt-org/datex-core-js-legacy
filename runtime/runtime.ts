@@ -3516,8 +3516,8 @@ export class Runtime {
                     const type = Type.ofValue(parent);
 
                     if (type.template && !type.isPropertyAllowed(key)) throw new ValueError("Property '" + key + "' does not exist");
-                    if (type.template && !type.isPropertyValueAllowed(key, value)) throw new ValueError("Property '" + key + "' must be of type " + type.getAllowedPropertyType(key));
-
+                    if (type.template) type.assertPropertyValueAllowed(key, value)
+                    
                     // check sealed tuple
                     if (parent instanceof Tuple && !parent.has(key)) throw new ValueError("Property '"+key.toString()+"' does not exist in <Tuple>", SCOPE)
                     

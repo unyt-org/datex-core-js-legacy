@@ -4,7 +4,7 @@
 import { baseURL, Runtime, PrecompiledDXB, Type, Pointer, Ref, PointerProperty, primitive, any_class, Target, IdEndpoint, TransformFunctionInputs, AsyncTransformFunction, TransformFunction, TextRef, Markdown, DecimalRef, BooleanRef, IntegerRef, MinimalJSRef, RefOrValue, PartialRefOrValueObject, datex_meta, ObjectWithDatexValues, Compiler, endpoint_by_endpoint_name, endpoint_name, Storage, compiler_scope, datex_scope, DatexResponse, target_clause, ValueError, logger, Class, getUnknownMeta, Endpoint, INSERT_MARK, CollapsedValueAdvanced, CollapsedValue, SmartTransformFunction, compiler_options, activePlugins, METADATA, handleDecoratorArgs, RefOrValueObject, PointerPropertyParent, InferredPointerProperty, RefLike } from "./datex_all.ts";
 
 /** make decorators global */
-import { validate as _validate, property as _property, sync as _sync, endpoint as _endpoint, template as _template, jsdoc as _jsdoc} from "./datex_all.ts";
+import { assert as _assert, property as _property, sync as _sync, endpoint as _endpoint, template as _template, jsdoc as _jsdoc} from "./datex_all.ts";
 import { effect as _effect, always as _always, toggle as _toggle, map as _map, equals as _equals, selectProperty as _selectProperty, not as _not } from "./functions.ts";
 export * from "./functions.ts";
 import { NOT_EXISTING, DX_SLOTS, SLOT_GET, SLOT_SET } from "./runtime/constants.ts";
@@ -17,7 +17,7 @@ export {instance} from "./js_adapter/js_class_adapter.ts";
 
 declare global {
 	const property: typeof _property;
-    const validate: typeof _validate;
+    const assert: typeof _assert;
 
     const jsdoc: typeof _jsdoc;
 	const sync: typeof _sync;
@@ -40,7 +40,7 @@ declare global {
 // @ts-ignore global
 globalThis.property = _property;
 // @ts-ignore global
-globalThis.validate = _validate;
+globalThis.assert = _assert;
 
 // @ts-ignore global
 globalThis.sync = _sync;
@@ -71,8 +71,13 @@ export async function get<T=unknown>(dx:string|URL|Endpoint, assert_type?:Type<T
         Runtime.deleteURLCache(dx.toString())
     }
 
-    // handle edge case blob:http:// -> escape
-    if (dx.toString().startsWith('blob:http://') || dx.toString().startsWith('blob:https://')) dx = `url '${dx}'`;
+    // escape relative paths
+    if (typeof dx == "string" && (dx.startsWith('./') || dx.startsWith('../'))) {
+        dx = new URL(dx, context_location).toString();
+    }
+
+    // escape urls
+    if (dx.toString().startsWith('http://') || dx.toString().startsWith('https://') || dx.toString().startsWith('file://') || dx.toString().startsWith('blob:http://') || dx.toString().startsWith('blob:https://')) dx = `url '${dx}'`;
 
     const res = <T> await _datex('get (' + dx + ' )', undefined, undefined, undefined, undefined, context_location, plugins);
     if (plugins) activePlugins.splice(0, activePlugins.length);

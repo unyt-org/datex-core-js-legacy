@@ -35,7 +35,7 @@ export class Assertion<T=any> extends ExtensibleFunction implements ValueConsume
     }
 
     
-    assert<B extends boolean = false>(value:T|Tuple<T>, SCOPE?:datex_scope, return_boolean:B = false): B extends true ? boolean|Promise<boolean> : void|Promise<void> {
+    assert(value:T|Tuple<T>, SCOPE?:datex_scope, return_boolean = false): boolean|Promise<boolean> {
         // ntarget
         if (this.ntarget) {
             if (this.ntarget_async) return this.checkResultPromise(<Promise<string | boolean>>this.ntarget(...(value instanceof Tuple ? value.toArray() : (value instanceof Array ? value : [value]))), return_boolean)
@@ -53,7 +53,7 @@ export class Assertion<T=any> extends ExtensibleFunction implements ValueConsume
         return this.checkResult(await valid_promise, return_boolean);
     }
 
-    private checkResult(valid:string|boolean|undefined, return_boolean = false) {
+    private checkResult(valid:string|boolean|undefined, return_boolean = false):boolean {
         if (return_boolean) return valid === true || valid === VOID
 
         if (valid !== true && valid !== VOID) {
@@ -61,6 +61,7 @@ export class Assertion<T=any> extends ExtensibleFunction implements ValueConsume
             else if (typeof valid == "string") throw new AssertionError(valid);
             else throw new ValueError("Invalid assertion result - must be of type <float>, <boolean>, or <text>")
         }
+        return true;
     }
 
     handleApply(value: T|Tuple<T>, SCOPE?: datex_scope) {

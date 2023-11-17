@@ -402,10 +402,19 @@ export class Type<T = any> extends ExtensibleFunction {
     }
 
     // match type against template
+    /**
+     * @deprecated, use assertPropertyValueAllowed
+     */
     public isPropertyValueAllowed(property:any, value:any) {
         if (!this.#template) return true;
         else if (typeof property !== "string") return true; // only strings handled by templates
         else return (!this.#template[property] || Type.matches(value, this.#template[property])) // check if value allowed
+    }
+
+    public assertPropertyValueAllowed(property:any, value:any) {
+        if (!this.#template) return true;
+        else if (typeof property !== "string") return true; // only strings handled by templates
+        else if (this.#template[property]) Type.assertMatches(value, this.#template[property]) // assert value allowed
     }
 
     // get type for value in template
@@ -640,8 +649,8 @@ export class Type<T = any> extends ExtensibleFunction {
 
     // type check (type is a subtype of matches_type)
     // TODO: swap arguments
-    public static matchesType(type:type_clause, against: type_clause, assertionValue?:any) {
-        return Logical.matches(type, against, Type, assertionValue);
+    public static matchesType(type:type_clause, against: type_clause, assertionValue?:any, throwInvalidAssertion = false) {
+        return Logical.matches(type, against, Type, assertionValue, throwInvalidAssertion);
     }
 
 
@@ -654,6 +663,11 @@ export class Type<T = any> extends ExtensibleFunction {
             }
             return false;
         }
+    }
+
+    public static assertMatches<T extends Type>(value:RefOrValue<any>, type:type_clause): asserts value is (T extends Type<infer TT> ? TT : any) {
+        const res = Type.matchesType(Type.ofValue(value), type, value, true);
+        if (!res) throw new ValueError("Value must be of type " + type)
     }
 
     // check if root type of value matches exactly

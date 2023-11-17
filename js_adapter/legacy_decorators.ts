@@ -291,9 +291,9 @@ export function type(...args:any[]): any {
     return handleDecoratorArgs(args, Decorators.type);
 }
 
-export function validate(assertion:(val:any)=>boolean):any
-export function validate(...args:any[]): any {
-    return handleDecoratorArgs(args, Decorators.validate, true);
+export function assert(assertion:(val:any)=>boolean|string|undefined|null):any
+export function assert(...args:any[]): any {
+    return handleDecoratorArgs(args, Decorators.assert, true);
 }
 
 

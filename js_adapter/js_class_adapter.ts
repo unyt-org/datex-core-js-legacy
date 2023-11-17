@@ -325,11 +325,11 @@ export class Decorators {
 
     }
 
-     /** @validate: add type assertion function */
-     static validate(value:any, name:context_name, kind:context_kind, is_static:boolean, is_private:boolean, setMetadata:context_meta_setter, getMetadata:context_meta_getter, params:[((value:any)=>boolean)?] = []) {
-        if (kind != "field" && kind != "getter" && kind != "setter" && kind != "method") logger.error("Invalid use of @validate decorator");
+     /** @assert: add type assertion function */
+     static assert(value:any, name:context_name, kind:context_kind, is_static:boolean, is_private:boolean, setMetadata:context_meta_setter, getMetadata:context_meta_getter, params:[((value:any)=>boolean)?] = []) {
+        if (kind != "field" && kind != "getter" && kind != "setter" && kind != "method") logger.error("Invalid use of @assert decorator");
         else {
-            if (typeof params[0] !== "function") logger.error("Invalid @validate decorator value, must be a function");
+            if (typeof params[0] !== "function") logger.error("Invalid @assert decorator value, must be a function");
             else {
                 const assertionType = new Conjunction(Assertion.get(undefined, params[0], false));
                 setMetadata(Decorators.FORCE_TYPE, assertionType)

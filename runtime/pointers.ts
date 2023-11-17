@@ -3051,9 +3051,7 @@ export class Pointer<T = any> extends Ref<T> {
         if (typeof value == "number" && this.type.getAllowedPropertyType(key).root_type == Type.std.integer) value = BigInt(value);
 
         // invalid type for value?
-        if (!this.type.isPropertyValueAllowed(key, value)) {
-            throw new ValueError("Property '" + key + "' must be of type " + this.type.getAllowedPropertyType(key));
-        }
+        this.type.assertPropertyValueAllowed(key, value)
 
         this.initShadowObjectProperty(key, value);
 
@@ -3082,9 +3080,7 @@ export class Pointer<T = any> extends Ref<T> {
         if (typeof value == "number" && this.type.getAllowedPropertyType(key).root_type == Type.std.integer) value = BigInt(value);
 
         // invalid type for value?
-        if (!this.type.isPropertyValueAllowed(key, value)) {
-            throw new ValueError("Property '" + key + "' must be of type " + this.type.getAllowedPropertyType(key));
-        }
+        this.type.assertPropertyValueAllowed(key, value)
 
         // get current value
         const current_value = this.getProperty(key);
