@@ -121,14 +121,20 @@ export class Supranet {
         else {
             // existing locally available endpoint instances -> hashes
             const hashes = await Storage.loadOrCreate("Datex.Supranet.ENDPOINT_INSTANCE_HASHES", () => new Map<Endpoint, string>())
-            
-            logger.debug("available cached instances: " + [...hashes.keys()].map(e=>e.toString()).join(", "))
+
+            try {
+                logger.debug("available cached instances: " + [...hashes.keys()].map(e=>e.toString()).join(", "))
+            }
+            catch (e) {
+                console.error("invalid hashes", hashes)
+                throw e;
+            }
 
             const activeEndpoints = Runtime.getActiveLocalStorageEndpoints();
             let hash: string|undefined = undefined;
             let endpoint = Runtime.endpoint;
             for (const [storedEndpoint, storedHash] of hashes) {
-                if (!activeEndpoints.includes(storedEndpoint)) {
+                if (Runtime.endpoint.main == storedEndpoint.main && !activeEndpoints.includes(storedEndpoint)) {
                     hash = storedHash;
                     endpoint = storedEndpoint;
                     break;

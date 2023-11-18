@@ -56,12 +56,13 @@ export class IFrameCommunicationInterface extends CommonInterface<[HTMLIFrameEle
     }
 
     onReceive = (event: MessageEvent) => {
-        if (event.origin == this.otherOrigin) {
+        
+        if (event.source === this.other) {
             const data = event.data;
             if (data instanceof ArrayBuffer) {
                 InterfaceManager.handleReceiveBlock(data, this.endpoint, this);
             }
-            else if (data?.type == "INIT") {
+            else if (data?.type == "INIT" && !this.endpoint) {
                 this.endpoint = Target.get(data.endpoint) as Datex.Endpoint;
 
                 // if in parent: send INIT to iframe after initialized

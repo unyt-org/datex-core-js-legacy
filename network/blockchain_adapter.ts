@@ -88,7 +88,7 @@ export type BCData<T extends BCEntryType> =
 
 	public async sign(){
 		const data_dx = Datex.Compiler.encodeValue(this.data);
-		this.creator = Datex.Runtime.endpoint;
+		this.creator = Datex.Runtime.endpoint.main;
 		this.signature = await Datex.Crypto.sign(data_dx);
 		return this;
 	}

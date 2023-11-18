@@ -150,6 +150,7 @@ export abstract class CommonInterface<Args extends unknown[] = []> implements Co
 
     // use this per default for all outgoing datex requests
     public static default_interface:ComInterface;
+    public static proxy_interface?:ComInterface;
 
     public type = "local"
     public persistent = false; // interface can be disconnected (per default)
@@ -167,9 +168,11 @@ export abstract class CommonInterface<Args extends unknown[] = []> implements Co
     }
 
     public set endpoint(endpoint: Endpoint|undefined) {
+        if (endpoint === this._endpoint) return;
         this.logger.debug("updated endpoint to " + endpoint);
         this._endpoint = endpoint;
         this.updateEndpoint();
+        this.onEndpointSet?.(endpoint);
     }
 
     private updateEndpoint() {
@@ -178,6 +181,8 @@ export abstract class CommonInterface<Args extends unknown[] = []> implements Co
             else CommonInterface.addInterfaceForEndpoint(this.endpoint, this);
         }
     }
+
+    private onEndpointSet?: Function
 
 
     protected declare initial_arguments:Args
@@ -806,10 +811,15 @@ export class InterfaceManager {
             return InterfaceManager.handleNoRedirectFound(to);
         }
 
+        // prefere proxy_interface
+        if (CommonInterface.proxy_interface) comInterface = CommonInterface.proxy_interface;
+
         // error: loopback
         if (source && !source?.is_bidirectional_hub && (source == comInterface || comInterface.isEqualSource?.(source, to))) {
             // fallback to default interface
             if (CommonInterface.default_interface && comInterface !== CommonInterface.default_interface) comInterface = CommonInterface.default_interface;
+            // fallback to proxy interface
+            if (CommonInterface.proxy_interface && comInterface !== CommonInterface.proxy_interface) comInterface = CommonInterface.proxy_interface;
             else return InterfaceManager.handleNoRedirectFound(to);
         }
 
@@ -823,7 +833,7 @@ export class InterfaceManager {
         const exclude_endpoints = new Set([exclude]);
 
         // iterate over all active endpoints
-        for (const interf of this.active_interfaces) {
+        for (const interf of CommonInterface.proxy_interface ? [CommonInterface.proxy_interface]: this.active_interfaces) {
             if (interf.endpoint && !exclude_endpoints.has(interf.endpoint) && !interf.endpoint.equals(Runtime.endpoint)) {
             exclude_endpoints.add(interf.endpoint);
             //console.log("FLOOD > " + interf.endpoint)

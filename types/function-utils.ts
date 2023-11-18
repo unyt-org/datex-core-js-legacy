@@ -114,11 +114,19 @@ export async function getDeclaredExternalVariablesAsync(fn: (...args:unknown[])=
 }
 
 export function getSourceWithoutUsingDeclaration(fn: (...args:unknown[])=>unknown) {
-    return fn
-        .toString()
+    let fnSource = fn.toString();
+	// object methods check if 'this' context is component context;
+	if (isObjectMethod(fnSource)) {
+        if (fnSource.startsWith("async")) fnSource = fnSource.replace("async", "async function") 
+		else fnSource = "function " + fnSource
+	}
+    return fnSource
         .replace(/(?<=(?:(?:[\w\s*])+\(.*\)\s*{|\(.*\)\s*=>\s*{?|.*\s*=>\s*{?)\s*)(use\s*\((?:[\s\S]*?)\))/, 'true /*$1*/')
 }
- 
+
+function isObjectMethod(fnSrc:string) {
+	return !!fnSrc.match(/^(async\s+)?[^\s(]+ *(\(|\*)/)
+}
 
 /**
  * Create a new function from JS source code with injected dependency variables
@@ -139,9 +147,16 @@ export function createFunctionWithDependencyInjections(source: string, dependenc
         return val;
     };`
 
-    let creatorFn = new Function(...renamedVars, `"use strict";${varMapping?createStaticFn:''}${varMapping}; return (${source})`)
-    if (hasThis) creatorFn = creatorFn.bind(dependencies['this'])
-    return creatorFn(...Object.values(dependencies));
+    try {
+        let creatorFn = new Function(...renamedVars, `"use strict";${varMapping?createStaticFn:''}${varMapping}; return (${source})`)
+        if (hasThis) creatorFn = creatorFn.bind(dependencies['this'])
+        return creatorFn(...Object.values(dependencies));
+    }
+    catch (e) {
+        console.error(source)
+        throw e;
+    }
+    
 }
 
 export class ExtensibleFunction {
