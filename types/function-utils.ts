@@ -116,7 +116,7 @@ export async function getDeclaredExternalVariablesAsync(fn: (...args:unknown[])=
 export function getSourceWithoutUsingDeclaration(fn: (...args:unknown[])=>unknown) {
     let fnSource = fn.toString();
 	// object methods check if 'this' context is component context;
-	if (isObjectMethod(fnSource)) {
+	if (!isNormalFunction(fnSource) && !isArrowFunction(fnSource) && isObjectMethod(fnSource)) {
         if (fnSource.startsWith("async")) fnSource = fnSource.replace("async", "async function") 
 		else fnSource = "function " + fnSource
 	}
@@ -124,9 +124,16 @@ export function getSourceWithoutUsingDeclaration(fn: (...args:unknown[])=>unknow
         .replace(/(?<=(?:(?:[\w\s*])+\(.*\)\s*{|\(.*\)\s*=>\s*{?|.*\s*=>\s*{?)\s*)(use\s*\((?:[\s\S]*?)\))/, 'true /*$1*/')
 }
 
-function isObjectMethod(fnSrc:string) {
+const isObjectMethod = (fnSrc:string) => {
 	return !!fnSrc.match(/^(async\s+)?[^\s(]+ *(\(|\*)/)
 }
+const isNormalFunction = (fnSrc:string) => {
+	return !!fnSrc.match(/^(async\s+)?function(\(| |\*)/)
+}
+const isArrowFunction = (fnSrc:string) => {
+	return !!fnSrc.match(/^(async\s+)?\([^)]*\)\s*=>/)
+}
+
 
 /**
  * Create a new function from JS source code with injected dependency variables

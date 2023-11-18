@@ -5165,7 +5165,7 @@ export class Runtime {
                     }).filter(o => o && !(o.equals(Runtime.endpoint) || o.equals(SCOPE.sender))))
                 ];
                 if (origins.length > 1) {
-                    logger.debug("pre-fetching online state for "+ origins.length + " endpoints", content)
+                    logger.debug("pre-fetching online state for "+ origins.length + " endpoints")
                     await Promise.race([
                         Promise.all(origins.map(origin => origin.isOnline())),
                         new Promise(resolve => setTimeout(resolve, 10_000))

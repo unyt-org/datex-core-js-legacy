@@ -140,7 +140,9 @@ export function map<T, U, O extends 'array'|'map' = 'array'>(iterable: Iterable<
 				onNewEntry: (v,k) => {
 					(mapped as U[])[k] = v
 				},
-				onEmpty: () => (mapped as U[]).length = 0
+				onEmpty: () => {
+					(mapped as U[]).length = 0
+				}
 			})
 		}
 
@@ -197,7 +199,7 @@ export const select = toggle;
  * @param a input value
  * @param b input value
  */
-export function equals<T,V>(a:RefLike<T>|T, b: RefLike<V>|V): T extends V ? (V extends T ? Datex.Pointer<boolean> : Datex.Pointer<false>) : Datex.Pointer<false> {
+export function equals<T,V>(a:RefLike<T>|T, b: RefLike<V>|V): Datex.Pointer<boolean> {
     return transform([a, b], (a,b) =>  Datex.Ref.collapseValue(a, true, true) === Datex.Ref.collapseValue(b, true, true), 
 	// dx transforms not working correctly (with uix)
 		/*`always (${Runtime.valueToDatexString(a)} === ${Runtime.valueToDatexString(b)})`*/) as any;

@@ -899,7 +899,7 @@ export namespace Storage {
 
 // @ts-ignore NO_INIT
 if (!globalThis.NO_INIT) {
-    addEventListener("unload", ()=>Storage.handleExit(), {capture: true});
+    if (client_type == "deno") addEventListener("unload", ()=>Storage.handleExit(), {capture: true});
     addEventListener("beforeunload", ()=>Storage.handleExit(), {capture: true});
     // @ts-ignore document
     if (globalThis.document) addEventListener("visibilitychange", ()=>{

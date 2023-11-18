@@ -6,14 +6,14 @@ export class IterableHandler<T, U = T> {
 	private map: ((value: T, index: number, array: Iterable<T>) => U) | undefined
 	private onNewEntry: (entry:U, key:number,) => void
 	private onEntryRemoved: (entry:U, key:number,) => void
-	private onEmpty: () => void
+	private onEmpty?: () => void
 
 	
 	constructor(private iterable: Datex.RefOrValue<Iterable<T>>, callbacks: {
 		map?: (value: T, index: number, array: Iterable<T>) => U,
 		onNewEntry: (this: IterableHandler<T, U>, entry:U, key:number) => void
 		onEntryRemoved: (entry: U, key:number) => void,
-		onEmpty: () => void
+		onEmpty?: () => void
 	}) {
 		this.map = callbacks.map;
 		this.onNewEntry = callbacks.onNewEntry;
@@ -102,10 +102,17 @@ export class IterableHandler<T, U = T> {
 		// single property update
 		if (type == Datex.Ref.UPDATE_TYPE.SET) this.handleNewEntry(<T>value, key)
 		else if (type == Datex.Ref.UPDATE_TYPE.ADD) this.handleNewEntry(<T>value, this.getPseudoIndex(key, <T>value));
-		// property removed
+		// clear all
 		else if (type == Datex.Ref.UPDATE_TYPE.CLEAR) {
-			for (const [key,] of this.#entries??[]) {
-				this.handleRemoveEntry(key);
+			// handle onEmpty
+			if (this.onEmpty) {
+				this.onEmpty.call ? this.onEmpty.call(this) : this.onEmpty();
+			}
+			// alternative: delete all entries individually
+			else {
+				for (const [key,] of [...this.#entries??[]].toReversed()) {
+					this.handleRemoveEntry(key);
+				}
 			}
 		}
 		else if (type == Datex.Ref.UPDATE_TYPE.BEFORE_DELETE) this.handleRemoveEntry(key);
@@ -130,7 +137,8 @@ export class IterableHandler<T, U = T> {
 		const entry = this.valueToEntry(value, key)
 
 		if (key != undefined) {
-			if (this.entries.has(key)) this.handleRemoveEntry(key) // entry is overridden
+			// TODO: is this correct
+			if (!this.isPseudoIndex() && this.entries.has(key)) this.handleRemoveEntry(key) // entry is overridden
 			this.entries.set(key, entry);
 		}
 		this.onNewEntry.call ? this.onNewEntry.call(this, entry, Number(key)) : this.onNewEntry(entry, Number(key)); // new entry handler
@@ -142,11 +150,12 @@ export class IterableHandler<T, U = T> {
 		const entry = this.entries.get(key)!;
 		this.deleteEntry(key);
 		this.onEntryRemoved.call ? this.onEntryRemoved.call(this, entry, key) : this.onEntryRemoved(entry, key);
+
 		this.checkEmpty();
 	}
 
 	private checkEmpty() {
-		if (this.#entries?.size == 0) this.onEmpty.call ? this.onEmpty.call(this) : this.onEmpty();
+		if (this.onEmpty && this.#entries?.size == 0) this.onEmpty.call ? this.onEmpty.call(this) : this.onEmpty();
 	}
 
 }
