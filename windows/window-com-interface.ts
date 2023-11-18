@@ -21,7 +21,6 @@ export class WindowCommunicationInterface extends CommonInterface<[Window, strin
     
     protected async connect() {
         // is the parent document
-        console.log("iinit", this.initial_arguments)
         if (this.initial_arguments[0] !== self.window.opener) {
             this.window = this.initial_arguments[0];
             this.otherOrigin = this.initial_arguments[1];
@@ -40,7 +39,6 @@ export class WindowCommunicationInterface extends CommonInterface<[Window, strin
 		}
         globalThis.addEventListener("message", this.onReceive);
         // if in sub window: send INIT to parent immediately
-        console.log("SEND sendInit", this.parentDocument)
         if (this.parentDocument)
             this.sendInit();
 
@@ -56,7 +54,6 @@ export class WindowCommunicationInterface extends CommonInterface<[Window, strin
             }
 
             else if (data?.type == "INIT") {
-                console.warn(" && !this.endpoint",  !this.endpoint)
                 this.endpoint = Target.get(data.endpoint) as Datex.Endpoint;
 
                 // if in parent: send INIT to window after initialized
@@ -66,7 +63,6 @@ export class WindowCommunicationInterface extends CommonInterface<[Window, strin
     }
 
     private sendInit() {
-        console.log("SEND sendInit...")
         this.other.postMessage({
             type:"INIT",
             endpoint:Datex.Runtime.endpoint.toString()
