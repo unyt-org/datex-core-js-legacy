@@ -1,7 +1,7 @@
 // deno-lint-ignore-file no-namespace
 import { Runtime } from "../runtime/runtime.ts";
 
-import type { PointerSource } from "../utils/global_types.ts";
+import type { ExecConditions, PointerSource } from "../utils/global_types.ts";
 import { logger } from "../utils/global_values.ts";
 import { client_type } from "../utils/constants.ts";
 import { NOT_EXISTING } from "./constants.ts";
@@ -31,13 +31,14 @@ export const site_suffix = (()=>{
 export interface StorageLocation<SupportedModes extends Storage.Mode = Storage.Mode> {
     name: string
     isAsync: boolean
+    supportsExecConditions?: boolean
 
     isSupported(): boolean
     onAfterExit?(): void // called when deno process exits
     onAfterSnapshot?(isExit: boolean): void // called after a snapshot was saved to the storage (e.g. triggered by interval or exit event)
 
     setItem(key:string, value:unknown): Promise<boolean>|boolean
-    getItem(key:string): Promise<unknown>|unknown
+    getItem(key:string, conditions?:ExecConditions): Promise<unknown>|unknown
     hasItem(key:string):Promise<boolean>|boolean
     removeItem(key:string): Promise<void>|void
     getItemValueDXB(key:string): Promise<ArrayBuffer|null>|ArrayBuffer|null
@@ -45,7 +46,7 @@ export interface StorageLocation<SupportedModes extends Storage.Mode = Storage.M
     getItemKeys(): Promise<Generator<string, void, unknown>> | Generator<string, void, unknown>
 
     setPointer(pointer:Pointer, partialUpdateKey: unknown|typeof NOT_EXISTING): Promise<Set<Pointer>>|Set<Pointer>
-    getPointerValue(pointerId:string, outer_serialized:boolean):Promise<unknown>|unknown
+    getPointerValue(pointerId:string, outer_serialized:boolean, conditions?:ExecConditions):Promise<unknown>|unknown
     removePointer(pointerId:string):Promise<void>|void
     hasPointer(pointerId:string):Promise<boolean>|boolean
     getPointerIds(): Promise<Generator<string, void, unknown>> | Generator<string, void, unknown>
@@ -63,7 +64,7 @@ export abstract class SyncStorageLocation implements StorageLocation<Storage.Mod
     onAfterExit() {}
 
     abstract setItem(key: string,value: unknown): boolean
-    abstract getItem(key:string): Promise<unknown>|unknown
+    abstract getItem(key:string, conditions?:ExecConditions): Promise<unknown>|unknown
     abstract hasItem(key:string): boolean
     abstract getItemKeys(): Generator<string, void, unknown>
 
@@ -72,7 +73,7 @@ export abstract class SyncStorageLocation implements StorageLocation<Storage.Mod
     abstract setItemValueDXB(key:string, value: ArrayBuffer):void
 
     abstract setPointer(pointer: Pointer<any>, partialUpdateKey: unknown|typeof NOT_EXISTING): Set<Pointer<any>>
-    abstract getPointerValue(pointerId: string, outer_serialized:boolean): unknown
+    abstract getPointerValue(pointerId: string, outer_serialized:boolean, conditions?:ExecConditions): unknown
     abstract getPointerIds(): Generator<string, void, unknown>
 
     abstract removePointer(pointerId: string): void
@@ -91,7 +92,7 @@ export abstract class AsyncStorageLocation implements StorageLocation<Storage.Mo
     onAfterExit() {}
 
     abstract setItem(key: string,value: unknown): Promise<boolean>
-    abstract getItem(key:string): Promise<unknown>
+    abstract getItem(key:string, conditions?:ExecConditions): Promise<unknown>
     abstract hasItem(key:string): Promise<boolean>
     abstract getItemKeys(): Promise<Generator<string, void, unknown>>
 
@@ -100,7 +101,7 @@ export abstract class AsyncStorageLocation implements StorageLocation<Storage.Mo
     abstract setItemValueDXB(key:string, value: ArrayBuffer):Promise<void>
 
     abstract setPointer(pointer: Pointer<any>, partialUpdateKey: unknown|typeof NOT_EXISTING): Promise<Set<Pointer<any>>>
-    abstract getPointerValue(pointerId: string, outer_serialized:boolean): Promise<unknown>
+    abstract getPointerValue(pointerId: string, outer_serialized:boolean, conditions?:ExecConditions): Promise<unknown>
     abstract getPointerIds(): Promise<Generator<string, void, unknown>>
 
     abstract removePointer(pointerId: string): Promise<void>
@@ -574,7 +575,7 @@ export class Storage {
      * @param outer_serialized if true, the outer value type is not evaluated and only the serialized value is returned
      * @returns value from pointer storage
      */
-    public static async getPointer(pointer_id:string, pointerify?:boolean, bind?:any, location?:StorageLocation):Promise<any> {
+    public static async getPointer(pointer_id:string, pointerify?:boolean, bind?:any, location?:StorageLocation, conditions?: ExecConditions):Promise<any> {
 
         if (this.#dirty) {
             displayFatalError('storage-unrecoverable');
@@ -584,22 +585,22 @@ export class Storage {
         // try to find pointer at a storage location
         for (const loc of (location!=undefined ? [location] : this.getLocationPriorityOrder(pointer_id))) {
             if (loc==undefined) continue;
-            const val = await this.getPointerFromLocation(pointer_id, pointerify, bind, loc);
+            const val = await this.getPointerFromLocation(pointer_id, pointerify, bind, loc, conditions);
             if (val !== NOT_EXISTING) return val;
         }
         
         return NOT_EXISTING
     }
 
-    private static async getPointerFromLocation(pointer_id:string, pointerify: boolean|undefined, bind:any|undefined, location:StorageLocation) {
-        const val = await this.getPointerAsync(location, pointer_id, pointerify, bind);
+    private static async getPointerFromLocation(pointer_id:string, pointerify: boolean|undefined, bind:any|undefined, location:StorageLocation, conditions?: ExecConditions) {
+        const val = await this.getPointerAsync(location, pointer_id, pointerify, bind, conditions);
 		if (val == NOT_EXISTING) return NOT_EXISTING;
         
 		await this.initPointerFromTrustedLocation(pointer_id, location)
         return val;
     }
 
-    private static async getPointerAsync(location:StorageLocation, pointer_id:string, pointerify?:boolean, bind?:any) {
+    private static async getPointerAsync(location:StorageLocation, pointer_id:string, pointerify?:boolean, bind?:any, conditions?: ExecConditions) {
 
         let pointer:Pointer|undefined;
 		if (pointerify && (pointer = Pointer.get(pointer_id))?.value_initialized) {
@@ -608,7 +609,7 @@ export class Storage {
 
 
         // load from storage
-		let val = await location.getPointerValue(pointer_id, !!bind);
+		let val = await location.getPointerValue(pointer_id, !!bind, conditions);
 
         if (val == NOT_EXISTING) return NOT_EXISTING;
 
@@ -768,7 +769,7 @@ export class Storage {
         await Promise.all(promises);
     }
 
-    public static async getItem(key:string, location?:StorageLocation|undefined/* = this.#primary_location*/):Promise<any> {
+    public static async getItem(key:string, location?:StorageLocation|undefined/* = this.#primary_location*/, conditions?: ExecConditions):Promise<any> {
 
         if (this.#dirty) {
             displayFatalError('storage-unrecoverable');
@@ -781,7 +782,7 @@ export class Storage {
         // try to find item at a storage location
         for (const loc of (location!=undefined ? [location] : this.getLocationPriorityOrder(key))) {
             if (loc==undefined) continue;
-            const val = await this.getItemFromLocation(key, loc);
+            const val = await this.getItemFromLocation(key, loc, conditions);
             if (val!==NOT_EXISTING) return val;
         }
 
@@ -789,9 +790,11 @@ export class Storage {
     }
 
 
-    public static async getItemFromLocation(key:string, location:StorageLocation/* = this.#primary_location*/):Promise<any> {
+    public static async getItemFromLocation(key:string, location:StorageLocation/* = this.#primary_location*/, conditions?: ExecConditions):Promise<any> {
 
-		const val = await location.getItem(key);
+        if (!location.supportsExecConditions && conditions) throw new Error(`Storage Location ${location.name} does not support exec conditions`);
+
+		const val = await location.getItem(key, conditions);
 		if (val == NOT_EXISTING) return NOT_EXISTING;
 
 		Storage.cache.set(key, val);
@@ -863,12 +866,12 @@ export class Storage {
     }
 
     // load saved state
-    public static async loadOrCreate<T>(id:string|number, create?:()=>Promise<T>|T):Promise<MinimalJSRef<T>> {
+    public static async loadOrCreate<T>(id:string|number, create?:()=>Promise<T>|T, conditions?: ExecConditions, override = false):Promise<MinimalJSRef<T>> {
         const state_name = this.state_prefix+id.toString();
 
         // already has a saved state
-        if (await this.hasItem(state_name)) {
-            return await this.getItem(state_name)
+        if (!override && await this.hasItem(state_name)) {
+            return await this.getItem(state_name, undefined, conditions)
         }
         // create state
         else if (create){
@@ -923,8 +926,8 @@ globalThis.reset = Storage.clearAndReload
 
 // proxy for Storage
 class DatexStoragePointerSource implements PointerSource {
-    getPointer(pointer_id:string, pointerify?:boolean) {
-        return Storage.getPointer(pointer_id, pointerify)
+    getPointer(pointer_id:string, pointerify?:boolean, localOnly?: boolean) {
+        return Storage.getPointer(pointer_id, pointerify, undefined, undefined, localOnly ? {onlyLocalPointers: true} : undefined)
     }
     syncPointer(pointer:Pointer) {
         return Storage.syncPointer(pointer)

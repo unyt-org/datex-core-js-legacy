@@ -11,6 +11,7 @@ import { logger } from "../utils/global_values.ts";
 import { Datex } from "../mod.ts";
 import { ProtocolDataType } from "../compiler/protocol_types.ts";
 import { ESCAPE_SEQUENCES } from "../utils/logger.ts";
+import { deleteCookie, getCookie } from "../utils/cookies.ts";
 
 type target_prefix_person = "@";
 type target_prefix_id = "@@";
@@ -470,6 +471,25 @@ export class Endpoint extends Target {
 		return val;
 	}
 	
+	/**
+	 * Get endpoint id from "datex-endpoint" cookies.
+	 * Deletes the cookie if not a valid endpoint and returns null
+	 * @returns
+	 */
+	public static getFromCookie() {
+		const cookieEndpoint = getCookie("datex-endpoint");
+		if (cookieEndpoint) {
+			try {
+				const endpoint = Target.get(cookieEndpoint) as Endpoint;
+				logger.debug("loaded endpoint from 'datex-endpoint' cookie: " + endpoint)
+				return endpoint
+			}
+			catch {
+				deleteCookie("datex-endpoint")
+			}
+		}
+		return null;
+	}
 
 	public static createNewID():filter_target_name_id{
 		const id = new DataView(new ArrayBuffer(16));

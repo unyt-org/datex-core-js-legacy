@@ -101,7 +101,22 @@ export async function init() {
 
 	// init persistent subscriber cache
 	(async () => {
-		Runtime.subscriber_cache = (await Storage.loadOrCreate("Datex.Runtime.SUBSCRIBER_CACHE", ()=>new Map())).setAutoDefault(Set);
+		try {
+			Runtime.subscriber_cache = (await Storage.loadOrCreate(
+				"Datex.Runtime.SUBSCRIBER_CACHE", 
+				() => new Map(), 
+				{onlyLocalPointers: true}
+			)).setAutoDefault(Set);
+		}
+		catch (e) {
+			logger.debug("resetting subscriber cache (" + e?.message + ")")
+			Runtime.subscriber_cache = (await Storage.loadOrCreate(
+				"Datex.Runtime.SUBSCRIBER_CACHE", 
+				() => new Map(), 
+				undefined, 
+				true
+			)).setAutoDefault(Set);
+		}
 	})()
 
 

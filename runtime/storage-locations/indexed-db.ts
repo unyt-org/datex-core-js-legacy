@@ -6,6 +6,7 @@ import { NOT_EXISTING } from "../constants.ts";
 import { AsyncStorageLocation, site_suffix } from "../storage.ts";
 
 import localforage from "../../lib/localforage/localforage.js";
+import { ExecConditions } from "../../utils/global_types.ts";
 
 // db based storage for DATEX value caching (IndexDB in the browser)
 const datex_item_storage = <globalThis.Storage><unknown> localforage.createInstance({name: "dxitem::"+site_suffix});
@@ -14,8 +15,9 @@ const datex_pointer_storage = <globalThis.Storage><unknown> localforage.createIn
 
 export class IndexedDBStorageLocation extends AsyncStorageLocation {
 
-
 	name = "INDEXED_DB"
+
+	supportsExecConditions = true
 
 	isSupported() {
 		return !!globalThis.indexedDB;
@@ -25,10 +27,10 @@ export class IndexedDBStorageLocation extends AsyncStorageLocation {
 		await datex_item_storage.setItem(key, <any>Compiler.encodeValue(value));  // value to buffer (no header)
 		return true;
 	}
-	async getItem(key: string): Promise<unknown> {
+	async getItem(key: string, conditions: ExecConditions): Promise<unknown> {
 		const buffer = <ArrayBuffer><any>await datex_item_storage.getItem(key);
 		if (buffer == null) return NOT_EXISTING;
-		else return Runtime.decodeValue(buffer);
+		else return Runtime.decodeValue(buffer, false, conditions);
 	}
 
 	async hasItem(key:string) {
@@ -68,10 +70,10 @@ export class IndexedDBStorageLocation extends AsyncStorageLocation {
         await datex_pointer_storage.setItem(pointer.id, <any>Compiler.encodeValue(pointer, inserted_ptrs, true, false, true));
         return inserted_ptrs;
 	}
-	async getPointerValue(pointerId: string, outer_serialized: boolean): Promise<unknown> {
+	async getPointerValue(pointerId: string, outer_serialized: boolean, conditions: ExecConditions): Promise<unknown> {
 		const buffer = <ArrayBuffer><any>await datex_pointer_storage.getItem(pointerId);
 		if (buffer == null) return NOT_EXISTING;
-		return Runtime.decodeValue(buffer, outer_serialized);
+		return Runtime.decodeValue(buffer, outer_serialized, conditions);
 	}
 	async removePointer(pointerId: string): Promise<void> {
 		await datex_pointer_storage.removeItem(pointerId);

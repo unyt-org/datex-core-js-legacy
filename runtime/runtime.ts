@@ -36,7 +36,7 @@ import { Function as DatexFunction } from "../types/function.ts";
 import { Storage } from "../runtime/storage.ts";
 import { Observers } from "../utils/observers.ts";
 import { BinaryCode } from "../compiler/binary_codes.ts";
-import type { compile_info, datex_meta, datex_scope, dxb_header, routing_info } from "../utils/global_types.ts";
+import type { ExecConditions, compile_info, datex_meta, datex_scope, dxb_header, routing_info } from "../utils/global_types.ts";
 import { Markdown } from "../types/markdown.ts";
 import { Type } from "../types/type.ts";
 import { Tuple } from "../types/tuple.ts";
@@ -73,6 +73,7 @@ import type { Blockchain } from "../network/blockchain_adapter.ts";
 import { AutoMap } from "../utils/auto_map.ts";
 import { Supranet } from "../network/supranet.ts";
 import { sendDatexViaHTTPChannel } from "../network/datex-http-channel.ts";
+import { setCookie } from "../utils/cookies.ts";
 
 const mime = client_type === "deno" ? (await import("https://deno.land/x/mimetypes@v1.0.0/mod.ts")).mime : null;
 
@@ -744,10 +745,11 @@ export class Runtime {
      * @param dxb_base64 DATEX Data Binary (without header) as Base64 string
      * @returns evaluated DATEX result
      */
-    public static decodeValueBase64<T=unknown>(dxb_base64:string, outer_serialized=false):Promise<T> {
+    public static decodeValueBase64<T=unknown>(dxb_base64:string, outer_serialized=false, conditions?:ExecConditions):Promise<T> {
         // create scope
         const scope = Runtime.createNewInitialScope();
         scope.outer_serialized = outer_serialized;
+        scope.exec_conditions = conditions;
         // set dxb as scope buffer
         Runtime.updateScope(scope, base64ToArrayBuffer(dxb_base64), {end_of_scope:true, sender:Runtime.endpoint})
         // execute scope
@@ -759,10 +761,11 @@ export class Runtime {
      * @param dxb DATEX Data Binary (without header)
      * @returns evaluated DATEX result
      */
-    public static decodeValue(dxb:ArrayBuffer, outer_serialized=false):Promise<any> {
+    public static decodeValue(dxb:ArrayBuffer, outer_serialized=false, conditions?:ExecConditions):Promise<any> {
         // create scope
         const scope = Runtime.createNewInitialScope();
         scope.outer_serialized = outer_serialized;
+        scope.exec_conditions = conditions;
         // set dxb as scope buffer
         Runtime.updateScope(scope, dxb, {end_of_scope:true, sender:Runtime.endpoint})
         // execute scope
@@ -1077,7 +1080,7 @@ export class Runtime {
      * Handles beforeunload (sending GOODBYE)
      * @param endpoint 
      */
-    static addActiveEndpoint(endpoint:Endpoint) {
+    static setActiveEndpoint(endpoint:Endpoint) {
         let endpoints:string[] = [];
         try {
             endpoints = JSON.parse(localStorage['active_endpoints']) as string[]
@@ -1122,6 +1125,11 @@ export class Runtime {
         }
 
         localStorage['active_endpoints'] = JSON.stringify(endpoints)
+
+        // update endpoint cookie
+        const endpointName = endpoint.toString();
+        // TODO: store signed endpoint validation cookie
+        if (client_type == "browser") setCookie("datex-endpoint", endpointName);
     }
 
     static getActiveLocalStorageEndpoints() {
@@ -1144,7 +1152,7 @@ export class Runtime {
     public static init(endpoint?:Endpoint) {
 
         // save all currently active endpoints for shared local storage (multiple tabs)
-        if (endpoint && endpoint != LOCAL_ENDPOINT && client_type == "browser") this.addActiveEndpoint(endpoint)
+        if (endpoint && endpoint != LOCAL_ENDPOINT && client_type == "browser") this.setActiveEndpoint(endpoint)
 
 
         if (endpoint) Runtime.endpoint = endpoint;
@@ -1940,6 +1948,9 @@ export class Runtime {
         }
         else if (header.type == ProtocolDataType.UPDATE) {
             // ignore
+        }
+        else if (header.type == ProtocolDataType.GOODBYE) {
+            console.error("Error in GOODBYE message:",e)
         }
         else {
             logger.error("Invalid proctocol data type: " + ProtocolDataTypesMap[header.type]??header.type)

@@ -14,9 +14,14 @@ export type Return<T=void> = Promise<T|void>|T|void;
 // export type Return<T=void> = Promise<T|void|DatexResponse<T>>|T|void|DatexResponse<T>;
 
 export interface PointerSource {
-    getPointer(pointer_id:string, pointerify?:boolean): Promise<any|typeof NOT_EXISTING>|any|typeof NOT_EXISTING
+    getPointer(pointer_id:string, pointerify?:boolean, localOnly?: boolean): Promise<any|typeof NOT_EXISTING>|any|typeof NOT_EXISTING
     syncPointer?(pointer:Pointer):Promise<void>|void
 }
+
+export type ExecConditions = {
+    onlyLocalPointers?: boolean // if true, throws an error if local pointers are accessed
+}
+
 
 
 export type datex_sub_scope = {    
@@ -175,6 +180,8 @@ export type datex_scope = {
     result?: any, // result value (__result internal variable)
 
     outer_serialized?: boolean, // if true, the outer value is not casted to a type, just the serialized value is returned
+
+    exec_conditions?: ExecConditions
 
     meta: datex_meta,
     remote: {insert?:object, sign?:boolean, encrypt?:boolean, eos?:boolean, type?:ProtocolDataType, timeout?:number|bigint}, // outgoing remote configuration

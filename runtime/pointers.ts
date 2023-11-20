@@ -1151,6 +1151,14 @@ export class Pointer<T = any> extends Ref<T> {
 
         const id_string = Pointer.normalizePointerId(id);
 
+        // only load if local pointer id
+        if (SCOPE?.exec_conditions?.onlyLocalPointers) {
+            const origin = Pointer.getOriginFromPointerId(id_string);
+            if (origin !== LOCAL_ENDPOINT && origin !== Runtime.endpoint) {
+                throw new Error("Tried to load non-local pointer");
+            }
+        }
+
         if (SCOPE) {
             // recursive pointer loading! TODO
             if (this.loading_pointers.get(id_string)?.scopeList.has(SCOPE)) {
@@ -1205,10 +1213,11 @@ export class Pointer<T = any> extends Ref<T> {
             let priority:number;
             for ([source,priority] of this.#pointer_sources) {
                 try {
-                    stored = await source.getPointer(pointer.id, !SCOPE);
+                    stored = await source.getPointer(pointer.id, !SCOPE, SCOPE?.exec_conditions?.onlyLocalPointers??false);
                 }
                 catch (e) {
-                    logger.error("pointer source error:",e)
+                    this.loading_pointers.delete(id_string);
+                    throw e;
                 }
                 if (stored != NOT_EXISTING) break;
             }
@@ -1320,7 +1329,6 @@ export class Pointer<T = any> extends Ref<T> {
             // intentionally not loaded
             else if (only_load_local) {
                 this.loading_pointers.delete(id_string);
-                pointer.delete();
                 throw new PointerError("Pointer $"+id_string+" was not found locally", SCOPE);
             }
 

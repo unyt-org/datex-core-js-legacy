@@ -313,6 +313,7 @@ export class Supranet {
         return `@@${buffer2hex(new Uint8Array(id.buffer))}`;
     }
 
+
     public static async getLocalEndpointAndKeys():Promise<[Endpoint|UnresolvedEndpointProperty, Crypto.ExportedKeySet]> {
         let endpoint: Endpoint|UnresolvedEndpointProperty;
 
@@ -339,8 +340,11 @@ export class Supranet {
         return [endpoint, await this.getKeysOrGenerateNew()];
     }
 
+    /**
+     * Create new anonymous endpoint or load from "datex-endpoint" cookie
+     */
     private static createAndSaveNewEndpoint(){
-        const endpoint = <Endpoint> Endpoint.get(this.createEndpointId());
+        const endpoint = Endpoint.getFromCookie() ?? <Endpoint> Endpoint.get(Endpoint.createNewID());
         endpoint_config.endpoint = endpoint;
         endpoint_config.save();
         return endpoint;

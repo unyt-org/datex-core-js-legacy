@@ -6,10 +6,12 @@ import { NOT_EXISTING } from "../constants.ts";
 import { base64ToArrayBuffer } from "../../utils/utils.ts";
 import { arrayBufferToBase64 } from "../../datex_all.ts";
 import { localStorage } from "./local-storage-compat.ts";
+import type { ExecConditions } from "../../utils/global_types.ts";
 
 export class LocalStorageLocation extends SyncStorageLocation {
 	name = "LOCAL_STORAGE"
 
+	supportsExecConditions = true
 
 	isSupported() {
 		return !!localStorage;
@@ -25,10 +27,10 @@ export class LocalStorageLocation extends SyncStorageLocation {
         return true;
 	}
 
-	getItem(key: string) {
+	getItem(key: string, conditions?: ExecConditions) {
 		const base64 = localStorage.getItem(Storage.item_prefix+key);
 		if (base64==null) return NOT_EXISTING;
-		else return Runtime.decodeValueBase64(base64);
+		else return Runtime.decodeValueBase64(base64, false, conditions);
 	}
 
 	*getItemKeys() {
@@ -68,10 +70,10 @@ export class LocalStorageLocation extends SyncStorageLocation {
         localStorage.setItem(Storage.pointer_prefix+pointer.id, Compiler.encodeValueBase64(pointer, inserted_ptrs, true, false, true));  // serialized pointer
         return inserted_ptrs;
 	}
-	async getPointerValue(pointerId: string, outer_serialized: boolean): Promise<unknown> {
+	async getPointerValue(pointerId: string, outer_serialized: boolean, conditions?: ExecConditions): Promise<unknown> {
 		const base64 = localStorage.getItem(Storage.pointer_prefix+pointerId);
         if (base64 == null) return NOT_EXISTING;
-        return await Runtime.decodeValueBase64(base64, outer_serialized);
+        return await Runtime.decodeValueBase64(base64, outer_serialized, conditions);
 	}
 	removePointer(pointerId: string): void {
 		localStorage.removeItem(Storage.pointer_prefix+pointerId);

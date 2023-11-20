@@ -7,6 +7,7 @@ import { AsyncStorageLocation } from "../storage.ts";
 import { ptr_cache_path } from "../cache_path.ts";
 import { client_type } from "../../utils/constants.ts";
 import { normalizePath } from "../../utils/normalize-path.ts";
+import { ExecConditions } from "../../utils/global_types.ts";
 
 const denoKvDir = new URL("./deno-kv/", ptr_cache_path);
 // @ts-ignore global Deno
@@ -37,10 +38,10 @@ export class DenoKVStorageLocation extends AsyncStorageLocation {
 		await this.set(itemDB!, key, Compiler.encodeValue(value));
 		return true;
 	}
-	async getItem(key: string): Promise<unknown> {
+	async getItem(key: string, conditions?: ExecConditions): Promise<unknown> {
 		const result = await this.get(itemDB!, key);
 		if (result == null) return NOT_EXISTING;
-		else return Runtime.decodeValue(result);
+		else return Runtime.decodeValue(result, false, conditions);
 	}
 
 	hasItem(key:string) {
@@ -81,10 +82,10 @@ export class DenoKVStorageLocation extends AsyncStorageLocation {
 		await this.set(pointerDB!, pointer.id, Compiler.encodeValue(pointer, inserted_ptrs, true, false, true));
         return inserted_ptrs;
 	}
-	async getPointerValue(pointerId: string, outer_serialized: boolean): Promise<unknown> {
+	async getPointerValue(pointerId: string, outer_serialized: boolean, conditions?: ExecConditions): Promise<unknown> {
 		const result = await this.get(pointerDB!, pointerId);
 		if (result == null) return NOT_EXISTING;
-		else return Runtime.decodeValue(result, outer_serialized);
+		else return Runtime.decodeValue(result, outer_serialized, conditions);
 	}
 	async removePointer(pointerId: string): Promise<void> {
 		await pointerDB!.delete([pointerId]);
