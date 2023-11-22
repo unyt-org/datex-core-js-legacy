@@ -6862,12 +6862,12 @@ export class Runtime {
     }
 }
 
-
 try {
-    const res = await fetch(new URL("../version", import.meta.url));
-    if (res.ok) Runtime.VERSION = (await res.text()).replaceAll("\n","");
+    Runtime.VERSION = (await import("../VERSION.ts")).default
 }
-catch {}
+catch {
+    console.error("Could not determine DATEX version")
+}
 
 // if (globalThis.HTMLImageElement) {
 //     Runtime.MIME_TYPE_MAPPING["image/*"] = <mime_type_definition<globalThis.HTMLImageElement>>{
