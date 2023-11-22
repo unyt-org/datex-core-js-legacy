@@ -83,6 +83,47 @@ c.val = 20;
 >  [!NOTE]  
 >  The `always` transform function must always be synchronous and must not return a Promise
 
+
+### Caching `always` output values
+
+Since `always` functions are always required to be pure functions, it is possible to
+cache the result of a calculation with given input values and return it at a later point in time.
+
+This can be particularly useful when 
+ * a calculation is very time-consuming
+ * the `always` function is triggered very often but returns a limited set of output values
+
+To enable output caching, set `cache` to `true` in the `always` options that are passed in as a second parameter:
+
+```ts
+const n = $$(0);
+
+const fibN = always(() => {
+  console.log("calculating fibonacci nr " + n)
+  return fibonacciNr(n.val);
+}, {cache: true});
+
+// triggered each time n/fibN is updated
+effect(() => console.log(`fibonacci nr ${n} = ${fibN}`))
+
+n.val = 42; 
+// -> "calculating fibonacci nr 42"
+// -> "fibonacci nr 42 = 267914296"
+
+n.val = 1; 
+// -> "calculating fibonacci nr 1"
+// -> "fibonacci nr 1 = 1"
+
+n.val = 42;
+// calculation is not triggered again, cached result is used
+// -> "fibonacci nr 42 = 267914296"
+```
+
+> [!WARNING]
+> This feature is still experimental.
+> It is not guaranteed that caches will be correctly used in every scenario.
+> There is currently no way to limit the cache size, which could lead to memory leaks.
+
 ### The `always` template function
 
 Instead of providing a JavaScript callback function, you can also provide a DATEX Script as a template string to an `always` function:

@@ -42,8 +42,9 @@ When you compare this code with the [example code](./02%20Important%20DATEX%20Co
 you can see how the DATEX concepts are adopted in JavaScript in a very straightforward way.
 
 To learn more about DATEX pointers in JavaScript, check out the chapter [Pointers](./03%20Pointers.md).
+In the chapter [Functional Programming](./09%20Functional%20Programming.md), you can read more about `always` and other transform functions.
 
-### Pointer synhronisation
+### Pointer synchronisation
 
 Check out the chapter [Pointer Synchronisation](./04%20Pointer%20Synchronisation.md) to understand
 how pointers are synchronized between endpoints.
