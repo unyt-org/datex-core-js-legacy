@@ -23,6 +23,8 @@ import "../types/native_types.ts"; // getAutoDefault
 import { displayFatalError } from "./display.ts";
 import { JSTransferableFunction } from "../types/js-function.ts";
 import { map } from "../functions.ts";
+import { sha256 } from "../utils/sha256.ts";
+import { AutoMap } from "../utils/auto_map.ts";
 
 export type observe_handler<K=any, V extends RefLike = any> = (value:V extends RefLike<infer T> ? T : V, key?:K, type?:Ref.UPDATE_TYPE, transform?:boolean, is_child_update?:boolean)=>void|boolean
 export type observe_options = {types?:Ref.UPDATE_TYPE[], ignore_transforms?:boolean, recursive?:boolean}
@@ -56,7 +58,8 @@ export abstract class Ref<T = any> extends EventTarget {
     }
 
     public get val(): T|undefined {
-        this.handleBeforeValueGet();
+        if (typeof this.#val !== "object" && typeof this.#val !== "function")
+            this.handleBeforeNonReferencableGet();
         return this.#val;
     }
     public set val(value: T|undefined) {
@@ -171,7 +174,6 @@ export abstract class Ref<T = any> extends EventTarget {
     
                 if (thisRef instanceof PointerProperty) {
                     return Ref.collapseValue(Pointer.createTransform([thisRef.pointer], ()=>{
-                        console.log("trans",thisRef.pointer,thisVal,thisVal(...args))
                         return thisVal(...args);
                     }));
                 }
@@ -351,12 +353,14 @@ export abstract class Ref<T = any> extends EventTarget {
 
 
     protected static capturedGetters? = new Set<Ref>()
+    protected static capturedGettersWithKeys? = new Map<Pointer, Set<any>>().setAutoDefault(Set)
 
     /**
      * true if currently capturing pointer getters in always function
      */
     public static isCapturing = false;
-    
+    public static freezeCapturing = false;
+
     /**
      * Used for handling smart transforms
      * captureGetters must be called before transform, getCaptuedGetters after to
@@ -364,34 +368,62 @@ export abstract class Ref<T = any> extends EventTarget {
      */
     protected static captureGetters() {
         this.isCapturing = true;
+        this.freezeCapturing = false;
         this.capturedGetters = new Set()
+        this.capturedGettersWithKeys = new Map().setAutoDefault(Set)
     }
 
     protected static getCapturedGetters() {
-        const captured = this.capturedGetters;
+        const captured = {capturedGetters: this.capturedGetters, capturedGettersWithKeys:this.capturedGettersWithKeys};
         this.capturedGetters = undefined;
+        this.capturedGettersWithKeys = undefined;
         this.isCapturing = false;
         return captured;
     }
 
     /**
-     * must be called each time before the current value of the Ref is requested
-     * to keep track of dependencies and update transform
+     * Prevents any values accessed within the callback function from
+     * being captured by a transform function (e.g. always)
      */
-    handleBeforeValueGet() {
+    public static disableCapturing<T>(callback:()=>T): T {
+        this.freezeCapturing = true;
+        const res = callback();
+        this.freezeCapturing = false;
+        return res;
+    }
+
+
+    /**
+     * must be called each time before the current collapsed value of the Ref is requested
+     * to keep track of dependencies and update transform
+     * Examples:
+     *  * raw values of a primitive pointer 
+     *  * any raw property of a pointer (not a PointerProperty ref)
+     *  * toString() for any value
+     */
+    handleBeforeNonReferencableGet(key:any = NOT_EXISTING) {
+        if (Ref.freezeCapturing) return;
         // remember previous capture state
         const previousGetters = Ref.capturedGetters;
+        const previousGettersWithKeys = Ref.capturedGettersWithKeys;
         const previousCapturing = Ref.isCapturing;
 
         // trigger transform update if not live
         if (this.#transformSource && !this.#liveTransform && !this.#forceLiveTransform) {
             Ref.capturedGetters = new Set();
+            Ref.capturedGettersWithKeys = new Map().setAutoDefault(Set);
             this.#transformSource.update();
         }
         if (previousCapturing) {
             Ref.isCapturing = true;
             Ref.capturedGetters = previousGetters ?? new Set();
-            Ref.capturedGetters.add(this);
+            Ref.capturedGettersWithKeys = previousGettersWithKeys ?? new Map().setAutoDefault(Set);
+
+            if (key === NOT_EXISTING) Ref.capturedGetters.add(this);
+            else if (this instanceof Pointer) Ref.capturedGettersWithKeys.getAuto(this).add(key)
+            else {
+                logger.warn("invalid capture, must be a pointer or property")
+            }
         }
     }
 
@@ -536,7 +568,7 @@ export class PointerProperty<T=any> extends Ref<T> {
 
     // get current pointer property
     public override get val():T {
-        this.handleBeforeValueGet();
+        // this.handleBeforePrimitiveValueGet();
         return this.pointer.getProperty(this.key, this.#leak_js_properties);
     }
 
@@ -906,6 +938,10 @@ export type pointer_type = number;
 
 // mock pointer used for garbage collection
 type MockPointer = {id: string, origin: Endpoint, subscribed?: Endpoint|false, is_origin: boolean} 
+
+export type SmartTransformOptions = {
+	cache?: boolean
+}
 
 /** Wrapper class for all pointer values ($xxxxxxxx) */
 export class Pointer<T = any> extends Ref<T> {
@@ -1408,8 +1444,8 @@ export class Pointer<T = any> extends Ref<T> {
      * @param persistent_datex_transform 
      * @returns 
      */
-    static createSmartTransform<const T>(transform:SmartTransformFunction<T>, persistent_datex_transform?:string, forceLive = false, ignoreReturnValue = false):Pointer<T> {
-        return Pointer.create(undefined, NOT_EXISTING).smartTransform(transform, persistent_datex_transform, forceLive, ignoreReturnValue);
+    static createSmartTransform<const T>(transform:SmartTransformFunction<T>, persistent_datex_transform?:string, forceLive = false, ignoreReturnValue = false, options?:SmartTransformOptions):Pointer<T> {
+        return Pointer.create(undefined, NOT_EXISTING).smartTransform(transform, persistent_datex_transform, forceLive, ignoreReturnValue, options);
     }
 
     static createTransformAsync<const T,V extends TransformFunctionInputs>(observe_values:V, transform:AsyncTransformFunction<V,T>, persistent_datex_transform?:string):Promise<Pointer<T>>
@@ -2086,6 +2122,30 @@ export class Pointer<T = any> extends Ref<T> {
         else return this.initializeValue(v, is_transform); // observers not relevant for init
     }
 
+    // also trigger event for all property specific observers
+    override triggerValueInitEvent() {
+        const value = this.current_val;
+
+        // TODO: await promises?
+        for (const [key, entry] of this.change_observers) {
+            for (const [o, options] of entry) {
+                if ((!options?.types || options.types.includes(Ref.UPDATE_TYPE.INIT))) o(value, key, Ref.UPDATE_TYPE.INIT); 
+            }
+        }
+        for (const [object, entries] of this.bound_change_observers) {
+            for (const [key, handlers] of entries) {
+                for (const [handler, options] of handlers) {
+                    if ((!options?.types || options.types.includes(Ref.UPDATE_TYPE.INIT))) {
+                        const res = handler.call(object, value, key, Ref.UPDATE_TYPE.INIT);
+                        if (res === false) this.unobserve(handler, object, key);
+                    }
+                }
+            }
+        }
+
+        return super.triggerValueInitEvent()
+    }
+
 
     /**
      * returns a value that can be referenced in JS
@@ -2352,12 +2412,27 @@ export class Pointer<T = any> extends Ref<T> {
         else return false;
     }
 
-    protected smartTransform<R>(transform:SmartTransformFunction<T&R>, persistent_datex_transform?:string, forceLive = false, ignoreReturnValue = false): Pointer<R> {
+
+    protected smartTransform<R>(transform:SmartTransformFunction<T&R>, persistent_datex_transform?:string, forceLive = false, ignoreReturnValue = false, options?:SmartTransformOptions): Pointer<R> {
         if (persistent_datex_transform) this.setDatexTransform(persistent_datex_transform) // TODO: only workaround
 
         const deps = new Set<Ref>();
+        const keyedDeps = new Map<Pointer, Set<any>>().setAutoDefault(Set);
+
         let isLive = false;
         let isFirst = true;
+
+        const returnCache = new Map<string, any>()
+
+        const getDepsHash = () => {
+            const norm = 
+                [...deps].map(v=>Runtime.valueToDatexStringExperimental(v, false, false, false, true)).join("\n") + "\n" +
+                [...keyedDeps].map(([ptr, keys]) => 
+                    [...keys].map(key => Runtime.valueToDatexStringExperimental(ptr.getProperty(key), false, false, false, false)).join("\n")
+                ).join("\n")
+            const hash = sha256(norm)
+            return hash;
+        }
 
         const update = () => {
             // no live transforms needed, just get current value
@@ -2371,21 +2446,33 @@ export class Pointer<T = any> extends Ref<T> {
                 isFirst = false;
 
                 let val!: T
-                let getters!: Set<Ref>;
-    
-                Ref.captureGetters();
-    
-                try {
-                    val = transform() as T;
-                    // also trigger getter if pointer is returned
-                    Ref.collapseValue(val, true, true); 
+                let capturedGetters: Set<Ref<any>> | undefined;
+                let capturedGettersWithKeys: AutoMap<Pointer<any>, Set<any>> | undefined;
+
+                if (options?.cache) {
+                    const hash = getDepsHash()
+                    if (returnCache.has(hash)) {
+                        logger.debug("using cached transform result with hash " + hash)
+                        val = returnCache.get(hash)
+                    } 
                 }
-                catch (e) {
-                    throw e;
-                }
-                // always cleanup capturing
-                finally {
-                    getters = Ref.getCapturedGetters()!;
+
+                // no cached value found, run transform function
+                if (val === undefined) {
+                    Ref.captureGetters();
+    
+                    try {
+                        val = transform() as T;
+                        // also trigger getter if pointer is returned
+                        Ref.collapseValue(val, true, true); 
+                    }
+                    catch (e) {
+                        throw e;
+                    }
+                    // always cleanup capturing
+                    finally {
+                        ({capturedGetters, capturedGettersWithKeys} = Ref.getCapturedGetters());
+                    }
                 }
 
                 if (!ignoreReturnValue && !this.value_initialized) {
@@ -2402,23 +2489,67 @@ export class Pointer<T = any> extends Ref<T> {
                 // update value
                 if (!ignoreReturnValue) this.setVal(val, true, true);
 
+                // remove return value if captured by getters
+                // TODO: this this work as intended?
+                capturedGetters?.delete(val instanceof Pointer ? val : Pointer.getByValue(val));
+                capturedGettersWithKeys?.delete(val instanceof Pointer ? val : Pointer.getByValue(val));
+
+                const hasGetters = capturedGetters||capturedGettersWithKeys;
+                const gettersCount = (capturedGetters?.size??0) + (capturedGettersWithKeys?.size??0);
+
                 // no dependencies, will never change, this is not the intention of the transform
-                if (!ignoreReturnValue && !getters.size) {
+                if (!ignoreReturnValue && hasGetters && !gettersCount) {
                     logger.warn("The transform value for " + this.idString() + " is a static value:", val);
                 }
 
                 if (isLive) {
-                    // observe newly discovered dependencies
-                    for (const getter of getters) {
-                        // // remove returned value from getters
-                        // if (Ref.collapseValue(getter, true, true) === val) {
-                        //     console.log("ignore",val);
-                        //     continue;
-                        // }
 
-                        if (deps.has(getter)) continue;
-                        deps.add(getter)
-                        getter.observe(update, this);
+                    if (capturedGetters) {
+                        // unobserve no longer relevant dependencies
+                        for (const dep of deps) {
+                            if (!capturedGetters?.has(dep)) {
+                                dep.unobserve(update, this);
+                                deps.delete(dep)
+                            }
+                        }
+                        // observe newly discovered dependencies
+                        for (const getter of capturedGetters) {
+                            if (deps.has(getter)) continue;
+                            deps.add(getter)
+                            getter.observe(update, this);
+                        }
+                    }
+
+                    if (capturedGettersWithKeys) {
+                        // unobserve no longer relevant dependencies
+                        for (const [ptr, keys] of keyedDeps) {
+                            const capturedKeys = capturedGettersWithKeys.get(ptr);
+                            for (const key of keys) {
+                                if (!capturedKeys?.has(key)) {
+                                    ptr.unobserve(update, this, key);
+                                    keys.delete(key)
+                                }
+                            }
+                            if (keys.size == 0) keyedDeps.delete(ptr);
+                        }
+
+                        // observe newly discovered dependencies
+                        for (const [ptr, keys] of capturedGettersWithKeys) {
+                            const storedKeys = keyedDeps.getAuto(ptr);
+
+                            for (const key of keys) {
+                                if (storedKeys.has(key)) continue;
+                                ptr.observe(update, this, key);
+                                storedKeys.add(key);
+                            }
+                           
+                        }
+                    }
+                    
+
+                    if (options?.cache) {
+                        const hash = getDepsHash()
+                        returnCache.set(hash, val);
                     }
                 }
             }
@@ -2436,6 +2567,10 @@ export class Pointer<T = any> extends Ref<T> {
                 isLive = false;
                 // disable all observers
                 for (const dep of deps) dep.unobserve(update, this);
+                for (const [ptr, keys] of keyedDeps) {
+                    for (const key of keys) ptr.unobserve(update, this, key);
+                }
+
                 deps.clear();
             },
             update
@@ -2884,8 +3019,9 @@ export class Pointer<T = any> extends Ref<T> {
                         this.handleSet(name, val);
                     },
                     get: () => { 
-                        this.handleBeforeValueGet();
+                        // this.handleBeforePrimitiveValueGet();
                         // important: reference shadow_object, not this.shadow_object here, otherwise it might get garbage collected
+                        this.handleBeforeNonReferencableGet(name);
                         return Ref.collapseValue(shadow_object[name], true, true);
                     }
                 });
@@ -2917,10 +3053,12 @@ export class Pointer<T = any> extends Ref<T> {
 
 			const proxy = new Proxy(<any>obj, {
                 get: (_target, key) => {
-                    this.handleBeforeValueGet();
                     if (key == DX_PTR) return this;
                     if (this.#custom_prop_getter && (!this.shadow_object || !(key in this.shadow_object)) && !(typeof key == "symbol")) return this.#custom_prop_getter(key);
                     const val:any = Ref.collapseValue(this.shadow_object?.[key], true, true);
+
+                    if (key != "$" && key != "$$")
+                        this.handleBeforeNonReferencableGet(key);
 
                     // should fix #private properties, but does not seem to work for inheriting classes?
                     if (typeof val == "function" 

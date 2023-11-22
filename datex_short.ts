@@ -32,6 +32,11 @@ declare global {
     const observe: typeof Ref.observe
     const observeAndInit: typeof Ref.observeAndInit
     const unobserve: typeof Ref.unobserve
+    /**
+     * Prevents any values accessed within the callback function from
+     * being captured by a transform function (e.g. always)
+     */
+    const isolate: typeof Ref.disableCapturing
 
     // conflict with UIX.template (confusing)
 	// const template: typeof _template; 
@@ -561,9 +566,10 @@ Object.defineProperty(globalThis, 'equals', {value:_equals, configurable:false})
 Object.defineProperty(globalThis, 'selectProperty', {value:_selectProperty, configurable:false})
 Object.defineProperty(globalThis, 'not', {value:_not, configurable:false})
 Object.defineProperty(globalThis, 'effect', {value:_effect, configurable:false})
-Object.defineProperty(globalThis, 'observe', {value:Ref.observe, configurable:false})
-Object.defineProperty(globalThis, 'observeAndInit', {value:Ref.observeAndInit, configurable:false})
-Object.defineProperty(globalThis, 'unobserve', {value:Ref.unobserve, configurable:false})
+Object.defineProperty(globalThis, 'observe', {value:Ref.observe.bind(Ref), configurable:false})
+Object.defineProperty(globalThis, 'observeAndInit', {value:Ref.observeAndInit.bind(Ref), configurable:false})
+Object.defineProperty(globalThis, 'unobserve', {value:Ref.unobserve.bind(Ref), configurable:false})
+Object.defineProperty(globalThis, 'isolate', {value:Ref.disableCapturing.bind(Ref), configurable:false})
 
 // @ts-ignore
 globalThis.get = get

@@ -4,9 +4,10 @@
  */
 
 
-import { AsyncTransformFunction, BooleanRef, CollapsedValue, CollapsedValueAdvanced, Decorators, INSERT_MARK, METADATA, MaybeObjectRef, MinimalJSRef, Pointer, Ref, RefLike, RefOrValue, Runtime, SmartTransformFunction, TransformFunction, TransformFunctionInputs, handleDecoratorArgs, primitive } from "./datex_all.ts";
+import { AsyncTransformFunction, BooleanRef, CollapsedValue, CollapsedValueAdvanced, Decorators, INSERT_MARK, METADATA, MaybeObjectRef, MinimalJSRef, Pointer, Ref, RefLike, RefOrValue, Runtime, SmartTransformFunction, SmartTransformOptions, TransformFunction, TransformFunctionInputs, handleDecoratorArgs, primitive } from "./datex_all.ts";
 import { Datex } from "./mod.ts";
 import { IterableHandler } from "./utils/iterable-handler.ts";
+
 
 
 /**
@@ -21,7 +22,7 @@ import { IterableHandler } from "./utils/iterable-handler.ts";
  * y.val // 10
  * ```
  */
-export function always<T>(transform:SmartTransformFunction<T>): MinimalJSRef<T> // return signature from Value.collapseValue(Pointer.smartTransform())
+export function always<T>(transform:SmartTransformFunction<T>, options?: SmartTransformOptions): MinimalJSRef<T> // return signature from Value.collapseValue(Pointer.smartTransform())
 /**
  * Shortcut for datex `always (...)`
  * @param script 
@@ -29,9 +30,8 @@ export function always<T>(transform:SmartTransformFunction<T>): MinimalJSRef<T> 
  */
 export function always<T=unknown>(script:TemplateStringsArray, ...vars:any[]): Promise<MinimalJSRef<T>>
 export function always(scriptOrJSTransform:TemplateStringsArray|SmartTransformFunction<any>, ...vars:any[]) {
-
     // js function
-    if (typeof scriptOrJSTransform == "function") return Ref.collapseValue(Pointer.createSmartTransform(scriptOrJSTransform));
+    if (typeof scriptOrJSTransform == "function") return Ref.collapseValue(Pointer.createSmartTransform(scriptOrJSTransform, undefined, undefined, undefined, vars[0]));
     // datex script
     else return (async ()=>Ref.collapseValue(await datex(`always (${scriptOrJSTransform.raw.join(INSERT_MARK)})`, vars)))()
 }

@@ -110,22 +110,22 @@ Type.std.Map.setJSInterface({
         const entries = value.entries.bind(value);
 
         Object.defineProperty(value, "size", {get() {
-            pointer.handleBeforeValueGet();
+            pointer.handleBeforeNonReferencableGet();
             return getSize();
         }, enumerable:false});
 
         Object.defineProperty(value, "values", {value: () => {
-            pointer.handleBeforeValueGet();
+            pointer.handleBeforeNonReferencableGet();
             return values()
         }, writable:false, enumerable:false});
 
         Object.defineProperty(value, "keys", {value: () => {
-            pointer.handleBeforeValueGet();
+            pointer.handleBeforeNonReferencableGet();
             return keys()
         }, writable:false, enumerable:false});
 
         Object.defineProperty(value, "entries", {value: () => {
-            pointer.handleBeforeValueGet();
+            pointer.handleBeforeNonReferencableGet();
             return entries()
         }, writable:false, enumerable:false});
 
@@ -196,22 +196,22 @@ Type.std.Set.setJSInterface({
         const entries = value.entries.bind(value);
 
         Object.defineProperty(value, "size", {get() {
-            pointer.handleBeforeValueGet();
+            pointer.handleBeforeNonReferencableGet();
             return getSize();
         }, enumerable:false});
 
         Object.defineProperty(value, "values", {value: () => {
-            pointer.handleBeforeValueGet();
+            pointer.handleBeforeNonReferencableGet();
             return values()
         }, writable:false, enumerable:false});
 
         Object.defineProperty(value, "keys", {value: () => {
-            pointer.handleBeforeValueGet();
+            pointer.handleBeforeNonReferencableGet();
             return values()
         }, writable:false, enumerable:false});
 
         Object.defineProperty(value, "entries", {value: () => {
-            pointer.handleBeforeValueGet();
+            pointer.handleBeforeNonReferencableGet();
             return entries()
         }, writable:false, enumerable:false});
 
