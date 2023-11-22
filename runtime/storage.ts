@@ -10,6 +10,7 @@ import { localStorage } from "./storage-locations/local-storage-compat.ts";
 import { MessageLogger } from "../utils/message_logger.ts";
 import { displayFatalError } from "./display.ts"
 import { Type } from "../types/type.ts";
+import { addPersistentListener } from "../utils/persistent-listeners.ts";
 
 
 // displayInit();
@@ -903,7 +904,7 @@ export namespace Storage {
 // @ts-ignore NO_INIT
 if (!globalThis.NO_INIT) {
     if (client_type == "deno") addEventListener("unload", ()=>Storage.handleExit(), {capture: true});
-    addEventListener("beforeunload", ()=>Storage.handleExit(), {capture: true});
+    addPersistentListener(globalThis, "beforeunload", ()=>Storage.handleExit(), {capture: true})
     // @ts-ignore document
     if (globalThis.document) addEventListener("visibilitychange", ()=>{
         // @ts-ignore document

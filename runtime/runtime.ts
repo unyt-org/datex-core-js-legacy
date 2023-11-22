@@ -74,6 +74,7 @@ import { AutoMap } from "../utils/auto_map.ts";
 import { Supranet } from "../network/supranet.ts";
 import { sendDatexViaHTTPChannel } from "../network/datex-http-channel.ts";
 import { setCookie } from "../utils/cookies.ts";
+import { addPersistentListener, removePersistentListener } from "../utils/persistent-listeners.ts";
 
 const mime = client_type === "deno" ? (await import("https://deno.land/x/mimetypes@v1.0.0/mod.ts")).mime : null;
 
@@ -1093,7 +1094,7 @@ export class Runtime {
         
         // remove previous goodbye
         if (this.lastEndpointUnloadHandler) {
-            globalThis.removeEventListener("beforeunload", this.lastEndpointUnloadHandler)
+            removePersistentListener(globalThis, "beforeunload", this.lastEndpointUnloadHandler)
             this.lastEndpointUnloadHandler = undefined;
         }
 
@@ -1121,7 +1122,7 @@ export class Runtime {
             }
             
             // delete endpoint on exit
-            globalThis.addEventListener("beforeunload", this.lastEndpointUnloadHandler);
+            addPersistentListener(globalThis, "beforeunload", this.lastEndpointUnloadHandler)
         }
 
         localStorage['active_endpoints'] = JSON.stringify(endpoints)
