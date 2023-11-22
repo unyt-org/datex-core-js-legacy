@@ -10,7 +10,7 @@ Includes
  1. [Introduction](./docs/manual/01%20Introduction.md)
  2. [Important DATEX Concepts](./docs/manual/02%20Important%20DATEX%20Concepts.md)
  3. [Pointers](./docs/manual/03%20Pointers.md)
- 4. [Pointer 20Synchronisation](./docs/manual/04%Pointer%20Synchronisation.md)
+ 4. [Pointer Synchronisation](./docs/manual/04%20Pointer%20Synchronisation.md)
  5. [Eternal Pointers](./docs/manual/05%20Eternal%20Pointers.md)
  6. [Supranet Networking](./docs/manual/06%20Supranet%20Networking.md)
  7. [Endpoints](./docs/manual/07%20Endpoints.md)
