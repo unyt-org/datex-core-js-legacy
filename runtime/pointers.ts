@@ -135,6 +135,7 @@ export abstract class Ref<T = any> extends EventTarget {
         }
 
         handler.get = (_, key) => {
+
             // array iterator
             if (key === Symbol.iterator) {
                 // array
@@ -148,15 +149,15 @@ export abstract class Ref<T = any> extends EventTarget {
                 else throw new Error("Cannot iterate over pointer properties");
             }
 
+            if (typeof key == "symbol") return pointer.val?.[key];
+
             // special array $ methods (map, ...)
             if (pointer.val instanceof Array) {
                 if (typeof key == "string" && key in arrayFunctions) return arrayFunctions[key];
             }
             
-
             if (force_pointer_properties) return PointerProperty.get(pointer, <keyof typeof pointer>key, true);
             else {
-                // TODO: handle typeof key == "symbol" (currently not supported in DATEX)
                 if (!(pointer.val instanceof Array) && ![...pointer.getKeys()].includes(key)) {
                     throw new ValueError("Property "+key.toString()+" does not exist in value");
                 }
