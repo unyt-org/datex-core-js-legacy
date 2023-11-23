@@ -155,6 +155,11 @@ export abstract class Ref<T = any> extends EventTarget {
             if (pointer.val instanceof Array) {
                 if (typeof key == "string" && key in arrayFunctions) return arrayFunctions[key];
             }
+
+            // special map $ methods (get, ...)
+            if (pointer.val instanceof Map) {
+                if (key === "get") return (k: any) => PointerProperty.get(pointer, <keyof typeof pointer>k);
+            }
             
             if (force_pointer_properties) return PointerProperty.get(pointer, <keyof typeof pointer>key, true);
             else {
@@ -715,28 +720,47 @@ type _Proxy$<T>         = _Proxy$Function<T> &
         [key: number]: RefLikeOut<V>, 
         map<U>(callbackfn: (value: MaybeObjectRef<V>, index: number, array: V[]) => U, thisArg?: any): Pointer<U[]>
     }
-    // normal object
-    : {readonly [K in keyof T]: RefLikeOut<T[K]>} // always map properties to pointer property references
+    : 
+    (
+        T extends Map<infer K, infer V> ? 
+        {
+            get(key: K): RefLikeOut<V>
+        }
 
+         // normal object
+        : {readonly [K in keyof T]: RefLikeOut<T[K]>} // always map properties to pointer property references
+    )
+   
 type _PropertyProxy$<T> = _Proxy$Function<T> & 
     T extends Array<infer V> ? 
     // array
     {
         [key: number]: PointerProperty<V>, 
         map<U>(callbackfn: (value: MaybeObjectRef<V>, index: number, array: V[]) => U, thisArg?: any): Pointer<U[]>
-    }
-    // normal object
-    : {readonly [K in keyof T]: PointerProperty<T[K]>} // always map properties to pointer property references
-
+    } 
+    : 
+    (
+        T extends Map<infer K, infer V> ? 
+        {
+            get(key: K): PointerProperty<V>
+        }
+        // normal object
+        : {readonly [K in keyof T]: PointerProperty<T[K]>} // always map properties to pointer property references
+    )
 export type Proxy$<T> = _Proxy$<PrimitiveToClass<T>>
 export type PropertyProxy$<T> = _PropertyProxy$<PrimitiveToClass<T>>
 
-export type ObjectRef<T> = T & {
-    $:Proxy$<T> // reference to value (might generate pointer property, if no underlying pointer reference)
-    $$:PropertyProxy$<T> // always returns a pointer property reference
-};
+export type ObjectRef<T> =
+    T
+    // TODO:
+    // {[K in keyof T]: MaybeObjectRef<T[K]>}
+    & 
+    {
+        $:Proxy$<T> // reference to value (might generate pointer property, if no underlying pointer reference)
+        $$:PropertyProxy$<T> // always returns a pointer property reference
+    };
 
-export type MaybeObjectRef<T> = T extends primitive ? T : ObjectRef<T>
+export type MaybeObjectRef<T> = T extends primitive|Function ? T : ObjectRef<T>
 
 /**
  * @deprecated use ObjectRef
