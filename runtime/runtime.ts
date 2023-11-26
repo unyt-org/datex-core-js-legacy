@@ -460,7 +460,7 @@ export class Runtime {
 
     // DATEX OUT + REDIRECT
 
-    private static callbacks_by_sid = new Map<string, [resolve:globalThis.Function, reject:globalThis.Function, response_received?:true]>();
+    private static callbacks_by_sid = new Map<string, [resolve:globalThis.Function, reject:globalThis.Function, timeoutId?: number]>();
     private static detailed_result_callbacks_by_sid = new Map<string, (scope:datex_scope, header:dxb_header, error?:Error)=>void>(); // call only once
     private static detailed_result_callbacks_by_sid_multi = new Map<string, (scope:datex_scope, header:dxb_header, error?:Error)=>void>(); // call multiple times
 
@@ -999,15 +999,16 @@ export class Runtime {
           
 
             if (wait_for_result) { // only set callback if required
-                this.callbacks_by_sid.set(unique_sid, [resolve, reject]);
+                let timeoutId = undefined;
                 // default timeout
                 if (timeout == undefined) timeout = this.OPTIONS.DEFAULT_REQUEST_TIMEOUT;
                 if (timeout > 0 && Number.isFinite(timeout)) {
-                    setTimeout(()=>{
+                    timeoutId = setTimeout(()=>{
                         // reject if response wasn't already received (might still be processed, and resolve not yet called)
                         if (!this.callbacks_by_sid.get(unique_sid)?.[2]) reject(new NetworkError("DATEX request timeout after "+timeout+"ms: " + unique_sid +  " to " + Runtime.valueToDatexString(to)));
                     }, timeout);
                 }
+                this.callbacks_by_sid.set(unique_sid, [resolve, reject, timeoutId]);
             }
             else resolve(true)
         })
@@ -1809,7 +1810,8 @@ export class Runtime {
             const unique_sid = header.sid+"-"+header.return_index;
             const callbacks = this.callbacks_by_sid.get(unique_sid);
             if (callbacks) {
-                callbacks[2] = true; // set response received flag
+                // clear response received timeout
+                if (callbacks[2] != undefined) clearTimeout(callbacks[2])
             }
 
             // parse current block and try if blocks with higher ids exist
@@ -1935,15 +1937,15 @@ export class Runtime {
 
             // handle result
             if (this.callbacks_by_sid.has(unique_sid)) {
-                this.callbacks_by_sid.get(unique_sid)[1](e, true);
+                this.callbacks_by_sid.get(unique_sid)![1](e, true);
                 this.callbacks_by_sid.delete(unique_sid);
             }
             if (this.detailed_result_callbacks_by_sid.has(unique_sid)) {
-                this.detailed_result_callbacks_by_sid.get(unique_sid)(scope, header, e);
+                this.detailed_result_callbacks_by_sid.get(unique_sid)!(scope, header, e);
                 this.detailed_result_callbacks_by_sid.delete(unique_sid)
             }
             else if (this.detailed_result_callbacks_by_sid_multi.has(unique_sid)) {
-                this.detailed_result_callbacks_by_sid_multi.get(unique_sid)(scope, header, e);
+                this.detailed_result_callbacks_by_sid_multi.get(unique_sid)!(scope, header, e);
             }
 
         }
@@ -1984,15 +1986,15 @@ export class Runtime {
 
             // handle result
             if (this.callbacks_by_sid.has(unique_sid)) {
-                this.callbacks_by_sid.get(unique_sid)[0](return_value);      
+                this.callbacks_by_sid.get(unique_sid)![0](return_value);      
                 this.callbacks_by_sid.delete(unique_sid)                     
             }
             if (this.detailed_result_callbacks_by_sid.has(unique_sid)) {
-                this.detailed_result_callbacks_by_sid.get(unique_sid)(scope, header);
+                this.detailed_result_callbacks_by_sid.get(unique_sid)!(scope, header);
                 this.detailed_result_callbacks_by_sid.delete(unique_sid)
             }
             else if (this.detailed_result_callbacks_by_sid_multi.has(unique_sid)) {
-                this.detailed_result_callbacks_by_sid_multi.get(unique_sid)(scope, header);
+                this.detailed_result_callbacks_by_sid_multi.get(unique_sid)!(scope, header);
             }
             
         }
