@@ -1005,7 +1005,7 @@ export class Runtime {
                 if (timeout > 0 && Number.isFinite(timeout)) {
                     timeoutId = setTimeout(()=>{
                         // reject if response wasn't already received (might still be processed, and resolve not yet called)
-                        if (!this.callbacks_by_sid.get(unique_sid)?.[2]) reject(new NetworkError("DATEX request timeout after "+timeout+"ms: " + unique_sid +  " to " + Runtime.valueToDatexString(to)));
+                        reject(new NetworkError("DATEX request timeout after "+timeout+"ms: " + unique_sid +  " to " + Runtime.valueToDatexString(to)));
                     }, timeout);
                 }
                 this.callbacks_by_sid.set(unique_sid, [resolve, reject, timeoutId]);
