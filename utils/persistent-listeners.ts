@@ -1,3 +1,4 @@
+import { IterableWeakMap } from "./iterable-weak-map.ts";
 
 const originalAddEventListener = EventTarget.prototype.addEventListener
 const originalRemoveEventListener = EventTarget.prototype.removeEventListener
@@ -18,31 +19,21 @@ export function overrideEventTargetPrototype() {
  */
 export function addPersistentListener(target: EventTarget, event: string, handler: EventListenerOrEventListenerObject|null, options?: boolean | AddEventListenerOptions) {
 	originalAddEventListener.call(target, event, handler, options)
-	listeners.set(new WeakRef(target), {event, handler, options});
+	listeners.set(target, {event, handler, options});
 }
 
 export function removePersistentListener(target: EventTarget, event: string, handler: EventListenerOrEventListenerObject|null, options?: boolean | AddEventListenerOptions) {
 	originalRemoveEventListener.call(target, event, handler, options)
-	for (const [targetRef] of listeners) {
-		const possibleTarget = targetRef.deref();
-		if (!possibleTarget) {
-			listeners.delete(targetRef);
-			continue;
-		}
-		if (target === possibleTarget) listeners.delete(targetRef);
+	for (const [possibleTarget] of listeners) {
+		if (target === possibleTarget) listeners.delete(possibleTarget);
 	}
 }
 
 export function recreatePersistentListeners() {
-	for (const [targetRef, {event, handler, options}] of listeners) {
-		const target = targetRef.deref();
-		if (!target) {
-			listeners.delete(targetRef);
-			continue;
-		}
+	for (const [target, {event, handler, options}] of listeners) {
 		console.debug("recreated a persistent event listener for '" + event + "'")
 		originalAddEventListener.call(target, event, handler, options)
 	}
 }
 
-const listeners = new Map<WeakRef<EventTarget>, {event: string, handler: EventListenerOrEventListenerObject|null, options?: boolean | AddEventListenerOptions}>()
+const listeners = new IterableWeakMap<EventTarget, {event: string, handler: EventListenerOrEventListenerObject|null, options?: boolean | AddEventListenerOptions}>()

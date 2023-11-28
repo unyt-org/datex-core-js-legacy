@@ -1082,14 +1082,12 @@ export class Pointer<T = any> extends Ref<T> {
     }
 
     static #is_local = true;
-    static #local_pointers = new Set<WeakRef<Pointer>>();
+    static #local_pointers = new IterableWeakSet<Pointer>();
     public static set is_local(local: boolean) {
         this.#is_local = local;
         // update pointer ids if no longer local
         if (!this.#is_local) {
-            for (const pointerRef of this.#local_pointers) {
-                const pointer = pointerRef.deref();
-                if (!pointer) continue;
+            for (const pointer of this.#local_pointers) {
                 pointer.id = Pointer.getUniquePointerID(pointer);
             }
             this.#local_pointers.clear();
@@ -1148,7 +1146,7 @@ export class Pointer<T = any> extends Ref<T> {
 
         // add to local pointers list if no global endpoint id yet -> update pointer id as soon as global id available
         if (Pointer.is_local) {
-            this.#local_pointers.add(new WeakRef(forPointer))
+            this.#local_pointers.add(forPointer)
         }
 
         return id;
