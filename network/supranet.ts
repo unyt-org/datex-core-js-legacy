@@ -279,6 +279,8 @@ export class Supranet {
             }    
         }
 
+        if (local_cache == false) endpoint_config.temporary = true;
+
         endpoint_config.endpoint = endpoint;
         endpoint_config.keys = keys;
         endpoint_config.save();

@@ -16,11 +16,11 @@ export function setCookie(name: string, value: string, expDays?: number) {
 
 	value = encodeURIComponent(value)
 	let expiryDate = new Date("Fri, 31 Dec 9999 21:10:10 GMT");
-	if (expDays) {
+	if (expDays !== undefined) {
 		expiryDate = new Date();
 		expiryDate.setTime(expiryDate.getTime() + (expDays * 24 * 60 * 60 * 1000));
 	}
-	const expires = "expires=" + expiryDate.toUTCString() + ";";
+	const expires = expDays == 0 ? "" : "expires=" + expiryDate.toUTCString() + ";";
 	document.cookie = name + "=" + value + "; " + expires + " path=/;"
 }
 

@@ -175,6 +175,10 @@ class EndpointConfig implements EndpointConfigData {
 		else if (!this.storage)
 			logger.warn("Cannot save endpoint config");
 		else {
+			// remove endpoint config from previous storage
+			if (this.storage == globalThis.localStorage) globalThis.sessionStorage.removeItem(this.storageId)
+			else globalThis.localStorage.removeItem(this.storageId)
+
 			localStorage.setItem(this.locationId, this.temporary ? "session" : "persistent");
 			this.storage.setItem(this.storageId, serialized);
 		}

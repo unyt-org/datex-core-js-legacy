@@ -75,6 +75,7 @@ import { Supranet } from "../network/supranet.ts";
 import { sendDatexViaHTTPChannel } from "../network/datex-http-channel.ts";
 import { setCookie } from "../utils/cookies.ts";
 import { addPersistentListener, removePersistentListener } from "../utils/persistent-listeners.ts";
+import { endpoint_config } from "./endpoint_config.ts";
 
 const mime = client_type === "deno" ? (await import("https://deno.land/x/mimetypes@v1.0.0/mod.ts")).mime : null;
 
@@ -1131,7 +1132,7 @@ export class Runtime {
         // update endpoint cookie
         const endpointName = endpoint.toString();
         // TODO: store signed endpoint validation cookie
-        if (client_type == "browser") setCookie("datex-endpoint", endpointName);
+        if (client_type == "browser") setCookie("datex-endpoint", endpointName, endpoint_config.temporary ? 0 : undefined);
     }
 
     static getActiveLocalStorageEndpoints() {

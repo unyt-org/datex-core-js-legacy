@@ -25,6 +25,8 @@ import { JSTransferableFunction } from "../types/js-function.ts";
 import { map } from "../functions.ts";
 import { sha256 } from "../utils/sha256.ts";
 import { AutoMap } from "../utils/auto_map.ts";
+import { IterableWeakSet } from "../utils/iterable-weak-set.ts";
+import { IterableWeakMap } from "../utils/iterable-weak-map.ts";
 
 export type observe_handler<K=any, V extends RefLike = any> = (value:V extends RefLike<infer T> ? T : V, key?:K, type?:Ref.UPDATE_TYPE, transform?:boolean, is_child_update?:boolean)=>void|boolean
 export type observe_options = {types?:Ref.UPDATE_TYPE[], ignore_transforms?:boolean, recursive?:boolean}
@@ -2437,12 +2439,13 @@ export class Pointer<T = any> extends Ref<T> {
         else return false;
     }
 
+    public static WEAK_EFFECT_DISPOSED = Symbol("WEAK_EFFECT_DISPOSED")
 
     protected smartTransform<R>(transform:SmartTransformFunction<T&R>, persistent_datex_transform?:string, forceLive = false, ignoreReturnValue = false, options?:SmartTransformOptions): Pointer<R> {
         if (persistent_datex_transform) this.setDatexTransform(persistent_datex_transform) // TODO: only workaround
 
-        const deps = new Set<Ref>();
-        const keyedDeps = new Map<Pointer, Set<any>>().setAutoDefault(Set);
+        const deps = new IterableWeakSet<Ref>();
+        const keyedDeps = new IterableWeakMap<Pointer, Set<any>>().setAutoDefault(Set);
 
         let isLive = false;
         let isFirst = true;
@@ -2492,7 +2495,7 @@ export class Pointer<T = any> extends Ref<T> {
                         Ref.collapseValue(val, true, true); 
                     }
                     catch (e) {
-                        throw e;
+                        if (e !== Pointer.WEAK_EFFECT_DISPOSED) console.error(e);
                     }
                     // always cleanup capturing
                     finally {

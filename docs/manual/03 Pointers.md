@@ -186,6 +186,7 @@ id.val = 35; // triggers the fetch effect again
 > id = 12; // does not trigger the effect
 > ```
 
+
 ### Clearing effects
 
 The `effect()` function returns an object with a `dispose()` method that can be called to clear the effect.
@@ -219,6 +220,30 @@ function task() {
     // effect is automatically disposed at the end of this scope
 }
 ```
+
+### Automatic effect disposal with weak variable bindings
+
+Effects can also be automatically disposed by using weak value bindings.
+The effect is only active as long as none of the weakly bound values is garbage collected:
+
+```ts
+const x = $$(42)
+
+// bind x to the effect as a weak value
+effect(
+    // effect function, weak variables are passed in via function arguments
+    ({x}) => {
+        console.log("x is " + x);
+    }, 
+    // list of weak variable bindings:
+    {x} 
+)
+```
+
+As soon the the weakly bound value (`x` in the example above) is no longer referenced anywhere,
+it is garbage colleted and the effect is removed.
+
+Weak value bindings can be used with all *object* values, not just with pointers.
 
 ## Observing pointer changes
 

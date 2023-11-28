@@ -55,9 +55,33 @@ export function always(scriptOrJSTransform:TemplateStringsArray|SmartTransformFu
  * x.val = 6; // no log
  * ```
  */
-export function effect(handler:() => void): {dispose: () => void, [Symbol.dispose]: () => void} {
-    const ptr = Pointer.createSmartTransform(handler, undefined, true, true);
+export function effect<W extends Record<string, WeakKey>|undefined>(handler:W extends undefined ? () => void :(weakVariables: W) => void, weakVariables?: W): {dispose: () => void, [Symbol.dispose]: () => void} {
+    
+	let ptr: Pointer;
+
+	// weak variable binding
+	if (weakVariables) {
+		const weakVariablesProxy = {};
+		for (const [k, v] of Object.entries(weakVariables)) {
+			const weakRef = new WeakRef(v);
+			Object.defineProperty(weakVariablesProxy, k, {get() {
+			  const val = weakRef.deref()
+			  if (!val) {
+				// dispose effect
+				ptr.is_persistent = false;
+				ptr.delete()
+				throw Pointer.WEAK_EFFECT_DISPOSED;
+			  }
+			  else return val;
+			}})
+		}
+		const originalHandler = handler;
+		handler = (() => originalHandler(weakVariablesProxy)) as any;
+	}
+	
+	ptr = Pointer.createSmartTransform(handler as any, undefined, true, true);
 	ptr.is_persistent = true;
+
 	return {
 		[Symbol.dispose||Symbol.for("Symbol.dispose")]() {
 			ptr.is_persistent = false;
@@ -69,7 +93,6 @@ export function effect(handler:() => void): {dispose: () => void, [Symbol.dispos
 		}
 	}
 }
-
 
 
 /**
