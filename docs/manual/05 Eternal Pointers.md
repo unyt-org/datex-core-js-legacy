@@ -48,6 +48,9 @@ const users = eternalVar('users') ?? $$(new Set<string>());
 > The expression followed by the `eternal` value must be always enclosed with `$$()`.
 > This ensures that a new pointer is created and is also necessary to bind the eternal pointer to the correct value within the JavaScript module.
 
+> [!WARNING]
+> You should only use `eternal` for native values (e.g. primitive values, Arrays, Sets, Maps). For custom classes and types, use `lazyEternal`.
+
 ---
 The DATEX Script equivalent to creating eternal values is the *init* operator (`:=`):
 ```rust
@@ -77,3 +80,8 @@ import { User } from "user.ts";
 
 const users = await lazyEternalVar('users') ?? $$(new Set<User>());
 ```
+
+## Resetting eternal state
+
+Delete the `.datex-cache` directory or clear your browser site data.
+In UIX, this can also be achieved by running `uix --clear`.
