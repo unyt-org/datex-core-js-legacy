@@ -22,8 +22,6 @@ export async function sendReport(id: string, reportData:Record<string,any>) {
 		stack: getCallerInfo()
 	}
 
-	console.log("report", report);
-
 	const dx = `@+unyt_status.Reporting.sendReport(?)`
 	const dxb = <ArrayBuffer> await Compiler.compile(dx, [report], {sign: false, encrypt: false});
 	sendDatexViaHTTPChannel(dxb, "https://status.unyt.org")
