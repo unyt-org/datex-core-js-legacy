@@ -14,8 +14,8 @@ export function sendDatexViaHTTPChannel(dxb: ArrayBuffer, origin = window.locati
 	}
 	else {
 		fetch(origin + "/datex-http", {
-			method:'post',
-			headers:{
+			method: 'post',
+			headers: {
 				'Content-Type': 'application/datex',
 			},
 			body: dxb,

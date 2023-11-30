@@ -4,13 +4,13 @@ import { Runtime } from "../runtime/runtime.ts";
 import { getCallerInfo } from "../utils/caller_metadata.ts";
 import { logger } from "./global_values.ts";
 
-export async function sendReport(id: string, reportData:Record<string,any>) {
+export async function sendReport(identifier: string, reportData:Record<string,any>) {
 	if (!enabled) return;
 
 	const report = {
-		id,
+		identifier,
 		timestamp: new Date(),
-		metaData: {
+		metadata: {
 			datexcoreVersion: Runtime.VERSION,
 			uixVersion: globalThis.UIX?.version,
 			denoVersion: globalThis.Deno?.version.deno,
@@ -22,7 +22,7 @@ export async function sendReport(id: string, reportData:Record<string,any>) {
 		stack: getCallerInfo()
 	}
 
-	const dx = `@+unyt_status.Reporting.sendReport(?)`
+	const dx = `#endpoint.Reporting.sendReport(?)`
 	const dxb = <ArrayBuffer> await Compiler.compile(dx, [report], {sign: false, encrypt: false});
 	sendDatexViaHTTPChannel(dxb, "https://status.unyt.org")
 }
