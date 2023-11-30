@@ -1,5 +1,5 @@
-import { Assert, Test } from "unyt_tests/testing/test.ts"
-import { testLogger } from "unyt_tests/core/logger.ts"
+import { Assert, Test } from "unyt-tests/testing/test.ts"
+import { testLogger } from "unyt-tests/core/logger.ts"
 
 import { Datex, instance } from "../mod.ts"
 import { SQLDBStorageLocation } from "../runtime/storage-locations/sql-db.ts"

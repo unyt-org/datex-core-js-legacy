@@ -1,0 +1,5 @@
+{
+	"imports": {
+		"unyt-tests/": "https://cdn.unyt.org/unyt-tests@0.0.3/"
+	}
+}
