@@ -436,15 +436,26 @@ export class Type<T = any> extends ExtensibleFunction {
             this.interface_config.override_silently(ref, value)
         }
 
+        // default array update
+        else if (ref instanceof Array) {
+            if (!(value instanceof Array)) throw new ValueError("Cannot update array value with non-array value")
+            ref.splice(0, ref.length, ...(value as any))
+        }
+
         // default object update
         else if (typeof ref == "object") {
             if (typeof value != "object") throw new ValueError("Cannot update value with non-object-like value")
-            Object.assign(ref, Runtime.serializeValue(value))
+            
+            for (const prop of Object.getOwnPropertyNames(ref)) {
+                if (prop === "$" || prop == "$$") continue; // skip $ properties
+                delete (ref as any)[prop];
+            }
+            Object.assign(ref as any, Runtime.serializeValue(value))
         }
 
         // js function, no change? should not happen
         else if (this as Type<any> == Type.js.TransferableFunction && ref?.toString?.() === value?.toString?.()) {
-            console.log("no chagne fn", value)
+            console.log("no change for fn", value)
         }
 
         else {

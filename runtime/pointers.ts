@@ -1224,7 +1224,8 @@ export class Pointer<T = any> extends Ref<T> {
             // recursive pointer loading! TODO
             if (this.loading_pointers.get(id_string)?.scopeList.has(SCOPE)) {
                 logger.error("recursive pointer loading: $"+ id_string);
-                throw new PointerError("recursive pointer loading: $"+ id_string);
+                return "placeholder"
+                // throw new PointerError("recursive pointer loading: $"+ id_string);
             }
         }
 
