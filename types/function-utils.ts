@@ -157,7 +157,7 @@ export function createFunctionWithDependencyInjections(source: string, dependenc
     try {
         let creatorFn = new Function(...renamedVars, `"use strict";${varMapping?createStaticFn:''}${varMapping}; return (${source})`)
         if (hasThis) creatorFn = creatorFn.bind(dependencies['this'])
-        return creatorFn(...Object.values(dependencies));
+        return creatorFn(...Object.entries(dependencies).filter(([d]) => d!=='this').map(([_,v]) => v));
     }
     catch (e) {
         console.error(source)

@@ -31,7 +31,7 @@ export function removePersistentListener(target: EventTarget, event: string, han
 
 export function recreatePersistentListeners() {
 	for (const [target, {event, handler, options}] of listeners) {
-		console.debug("recreated a persistent event listener for '" + event + "'")
+		// console.debug("recreated a persistent event listener for '" + event + "'")
 		originalAddEventListener.call(target, event, handler, options)
 	}
 }

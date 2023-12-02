@@ -55,6 +55,14 @@ export class Type<T = any> extends ExtensibleFunction {
     variation:string = ''
     parameters:any[] // special type parameters
 
+    #jsTypeDefModule?: string|URL // URL for the JS module that creates the corresponding type definition
+
+    get jsTypeDefModule():string|URL|undefined {return this.#jsTypeDefModule}
+    set jsTypeDefModule(url: string|URL) {
+        if (Type.#jsTypeDefModuleMapper) this.#jsTypeDefModule = Type.#jsTypeDefModuleMapper(url);
+        else this.#jsTypeDefModule = url;
+    }
+
     root_type: Type; // DatexType without parameters and variation
     base_type: Type; // DatexType without parameters
 
@@ -69,6 +77,16 @@ export class Type<T = any> extends ExtensibleFunction {
     // TODO: make true per default? currently results in stack overflows for some std types
     #proxify_children = false // proxify all (new) children of this type
     children_timeouts?: Map<string, number> // individual timeouts for children
+    
+    static #jsTypeDefModuleMapper?: (url:string|URL) => string|URL
+    
+    static setJSTypeDefModuleMapper(fn:  (url:string|URL) => string|URL) {
+        this.#jsTypeDefModuleMapper = fn;
+        // update existing typedef modules
+        for (const type of this.types.values()) {
+            if (type.#jsTypeDefModule) type.jsTypeDefModule = type.#jsTypeDefModule;
+        }
+    }
 
     /**
      * Should proxify all children with proxify_as_child=true

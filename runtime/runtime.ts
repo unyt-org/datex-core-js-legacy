@@ -569,6 +569,9 @@ export class Runtime {
     public static async getURLContent<T=unknown, RAW extends boolean = false>(url_string:string, raw?:RAW, cached?:boolean):Promise<RAW extends false ? T : [data:unknown, type?:string]>
     public static async getURLContent<T=unknown, RAW extends boolean = false>(url:URL, raw?:RAW, cached?:boolean):Promise<RAW extends false ? T : [data:unknown, type?:string]>
     public static async getURLContent<T=unknown, RAW extends boolean = false>(url_string:string|URL, raw:RAW=false, cached = false):Promise<RAW extends false ? T : [data:unknown, type?:string]> {
+
+        if (url_string.toString().startsWith("route:") && window.location?.origin) url_string = new URL(url_string.toString().replace("route:", ""), window.location.origin)
+
         const url = url_string instanceof URL ? url_string : new URL(url_string, baseURL);
         url_string = url.toString();
 
@@ -2434,7 +2437,7 @@ export class Runtime {
 
             else {
                 // cannot fetch type, just cast default
-                logger.warn("Cannot further resolve unknown type '"+type.toString()+"'");
+                logger.warn("Cannot find a type definition for "+type.toString()+". Make sure the module for this type is imported. If this type is no longer used, try to clear your eternal caches.");
                 new_value = type.cast(old_value, context, origin, false, false, assigningPtrId);
             }
 
@@ -4459,7 +4462,7 @@ export class Runtime {
                         if (!SCOPE.sender.equals(to)) throw new PointerError("Sender has no permission to stop sync pointer to another origin", SCOPE);
                     }
 
-                    logger.success(SCOPE.sender + " unsubscribed from " + pointer.idString());
+                    logger.debug(SCOPE.sender + " unsubscribed from " + pointer.idString());
 
                     // not existing pointer or no access to this pointer
                     if (!pointer.value_initialized) throw new PointerError("Pointer does not exist", SCOPE)

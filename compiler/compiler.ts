@@ -14,7 +14,7 @@ import { Logger } from "../utils/logger.ts";
 const logger = new Logger("datex compiler");
 
 import { ReadableStream, Runtime, StaticScope} from "../runtime/runtime.ts";
-import { Endpoint, IdEndpoint, Target, WildcardTarget, Institution, Person, BROADCAST, target_clause, endpoints } from "../types/addressing.ts";
+import { Endpoint, IdEndpoint, Target, WildcardTarget, Institution, Person, BROADCAST, target_clause, endpoints, LOCAL_ENDPOINT } from "../types/addressing.ts";
 import { Pointer, PointerProperty, Ref } from "../runtime/pointers.ts";
 import { CompilerError, RuntimeError, Error as DatexError, ValueError } from "../types/errors.ts";
 import { Function as DatexFunction } from "../types/function.ts";
@@ -162,6 +162,8 @@ export type compiler_scope = {
     inserted_values: Map<unknown, [number]>, // save start indices of all inserted values
 
     used_lbls: string[], // already used lbls
+
+    addJSTypeDefs?: boolean, // should add url() imports for types to load via JS modules
 
     last_cache_point?: number, // index of last cache point (at LBL)
 
@@ -850,7 +852,7 @@ export class Compiler {
         const block_size = pre_header.byteLength + header_and_body.byteLength;
         if (block_size > this.MAX_DXB_BLOCK_SIZE) {
             pre_header_data_view.setUint16(3, 0, true);
-            logger.warn("DXB block size exceeds maximum size of " + this.MAX_DXB_BLOCK_SIZE + " bytes")
+            logger.debug("DXB block size exceeds maximum size of " + this.MAX_DXB_BLOCK_SIZE + " bytes")
         }
         else pre_header_data_view.setUint16(3, block_size, true);
 
@@ -1968,8 +1970,26 @@ export class Compiler {
         },
 
 
-        addTypeByNamespaceAndName: (SCOPE:compiler_scope, namespace:string, name:string, variation?:string, parameters?:any[]|true) => {
+        addTypeByNamespaceAndName: (SCOPE:compiler_scope, namespace:string, name:string, variation?:string, parameters?:any[]|true, jsTypeDefModule?:string|URL) => {
             Compiler.builder.handleRequiredBufferSize(SCOPE.b_index, SCOPE);
+
+            // remember if js type def modules should be added to this scope
+            if (SCOPE.addJSTypeDefs == undefined) {
+                let receiver = Compiler.builder.getScopeReceiver(SCOPE);
+                SCOPE.addJSTypeDefs = !!jsTypeDefModule && receiver != Runtime.endpoint && receiver != LOCAL_ENDPOINT;
+            }
+
+            if (SCOPE.addJSTypeDefs) {
+                Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+4, SCOPE);
+                SCOPE.uint8[SCOPE.b_index++] = BinaryCode.SUBSCOPE_START;
+                SCOPE.uint8[SCOPE.b_index++] = BinaryCode.GET;
+                if (jsTypeDefModule instanceof URL) Compiler.builder.addUrl(jsTypeDefModule.toString(), SCOPE);
+                else {
+                    SCOPE.uint8[SCOPE.b_index++] = BinaryCode.STD_TYPE_URL;
+                    Compiler.builder.addText(jsTypeDefModule.toString(), SCOPE);
+                }
+                SCOPE.uint8[SCOPE.b_index++] = BinaryCode.CLOSE_AND_STORE;
+            }
 
             Compiler.builder.valueIndex(SCOPE);
 
@@ -2006,7 +2026,7 @@ export class Compiler {
             const ns_bin = Compiler.utf8_encoder.encode(namespace);  // convert type namespace to binary
             const variation_bin = variation ? Compiler.utf8_encoder.encode(variation) : undefined;  // convert type namespace to binary
 
-            Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+name_bin.byteLength+ns_bin.byteLength+3+(variation_bin ? variation_bin.byteLength : 0)+(is_extended_type?2:0), SCOPE);
+            Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+name_bin.byteLength+ns_bin.byteLength+4+(variation_bin ? variation_bin.byteLength : 0)+(is_extended_type?2:0), SCOPE);
             SCOPE.uint8[SCOPE.b_index++] = is_extended_type ? BinaryCode.EXTENDED_TYPE : BinaryCode.TYPE;  
             SCOPE.uint8[SCOPE.b_index++] = ns_bin.byteLength;
             SCOPE.uint8[SCOPE.b_index++] = name_bin.byteLength;
@@ -2027,6 +2047,10 @@ export class Compiler {
             // insert parameters directly
             if (parameters instanceof Array) {
                 Compiler.builder.addTuple(new Tuple(parameters), SCOPE);
+            }
+
+            if (SCOPE.addJSTypeDefs) {
+                SCOPE.uint8[SCOPE.b_index++] = BinaryCode.SUBSCOPE_END;
             }
         },
 
@@ -2573,21 +2597,25 @@ export class Compiler {
         serializeValue: (v:any, SCOPE:compiler_scope):any => {
             if (SCOPE.serialized_values.has(v)) return SCOPE.serialized_values.get(v);
             else {
-                let receiver:target_clause = Runtime.endpoint;
-                let options:compiler_options | undefined = SCOPE.options;
-                while(options) {
-                    if (options.to) {
-                        receiver = options.to as target_clause;
-                        break;
-                    }
-                    options = options.parent_scope?.options;
-                }
+                let receiver = Compiler.builder.getScopeReceiver(SCOPE);
                 const s = Runtime.serializeValue(v, receiver);
                 SCOPE.serialized_values.set(v,s);
                 return s;
             }
         },
         
+        getScopeReceiver: (SCOPE: compiler_scope) => {
+            let receiver:target_clause = Runtime.endpoint;
+            let options:compiler_options | undefined = SCOPE.options;
+            while(options) {
+                if (options.to) {
+                    receiver = options.to as target_clause;
+                    break;
+                }
+                options = options.parent_scope?.options;
+            }
+            return receiver;
+        },
 
         // // insert Maybe
         // insertMaybe: async (maybe:Maybe, SCOPE:compiler_scope) => {
@@ -2715,7 +2743,7 @@ export class Compiler {
                 // convert to <type> + serialized object ; also always for type variations
                 // exception for explicit type quantity, type variation is always included in primitive representation without explicit cast
                 if (type?.is_complex || type.root_type !== type && !Type.std.quantity.matchesType(type)) {
-                    Compiler.builder.addTypeByNamespaceAndName(SCOPE, type.namespace, type.name, type.variation, type.parameters);
+                    Compiler.builder.addTypeByNamespaceAndName(SCOPE, type.namespace, type.name, type.variation, type.parameters, type.jsTypeDefModule);
                     value = Compiler.builder.serializeValue(value, SCOPE);
                 }
                 else if (type?.serializable_not_complex) { // for UintArray Buffers
@@ -2832,7 +2860,7 @@ export class Compiler {
             else if (value instanceof WildcardTarget)   Compiler.builder.addTarget(value.target, SCOPE); // Filter Target: ORG, APP, LABEL, ALIAS
             else if (value instanceof Endpoint)         Compiler.builder.addTarget(value, SCOPE); // Filter Target: ORG, APP, LABEL, ALIAS
             else if (value instanceof Type) {
-                Compiler.builder.addTypeByNamespaceAndName(SCOPE, value.namespace, value.name, value.variation, value.parameters); // Type
+                Compiler.builder.addTypeByNamespaceAndName(SCOPE, value.namespace, value.name, value.variation, value.parameters, value.jsTypeDefModule); // Type
             }
             else if (value instanceof Uint8Array)        Compiler.builder.addBuffer(value, SCOPE); // Uint8Array
             else if (value instanceof ArrayBuffer)       Compiler.builder.addBuffer(new Uint8Array(value), SCOPE); // Buffer

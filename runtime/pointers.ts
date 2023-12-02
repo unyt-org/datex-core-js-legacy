@@ -27,6 +27,7 @@ import { sha256 } from "../utils/sha256.ts";
 import { AutoMap } from "../utils/auto_map.ts";
 import { IterableWeakSet } from "../utils/iterable-weak-set.ts";
 import { IterableWeakMap } from "../utils/iterable-weak-map.ts";
+import { LazyPointer } from "./lazy-pointer.ts";
 
 export type observe_handler<K=any, V extends RefLike = any> = (value:V extends RefLike<infer T> ? T : V, key?:K, type?:Ref.UPDATE_TYPE, transform?:boolean, is_child_update?:boolean)=>void|boolean
 export type observe_options = {types?:Ref.UPDATE_TYPE[], ignore_transforms?:boolean, recursive?:boolean}
@@ -983,6 +984,7 @@ export class Pointer<T = any> extends Ref<T> {
     private static pointer_property_delete_listeners = new Set<(p:Pointer, key:any)=>void>();
     private static pointer_value_change_listeners =new Set<(p:Pointer)=>void>();
     private static pointer_for_value_created_listeners = new WeakMap<any, (Set<((p:Pointer)=>void)>)>();
+    private static pointer_for_id_created_listeners = new Map<string, (Set<((p:Pointer)=>void)>)>();
 
     public static onPointerAdded(listener: (p:Pointer)=>void) {
         this.pointer_add_listeners.add(listener);
@@ -1001,6 +1003,23 @@ export class Pointer<T = any> extends Ref<T> {
     }
     public static onPointerValueChanged(listener: (p:Pointer)=>void) {
         this.pointer_value_change_listeners.add(listener);
+    }
+
+    /**
+     * Callback when pointer for a given id was added
+     * @param id
+     * @param listener 
+     * @returns 
+     */
+    public static onPointerForIdAdded(id:string, listener: (p:Pointer)=>void) {
+        const ptr = Pointer.get(id);
+        if (ptr && ptr.value_initialized) {
+            listener(ptr);
+            return;
+        }
+        // set listener
+        if (!this.pointer_for_id_created_listeners.has(id)) this.pointer_for_id_created_listeners.set(id, new Set());
+        this.pointer_for_id_created_listeners.get(id)?.add(listener);
     }
 
     public static onPointerForValueCreated(value:any, listener: (p:Pointer)=>void, trigger_if_exists = true){
@@ -1223,9 +1242,8 @@ export class Pointer<T = any> extends Ref<T> {
         if (SCOPE) {
             // recursive pointer loading! TODO
             if (this.loading_pointers.get(id_string)?.scopeList.has(SCOPE)) {
-                logger.error("recursive pointer loading: $"+ id_string);
-                return "placeholder"
-                // throw new PointerError("recursive pointer loading: $"+ id_string);
+                // logger.debug("recursive pointer loading: $"+ id_string);
+                return new LazyPointer(id_string)
             }
         }
 
@@ -2259,6 +2277,12 @@ export class Pointer<T = any> extends Ref<T> {
                 // pointer for value listeners?
                 if (Pointer.pointer_for_value_created_listeners.has(val)) {
                     for (const l of Pointer.pointer_for_value_created_listeners.get(val)!) l(this);
+                    Pointer.pointer_for_value_created_listeners.delete(val)
+                }
+                // pointer for id listeners
+                if (Pointer.pointer_for_id_created_listeners.has(this.id)) {
+                    for (const l of Pointer.pointer_for_id_created_listeners.get(this.id)!) l(this);
+                    Pointer.pointer_for_id_created_listeners.delete(this.id)
                 }
     
                 // seal original value
@@ -2281,6 +2305,12 @@ export class Pointer<T = any> extends Ref<T> {
             // update registry
             Pointer.primitive_pointers.set(this.#id, new WeakRef(this)); 
             Pointer.pointers.delete(this.#id); 
+
+            // pointer for id listeners
+            if (Pointer.pointer_for_id_created_listeners.has(this.id)) {
+                for (const l of Pointer.pointer_for_id_created_listeners.get(this.id)!) l(this);
+                Pointer.pointer_for_id_created_listeners.delete(this.id)
+            }
 
             // adds garbage collection listener
             this.updateGarbageCollection(); 

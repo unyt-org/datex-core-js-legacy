@@ -28,6 +28,7 @@ import { type Class } from "../utils/global_types.ts";
 import { Conjunction, Disjunction, Logical } from "../types/logic.ts";
 import { client_type } from "../utils/constants.ts";
 import { Assertion } from "../types/assertion.ts";
+import { getCallerInfo } from "../utils/caller_metadata.ts";
 
 const { Reflect: MetadataReflect } = client_type == 'deno' ? await import("https://deno.land/x/reflect_metadata@v0.1.12/mod.ts") : {Reflect};
 
@@ -417,7 +418,17 @@ export class Decorators {
                 else if (params[0] instanceof Type) type = params[0];
                 else if (original_class[METADATA]?.[Decorators.FORCE_TYPE]?.constructor) type = original_class[METADATA]?.[Decorators.FORCE_TYPE]?.constructor
                 else type = Type.get("ext", original_class.name);
-    
+
+                if (client_type == "deno" && type.namespace !== "std") {
+                    const callerFile = getCallerInfo()?.[2]?.file;
+                    if (!callerFile) {
+                        logger.error("Could not determine JS module URL for type '" + type + "'")
+                    }
+                    else {
+                        type.jsTypeDefModule = callerFile;
+                    }
+                }
+                
                 // return new templated class
                 return createTemplateClass(original_class, type);
             }
