@@ -7,6 +7,7 @@ import { INVALID, NOT_EXISTING } from "../runtime/constants.ts";
 import { Tuple } from "./tuple.ts";
 
 import "../utils/auto_map.ts"
+import { ReactiveMapMethods } from "./reactive-methods/map.ts";
 
 // @ts-ignore accecssible to dev console
 globalThis.serializeImg = (img:HTMLImageElement)=> {
@@ -133,6 +134,8 @@ Type.std.Map.setJSInterface({
 
         return value;
     },
+
+    get_reactive_methods_object: (ptr) => new ReactiveMapMethods(ptr),
 
     set_property_silently: (parent:Map<any,any>, key, value, pointer) => Map.prototype.set.call(parent, key, value),
     delete_property_silently: (parent:Map<any,any>, key, pointer) => Map.prototype.delete.call(parent, key),

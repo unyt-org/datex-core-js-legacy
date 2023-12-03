@@ -4,6 +4,8 @@ import { ValueError } from "../datex_all.ts";
 export class IterableHandler<T, U = T> {
 
 	private map: ((value: T, index: number, array: Iterable<T>) => U) | undefined
+	private filter: ((value: T, index: number, array: Iterable<T>) => value is T&U) | undefined
+
 	private onNewEntry: (entry:U, key:number,) => void
 	private onEntryRemoved: (entry:U, key:number,) => void
 	private onEmpty?: () => void
@@ -11,11 +13,14 @@ export class IterableHandler<T, U = T> {
 	
 	constructor(private iterable: Datex.RefOrValue<Iterable<T>>, callbacks: {
 		map?: (value: T, index: number, array: Iterable<T>) => U,
+		// TODO:
+		// filter?: (value: T, index: number, array: Iterable<T>) => value is T&U,
 		onNewEntry: (this: IterableHandler<T, U>, entry:U, key:number) => void
 		onEntryRemoved: (entry: U, key:number) => void,
 		onEmpty?: () => void
 	}) {
 		this.map = callbacks.map;
+		this.filter = callbacks.filter;
 		this.onNewEntry = callbacks.onNewEntry;
 		this.onEntryRemoved = callbacks.onEntryRemoved;
 		this.onEmpty = callbacks.onEmpty;
@@ -135,6 +140,11 @@ export class IterableHandler<T, U = T> {
 	private handleNewEntry(value:T, key:number) {
 		key = Number(key);
 		const entry = this.valueToEntry(value, key)
+
+		// TODO: remove entries inbetween
+		// if (this.filter && !this.filter(value, key, val(this.iterable))) {
+		// 	return;
+		// }
 
 		if (key != undefined) {
 			// TODO: is this correct

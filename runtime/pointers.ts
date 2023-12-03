@@ -2,7 +2,7 @@
 import { Endpoint, endpoints, endpoint_name, IdEndpoint, Person, Target, target_clause, LOCAL_ENDPOINT } from "../types/addressing.ts";
 import { NetworkError, PermissionError, PointerError, RuntimeError, ValueError } from "../types/errors.ts";
 import { Compiler, PrecompiledDXB } from "../compiler/compiler.ts";
-import { DX_PTR, DX_VALUE, INVALID, NOT_EXISTING, SET_PROXY, SHADOW_OBJECT, UNKNOWN_TYPE, VOID } from "./constants.ts";
+import { DX_PTR, DX_REACTIVE_METHODS, DX_VALUE, INVALID, NOT_EXISTING, SET_PROXY, SHADOW_OBJECT, UNKNOWN_TYPE, VOID } from "./constants.ts";
 import { Runtime, UnresolvedValue } from "./runtime.ts";
 import { DEFAULT_HIDDEN_OBJECT_PROPERTIES, logger, TypedArray } from "../utils/global_values.ts";
 import type { compile_info, datex_scope, Equals, PointerSource } from "../utils/global_types.ts";
@@ -22,12 +22,12 @@ import { Time } from "../types/time.ts";
 import "../types/native_types.ts"; // getAutoDefault
 import { displayFatalError } from "./display.ts";
 import { JSTransferableFunction } from "../types/js-function.ts";
-import { map } from "../functions.ts";
 import { sha256 } from "../utils/sha256.ts";
 import { AutoMap } from "../utils/auto_map.ts";
 import { IterableWeakSet } from "../utils/iterable-weak-set.ts";
 import { IterableWeakMap } from "../utils/iterable-weak-map.ts";
 import { LazyPointer } from "./lazy-pointer.ts";
+import { ReactiveArrayMethods } from "../types/reactive-methods/array.ts";
 
 export type observe_handler<K=any, V extends RefLike = any> = (value:V extends RefLike<infer T> ? T : V, key?:K, type?:Ref.UPDATE_TYPE, transform?:boolean, is_child_update?:boolean)=>void|boolean
 export type observe_options = {types?:Ref.UPDATE_TYPE[], ignore_transforms?:boolean, recursive?:boolean}
@@ -130,11 +130,15 @@ export abstract class Ref<T = any> extends EventTarget {
             return Reflect.getOwnPropertyDescriptor(pointer.val, p);
         }
 
-        const arrayFunctions:Record<string,Function> = {};
-        if (pointer.val instanceof Array) {
-            arrayFunctions.map = function(handler:(value: unknown, index: number, array: Iterable<unknown>) => unknown) {
-                return map(pointer.val, handler)
-            }
+        const type = Type.ofValue(pointer.val);
+        
+        // add DX_REACTIVE_METHODS for array
+        if (pointer.val instanceof Array && !(pointer.val as any)[DX_REACTIVE_METHODS]) {
+            (pointer.val as any)[DX_REACTIVE_METHODS] = new ReactiveArrayMethods(pointer);
+        }
+        // add custom DX_REACTIVE_METHODS
+        else if (type.interface_config?.get_reactive_methods_object) {
+            (pointer.val as any)[DX_REACTIVE_METHODS] = type.interface_config.get_reactive_methods_object(pointer.val);
         }
 
         handler.get = (_, key) => {
@@ -154,16 +158,10 @@ export abstract class Ref<T = any> extends EventTarget {
 
             if (typeof key == "symbol") return pointer.val?.[key];
 
-            // special array $ methods (map, ...)
-            if (pointer.val instanceof Array) {
-                if (typeof key == "string" && key in arrayFunctions) return arrayFunctions[key];
-            }
+            // special $ methods
+            const reactiveMethods = pointer.val?.[DX_REACTIVE_METHODS];
+            if (reactiveMethods && key in reactiveMethods) return reactiveMethods[key];
 
-            // special map $ methods (get, ...)
-            if (pointer.val instanceof Map) {
-                if (key === "get") return (k: any) => PointerProperty.get(pointer, <keyof typeof pointer>k);
-            }
-            
             if (force_pointer_properties) return PointerProperty.get(pointer, <keyof typeof pointer>key, true);
             else {
                 if (!(pointer.val instanceof Array) && ![...pointer.getKeys()].includes(key)) {
@@ -401,7 +399,6 @@ export abstract class Ref<T = any> extends EventTarget {
         return res;
     }
 
-
     /**
      * must be called each time before the current collapsed value of the Ref is requested
      * to keep track of dependencies and update transform
@@ -412,6 +409,7 @@ export abstract class Ref<T = any> extends EventTarget {
      */
     handleBeforeNonReferencableGet(key:any = NOT_EXISTING) {
         if (Ref.freezeCapturing) return;
+
         // remember previous capture state
         const previousGetters = Ref.capturedGetters;
         const previousGettersWithKeys = Ref.capturedGettersWithKeys;
@@ -970,6 +968,33 @@ type MockPointer = {id: string, origin: Endpoint, subscribed?: Endpoint|false, i
 export type SmartTransformOptions = {
 	cache?: boolean
 }
+
+const observableArrayMethods = new Set<string>([
+    "entries",
+    "filter",
+    "find",
+    "findIndex",
+    "findLast",
+    "findLastIndex",
+    "flat",
+    "flatMap",
+    "forEach",
+    "includes",
+    "indexOf",
+    "join",
+    "keys",
+    "lastIndexOf",
+    "map",
+    "reduce",
+    "reduceRight",
+    "slice",
+    "some",
+    "toReversed",
+    "toSorted",
+    "toSpliced",
+    "values",
+    "with"
+])
 
 /** Wrapper class for all pointer values ($xxxxxxxx) */
 export class Pointer<T = any> extends Ref<T> {
@@ -3076,9 +3101,8 @@ export class Pointer<T = any> extends Ref<T> {
                         this.handleSet(name, val);
                     },
                     get: () => { 
-                        // this.handleBeforePrimitiveValueGet();
-                        // important: reference shadow_object, not this.shadow_object here, otherwise it might get garbage collected
                         this.handleBeforeNonReferencableGet(name);
+                        // important: reference shadow_object, not this.shadow_object here, otherwise it might get garbage collected
                         return Ref.collapseValue(shadow_object[name], true, true);
                     }
                 });
@@ -3114,8 +3138,10 @@ export class Pointer<T = any> extends Ref<T> {
                     if (this.#custom_prop_getter && (!this.shadow_object || !(key in this.shadow_object)) && !(typeof key == "symbol")) return this.#custom_prop_getter(key);
                     const val:any = Ref.collapseValue(this.shadow_object?.[key], true, true);
 
-                    if (key != "$" && key != "$$")
-                        this.handleBeforeNonReferencableGet(key);
+                    if (key != "$" && key != "$$") {
+                        if (is_array) this.handleBeforeNonReferenceableGetArray(key);
+                        else this.handleBeforeNonReferencableGetObject(key)
+                    }
 
                     // should fix #private properties, but does not seem to work for inheriting classes?
                     if (typeof val == "function" 
@@ -3221,6 +3247,20 @@ export class Pointer<T = any> extends Ref<T> {
             return obj;
         }
     }
+
+
+    private handleBeforeNonReferenceableGetArray(key: string|symbol) {
+        // assumes map, filter, etc. gets called after property is accessed
+        if (typeof key=="string" && observableArrayMethods.has(key)) this.handleBeforeNonReferencableGet()
+        else this.handleBeforeNonReferencableGetObject(key);
+    }
+
+    private handleBeforeNonReferencableGetObject(key: string|symbol) {
+        if (Object.hasOwn(this.shadow_object!, key)) {
+            this.handleBeforeNonReferencableGet(key);
+        }
+    }
+
 
     // get property by key
     // if leak_js_properties is true, primitive + prototype methods (like toString are also accessible) - should only be used in JS context

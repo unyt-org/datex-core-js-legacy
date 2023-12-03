@@ -194,6 +194,41 @@ export function map<T, U, O extends 'array'|'map' = 'array'>(iterable: Iterable<
 }
 
 
+// TODO: (remove empty entries inbetween)
+// export function filter<T, U>(array: Array<T>, predicate: (value: T, index: number, array: T[]) => value is T&U) {
+
+// 	// live map
+// 	if (Datex.Ref.isRef(array)) {
+
+// 		const filtered:U[] = $$([])
+
+// 		const spliceArray = true;
+
+// 		new IterableHandler<T,U>(array, {
+// 			filter: (v,k):v is T&U => {
+// 				return predicate(v,k,array)
+// 			},
+// 			onEntryRemoved: (v,k) => {
+// 				if (spliceArray) filtered.splice(k, 1);
+// 				else delete filtered[k];
+// 			},
+// 			onNewEntry: (v,k) => {
+// 				filtered[k] = v
+// 			},
+// 			onEmpty: () => {
+// 				filtered.length = 0
+// 			}
+// 		})
+
+// 		return filtered;
+
+// 	}
+
+// 	// static map
+// 	else return array.filter(predicate)
+// }
+
+
 /**
  * Switches between two values depending if a value is true or false
  * @param value input value

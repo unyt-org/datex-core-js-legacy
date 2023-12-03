@@ -31,6 +31,7 @@ export type js_interface_configuration<T=any> = {
 
     is_normal_object?: boolean, // if true, handle properties like object properties (no custom handling), ignore add_property, set_property, etc.
 
+    get_reactive_methods_object?: (ptr: Pointer) => Record<string, any>, // returns an object that is mapped to $ methods on the ptr value
 
     type_params_match?: (params:any[], against_params:any[])=>boolean, // implement for parmetrized types -> return if parameters match
 
