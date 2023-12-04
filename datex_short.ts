@@ -13,6 +13,7 @@ import { getCallerFile, getCallerInfo, getMeta } from "./utils/caller_metadata.t
 import { eternals, getLazyEternal, waitingEternals, waitingLazyEternals } from "./utils/eternals.ts";
 
 import {instance} from "./js_adapter/js_class_adapter.ts";
+import { client_type } from "./utils/constants.ts";
 export {instance} from "./js_adapter/js_class_adapter.ts";
 
 declare global {
@@ -281,23 +282,34 @@ export function pointer<T>(value:RefOrValue<T>, property?:unknown): unknown {
 
 export const $$ = pointer;
 
-type $type = Record<string, Pointer<unknown>|Promise<Pointer<unknown>>>;
+interface $fn {
+    <const T>(value:T): MinimalJSRef<T>
+}
+
+type $type = (Record<string, Pointer<unknown>|Promise<Pointer<unknown>>>) & $fn;
 
 /**
- * Used as shortcut for debugging, returns a Pointer or Promise<Pointer>
+ * Compiled reactivity syntax ($()) - throws an error when called directly and not compiled to $$() or always()
+ * Also used as shortcut for debugging, returns a Pointer or Promise<Pointer>
  * for a given id:
  * ```ts
  * const ptr: Pointer = $.AFEFEF3282389FEFAxE2;
  * ```
  * 
  */
-export const $ = new Proxy({} as $type, {
+export const $ = new Proxy(function(){} as unknown as $type, {
     get(_target,p,_receiver) {
         if (typeof p == "string") {
             const ptr = Pointer.get(p);
             if (ptr) return ptr;
             else return Pointer.load(p)
         }
+    },
+
+    apply() {
+        // TODO: change errors, not UIX specific
+        if (client_type == "deno") throw new Error("Experimental $() syntax is currently not supported on the backend");
+        else throw new Error("Experimental $() syntax is not enabled per default. Add \"experimentalFeatures: ['embedded-reactivity']\" to your app.dx to enable this feature.");
     },
 })
 
