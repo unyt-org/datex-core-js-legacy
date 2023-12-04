@@ -32,13 +32,13 @@ Datex.Type.std.Any === any
 Most builtin JavaScript types, like Map, Set or Array have equivalent types in the DATEX std library.
 There are only a few types that are implemented specifically to match JS types:
 
-### js:TransferableFunction
+### js:Function
 
-The `js:TransferableFunction` (`Datex.Type.js.TransferableFunction`) is a special wrapper
+The `js:Function` (`Datex.Type.js.Function`) is a special wrapper
 around a JavaScript function that can be transferred between endpoints.
 
 In contrast to a normal function (`std:Function`) that can also be mapped to a JavaScript function,
-a `js:TransferableFunction` is always executed on the endpoint where it is called, not on the origin endpoint.
+a `js:Function` is always executed on the endpoint where it is called, not on the origin endpoint.
 
 A transferable functions can be created from a normal JS function. Dependencies from the parent scope can be declared with a `use()` statement:
 
@@ -47,7 +47,7 @@ import { JSTransferableFunction } from "datex-core-legacy/types/js-function.ts";
 
 const data = $$([1,2,3]);
 
-// create a js:TransferableFunction
+// create a js:Function
 const transferableFn = JSTransferableFunction.create(() => {
     use (data);
 
@@ -72,6 +72,11 @@ Examples for `js:Object`s:
  * A class instance like `new WebSocket("ws://example.com")`
 
 The property values of a `js:Object` are never automatically bound to pointers when the object is bound to a pointer.
+
+
+### js:Symbol
+
+DATEX has no native symbol type. JavaScript symbols are mapped to `js:Symbol` values.
 
 ## Structs
 

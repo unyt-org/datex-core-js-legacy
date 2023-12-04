@@ -2094,8 +2094,8 @@ export class Runtime {
         
         let new_value:any = UNKNOWN_TYPE;
 
-        // only handle std namespace / js:Object
-        if (type.namespace == "std" || type == Type.js.NativeObject) {
+        // only handle std namespace / js:Object / js:Symbol
+        if (type.namespace == "std" || type == Type.js.NativeObject || type == Type.js.Symbol) {
             if (old_value instanceof Pointer) old_value = old_value.val;
 
             // handle default casts
@@ -2172,6 +2172,12 @@ export class Runtime {
                     if (old_value === VOID) new_value = Object();
                     else if (old_value instanceof Tuple) new_value = old_value.toObject();
                     else if (old_value && typeof old_value == "object") new_value = {...<object>Runtime.serializeValue(old_value)??{}};
+                    else new_value = INVALID;
+                    break;
+                }
+                case Type.js.Symbol: {
+                    if (old_value === VOID) new_value = Symbol();
+                    else if (typeof old_value == "string") new_value = Symbol(old_value);
                     else new_value = INVALID;
                     break;
                 }
@@ -2482,6 +2488,10 @@ export class Runtime {
 
         // primitives
         if (typeof value == "string" || typeof value == "boolean" || typeof value == "number" || typeof value == "bigint") return value;
+        
+        // symbol
+        if (typeof value == "symbol") return value.toString().slice(7,-1) || undefined
+        
         // directly return, cannot be overwritten
         if (value === VOID || value === null || value instanceof Endpoint || value instanceof Type) return value;
         if (value instanceof Scope) return value;

@@ -777,10 +777,14 @@ export type JSValueWith$<T> = ObjectRef<T>;
 
 // convert from any JS/DATEX value to minimal representation with reference
 export type MinimalJSRefGeneralTypes<T, _C = CollapsedValue<T>> = 
-    JSPrimitiveToDatexRef<_C> extends never ? ObjectRef<_C> : JSPrimitiveToDatexRef<_C>
+    _C extends symbol ? symbol : (
+        JSPrimitiveToDatexRef<_C> extends never ? ObjectRef<_C> : JSPrimitiveToDatexRef<_C>
+    )
 // same as MinimalJSRefGeneralTypes, but returns Pointer<2|5> instead of IntegerRef
-export type MinimalJSRef<T, _C = CollapsedValue<T>> = 
-    JSPrimitiveToDatexRef<_C> extends never ? ObjectRef<_C> : (Pointer<_C> & (_C extends boolean ? unknown : _C))
+export type MinimalJSRef<T, _C = CollapsedValue<T>> =
+    _C extends symbol ? symbol : ( 
+        JSPrimitiveToDatexRef<_C> extends never ? ObjectRef<_C> : (Pointer<_C> & (_C extends boolean ? unknown : _C))
+    )
 
 // return Pointer<T>&T for primitives (excluding boolean) and Pointer<T> otherwise
 export type PointerWithPrimitive<T> = T extends number|string|boolean|bigint ? Pointer<T>&T : Pointer<T>
@@ -1839,7 +1843,7 @@ export class Pointer<T = any> extends Ref<T> {
 
     #updateIsJSPrimitive(val:any = this.val) {
         const type = this.#type ?? Type.ofValue(val);
-        this.#is_js_primitive = !(Object(val) === val && !type.is_js_pseudo_primitive && !(type == Type.js.NativeObject && globalThis.Element && val instanceof globalThis.Element))
+        this.#is_js_primitive = (typeof val !== "symbol") && !(Object(val) === val && !type.is_js_pseudo_primitive && !(type == Type.js.NativeObject && globalThis.Element && val instanceof globalThis.Element))
     }
 
     /**
@@ -2232,6 +2236,10 @@ export class Pointer<T = any> extends Ref<T> {
 
         let val = Ref.collapseValue(v,true,true);
 
+        if (typeof val == "symbol" && Symbol.keyFor(val) !== undefined) {
+            throw new Error("Global and well-known symbols (e.g. Symbol.for('name') or Symbol.iterator) are no yet supported as pointer values")
+        }
+
         // get transform wrapper
         if (is_transform) val = this.getInitialTransformValue(val)
 
@@ -2272,7 +2280,7 @@ export class Pointer<T = any> extends Ref<T> {
                 // create proxy
                 const value = this.addObjProxy((val instanceof UnresolvedValue) ? val[DX_VALUE] : val); 
                 // add $, $$
-                this.add$Properties(value);
+                if (typeof value !== "symbol") this.add$Properties(value);
 
                 // // add reference to this DatexPointer to the value
                 // if (!this.is_anonymous) {
@@ -3022,7 +3030,7 @@ export class Pointer<T = any> extends Ref<T> {
         const res = JSInterface.createProxy(obj, this, this.type);
         if (res != INVALID && res != NOT_EXISTING) return res; // proxy created successfully
 
-        if (obj instanceof Stream || obj instanceof DatexFunction || obj instanceof JSTransferableFunction) { // no proxy needed?!
+        if (typeof obj == "symbol" || obj instanceof Stream || obj instanceof DatexFunction || obj instanceof JSTransferableFunction) { // no proxy needed?!
             return obj;
         }
 

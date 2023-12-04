@@ -799,7 +799,7 @@ export class Type<T = any> extends ExtensibleFunction {
             if (typeof value == "bigint") return <Type<T>>Type.std.integer;
             if (typeof value == "number") return <Type<T>>Type.std.decimal;
             if (typeof value == "boolean") return <Type<T>>Type.std.boolean;
-            if (typeof value == "symbol") return Type.std.void; // TODO?, ignores symbols
+            if (typeof value == "symbol") return Type.js.Symbol;
 
             if (value instanceof ArrayBuffer || value instanceof TypedArray) return <Type<T>>Type.std.buffer;
             if (value instanceof Tuple) return <Type<T>>Type.std.Tuple;
@@ -872,6 +872,7 @@ export class Type<T = any> extends ExtensibleFunction {
             if (_forClass == BigInt || BigInt.isPrototypeOf(_forClass)) return <Type<T>>Type.std.integer;
             if (_forClass == Number || Number.isPrototypeOf(_forClass)) return <Type<T>>Type.std.decimal;
             if (_forClass == globalThis.Boolean || globalThis.Boolean.isPrototypeOf(_forClass)) return <Type<T>>Type.std.boolean;
+            if (_forClass == Symbol || Symbol.isPrototypeOf(_forClass)) return <Type<T>>Type.js.Symbol;
 
             if (_forClass == ArrayBuffer || TypedArray.isPrototypeOf(_forClass)) return <Type<T>>Type.std.buffer;
             if (_forClass == Tuple || Tuple.isPrototypeOf(_forClass)) return <Type<T>>Type.std.Tuple;
@@ -930,7 +931,8 @@ export class Type<T = any> extends ExtensibleFunction {
      */
     static js = {
         NativeObject: Type.get<object>("js:Object"), // special object type for non-plain objects (objects with prototype) - no automatic children pointer initialization
-        TransferableFunction: Type.get<JSTransferableFunction>("js:Function")
+        TransferableFunction: Type.get<JSTransferableFunction>("js:Function"),
+        Symbol: Type.get<symbol>("js:Symbol")
     }
 
     /**
