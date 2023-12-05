@@ -4,7 +4,7 @@ import { ValueConsumer } from "./abstract_types.ts";
 import { ValueError } from "./errors.ts";
 import { Compiler, ProtocolDataTypesMap } from "../compiler/compiler.ts";
 import type { datex_scope, dxb_header } from "../utils/global_types.ts";
-import { buffer2hex, hex2buffer } from "../utils/utils.ts";
+import { base64ToArrayBuffer, buffer2hex, hex2buffer } from "../utils/utils.ts";
 import { clause, Disjunction } from "./logic.ts";
 import { Runtime, StaticScope } from "../runtime/runtime.ts";
 import { logger } from "../utils/global_values.ts";
@@ -12,6 +12,7 @@ import { Datex } from "../mod.ts";
 import { ProtocolDataType } from "../compiler/protocol_types.ts";
 import { ESCAPE_SEQUENCES } from "../utils/logger.ts";
 import { deleteCookie, getCookie } from "../utils/cookies.ts";
+import { Crypto } from "../runtime/crypto.ts";
 
 type target_prefix_person = "@";
 type target_prefix_id = "@@";
@@ -247,6 +248,7 @@ export class Endpoint extends Target {
 		}
 		try {
 			const res = await datex("#public.(?)", [key], this);
+			console.log("res",res);
 			if (res!==undefined) {
 				this.#properties.set(key, res)
 				return res;
@@ -474,17 +476,45 @@ export class Endpoint extends Target {
 	}
 	
 	/**
-	 * Get endpoint id from "datex-endpoint" cookies.
-	 * Deletes the cookie if not a valid endpoint and returns null
+	 * Get endpoint + keys from "datex-endpoint" cookie and "new_keys" entry
+	 * Only works one time ("new_keys" localStorage entry is removewd)
+	 * Deletes the cookie if not a valid endpoint or no "new_keys" entry exists, and returns null
 	 * @returns
 	 */
 	public static getFromCookie() {
 		const cookieEndpoint = getCookie("datex-endpoint");
 		if (cookieEndpoint) {
+			const newKeysEntry = localStorage.getItem("new_keys");
+			if (!newKeysEntry) {
+				logger.warn("no keys for datex-endpoint found");
+				deleteCookie("datex-endpoint")
+				deleteCookie("datex-endpoint-validation")
+				deleteCookie("uix-session") // TODO: this is UIX specific and should not be handled here
+				return null;
+			}
+			localStorage.removeItem("new_keys");
+
+			// check if has matching new_keys
+			const newKeys = JSON.parse(newKeysEntry);
+
 			try {
 				const endpoint = Target.get(cookieEndpoint) as Endpoint;
+
+				if (newKeys.endpoint !== endpoint.main.toString()) {
+					logger.warn("datex-endpoint does not match keys")
+					deleteCookie("datex-endpoint")
+					deleteCookie("datex-endpoint-validation")
+					deleteCookie("uix-session") // TODO: this is UIX specific and should not be handled here
+					return null;
+				}
+
+				const exportedKeys:Crypto.ExportedKeySet = {
+					sign: [base64ToArrayBuffer(newKeys.keys.sign[0]), base64ToArrayBuffer(newKeys.keys.sign[1])],
+					encrypt: [base64ToArrayBuffer(newKeys.keys.encrypt[0]), base64ToArrayBuffer(newKeys.keys.encrypt[1])]
+				}
+
 				logger.debug("loaded endpoint from 'datex-endpoint' cookie: " + endpoint)
-				return endpoint
+				return {endpoint, keys:exportedKeys}
 			}
 			catch {
 				deleteCookie("datex-endpoint")

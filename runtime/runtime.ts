@@ -43,7 +43,7 @@ import { Tuple } from "../types/tuple.ts";
 import { DatexObject } from "../types/object.ts";
 import { Crypto } from "../runtime/crypto.ts";
 import { ProtocolDataType } from "../compiler/protocol_types.ts";
-import { base64ToArrayBuffer, buffer2hex, getFileContent } from "../utils/utils.ts";
+import { arrayBufferToBase64, base64ToArrayBuffer, buffer2hex, getFileContent } from "../utils/utils.ts";
 import { IOHandler } from "./io_handler.ts";
 import { DX_PERMISSIONS, DX_SLOTS, DX_TYPE, DX_SERIALIZED, DX_VALUE, INVALID, MAX_UINT_16, NOT_EXISTING, UNKNOWN_TYPE, VOID, WILDCARD, SLOT_WRITE, SLOT_READ, DX_GET_PROPERTY, SLOT_GET, SLOT_SET } from "./constants.ts";
 import { baseURL, DEFAULT_HIDDEN_OBJECT_PROPERTIES, logger, TypedArray } from "../utils/global_values.ts";
@@ -73,7 +73,7 @@ import type { Blockchain } from "../network/blockchain_adapter.ts";
 import { AutoMap } from "../utils/auto_map.ts";
 import { Supranet } from "../network/supranet.ts";
 import { sendDatexViaHTTPChannel } from "../network/datex-http-channel.ts";
-import { setCookie } from "../utils/cookies.ts";
+import { deleteCookie, getCookie, setCookie } from "../utils/cookies.ts";
 import { addPersistentListener, removePersistentListener } from "../utils/persistent-listeners.ts";
 import { endpoint_config } from "./endpoint_config.ts";
 
@@ -1135,7 +1135,23 @@ export class Runtime {
         // update endpoint cookie
         const endpointName = endpoint.toString();
         // TODO: store signed endpoint validation cookie
-        if (client_type == "browser") setCookie("datex-endpoint", endpointName, endpoint_config.temporary ? 0 : undefined);
+        if (client_type == "browser") {
+            deleteCookie("datex-endpoint-new");
+            const currentEndpointName = getCookie("datex-endpoint");
+            // only update if endpoint not already set in cookie
+            if (currentEndpointName != endpointName) {
+                deleteCookie("datex-endpoint-validation");
+                setCookie("datex-endpoint", endpointName, endpoint_config.temporary ? 0 : undefined);
+                (async() => {
+                    const nonceBase64 = getCookie("datex-endpoint-nonce");
+                    if (nonceBase64) {
+                        const nonce = base64ToArrayBuffer(nonceBase64);
+                        setCookie("datex-endpoint-validation", arrayBufferToBase64(await Crypto.sign(nonce)), endpoint_config.temporary ? 0 : undefined);
+                    }
+                })()
+            }
+           
+        }
     }
 
     static getActiveLocalStorageEndpoints() {

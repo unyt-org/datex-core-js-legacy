@@ -29,7 +29,7 @@ import { IterableWeakMap } from "../utils/iterable-weak-map.ts";
 import { LazyPointer } from "./lazy-pointer.ts";
 import { ReactiveArrayMethods } from "../types/reactive-methods/array.ts";
 
-export type observe_handler<K=any, V extends RefLike = any> = (value:V extends RefLike<infer T> ? T : V, key?:K, type?:Ref.UPDATE_TYPE, transform?:boolean, is_child_update?:boolean)=>void|boolean
+export type observe_handler<K=any, V extends RefLike = any> = (value:V extends RefLike<infer T> ? T : V, key?:K, type?:Ref.UPDATE_TYPE, transform?:boolean, is_child_update?:boolean, previous?: any)=>void|boolean
 export type observe_options = {types?:Ref.UPDATE_TYPE[], ignore_transforms?:boolean, recursive?:boolean}
 
 const arrayProtoNames = Object.getOwnPropertyNames(Array.prototype);
@@ -68,7 +68,7 @@ export abstract class Ref<T = any> extends EventTarget {
     public set val(value: T|undefined) {
         const previous = this.#val;
         this.#val = <T> Ref.collapseValue(value, true, true);
-        if (previous !== this.#val) this.triggerValueInitEvent()
+        if (previous !== this.#val) this.triggerValueInitEvent(false, previous)
     }
 
     /**
@@ -84,18 +84,18 @@ export abstract class Ref<T = any> extends EventTarget {
     public setVal(value:T, trigger_observers = true, is_transform?:boolean):Promise<any>|void {
         const previous = this.#val;
         this.#val = <T> Ref.collapseValue(value, true, true);
-        if (trigger_observers && previous !== this.#val) return this.triggerValueInitEvent(is_transform)
+        if (trigger_observers && previous !== this.#val) return this.triggerValueInitEvent(is_transform, previous)
     }
     
-    protected triggerValueInitEvent(is_transform = false){
+    protected triggerValueInitEvent(is_transform = false, previous?:any){
         const value = this.current_val;
         const promises = [];
         for (const [o, options] of this.#observers??[]) {
-            if ((!options?.types || options.types.includes(Ref.UPDATE_TYPE.INIT)) && !(is_transform && options?.ignore_transforms)) promises.push(o(value, VOID, Ref.UPDATE_TYPE.INIT, is_transform));
+            if ((!options?.types || options.types.includes(Ref.UPDATE_TYPE.INIT)) && !(is_transform && options?.ignore_transforms)) promises.push(o(value, VOID, Ref.UPDATE_TYPE.INIT, is_transform, undefined, previous));
         }
         for (const [object, observers] of this.#observers_bound_objects??[]) {
             for (const [o, options] of observers??[]) {
-                if ((!options?.types || options.types.includes(Ref.UPDATE_TYPE.INIT)) && !(is_transform && options?.ignore_transforms)) promises.push(o.call(object, value, VOID, Ref.UPDATE_TYPE.INIT, is_transform));
+                if ((!options?.types || options.types.includes(Ref.UPDATE_TYPE.INIT)) && !(is_transform && options?.ignore_transforms)) promises.push(o.call(object, value, VOID, Ref.UPDATE_TYPE.INIT, is_transform, undefined, previous));
             }
         }
         return Promise.allSettled(promises);
@@ -2196,7 +2196,7 @@ export class Pointer<T = any> extends Ref<T> {
     }
 
     // also trigger event for all property specific observers
-    override triggerValueInitEvent() {
+    override triggerValueInitEvent(is_transform = false, previous?: any) {
         const value = this.current_val;
 
         // TODO: await promises?
@@ -2216,7 +2216,7 @@ export class Pointer<T = any> extends Ref<T> {
             }
         }
 
-        return super.triggerValueInitEvent()
+        return super.triggerValueInitEvent(is_transform, previous)
     }
 
 
@@ -3353,7 +3353,7 @@ export class Pointer<T = any> extends Ref<T> {
         if ((res == INVALID || res == NOT_EXISTING) && this.shadow_object instanceof Array) key = BigInt(key); 
 
         // inform observers
-        return this.handleSetObservers(key, value, existed_before);
+        return this.handleSetObservers(key, value, existed_before, current_value);
     }
 
     /**
@@ -3363,7 +3363,7 @@ export class Pointer<T = any> extends Ref<T> {
      * @param existed_before was the property already initialized on the value
      * @returns 
      */
-    handleSetObservers(key: any, value?: any, existed_before = false) {
+    handleSetObservers(key: any, value?: any, existed_before = false, previous?: any) {
 
         // get current value
         value = value ?? this.getProperty(key);
@@ -3394,7 +3394,7 @@ export class Pointer<T = any> extends Ref<T> {
         }
 
         // inform observers
-        return this.callObservers(value, key, Ref.UPDATE_TYPE.SET)
+        return this.callObservers(value, key, Ref.UPDATE_TYPE.SET, false, false, previous)
     }
 
 
@@ -3704,10 +3704,10 @@ export class Pointer<T = any> extends Ref<T> {
         }
 
         // new observer
-        const handler = (_value: unknown, _key?: unknown, _type?: Ref.UPDATE_TYPE, _is_transform?: boolean) => {
+        const handler = (_value: unknown, _key?: unknown, _type?: Ref.UPDATE_TYPE, _is_transform?: boolean, _is_child_update?: boolean, previous?: any) => {
             // console.warn(_value,_key,_type,_is_transform)
             // inform observers (TODO: more update event info?, currently just acting as if it was a SET)
-            this.callObservers(_value, key, Ref.UPDATE_TYPE.SET, _is_transform, true)
+            this.callObservers(_value, key, Ref.UPDATE_TYPE.SET, _is_transform, true, previous)
         };
         Ref.observeAndInit(value, handler, this);
         this.#active_property_observers.set(key, [value,handler]);
@@ -3789,12 +3789,12 @@ export class Pointer<T = any> extends Ref<T> {
     }
 
 
-    private callObservers(value:any, key:any, type:Ref.UPDATE_TYPE, is_transform = false, is_child_update = false) {
+    private callObservers(value:any, key:any, type:Ref.UPDATE_TYPE, is_transform = false, is_child_update = false, previous?: any) {
         const promises = [];
         // key specific observers
         if (key!=undefined) {
             for (const [o, options] of this.change_observers.get(key)||[]) {
-                if ((!options?.types || options.types.includes(type)) && !(is_transform && options?.ignore_transforms) && (!is_child_update || !options || options.recursive)) promises.push(o(value, key, type, is_transform, is_child_update)); 
+                if ((!options?.types || options.types.includes(type)) && !(is_transform && options?.ignore_transforms) && (!is_child_update || !options || options.recursive)) promises.push(o(value, key, type, is_transform, is_child_update, previous)); 
             }
             // bound observers
             for (const [object, entries] of this.bound_change_observers.entries()) {
@@ -3802,7 +3802,7 @@ export class Pointer<T = any> extends Ref<T> {
                     if (k === key) {
                         for (const [handler, options] of handlers) {
                             if ((!options?.types || options.types.includes(type)) && !(is_transform && options?.ignore_transforms) && (!is_child_update || !options || options.recursive)) {
-                                const res = handler.call(object, value, key, type, is_transform, is_child_update);
+                                const res = handler.call(object, value, key, type, is_transform, is_child_update, previous);
                                 promises.push(res)
                                 if (res === false) this.unobserve(handler, object, key);
                             }
@@ -3813,13 +3813,13 @@ export class Pointer<T = any> extends Ref<T> {
         } 
         // general observers
         for (const [o, options] of this.general_change_observers||[]) {
-            if ((!options?.types || options.types.includes(type)) && !(is_transform && options?.ignore_transforms) && (!is_child_update || !options || options.recursive)) promises.push(o(value, key, type, is_transform, is_child_update));
+            if ((!options?.types || options.types.includes(type)) && !(is_transform && options?.ignore_transforms) && (!is_child_update || !options || options.recursive)) promises.push(o(value, key, type, is_transform, is_child_update, previous));
         }    
         // bound generalobservers
         for (const [object, handlers] of this.bound_general_change_observers||[]) {
             for (const [handler, options] of handlers) {
                 if ((!options?.types || options.types.includes(type)) && !(is_transform && options?.ignore_transforms) && (!is_child_update || !options || options.recursive)) {
-                    const res = handler.call(object, value, key, type, is_transform, is_child_update)
+                    const res = handler.call(object, value, key, type, is_transform, is_child_update, previous)
                     promises.push(res)
                     if (res === false) this.unobserve(handler, object, key);
                 }

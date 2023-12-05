@@ -152,13 +152,13 @@ export class Supranet {
                 endpoint_config.save();
                 this.sayHelloToAllInterfaces();
                 logger.success("Switched to endpoint instance " + instance)
-                this.onConnect();
+                this.handleConnect();
                 return true;
             }
             catch {
                 logger.error("Could not determine endpoint instance (request error)");
                 this.sayHelloToAllInterfaces();
-                this.onConnect();
+                this.handleConnect();
             }
         }
         
@@ -175,7 +175,7 @@ export class Supranet {
         Runtime.setMainNode(node);
 
         if (!connected) logger.error("connection failed")
-        else if (this.onConnect && handleOnConnect) this.onConnect();
+        else if (handleOnConnect) this.handleConnect();
 
         this.#connected = connected;
 
@@ -203,9 +203,19 @@ export class Supranet {
         return <[Endpoint,string]> [node, channel_type]
     }
 
+    private static handleConnect() {
+        for (const listener of this.#connectListeners) listener();
+        if (this.onConnect) this.onConnect()
+    }
+
     // @override
     public static onConnect = ()=>{
         logger.success("Connected as **"+Runtime.endpoint+"** to the Supranet via **" +  CommonInterface.default_interface.endpoint + "** (" + CommonInterface.default_interface.type + ")" )
+    }
+
+    static #connectListeners = new Set<()=>void>()
+    public static onConnected(listener: ()=>void) {
+        this.#connectListeners.add(listener);
     }
 
     // only init, don't (re)connect
@@ -285,12 +295,12 @@ export class Supranet {
         endpoint_config.keys = keys;
         endpoint_config.save();
 
+        // save own keys
+        await Crypto.loadOwnKeys(...sign_keys, ...enc_keys);
+
         // start runtime + set endpoint
         Runtime.init(endpoint);
 
-        // save own keys
-        await Crypto.loadOwnKeys(...sign_keys, ...enc_keys);
-     
         // setup interface manager
         if (!this.#interfaces_initialized) {
             this.#interfaces_initialized = true;
@@ -305,15 +315,6 @@ export class Supranet {
 
 
     // load stuff ...
-
-    // 8 bytes timestamp + 8 bytes random number
-    private static createEndpointId():filter_target_name_id{
-        const id = new DataView(new ArrayBuffer(16));
-        const timestamp = Math.round((new Date().getTime() - Compiler.BIG_BANG_TIME));
-        id.setBigUint64(0, BigInt(timestamp), true); // timestamp
-        id.setBigUint64(8, BigInt(Math.floor(Math.random() * (2**64))), true); // random number
-        return `@@${buffer2hex(new Uint8Array(id.buffer))}`;
-    }
 
 
     public static async getLocalEndpointAndKeys():Promise<[Endpoint|UnresolvedEndpointProperty, Crypto.ExportedKeySet]> {
@@ -343,11 +344,12 @@ export class Supranet {
     }
 
     /**
-     * Create new anonymous endpoint or load from "datex-endpoint" cookie
+     * Create new anonymous endpoint or load from "datex-endpoint" cookie + "new_keys" entry
      */
     private static createAndSaveNewEndpoint(){
-        const endpoint = Endpoint.getFromCookie() ?? <Endpoint> Endpoint.get(Endpoint.createNewID());
+        const {endpoint, keys} = Endpoint.getFromCookie() ?? {endpoint: <Endpoint> Endpoint.get(Endpoint.createNewID())};
         endpoint_config.endpoint = endpoint;
+        if (keys) endpoint_config.keys = keys;
         endpoint_config.save();
         return endpoint;
     }

@@ -352,7 +352,7 @@ export class Crypto {
     // generate new sign + encryption (public + private) keys, returns base64 verify, sign, enc, dec keys
     static async createOwnKeys(): Promise<Crypto.ExportedKeySet> { 
         // create new encrpytion + sign key pair
-        const [enc_key_pair, sign_key_pair] = await this.generateKeysNewPairs();
+        const [enc_key_pair, sign_key_pair] = await this.generateNewKeyPair();
     
         this.rsa_dec_key = enc_key_pair.privateKey
         this.rsa_enc_key = enc_key_pair.publicKey
@@ -376,7 +376,7 @@ export class Crypto {
 
     static async generateNewKeys(): Promise<Crypto.ExportedKeySet> { 
         // create new encrpytion + sign key pair
-        const [enc_key_pair, sign_key_pair] = await this.generateKeysNewPairs();
+        const [enc_key_pair, sign_key_pair] = await this.generateNewKeyPair();
     
         const rsa_enc_key_exported = await this.exportPublicKey(enc_key_pair.publicKey);
         const rsa_dec_key_exported = await this.exportPrivateKey(enc_key_pair.privateKey);
@@ -389,7 +389,7 @@ export class Crypto {
         }
     }
 
-    private static async generateKeysNewPairs() {
+    private static async generateNewKeyPair() {
         // create new encrpytion key pair
         const enc_key_pair = <CryptoKeyPair> await crypto.subtle.generateKey(
             this.enc_key_options,
