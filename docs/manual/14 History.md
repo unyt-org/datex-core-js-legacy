@@ -35,7 +35,7 @@ console.log(entries) // ["Entry 1", "Entry 2"]
 
 This works for all value types, e.g. for primitive pointers:
 ```ts
-const name = $("Max")
+const name = $$("Max")
 history.add(name);
 
 name.val = "Tom"
