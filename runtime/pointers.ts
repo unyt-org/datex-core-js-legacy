@@ -142,7 +142,6 @@ export abstract class Ref<T = any> extends EventTarget {
         }
 
         handler.get = (_, key) => {
-
             // array iterator
             if (key === Symbol.iterator) {
                 // array
@@ -3309,11 +3308,11 @@ export class Pointer<T = any> extends Ref<T> {
     }
 
     // directly set value of property (reference)
-    handleSet(key:unknown, value:unknown, ignore_if_unchanged = true) {
+    handleSet(key:unknown, value:unknown, ignore_if_unchanged = true, always_use_provided_value = false) {
 
-        if(!this.current_val) return;
+        if (!this.current_val) return;
         // convert value/key to datex conform value/key
-        value = this.type.proxify_children ? this.proxifyChild(key, value) : value;
+        value = this.type.proxify_children&&!always_use_provided_value ? this.proxifyChild(key, value) : value;
         key = Pointer.proxifyValue(key);
         
         const obj = this.current_val;
@@ -3321,7 +3320,6 @@ export class Pointer<T = any> extends Ref<T> {
 
         // write permission?
         
-
         // does property exist in DATEX?
         if (!this.type.isPropertyAllowed(key)) {
             throw new ValueError("Property '" + key + "' does not exist")
@@ -3535,6 +3533,9 @@ export class Pointer<T = any> extends Ref<T> {
             this.callObservers(obj[i], i, Ref.UPDATE_TYPE.BEFORE_DELETE)
         }
 
+        // previous entries
+        const previous = [...obj]
+
         const ret = Array.prototype.splice.call(this.shadow_object, start_index, deleteCount, ...replace);
 
         // propagate updates via datex?
@@ -3563,11 +3564,11 @@ export class Pointer<T = any> extends Ref<T> {
         for (let i = originalLength-1; i>=start_index; i--) {
             // element moved here?
             if (i < obj.length) {
-                this.callObservers(obj[i], i, Ref.UPDATE_TYPE.SET)
+                this.callObservers(obj[i], i, Ref.UPDATE_TYPE.SET, undefined, undefined, previous[i])
             }
             // end of array, trigger delete
             else {
-                this.callObservers(VOID, i, Ref.UPDATE_TYPE.DELETE)
+                this.callObservers(VOID, i, Ref.UPDATE_TYPE.DELETE, undefined, undefined, previous[i])
             }
         }
        
@@ -3576,7 +3577,7 @@ export class Pointer<T = any> extends Ref<T> {
     }
 
     /** value is removed (by key)*/
-    handleDelete(key:any) {
+    handleDelete(key:any, arrayResize = false) {
         if(!this.current_val) return;
 
         const obj = this.current_val;
@@ -3586,11 +3587,17 @@ export class Pointer<T = any> extends Ref<T> {
             throw new ValueError("Property '" + key + "' does not exist")
         }
 
+        const previous = this.getProperty(key);
         // inform observers before delete
-        this.callObservers(this.getProperty(key), key, Ref.UPDATE_TYPE.BEFORE_DELETE)
+        this.callObservers(previous, key, Ref.UPDATE_TYPE.BEFORE_DELETE)
 
         const res = JSInterface.handleDeletePropertySilently(obj, key, this, this.type);
-        if (res == INVALID || res == NOT_EXISTING)  delete this.shadow_object[key]; // normal object
+        if (res == INVALID || res == NOT_EXISTING) {
+            if (arrayResize && this.shadow_object instanceof Array && typeof key == "number") {
+                this.shadow_object.splice(key, 1);
+            }
+            else delete this.shadow_object[key]; // normal object
+        }
 
         // propagate updates via datex
         
@@ -3613,7 +3620,7 @@ export class Pointer<T = any> extends Ref<T> {
         }
         
         // inform observers
-        return this.callObservers(VOID, key, Ref.UPDATE_TYPE.DELETE)
+        return this.callObservers(VOID, key, Ref.UPDATE_TYPE.DELETE, undefined, undefined, previous)
 
     }
 
