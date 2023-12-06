@@ -280,6 +280,37 @@ export function pointer<T>(value:RefOrValue<T>, property?:unknown): unknown {
     
 }
 
+
+/**
+ * Add endpoint to allowed_access list
+ * @param endpoint
+ */
+export function grantAccess(value: any, endpoint: string|Endpoint) {
+    const pointer = Pointer.pointerifyValue(value);
+    if (pointer instanceof Pointer) pointer.grantAccessTo(typeof endpoint == "string" ? f(endpoint as "@") : endpoint)
+    else throw new Error("Cannot set read permissions for non-pointer value")
+}
+
+/**
+ * Grant public access for pointer
+ * @param endpoint
+ */
+export function grantPublicAccess(value: any) {
+    const pointer = Pointer.pointerifyValue(value);
+    if (pointer instanceof Pointer) pointer.grantPublicAccess()
+    else throw new Error("Cannot set read permissions for non-pointer value")
+}
+
+/**
+ * Remove endpoint from allowed_access list
+ * @param endpoint
+ */
+export function revokeAccess(value: any, endpoint: string|Endpoint) {
+    const pointer = Pointer.pointerifyValue(value);
+    if (pointer instanceof Pointer) pointer.revokeAccessFor(typeof endpoint == "string" ? f(endpoint as "@") : endpoint)
+    else throw new Error("Cannot set read permissions for non-pointer value")
+}
+
 export const $$ = pointer;
 
 interface $fn {
@@ -445,6 +476,10 @@ export async function once<T>(id_or_init:string|(()=>Promise<T>|T), _init?:()=>P
 
 const _once = once;
 type val = typeof val;
+type grantAccess = typeof grantAccess
+type grantPublicAccess = typeof grantPublicAccess
+type revokeAccess = typeof revokeAccess
+
 declare global {
     const eternal: undefined
     const lazyEternal: undefined    
@@ -456,6 +491,10 @@ declare global {
     const eternalVar: (customIdentifier:string)=>undefined
     const lazyEternalVar: (customIdentifier:string)=>undefined
     const once: typeof _once;
+
+    const grantAccess: grantAccess;
+    const grantPublicAccess: grantPublicAccess;
+    const revokeAccess: revokeAccess;
 }
 
 
@@ -582,6 +621,10 @@ Object.defineProperty(globalThis, 'observe', {value:Ref.observe.bind(Ref), confi
 Object.defineProperty(globalThis, 'observeAndInit', {value:Ref.observeAndInit.bind(Ref), configurable:false})
 Object.defineProperty(globalThis, 'unobserve', {value:Ref.unobserve.bind(Ref), configurable:false})
 Object.defineProperty(globalThis, 'isolate', {value:Ref.disableCapturing.bind(Ref), configurable:false})
+
+Object.defineProperty(globalThis, 'grantAccess', {value:grantAccess, configurable:false})
+Object.defineProperty(globalThis, 'grantPublicAccess', {value:grantPublicAccess, configurable:false})
+Object.defineProperty(globalThis, 'revokeAccess', {value:revokeAccess, configurable:false})
 
 // @ts-ignore
 globalThis.get = get

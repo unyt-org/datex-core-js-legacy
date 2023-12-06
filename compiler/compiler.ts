@@ -1975,7 +1975,7 @@ export class Compiler {
 
             // remember if js type def modules should be added to this scope
             if (SCOPE.addJSTypeDefs == undefined) {
-                let receiver = Compiler.builder.getScopeReceiver(SCOPE);
+                const receiver = Compiler.builder.getScopeReceiver(SCOPE);
                 SCOPE.addJSTypeDefs = !!jsTypeDefModule && receiver != Runtime.endpoint && receiver != LOCAL_ENDPOINT;
             }
 
@@ -2220,6 +2220,14 @@ export class Compiler {
                 return;
             }
 
+            // pointer is sent to receiver, so he gets access (TODO: improve)
+            if (Runtime.OPTIONS.PROTECT_POINTERS) {
+                const receiver = Compiler.builder.getScopeReceiver(SCOPE);
+                if (receiver !== Runtime.endpoint) {
+                    p.grantAccessTo(receiver)
+                }
+            }
+            
             // pre extract per default
             if ((<compiler_scope>SCOPE).extract_pointers && action_type == ACTION_TYPE.GET) {
                 Compiler.builder.insertExtractedVariable(<compiler_scope>SCOPE, BinaryCode.POINTER, buffer2hex(p.id_buffer));
@@ -2597,7 +2605,7 @@ export class Compiler {
         serializeValue: (v:any, SCOPE:compiler_scope):any => {
             if (SCOPE.serialized_values.has(v)) return SCOPE.serialized_values.get(v);
             else {
-                let receiver = Compiler.builder.getScopeReceiver(SCOPE);
+                const receiver = Compiler.builder.getScopeReceiver(SCOPE);
                 const s = Runtime.serializeValue(v, receiver);
                 SCOPE.serialized_values.set(v,s);
                 return s;
@@ -2614,6 +2622,7 @@ export class Compiler {
                 }
                 options = options.parent_scope?.options;
             }
+            if (!SCOPE.options?.to) SCOPE.options.to = receiver;
             return receiver;
         },
 

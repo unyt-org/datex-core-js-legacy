@@ -130,7 +130,7 @@ function getValueTSCode(module_name:string, name:string, value: any, no_pointer 
 	const is_datex_module = module_name.endsWith(".dx") || module_name.endsWith(".dxb")
 
 	const type = Datex.Type.ofValue(value)
-	const is_pointer = (value instanceof Datex.Value) || !!(Datex.Pointer.getByValue(value));
+	const is_pointer = (value instanceof Datex.Ref) || !!(Datex.Pointer.getByValue(value));
 
 	// if (no_pointer) {
 	// 	// no pointer
@@ -183,6 +183,10 @@ function getValueTSCode(module_name:string, name:string, value: any, no_pointer 
 			value[BACKEND_EXPORT] = true;
 		}
 		catch {}
+
+		// add public permission
+		const ptr = Datex.Pointer.pointerifyValue(value);
+		if (ptr instanceof Datex.Pointer) ptr.grantPublicAccess(true)
 	}
 
 	// disable garbage collection

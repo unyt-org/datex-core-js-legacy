@@ -1,5 +1,5 @@
 // deno-lint-ignore-file no-namespace
-import { Endpoint, endpoints, endpoint_name, IdEndpoint, Person, Target, target_clause, LOCAL_ENDPOINT } from "../types/addressing.ts";
+import { Endpoint, endpoints, endpoint_name, IdEndpoint, Person, Target, target_clause, LOCAL_ENDPOINT, BROADCAST } from "../types/addressing.ts";
 import { NetworkError, PermissionError, PointerError, RuntimeError, ValueError } from "../types/errors.ts";
 import { Compiler, PrecompiledDXB } from "../compiler/compiler.ts";
 import { DX_PTR, DX_REACTIVE_METHODS, DX_VALUE, INVALID, NOT_EXISTING, SET_PROXY, SHADOW_OBJECT, UNKNOWN_TYPE, VOID } from "./constants.ts";
@@ -1453,7 +1453,7 @@ export class Pointer<T = any> extends Ref<T> {
 
         this.loading_pointers.delete(id_string);
 
-        // check read permissions (works if PROTECT_POINTERS enabled)
+        // check read permissions
         pointer.assertEndpointCanRead(SCOPE?.sender)
 
         return pointer;
@@ -1807,7 +1807,7 @@ export class Pointer<T = any> extends Ref<T> {
     sealed:boolean = false; // can the value be changed from the client side? (otherwise, it can only be changed via DATEX calls)
     #scheduler: UpdateScheduler|null = null  // has fixed update_interval
 
-    #allowed_access: target_clause // who has access to this pointer?, undefined = all
+    #allowed_access?: target_clause // who has access to this pointer?, undefined = all
 
     #garbage_collectable = false;
     #garbage_collected = false;
@@ -1852,6 +1852,14 @@ export class Pointer<T = any> extends Ref<T> {
      * @returns 
      */
     public assertEndpointCanRead(endpoint?: Endpoint) {
+        // logger.error(this.val)
+        // console.log("assert " + endpoint, Logical.matches(endpoint, this.allowed_access, Target), !(
+        //     Runtime.OPTIONS.PROTECT_POINTERS 
+        //     && !(endpoint == Runtime.endpoint)
+        //     && this.is_origin 
+        //     && (!endpoint || !Logical.matches(endpoint, this.allowed_access, Target))
+        //     && (endpoint && !Runtime.trustedEndpoints.get(endpoint.main)?.includes("protected-pointer-access"))
+        // ), this.allowed_access)
         if (
             Runtime.OPTIONS.PROTECT_POINTERS 
             && !(endpoint == Runtime.endpoint)
@@ -1859,6 +1867,7 @@ export class Pointer<T = any> extends Ref<T> {
             && (!endpoint || !Logical.matches(endpoint, this.allowed_access, Target))
             && (endpoint && !Runtime.trustedEndpoints.get(endpoint.main)?.includes("protected-pointer-access"))
         ) {
+            console.log("inv",new Error().stack)
             throw new PermissionError("Endpoint has no read permissions for this pointer")
         }
     }
@@ -1869,6 +1878,37 @@ export class Pointer<T = any> extends Ref<T> {
     }
 
 
+    /**
+     * add endpoint to allowed_access list
+     * @param endpoint
+     */
+    public grantAccessTo(endpoint: Endpoint, _force = false) {
+        if (!_force && !Runtime.OPTIONS.PROTECT_POINTERS) throw new Error("Read permissions are not enabled per default (set Datex.Runtime.OPTIONS.PROTECT_POINTERS to true)")
+        if (!this.#allowed_access || this.#allowed_access == BROADCAST) this.#allowed_access = new Disjunction()
+        if (this.#allowed_access instanceof Disjunction) this.#allowed_access.add(endpoint)
+        else throw new Error("Invalid access filter, cannot add endpoint (TODO)")
+    }
+
+
+    /**
+     * add public access to pointer
+     * @param endpoint
+     */
+    public grantPublicAccess(_force = false) {
+        if (!_force && !Runtime.OPTIONS.PROTECT_POINTERS) throw new Error("Read permissions are not enabled per default (set Datex.Runtime.OPTIONS.PROTECT_POINTERS to true)")
+        this.#allowed_access = BROADCAST;
+    }
+
+
+    /**
+     * remove endpoint from allowed_access list
+     * @param endpoint 
+     */
+    public revokeAccessFor(endpoint: Endpoint, _force = false) {
+        if (!_force && !Runtime.OPTIONS.PROTECT_POINTERS) throw new Error("Read permissions are not enabled per default (set Datex.Runtime.OPTIONS.PROTECT_POINTERS to true)")
+        if (this.#allowed_access instanceof Disjunction) this.#allowed_access.delete(endpoint)
+        else throw new Error("Invalid access filter, cannot add endpoint (TODO)")
+    }
 
 
     /**
@@ -2557,6 +2597,8 @@ export class Pointer<T = any> extends Ref<T> {
                     }
                     catch (e) {
                         if (e !== Pointer.WEAK_EFFECT_DISPOSED) console.error(e);
+                        // invalid result, no update
+                        return;
                     }
                     // always cleanup capturing
                     finally {

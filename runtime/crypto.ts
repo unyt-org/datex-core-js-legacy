@@ -138,7 +138,6 @@ export class Crypto {
         // keys not found, request from network
         else {
             return this.requestKeys(endpoint.main)
-                .catch(() => this.requestKeys(endpoint))
         }
     }
 
@@ -156,18 +155,25 @@ export class Crypto {
         if (verify_key && !(verify_key instanceof ArrayBuffer)) throw new ValueError("Invalid verify key");
         if (enc_key && !(enc_key instanceof ArrayBuffer)) throw new ValueError("Invalid encryption key");
 
+        // always bind to main endpoint
+        endpoint = endpoint.main;
+
         if (this.public_keys.has(endpoint)) return false; // keys already exist
  
         const storage_item_key = "keys_"+endpoint;
         if (await Storage.hasItem(storage_item_key)) return false; // keys already in storage
 
-        try {            
-            this.public_keys.set(endpoint, [
+        try {      
+            const keys = [
                 verify_key ? await Crypto.importVerifyKey(verify_key) : null,
                 enc_key ? await Crypto.importEncKey(enc_key): null
-            ])
-            this.public_keys_exported.set(endpoint, [verify_key, enc_key]);
-            await Storage.setItem(storage_item_key, [verify_key, enc_key]);
+            ] as [CryptoKey | null, CryptoKey | null];      
+            const exportedKeys = [verify_key, enc_key] as [ArrayBuffer, ArrayBuffer];
+
+            this.public_keys.set(endpoint.main, keys)
+            this.public_keys_exported.set(endpoint, exportedKeys);
+
+            await Storage.setItem(storage_item_key, exportedKeys);
             return true;
         } catch(e) {
             logger.error(e);
@@ -237,7 +243,8 @@ export class Crypto {
             // convert to CryptoKeys
             try {
                 const keys:[CryptoKey, CryptoKey] = [await this.importVerifyKey(exported_keys[0])||null, await this.importEncKey(exported_keys[1])||null];
-                this.public_keys.set(endpoint, keys);
+                this.public_keys.set(endpoint.main, keys);
+                logger.debug("saving keys for " + endpoint);
                 resolve(keys);
                 this.#waiting_key_requests.delete(endpoint); // remove from key promises
                 return;
@@ -308,9 +315,9 @@ export class Crypto {
 
     private static saveOwnPublicKeysInEndpointKeyMap () {
         // save in local endpoint key storage
-        if (!this.public_keys.has(Runtime.endpoint)) this.public_keys.set(Runtime.endpoint, [null,null]);
-        (<[CryptoKey?, CryptoKey?]>this.public_keys.get(Runtime.endpoint))[0] = this.rsa_verify_key;
-        (<[CryptoKey?, CryptoKey?]>this.public_keys.get(Runtime.endpoint))[1] = this.rsa_enc_key;
+        if (!this.public_keys.has(Runtime.endpoint)) this.public_keys.set(Runtime.endpoint.main, [null,null]);
+        (<[CryptoKey?, CryptoKey?]>this.public_keys.get(Runtime.endpoint.main))[0] = this.rsa_verify_key;
+        (<[CryptoKey?, CryptoKey?]>this.public_keys.get(Runtime.endpoint.main))[1] = this.rsa_enc_key;
     }
 
     // returns current public verify + encrypt keys

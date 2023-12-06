@@ -120,6 +120,10 @@ export class StaticScope {
     private constructor(name?:string){
         const proxy = <this> Pointer.proxifyValue(this, false, undefined, false);
         DatexObject.setWritePermission(<Record<string | symbol, unknown>>proxy, undefined); // make readonly
+        
+        const ptr = Pointer.pointerifyValue(proxy);
+        ptr.grantPublicAccess(true);
+
         if (name) proxy.name = name;
         return proxy;
     }
@@ -3026,6 +3030,10 @@ export class Runtime {
             let el = INNER_SCOPE.active_value;
             let did_assignment = false;
 
+            // make sure endpoint has access (TODO: INNER_SCOPE.active_value should never be set if no access)
+            const ptr = Pointer.pointerifyValue(el);
+            if (ptr instanceof Pointer) ptr.assertEndpointCanRead(SCOPE?.sender)
+
             // ptrs
             if (INNER_SCOPE.waiting_ptrs?.size) {
                 for (const p of INNER_SCOPE.waiting_ptrs) {
@@ -3318,6 +3326,7 @@ export class Runtime {
 
             const o_parent:Pointer = Pointer.pointerifyValue(parent);
             if (o_parent instanceof Pointer) o_parent.assertEndpointCanRead(SCOPE?.sender)
+
 
             key = Ref.collapseValue(key,true,true);
 
@@ -4022,6 +4031,11 @@ export class Runtime {
         async insertToScope(SCOPE:datex_scope, el:any, literal_value = false){
 
             const INNER_SCOPE = SCOPE.inner_scope;
+
+            // check pointer access permission
+            const pointer = el instanceof Pointer ? el : Pointer.getByValue(el);
+            if (pointer instanceof Pointer) pointer.assertEndpointCanRead(SCOPE?.sender)
+            
             // first make sure pointers are collapsed
             el = Ref.collapseValue(el) 
 
@@ -5090,6 +5104,12 @@ export class Runtime {
                     if (res == INVALID || res == NOT_EXISTING) throw new ValueError(`Cannot apply ${Runtime.valueToDatexString(el)} to ${Runtime.valueToDatexString(val)}`, SCOPE)
                     else INNER_SCOPE.active_value = res;
                 } 
+
+                // apply / function call return value -> give access permission to current endpoint
+                const ptr = Pointer.pointerifyValue(INNER_SCOPE.active_value);
+                if (Runtime.OPTIONS.PROTECT_POINTERS && SCOPE.sender !== Runtime.endpoint && ptr instanceof Pointer) {
+                    ptr.grantAccessTo(SCOPE.sender);
+                }
 
             }
 

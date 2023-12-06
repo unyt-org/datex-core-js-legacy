@@ -889,7 +889,11 @@ function _old_publicStaticClass(original_class:Class) {
                 // set allowed endpoints for this method
                 //static_scope.setAllowedEndpointsForProperty(name, this.method_a_filters.get(name))
         
-                let dx_function = Pointer.proxifyValue(DatexFunction.createFromJSFunction(current_value, original_class, name), true, undefined, false, true) ; // generate <Function>
+                const dx_function = Pointer.proxifyValue(DatexFunction.createFromJSFunction(current_value, original_class, name), true, undefined, false, true) ; // generate <Function>
+
+                // public function
+                const ptr = Pointer.pointerifyValue(dx_function);
+                if (ptr instanceof Pointer) ptr.grantPublicAccess(true);
 
                 static_scope.setVariable(name, dx_function); // add <Function> to static scope
             }
@@ -897,7 +901,12 @@ function _old_publicStaticClass(original_class:Class) {
             // field
             else {
                 // set static value (datexified)
-                let setProxifiedValue = (val:any) => static_scope.setVariable(name, Pointer.proxifyValue(val, true, undefined, false, true));
+                const setProxifiedValue = (val:any) => {
+                    static_scope.setVariable(name, Pointer.proxifyValue(val, true, undefined, false, true))
+                    // public function
+                    const ptr = Pointer.proxifyValue(val);
+                    if (ptr instanceof Pointer) ptr.grantPublicAccess(true);
+                };
                 setProxifiedValue(current_value);
 
                 /*** handle new value assignments to this property: **/

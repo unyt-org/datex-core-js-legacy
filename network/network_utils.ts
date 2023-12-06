@@ -9,7 +9,7 @@ export abstract class NetworkUtils {
     static _get_keys_data = {scope_name:"network", sign:false, filter:undefined};
     static get_keys (endpoint:Endpoint):Promise<[ArrayBuffer, ArrayBuffer]> {  
         if (!this._get_keys) this._get_keys = getProxyFunction("get_keys", this._get_keys_data);
-        this._get_keys_data.filter = Runtime.main_node ?? Runtime.endpoint
+        this._get_keys_data.filter = Runtime.main_node
         return this._get_keys(endpoint)
     }
 
@@ -19,7 +19,7 @@ export abstract class NetworkUtils {
 
     static add_push_channel (channel:string, data:object):Promise<any> {
         if (!this._add_push_channel) this._add_push_channel = getProxyFunction("add_push_channel", this._add_push_channel_data);
-        this._add_push_channel_data.filter = Runtime.main_node ?? Runtime.endpoint
+        this._add_push_channel_data.filter = Runtime.main_node
         return this._add_push_channel(channel, data)
     }
 }

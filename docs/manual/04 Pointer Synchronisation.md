@@ -54,7 +54,7 @@ x.val // -> 42
 This pointer is now accessible on any other endpoint in the supranet.
 
 > [!NOTE]
-> Per default, pointers have no read/write restrictions and can be accessed by any endpoint. This can be prevented by defining pointer permissions. This behaviour might also change in the future.
+> Per default, pointers have no read/write restrictions and can be accessed by any endpoint. This behaviour can be disabled by setting the [`PROTECT_POINTERS` runtime flag](#protecting-pointers)
 
 ### Pointer IDs
 
@@ -114,6 +114,32 @@ x.val // -> 10
 Pointer synchronisation does not just work with primitive values,
 but also with objects, maps, sets, etc.
 
+## Protecting Pointers
+
+Per default, pointers have no read/write restrictions and can be accessed by any endpoint.
+This behaviour will probably change in the future.
+To disable default read/write access for all remote endpoints, you can set
+
+```ts
+Datex.Runtime.OPTIONS.PROTECT_POINTERS = true
+```
+
+Now, pointers are only accessible by remote endpoints if they are explicitly sent to the endpoint from the
+origin endpoint.
+
+You can also explicitly grant access for a pointer to a specific endpoint:
+
+```ts
+const x = $$("private content");
+grantAccess(x, '@user1'); // @user1 can now read/write x
+revokeAccess(x, '@user1'); // @user1 can no longer read/write x
+```
+
+You can also make a pointer publicly accessible by all endpoints:
+```ts
+grantPublicAccess(x); // any endpoint can now read/write x
+```
+
 
 ## Global Garbage Collection (GGC)
 
@@ -140,3 +166,4 @@ const x1 = await $.ABCDEF
 const x2 = await $.ABCDEF
 assert (x1 === x2)
 ```
+

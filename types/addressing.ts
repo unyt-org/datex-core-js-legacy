@@ -48,9 +48,12 @@ export class Target implements ValueConsumer {
 
 	// @implements LogicalComparator<T>
     static logicalMatch(value: Target, against: Target) {
-		//console.log("logical match " + value + " against " + against);
-		// TODO: finish
-		return (value === against || (value instanceof Endpoint && against instanceof Endpoint && value.equals(against)))
+		return (
+			against === BROADCAST ||
+			value === against || 
+			(value instanceof Endpoint && value.main === against) ||
+			(value instanceof Endpoint && against instanceof Endpoint && value.equals(against))
+		)
 	}
 	
 	// TODO filter

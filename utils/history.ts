@@ -34,6 +34,8 @@ export class History {
 
 		Ref.observe(pointer, (value, key, type, transform, is_child_update, previous) => {
 
+			// TODO: group atomic state changes (e.g. splice)
+
 			if (type == Pointer.UPDATE_TYPE.BEFORE_DELETE) return; // ignore
 			if (type == Pointer.UPDATE_TYPE.BEFORE_REMOVE) return; // ignore
 

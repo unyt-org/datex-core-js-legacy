@@ -14,8 +14,10 @@ export class Error extends globalThis.Error {
     constructor(message?:string|number|bigint|null)
     constructor(message?:string|number|bigint|null, scope?:datex_scope|null)
     constructor(message?:string|number|bigint, stack?:[Endpoint, string?][]|null)
-    constructor(message:string|number|bigint|null = '', stack:datex_scope|null|[Endpoint, string?][] = [[Runtime.endpoint]]) {
+    constructor(message:string|number|bigint|null = '', initialStack?:datex_scope|null|[Endpoint, string?][]) {
         super();
+
+        const stack = initialStack ?? [[Runtime.endpoint]];
 
         // extract name from class name
         this.name = this.constructor.name.replace("Datex","");
@@ -27,7 +29,7 @@ export class Error extends globalThis.Error {
             this.addScopeToStack(stack)
         }
         // // stack already provided (as array)
-        // else if (Runtime.OPTIONS.ERROR_STACK_TRACES && stack instanceof Array) this.datex_stack = stack;
+        else if (Runtime.OPTIONS.ERROR_STACK_TRACES && initialStack instanceof Array) this.datex_stack = initialStack;
         // // no stack
         // else this.datex_stack = [];
 
