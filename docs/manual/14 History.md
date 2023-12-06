@@ -45,6 +45,31 @@ history.back();
 console.log(name.val) // "Max"
 ```
 
+The `back()` and `forward()` method both return a boolean indicating if the state change could be
+executed. If the end or start of the recorded history is reached, `false` is returned.
+
+The `backSteps` and `forwardSteps` properties indicate how many steps can currently be performed in both directions.
+
+## Save Points
+
+For some use cases, it is required to not undo and redo any atomic state change, but instead jump between manually defined *save points*.
+This can be achieved by enabling the `explicitSavePoints` option:
+```ts
+const history = new History({explicitSavePoints: true});
+```
+
+Now, you can set save points at any point in time by calling
+```ts
+history.setSavePoint()
+```
+
+The `back()` and `forward()` methods can be used as before.
+They now jump between the defined save point states.
+
+When the `back()` method is called before a new save point was set after pointer changes occured, 
+a new save point for the current state is automatically inserted.
+
+
 ## Enabling undo/redo shortcuts
 
 The History API also provides a builtin way to go back or forward in history when the user

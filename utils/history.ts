@@ -5,9 +5,10 @@ import { logger } from "./global_values.ts";
 type HistoryStateChange = {
 	pointer: Pointer,
 	type: Ref.UPDATE_TYPE,
-	value: any,
-	previous: any,
-	key?: any
+	value: unknown,
+	previous: unknown,
+	key?: unknown,
+	atomicId?: symbol
 }
 
 type HistoryOptions = {
@@ -20,8 +21,24 @@ export class History {
 	#options: HistoryOptions = {}
 	#changes = new Array<HistoryStateChange|HistoryStateChange[]>()
 	#index = -1;
+	#lastSavePoint = 0;
+	#currentSavePoint = 0;
 
 	#frozenPointers = new Set<Pointer>()
+
+	get forwardSteps() {
+		return -this.#index - 1
+	}
+
+	get backSteps() {
+		const range = this.#changes.length + this.#index + 1;
+		if (this.#options.explicitSavePoints) {
+			return this.#currentSavePoint + (
+				this.#changes.length !== this.#lastSavePoint ? 1 : 0 // additional step back that is not yet a save point
+			)
+		}
+		else return range
+	}
 
 	constructor(options?: HistoryOptions) {
 		if (options) this.#options = options
@@ -32,9 +49,7 @@ export class History {
 		const pointer = Pointer.pointerifyValue(val);
 		if (!(pointer instanceof Pointer)) throw new Error("Cannot include non-pointer value in history");
 
-		Ref.observe(pointer, (value, key, type, transform, is_child_update, previous) => {
-
-			// TODO: group atomic state changes (e.g. splice)
+		Ref.observe(pointer, (value, key, type, _transform, _isChildUpdate, previous, atomicId) => {
 
 			if (type == Pointer.UPDATE_TYPE.BEFORE_DELETE) return; // ignore
 			if (type == Pointer.UPDATE_TYPE.BEFORE_REMOVE) return; // ignore
@@ -55,13 +70,28 @@ export class History {
 				this.#index = -1;
 			}
 
-			this.#changes.push({
+			const change = {
 				pointer,
 				type,
 				value,
 				previous,
-				key
-			})
+				key,
+				atomicId
+			};
+
+			// group atomic changes
+			if (atomicId && this.#changes.at(-1) instanceof Array && (this.#changes.at(-1) as HistoryStateChange[])[0]?.atomicId === atomicId) {
+				(this.#changes.at(-1) as HistoryStateChange[]).push(change)
+			}
+			else if (atomicId && (this.#changes.at(-1) as HistoryStateChange)?.atomicId === atomicId) {
+				const lastChange = this.#changes.at(-1) as HistoryStateChange;
+				this.#changes[this.#changes.length-1] = [lastChange, change]
+			}
+			
+			// single change
+			else {
+				this.#changes.push(change)
+			}
 		})
 	}
 
@@ -70,13 +100,18 @@ export class History {
 	 * @returns false if already at the first state
 	 */
 	back() {
+		// create save point for current state
+		if (this.#options.explicitSavePoints && this.#changes.length !== this.#lastSavePoint) this.setSavePoint()
+
 		const lastChanges = this.#changes.at(this.#index);
 		if (!lastChanges) return false;
+
 		this.#index--;
+		if (this.#options.explicitSavePoints) this.#currentSavePoint--;
 
 		console.log("<- undo",lastChanges)
 
-		for (const lastChange of (lastChanges instanceof Array ? lastChanges : [lastChanges])) {
+		for (const lastChange of (lastChanges instanceof Array ? lastChanges.toReversed() : [lastChanges])) {
 			this.#silent(lastChange.pointer, () => {
 				if (lastChange.type == Pointer.UPDATE_TYPE.INIT) {
 					lastChange.pointer.val = lastChange.previous;
@@ -87,6 +122,12 @@ export class History {
 				else if (lastChange.type == Pointer.UPDATE_TYPE.SET) {
 					if (lastChange.previous == NOT_EXISTING) lastChange.pointer.handleDelete(lastChange.key, true)
 					else lastChange.pointer.handleSet(lastChange.key, lastChange.previous, true, true)
+				}
+				else if (lastChange.type == Pointer.UPDATE_TYPE.ADD) {
+					lastChange.pointer.handleRemove(lastChange.value)
+				}
+				else if (lastChange.type == Pointer.UPDATE_TYPE.REMOVE) {
+					lastChange.pointer.handleAdd(lastChange.value)
 				}
 			})
 		}		
@@ -99,8 +140,10 @@ export class History {
 	 * @returns false if already at the last state
 	 */
 	forward() {
-		if (this.#index >= -1) return;
+		if (this.#index >= -1) return false;
 		this.#index++;
+		if (this.#options.explicitSavePoints) this.#currentSavePoint++;
+
 		const nextChanges = this.#changes.at(this.#index);
 		if (!nextChanges) return false;
 
@@ -118,6 +161,12 @@ export class History {
 					if (nextChange.value == NOT_EXISTING) nextChange.pointer.handleDelete(nextChange.key, true)
 					else nextChange.pointer.handleSet(nextChange.key, nextChange.value, true, true)
 				}
+				else if (nextChange.type == Pointer.UPDATE_TYPE.ADD) {
+					nextChange.pointer.handleAdd(nextChange.value)
+				}
+				else if (nextChange.type == Pointer.UPDATE_TYPE.REMOVE) {
+					nextChange.pointer.handleRemove(nextChange.value)
+				}
 			})
 		}
 
@@ -125,9 +174,13 @@ export class History {
 		return true;
  	}
 
-	createSavePoint() {
+	setSavePoint() {
 		if (!this.#options.explicitSavePoints) throw new Error("Explicit save points are not enabled");
 
+		const historyChunk = this.#changes.splice(this.#lastSavePoint, this.#changes.length-this.#lastSavePoint).flat()
+		if (historyChunk.length) this.#changes.push(historyChunk);
+		this.#lastSavePoint = this.#changes.length;
+		this.#currentSavePoint = this.#lastSavePoint;
 	}
 
 	#silent(pointer: Pointer, handler: ()=>void) {

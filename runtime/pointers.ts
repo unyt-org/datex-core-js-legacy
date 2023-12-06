@@ -29,7 +29,7 @@ import { IterableWeakMap } from "../utils/iterable-weak-map.ts";
 import { LazyPointer } from "./lazy-pointer.ts";
 import { ReactiveArrayMethods } from "../types/reactive-methods/array.ts";
 
-export type observe_handler<K=any, V extends RefLike = any> = (value:V extends RefLike<infer T> ? T : V, key?:K, type?:Ref.UPDATE_TYPE, transform?:boolean, is_child_update?:boolean, previous?: any)=>void|boolean
+export type observe_handler<K=any, V extends RefLike = any> = (value:V extends RefLike<infer T> ? T : V, key?:K, type?:Ref.UPDATE_TYPE, transform?:boolean, is_child_update?:boolean, previous?: any, atomic_id?:symbol)=>void|boolean
 export type observe_options = {types?:Ref.UPDATE_TYPE[], ignore_transforms?:boolean, recursive?:boolean}
 
 const arrayProtoNames = Object.getOwnPropertyNames(Array.prototype);
@@ -1852,14 +1852,6 @@ export class Pointer<T = any> extends Ref<T> {
      * @returns 
      */
     public assertEndpointCanRead(endpoint?: Endpoint) {
-        // logger.error(this.val)
-        // console.log("assert " + endpoint, Logical.matches(endpoint, this.allowed_access, Target), !(
-        //     Runtime.OPTIONS.PROTECT_POINTERS 
-        //     && !(endpoint == Runtime.endpoint)
-        //     && this.is_origin 
-        //     && (!endpoint || !Logical.matches(endpoint, this.allowed_access, Target))
-        //     && (endpoint && !Runtime.trustedEndpoints.get(endpoint.main)?.includes("protected-pointer-access"))
-        // ), this.allowed_access)
         if (
             Runtime.OPTIONS.PROTECT_POINTERS 
             && !(endpoint == Runtime.endpoint)
@@ -1867,7 +1859,6 @@ export class Pointer<T = any> extends Ref<T> {
             && (!endpoint || !Logical.matches(endpoint, this.allowed_access, Target))
             && (endpoint && !Runtime.trustedEndpoints.get(endpoint.main)?.includes("protected-pointer-access"))
         ) {
-            console.log("inv",new Error().stack)
             throw new PermissionError("Endpoint has no read permissions for this pointer")
         }
     }
@@ -3602,15 +3593,17 @@ export class Pointer<T = any> extends Ref<T> {
             }, 0)
         }
 
+        const atomicId = Symbol("ATOMIC_SPLICE")
+
         // inform observers after splice finished - value already in right position
         for (let i = originalLength-1; i>=start_index; i--) {
             // element moved here?
             if (i < obj.length) {
-                this.callObservers(obj[i], i, Ref.UPDATE_TYPE.SET, undefined, undefined, previous[i])
+                this.callObservers(obj[i], i, Ref.UPDATE_TYPE.SET, undefined, undefined, previous[i], atomicId)
             }
             // end of array, trigger delete
             else {
-                this.callObservers(VOID, i, Ref.UPDATE_TYPE.DELETE, undefined, undefined, previous[i])
+                this.callObservers(VOID, i, Ref.UPDATE_TYPE.DELETE, undefined, undefined, previous[i], atomicId)
             }
         }
        
@@ -3838,12 +3831,12 @@ export class Pointer<T = any> extends Ref<T> {
     }
 
 
-    private callObservers(value:any, key:any, type:Ref.UPDATE_TYPE, is_transform = false, is_child_update = false, previous?: any) {
+    private callObservers(value:any, key:any, type:Ref.UPDATE_TYPE, is_transform = false, is_child_update = false, previous?: any, atomic_id?: symbol) {
         const promises = [];
         // key specific observers
         if (key!=undefined) {
             for (const [o, options] of this.change_observers.get(key)||[]) {
-                if ((!options?.types || options.types.includes(type)) && !(is_transform && options?.ignore_transforms) && (!is_child_update || !options || options.recursive)) promises.push(o(value, key, type, is_transform, is_child_update, previous)); 
+                if ((!options?.types || options.types.includes(type)) && !(is_transform && options?.ignore_transforms) && (!is_child_update || !options || options.recursive)) promises.push(o(value, key, type, is_transform, is_child_update, previous, atomic_id)); 
             }
             // bound observers
             for (const [object, entries] of this.bound_change_observers.entries()) {
@@ -3851,7 +3844,7 @@ export class Pointer<T = any> extends Ref<T> {
                     if (k === key) {
                         for (const [handler, options] of handlers) {
                             if ((!options?.types || options.types.includes(type)) && !(is_transform && options?.ignore_transforms) && (!is_child_update || !options || options.recursive)) {
-                                const res = handler.call(object, value, key, type, is_transform, is_child_update, previous);
+                                const res = handler.call(object, value, key, type, is_transform, is_child_update, previous, atomic_id);
                                 promises.push(res)
                                 if (res === false) this.unobserve(handler, object, key);
                             }
@@ -3862,13 +3855,13 @@ export class Pointer<T = any> extends Ref<T> {
         } 
         // general observers
         for (const [o, options] of this.general_change_observers||[]) {
-            if ((!options?.types || options.types.includes(type)) && !(is_transform && options?.ignore_transforms) && (!is_child_update || !options || options.recursive)) promises.push(o(value, key, type, is_transform, is_child_update, previous));
+            if ((!options?.types || options.types.includes(type)) && !(is_transform && options?.ignore_transforms) && (!is_child_update || !options || options.recursive)) promises.push(o(value, key, type, is_transform, is_child_update, previous, atomic_id));
         }    
         // bound generalobservers
         for (const [object, handlers] of this.bound_general_change_observers||[]) {
             for (const [handler, options] of handlers) {
                 if ((!options?.types || options.types.includes(type)) && !(is_transform && options?.ignore_transforms) && (!is_child_update || !options || options.recursive)) {
-                    const res = handler.call(object, value, key, type, is_transform, is_child_update, previous)
+                    const res = handler.call(object, value, key, type, is_transform, is_child_update, previous, atomic_id)
                     promises.push(res)
                     if (res === false) this.unobserve(handler, object, key);
                 }
