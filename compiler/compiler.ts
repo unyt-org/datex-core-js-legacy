@@ -27,7 +27,7 @@ import { BinaryCode } from "./binary_codes.ts";
 import { Scope } from "../types/scope.ts";
 import { ProtocolDataType } from "./protocol_types.ts";
 import { Quantity } from "../types/quantity.ts";
-import { EXTENDED_OBJECTS, INHERITED_PROPERTIES, VOID, SLOT_WRITE, SLOT_READ, SLOT_EXEC, NOT_EXISTING, SLOT_GET, SLOT_SET, DX_IGNORE } from "../runtime/constants.ts";
+import { EXTENDED_OBJECTS, INHERITED_PROPERTIES, VOID, SLOT_WRITE, SLOT_READ, SLOT_EXEC, NOT_EXISTING, SLOT_GET, SLOT_SET, DX_IGNORE, DX_BOUND_LOCAL_SLOT } from "../runtime/constants.ts";
 import { arrayBufferToBase64, base64ToArrayBuffer, buffer2hex, hex2buffer } from "../utils/utils.ts";
 import { RuntimePerformance } from "../runtime/performance_measure.ts";
 import { Conjunction, Disjunction, Logical, Negation } from "../types/logic.ts";
@@ -1448,6 +1448,7 @@ export class Compiler {
             let index:number
             let insert_new = false;
 
+
             if (!SCOPE.extract_var_indices) throw new CompilerError("Cannot extract variable in non child scope block")
             if (!SCOPE.extract_var_scope) throw new CompilerError("Cannot extract variable in non child scope block")
 
@@ -1756,7 +1757,7 @@ export class Compiler {
 
             const return_data:{datex:string} = {datex: SCOPE.datex}; 
 
-            const compiled = <ArrayBuffer> await this.compile(return_data, SCOPE.data, {parent_scope:SCOPE}, false, true, extract_pointers, undefined, Infinity, brackets?1:2, SCOPE.current_data_index);
+            const compiled = <ArrayBuffer> await this.compile(return_data, SCOPE.data, {parent_scope:SCOPE, to: Compiler.builder.getScopeReceiver(SCOPE)}, false, true, extract_pointers, undefined, Infinity, brackets?1:2, SCOPE.current_data_index);
             SCOPE.datex = return_data.datex; // update position in current datex script
 
             // insert scope block
@@ -2076,7 +2077,7 @@ export class Compiler {
         addInitBlock: async (SCOPE:compiler_scope, brackets = false) => {
 
             const return_data:{datex:string} = {datex: SCOPE.datex}; 
-            const compiled = <ArrayBuffer> await this.compile(return_data, SCOPE.data, {parent_scope:SCOPE, preemptive_pointer_init:SCOPE.options.preemptive_pointer_init==false?false:true, pseudo_parent:true}, false, false, false, undefined, Infinity, brackets?1:2, SCOPE.current_data_index);
+            const compiled = <ArrayBuffer> await this.compile(return_data, SCOPE.data, {parent_scope:SCOPE, preemptive_pointer_init:SCOPE.options.preemptive_pointer_init==false?false:true, pseudo_parent:true, to: Compiler.builder.getScopeReceiver(SCOPE)}, false, false, false, undefined, Infinity, brackets?1:2, SCOPE.current_data_index);
             SCOPE.datex = return_data.datex; // update position in current datex script
 
             // remove redundant ";"
@@ -2088,9 +2089,8 @@ export class Compiler {
 
         addInitBlockForValue: (SCOPE:compiler_scope|extract_var_scope, value:any) => {
 
-            //const compiled = <ArrayBuffer> this.compile("?", [value], {parent_scope:SCOPE, abs_offset, preemptive_pointer_init:SCOPE.options.preemptive_pointer_init==false?false:true, pseudo_parent:true, collapse_first_inserted:true}, false, false, false, undefined, Infinity); // sync
-            
-            const compiled = this.compileValue(value, {parent_scope: SCOPE, preemptive_pointer_init:SCOPE.options.preemptive_pointer_init==false?false:true, pseudo_parent:true, collapse_first_inserted:true}, false);
+            //const compiled = <ArrayBuffer> this.compile("?", [value], {parent_scope:SCOPE, abs_offset, preemptive_pointer_init:SCOPE.options.preemptive_pointer_init==false?false:true, pseudo_parent:true, collapse_first_inserted:true}, false, false, false, undefined, Infinity); // sync           
+            const compiled = this.compileValue(value, {parent_scope: SCOPE, preemptive_pointer_init:SCOPE.options.preemptive_pointer_init==false?false:true, pseudo_parent:true, collapse_first_inserted:true, to: Compiler.builder.getScopeReceiver(SCOPE)}, false);
 
             // insert scope block
             Compiler.builder.insertInitBlock(SCOPE, compiled);
@@ -2149,7 +2149,7 @@ export class Compiler {
         },
 
         // just $aabbcc = 
-        addPointerNormal: (SCOPE:compiler_scope|extract_var_scope, id:string|Uint8Array, action_type:ACTION_TYPE = ACTION_TYPE.GET, action_specifier?:BinaryCode, init_brackets = false, value:any = NOT_EXISTING):Promise<void>|void => {
+        addPointerNormal: (SCOPE:compiler_scope|extract_var_scope, id:string|Uint8Array, action_type:ACTION_TYPE = ACTION_TYPE.GET, action_specifier?:BinaryCode, init_brackets = false, value:any = NOT_EXISTING, transform_scope?: Scope<any>):Promise<void>|void => {
         
             Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+1, SCOPE);
             Compiler.builder.valueIndex(SCOPE);
@@ -2164,6 +2164,25 @@ export class Compiler {
                 if (value == NOT_EXISTING) {
                     if (!SCOPE.datex) throw new CompilerError("cannot insert init block in scope, missing datex source code");
                     return Compiler.builder.addInitBlock(<compiler_scope>SCOPE, init_brackets) // async
+                }
+                else if (transform_scope) {
+                    const temp_scope = <extract_var_scope>{
+                        b_index: 0,
+                        buffer: new ArrayBuffer(400),
+                        inner_scope: {},
+                        dynamic_indices: [],
+                        inserted_values: new Map(),
+                        preemptive_pointers: new Map(),
+                        assignment_end_indices: new Set(),
+                        options: SCOPE.options
+                    }
+                    temp_scope.uint8 = new Uint8Array(temp_scope.buffer);
+                    temp_scope.data_view = new DataView(temp_scope.buffer);
+                    Compiler.builder.insert_transform_scope(temp_scope, transform_scope);
+                    const compiled = temp_scope.uint8.slice(0,temp_scope.b_index)
+
+                    Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+compiled.byteLength+1, SCOPE);
+                    Compiler.builder.insertInitBlock(SCOPE, compiled.buffer);
                 }
                 else return Compiler.builder.addInitBlockForValue(SCOPE, value) // sync
             }
@@ -2187,12 +2206,13 @@ export class Compiler {
             // TODO: enable
             const defer = false // alreadyInitializing && ancestorScopes.has(parentScope.preemptive_pointers.get(normalized_id)!); // defer if already loading pointer in direct ancestor
 
+
             // preemptive value already exists and was not yet initialized in scope
             if (ptr?.value_initialized && !alreadyInitializing) {
                 parentScope.preemptive_pointers.set(normalized_id, SCOPE);
                 Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+1, SCOPE);
                 SCOPE.uint8[SCOPE.b_index++] = BinaryCode.SUBSCOPE_START;
-                Compiler.builder.addPointerNormal(SCOPE, id, ACTION_TYPE.INIT, undefined, true, ptr.val); // sync
+                Compiler.builder.addPointerNormal(SCOPE, id, ACTION_TYPE.INIT, undefined, true, ptr.val, (ptr.force_local_transform && ptr.transform_scope) ? ptr.transform_scope : undefined); // sync
                 Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+1, SCOPE);
                 SCOPE.uint8[SCOPE.b_index++] = BinaryCode.CLOSE_AND_STORE;
                 Compiler.builder.addPointerNormal(SCOPE, id, ACTION_TYPE.GET); // sync
@@ -2409,7 +2429,7 @@ export class Compiler {
             // adds __123.xy = _456 - if has recursive assignments
             
             Compiler.builder.insertByteAtIndex(BinaryCode.SUBSCOPE_START, root_start_index, SCOPE) // add (
-            for (let assignment of unassigned_children) {
+            for (const assignment of unassigned_children) {
                 Compiler.builder.handleRequiredBufferSize(SCOPE.b_index, SCOPE);
                 SCOPE.uint8[SCOPE.b_index++] = BinaryCode.CLOSE_AND_STORE;
                 Compiler.builder.insertVariable(SCOPE, assignment[0], ACTION_TYPE.GET, undefined, BinaryCode.INTERNAL_VAR); // parent
@@ -2631,6 +2651,28 @@ export class Compiler {
 
         // },
 
+        insert_transform_scope: (SCOPE: compiler_scope|extract_var_scope, transform_scope: Scope<any>) => {
+            const compiled = transform_scope.compiled;
+
+            Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+1, SCOPE);
+
+            SCOPE.uint8[SCOPE.b_index++] = BinaryCode.TRANSFORM;
+
+            for (const v of transform_scope.internal_vars) {
+                Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+1, SCOPE);
+                SCOPE.uint8[SCOPE.b_index++] = BinaryCode.SUBSCOPE_START;
+                Compiler.builder.insert(v, SCOPE);
+                SCOPE.uint8[SCOPE.b_index++] = BinaryCode.SUBSCOPE_END;
+            }
+
+            Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+1+Uint32Array.BYTES_PER_ELEMENT+compiled.byteLength, SCOPE);
+            SCOPE.uint8[SCOPE.b_index++] = BinaryCode.SCOPE_BLOCK;
+            SCOPE.data_view.setUint32(SCOPE.b_index, compiled.byteLength, true);
+            SCOPE.b_index += Uint32Array.BYTES_PER_ELEMENT
+            SCOPE.uint8.set(new Uint8Array(compiled), SCOPE.b_index)
+            SCOPE.b_index += compiled.byteLength;
+        },
+
 
         // insert any value besides Maybes
 
@@ -2641,6 +2683,38 @@ export class Compiler {
                 value = Ref.collapseValue(value);
             }
             catch {}
+
+            const receiver = Compiler.builder.getScopeReceiver(SCOPE);
+            // bound local slot? (eg. #env) - only when sending to remote
+            const toRemote = receiver && receiver!==Runtime.endpoint && receiver !== LOCAL_ENDPOINT;
+
+            if (toRemote && value?.[DX_BOUND_LOCAL_SLOT]) {
+                const v_name = value[DX_BOUND_LOCAL_SLOT];
+                if (typeof v_name !== "string") throw new Error("Invalid DX_BOUND_LOCAL_SLOT, must be of type string");
+                const mapped = Compiler.builder.mapInternalVarNameToByteCode(v_name, ACTION_TYPE.GET, SCOPE);
+                if (typeof mapped == "number") {
+                    Compiler.builder.insertVariable(SCOPE, undefined, ACTION_TYPE.GET, undefined, mapped);
+                }
+                else {
+                    throw new Error("Invalid DX_BOUND_LOCAL_SLOT: " + v_name);
+                }
+                return;
+            }
+            // bound pointer property (eg. #env->LANG) - only when sending to remote
+            if (toRemote && value instanceof PointerProperty && value.pointer.val?.[DX_BOUND_LOCAL_SLOT]) {
+                const v_name = value.pointer.val?.[DX_BOUND_LOCAL_SLOT];
+                if (typeof v_name !== "string") throw new Error("Invalid DX_BOUND_LOCAL_SLOT, must be of type string");
+                const mapped = Compiler.builder.mapInternalVarNameToByteCode(v_name, ACTION_TYPE.GET, SCOPE);
+                if (typeof mapped == "number") {
+                    Compiler.builder.insertVariable(SCOPE, undefined, ACTION_TYPE.GET, undefined, mapped);
+                    SCOPE.uint8[SCOPE.b_index++] = BinaryCode.CHILD_GET_REF
+                    Compiler.builder.insert(value.key, SCOPE);
+                }
+                else {
+                    throw new Error("Invalid DX_BOUND_LOCAL_SLOT: " + v_name);
+                }
+                return;
+            }
 
 
             // handle <Stream> and ReadableStream, if streaming (<<)
@@ -2698,33 +2772,17 @@ export class Compiler {
             const option_collapse = SCOPE.options.collapse_pointers && !(SCOPE.options.keep_external_pointers && value instanceof Pointer && !value.is_origin);
             const no_proxify = value instanceof Ref && (((value instanceof Pointer && value.is_anonymous) || option_collapse) || skip_first_collapse);
 
+             
             // proxify pointer exceptions:
             if (no_proxify) {
-
+               
                 // handle pointers with transform (always ...)
+ 
                 // only if not ignore_first_collapse or, if ignore_first_collapse and keep_first_transform is enabled
-                if (!SCOPE.options.no_create_pointers && value instanceof Pointer && value.transform_scope && (!skip_first_collapse || SCOPE.options.keep_first_transform)) {
+                if (!SCOPE.options.no_create_pointers && value instanceof Pointer && value.transform_scope && (value.force_local_transform || !skip_first_collapse || SCOPE.options.keep_first_transform)) {
                     SCOPE.options._first_insert_done = true; // set to true before next insert
 
-                    const compiled = value.transform_scope.compiled;
-
-                    Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+1, SCOPE);
-
-                    SCOPE.uint8[SCOPE.b_index++] = BinaryCode.TRANSFORM;
-
-                    for (const v of value.transform_scope.internal_vars) {
-                        Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+1, SCOPE);
-                        SCOPE.uint8[SCOPE.b_index++] = BinaryCode.SUBSCOPE_START;
-                        Compiler.builder.insert(v, SCOPE);
-                        SCOPE.uint8[SCOPE.b_index++] = BinaryCode.SUBSCOPE_END;
-                    }
-
-                    Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+1+Uint32Array.BYTES_PER_ELEMENT+compiled.byteLength, SCOPE);
-                    SCOPE.uint8[SCOPE.b_index++] = BinaryCode.SCOPE_BLOCK;
-                    SCOPE.data_view.setUint32(SCOPE.b_index, compiled.byteLength, true);
-                    SCOPE.b_index += Uint32Array.BYTES_PER_ELEMENT
-                    SCOPE.uint8.set(new Uint8Array(compiled), SCOPE.b_index)
-                    SCOPE.b_index += compiled.byteLength;
+                    Compiler.builder.insert_transform_scope(SCOPE, value.transform_scope);
                 
                     return;
                 }
@@ -2931,8 +2989,31 @@ export class Compiler {
                     Compiler.builder.insert(ext, SCOPE, is_root, parents, unassigned_children); // shallow clone parents set
                 }
             }
-        }
+        },
 
+        mapInternalVarNameToByteCode: (v_name: string, action_type: ACTION_TYPE, SCOPE: compiler_scope) => {
+            if (v_name == "result") return BinaryCode.VAR_RESULT
+            else if (v_name == "sub_result") return BinaryCode.VAR_SUB_RESULT
+            else if (v_name == "_origin") return BinaryCode._VAR_ORIGIN
+            else if (v_name == "it") return BinaryCode.VAR_IT
+            else if (v_name == "void") return BinaryCode.VAR_VOID
+
+            else if (v_name == "origin") {if (action_type != ACTION_TYPE.GET) throw new CompilerError("Invalid action on internal variable #origin", SCOPE.stack); return BinaryCode.VAR_ORIGIN}
+            else if (v_name == "endpoint") {if (action_type != ACTION_TYPE.GET) throw new CompilerError("Invalid action on internal variable #endpoint", SCOPE.stack); return BinaryCode.VAR_ENDPOINT}
+            else if (v_name == "location") {if (action_type != ACTION_TYPE.GET) throw new CompilerError("Invalid action on internal variable #location", SCOPE.stack); return BinaryCode.VAR_LOCATION}
+            else if (v_name == "env") {if (action_type != ACTION_TYPE.GET) throw new CompilerError("Invalid action on internal variable #env", SCOPE.stack); return BinaryCode.VAR_ENV}
+            // else if (v_name == "timestamp") {if (action_type != ACTION_TYPE.GET) throw new CompilerError("Invalid action on internal variable #timestamp", SCOPE.stack); base_type = BinaryCode.VAR_TIMESTAMP; v_name = undefined}
+            // else if (v_name == "encrypted") {if (action_type != ACTION_TYPE.GET) throw new CompilerError("Invalid action on internal variable #encrypted", SCOPE.stack); base_type = BinaryCode.VAR_ENCRYPTED; v_name = undefined}
+            // else if (v_name == "signed") {if (action_type != ACTION_TYPE.GET) throw new CompilerError("Invalid action on internal variable #signed", SCOPE.stack); base_type = BinaryCode.VAR_SIGNED; v_name = undefined}
+            else if (v_name == "meta") {  if (action_type != ACTION_TYPE.GET) throw new CompilerError("Invalid action on internal variable #meta", SCOPE.stack); return BinaryCode.VAR_META}
+            else if (v_name == "public") {  if (action_type != ACTION_TYPE.GET) throw new CompilerError("Invalid action on internal variable #public", SCOPE.stack); return BinaryCode.VAR_PUBLIC}
+            else if (v_name == "this") {  if (action_type != ACTION_TYPE.GET) throw new CompilerError("Invalid action on internal variable #this", SCOPE.stack); return BinaryCode.VAR_THIS}
+            else if (v_name == "remote") {if (action_type != ACTION_TYPE.GET) throw new CompilerError("Invalid action on internal variable #remote", SCOPE.stack); return BinaryCode.VAR_REMOTE}
+            else if (v_name == "entrypoint") {if (action_type != ACTION_TYPE.GET) throw new CompilerError("Invalid action on internal variable #entrypoint", SCOPE.stack); return BinaryCode.VAR_ENTRYPOINT}
+            else if (v_name == "std") {  if (action_type != ACTION_TYPE.GET) throw new CompilerError("Invalid action on internal variable #std", SCOPE.stack); return BinaryCode.VAR_STD}
+
+            return v_name;
+        }
 
     }
 
@@ -4294,7 +4375,7 @@ export class Compiler {
                     // veryyy inefficient way of doing things TODO
                     let return_data:{datex:string} = {datex: SCOPE.datex}; 
                     // ignore result - very bad
-                    await this.compile(return_data, SCOPE.data, {parent_scope:SCOPE, pseudo_parent:true}, false, false, false, undefined, Infinity, 42 /*illegal*/, SCOPE.current_data_index);
+                    await this.compile(return_data, SCOPE.data, {parent_scope:SCOPE, pseudo_parent:true, to: Compiler.builder.getScopeReceiver(SCOPE)}, false, false, false, undefined, Infinity, 42 /*illegal*/, SCOPE.current_data_index);
                     params[param_name][2] = SCOPE.datex.replace(return_data.datex, "");
                     if (return_data.datex[0] == ")") {
                         SCOPE.datex = return_data.datex;
@@ -4309,7 +4390,7 @@ export class Compiler {
                     // veryyy inefficient way of doing things TODO
                     let return_data:{datex:string} = {datex: SCOPE.datex}; 
                     // ignore result - very bad
-                    await this.compile(return_data, SCOPE.data, {parent_scope:SCOPE, pseudo_parent:true}, false, false, false, undefined, Infinity, 2, SCOPE.current_data_index);
+                    await this.compile(return_data, SCOPE.data, {parent_scope:SCOPE, pseudo_parent:true, to: Compiler.builder.getScopeReceiver(SCOPE)}, false, false, false, undefined, Infinity, 2, SCOPE.current_data_index);
                     params[param_name][3] = SCOPE.datex.replace(return_data.datex, "");
                     if (return_data.datex[0] == ")") {
                         SCOPE.datex = return_data.datex;
@@ -4365,7 +4446,7 @@ export class Compiler {
                 // TODO: optimize this, no full compilation required
                 const brackets = true;
                 const return_data:{datex:string} = {datex: SCOPE.datex}; 
-                await this.compile(return_data, SCOPE.data, {parent_scope:SCOPE}, false, true, false, undefined, Infinity, brackets?1:2, SCOPE.current_data_index);
+                await this.compile(return_data, SCOPE.data, {parent_scope:SCOPE, to: Compiler.builder.getScopeReceiver(SCOPE)}, false, true, false, undefined, Infinity, brackets?1:2, SCOPE.current_data_index);
 
                 SCOPE.datex = return_data.datex; // update position in current datex script
             }
@@ -4491,7 +4572,7 @@ export class Compiler {
 
         // INTERNAL_VAR or ROOT_VARIABLE or LABELED_POINTER
         else if ((m = SCOPE.datex.match(Regex.INTERNAL_VAR)) || (m = SCOPE.datex.match(Regex.ROOT_VARIABLE)) || (m = SCOPE.datex.match(Regex.LABELED_POINTER))) {
-            let v_name:string|number = m[2]; // get var name
+            let v_name:string|number|undefined = m[2]; // get var name
             const is_internal = m[1] == "#"; // is internal variable (#)?
             const is_label = m[1] == "$";
             const is_hex = v_name.match(Regex.HEX_VARIABLE) && (is_internal || is_label);
@@ -4507,8 +4588,7 @@ export class Compiler {
             if (is_property) SCOPE.datex = SCOPE.datex.substring(m[1].length + m[2].length + m[3].length);  // pop datex (not "=" or "+=")
             else SCOPE.datex = SCOPE.datex.substring(m[0].length);  // pop datex (also "=" or "+=")
 
-
-            let [action_type, action_specifier] = is_property ? [ACTION_TYPE.GET] : Compiler.builder.getAssignAction(m[3]);
+            const [action_type, action_specifier] = is_property ? [ACTION_TYPE.GET] : Compiler.builder.getAssignAction(m[3]);
 
             if (is_hex) v_name = parseInt(v_name.replace(/[-_]/g,''),16) || 0;
 
@@ -4520,26 +4600,11 @@ export class Compiler {
 
             // default internal variable shorthands
             if (is_internal) {
-                if (v_name == "result") {base_type = BinaryCode.VAR_RESULT; v_name = undefined}
-                else if (v_name == "sub_result") {base_type = BinaryCode.VAR_SUB_RESULT; v_name = undefined}
-                else if (v_name == "_origin") {base_type = BinaryCode._VAR_ORIGIN; v_name = undefined}
-                else if (v_name == "it") {base_type =  BinaryCode.VAR_IT; v_name = undefined}
-                else if (v_name == "void") {base_type =  BinaryCode.VAR_VOID; v_name = undefined}
-
-                else if (v_name == "origin") {if (action_type != ACTION_TYPE.GET) throw new CompilerError("Invalid action on internal variable #origin", SCOPE.stack); base_type = BinaryCode.VAR_ORIGIN; v_name = undefined}
-                else if (v_name == "endpoint") {if (action_type != ACTION_TYPE.GET) throw new CompilerError("Invalid action on internal variable #endpoint", SCOPE.stack); base_type = BinaryCode.VAR_ENDPOINT; v_name = undefined}
-                else if (v_name == "location") {if (action_type != ACTION_TYPE.GET) throw new CompilerError("Invalid action on internal variable #location", SCOPE.stack); base_type = BinaryCode.VAR_LOCATION; v_name = undefined}
-                else if (v_name == "env") {if (action_type != ACTION_TYPE.GET) throw new CompilerError("Invalid action on internal variable #env", SCOPE.stack); base_type = BinaryCode.VAR_ENV; v_name = undefined}
-                // else if (v_name == "timestamp") {if (action_type != ACTION_TYPE.GET) throw new CompilerError("Invalid action on internal variable #timestamp", SCOPE.stack); base_type = BinaryCode.VAR_TIMESTAMP; v_name = undefined}
-                // else if (v_name == "encrypted") {if (action_type != ACTION_TYPE.GET) throw new CompilerError("Invalid action on internal variable #encrypted", SCOPE.stack); base_type = BinaryCode.VAR_ENCRYPTED; v_name = undefined}
-                // else if (v_name == "signed") {if (action_type != ACTION_TYPE.GET) throw new CompilerError("Invalid action on internal variable #signed", SCOPE.stack); base_type = BinaryCode.VAR_SIGNED; v_name = undefined}
-                else if (v_name == "meta") {  if (action_type != ACTION_TYPE.GET) throw new CompilerError("Invalid action on internal variable #meta", SCOPE.stack); base_type =  BinaryCode.VAR_META; v_name = undefined}
-                else if (v_name == "public") {  if (action_type != ACTION_TYPE.GET) throw new CompilerError("Invalid action on internal variable #public", SCOPE.stack); base_type =  BinaryCode.VAR_PUBLIC; v_name = undefined}
-                else if (v_name == "this") {  if (action_type != ACTION_TYPE.GET) throw new CompilerError("Invalid action on internal variable #this", SCOPE.stack); base_type =  BinaryCode.VAR_THIS; v_name = undefined}
-                else if (v_name == "remote") {if (action_type != ACTION_TYPE.GET) throw new CompilerError("Invalid action on internal variable #remote", SCOPE.stack); base_type = BinaryCode.VAR_REMOTE; v_name = undefined}
-                else if (v_name == "entrypoint") {if (action_type != ACTION_TYPE.GET) throw new CompilerError("Invalid action on internal variable #entrypoint", SCOPE.stack); base_type = BinaryCode.VAR_ENTRYPOINT; v_name = undefined}
-                else if (v_name == "std") {  if (action_type != ACTION_TYPE.GET) throw new CompilerError("Invalid action on internal variable #std", SCOPE.stack); base_type =  BinaryCode.VAR_STD; v_name = undefined}
-
+                const mapped = typeof v_name == "string" ? Compiler.builder.mapInternalVarNameToByteCode(v_name, action_type, SCOPE) : undefined;
+                if (typeof mapped == "number") {
+                    base_type = mapped;
+                    v_name = undefined;
+                }
                 // resolve internal var proxy name
                 else if (typeof v_name == "string") {
                     v_name = Compiler.builder.resolveInternalProxyName(SCOPE, <string>v_name);
@@ -5635,7 +5700,6 @@ export class Compiler {
             SCOPE.extract_var_indices.set(BinaryCode.LABEL, new Map());
             SCOPE.extract_var_indices.set(BinaryCode.POINTER, new Map());
             SCOPE.extract_var_indices.set(BinaryCode.INTERNAL_VAR, new Map()); // for parent internal var references
-
         }
 
         SCOPE.inner_scope = SCOPE.subscopes[0];

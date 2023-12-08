@@ -4,6 +4,7 @@
 import { client_type } from "./constants.ts";
 
 const port = globalThis.location?.port;
+const isSafari = (/^((?!chrome|android).)*safari/i.test(navigator.userAgent));
 
 
 export function deleteCookie(name: string) {
@@ -28,7 +29,7 @@ export function setCookie(name: string, value: string, expDays?: number) {
 		expiryDate.setTime(expiryDate.getTime() + (expDays * 24 * 60 * 60 * 1000));
 	}
 	const expires = expDays == 0 ? "" : "expires=" + expiryDate.toUTCString() + ";";
-	document.cookie = name + "=" + value + "; " + expires + " path=/;"
+	document.cookie = name + "=" + value + "; " + expires + " path=/; SameSite=None;"  + (isSafari ? "" :" Secure;")
 }
 
 export function getCookie(name: string) {

@@ -8,6 +8,9 @@ import { IndexedDBStorageLocation } from "./runtime/storage-locations/indexed-db
 import { LocalStorageLocation } from "./runtime/storage-locations/local-storage.ts";
 import { DenoKVStorageLocation } from "./runtime/storage-locations/deno-kv.ts";
 import { loadEternalValues } from "./utils/eternals.ts";
+import { DX_BOUND_LOCAL_SLOT } from "./runtime/constants.ts";
+import { verboseArg } from "./utils/logger.ts";
+import { MessageLogger } from "./utils/message_logger.ts";
 
 
 /**
@@ -67,6 +70,7 @@ export async function init() {
 
 	// set Runtime ENV (not persistent if globalThis.NO_INIT)
 	Runtime.ENV = globalThis.NO_INIT ? getDefaultEnv() : await Storage.loadOrCreate("Datex.Runtime.ENV", getDefaultEnv);
+	Runtime.ENV[DX_BOUND_LOCAL_SLOT] = "env"
 
 	// workaround, should never happen
 	if (!Runtime.ENV) {
@@ -133,4 +137,7 @@ export async function init() {
 
 	// @ts-ignore NO_INIT
 	if (!globalThis.NO_INIT) await loadEternalValues();
+
+	// enables message logger when running with -v
+	if (verboseArg) MessageLogger.enable()
 }

@@ -24,9 +24,8 @@ export const DX_IGNORE: unique symbol = Symbol("DX_IGNORE"); // ignore in DX (wh
 export const DX_PREEMPTIVE: unique symbol = Symbol("DX_PREEMPTIVE"); // used to override the default loading behaviour for a pointer (fetching by id). Can be an arbitrary DATEX Script that can be resolved with datex.get. Currently only used by the interface generator for JS modules.
 
 export const DX_REACTIVE_METHODS: unique symbol = Symbol("DX_REACTIVE_METHODS"); // object containing reactive methods for this obj, used e.g. for x.$.map, x.$.filter, ...
-
 export const INIT_PROPS: unique symbol = Symbol("INIT_PROPS"); // key for init props function passed to constructor to initialize properties of pointer immediately
-
+export const DX_BOUND_LOCAL_SLOT: unique symbol = Symbol("DX_BOUND_SLOT"); // local slot (e.g. #env) to which this value always gets serialized, instead of the value/pointer
 // -------------------------------------
 export const DX_SLOTS: unique symbol = Symbol("DX_SLOTS");
 

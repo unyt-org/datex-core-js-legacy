@@ -6,6 +6,7 @@ import { Logger } from "./logger.ts";
 
 // WASM
 import {decompile as wasm_decompile} from "../wasm/adapter/pkg/datex_wasm.js";
+import { console } from "./ansi_compat.ts";
 
 export class MessageLogger {
 	

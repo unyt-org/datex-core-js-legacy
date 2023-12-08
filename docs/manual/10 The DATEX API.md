@@ -47,3 +47,13 @@ Inside function bodies, the [`datex.meta` object](https://github.com/unyt-org/da
   type:ProtocolDataType
 }
 ```
+
+Example:
+
+```ts
+@endpoint class MyInterface {
+  @property myMethod(a: number) {
+    console.log("myMethod called by endpoint " + datex.meta.sender)  
+  }
+}
+```

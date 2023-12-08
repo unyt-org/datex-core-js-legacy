@@ -1505,8 +1505,10 @@ export class Pointer<T = any> extends Ref<T> {
     
 
     // create a new pointer with a transform value
-    static createTransform<const T, const V extends TransformFunctionInputs>(observe_values:V, transform:TransformFunction<V,T>, persistent_datex_transform?:string) {
-        return Pointer.create(undefined, NOT_EXISTING).handleTransform(observe_values, transform, persistent_datex_transform);
+    static createTransform<const T, const V extends TransformFunctionInputs>(observe_values:V, transform:TransformFunction<V,T>, persistent_datex_transform?:string, force_transform = false) {
+        const ptr = Pointer.create(undefined, NOT_EXISTING).handleTransform(observe_values, transform, persistent_datex_transform);
+        ptr.force_local_transform = force_transform;
+        return ptr;
     }
 
     /**
@@ -1978,6 +1980,12 @@ export class Pointer<T = any> extends Ref<T> {
     */
 
     public async subscribeForPointerUpdates(override_endpoint?:Endpoint, get_value = !this.#loaded, keep_pointer_origin = false):Promise<Pointer> {
+        
+        // never subscribe if pointer is bound to a transform function
+        if (this.transform_scope) {
+            return this;
+        }
+
         if (this.#subscribed) {
             // logger.debug("already subscribed to " + this.idString());
             return this;
@@ -2437,8 +2445,8 @@ export class Pointer<T = any> extends Ref<T> {
         }
 
         // propagate updates via datex
-        if (this.origin && !this.is_origin) {
-            if (!this.#exclude_origin_from_updates) this.handleDatexUpdate(null, '#0=?;? = #0', [this.current_val, this], this.origin, true)
+        if (this.send_updates_to_origin) {
+            this.handleDatexUpdate(null, '#0=?;? = #0', [this.current_val, this], this.origin, true)
         }
         if (this.update_endpoints.size) {
             logger.debug("forwarding update to subscribers", this.update_endpoints);
@@ -2463,6 +2471,9 @@ export class Pointer<T = any> extends Ref<T> {
     #transform_scope?:Scope;
     get transform_scope() {return this.#transform_scope}
 
+    #force_transform = false; // if true, the pointer transform function is always sent via DATEX
+    set force_local_transform(force_transform: boolean) {this.#force_transform = force_transform}
+    get force_local_transform() {return this.#force_transform}
 
     /**
      * transform observed values to update pointer value (using a transform function or DATEX transform scope)
@@ -2707,7 +2718,12 @@ export class Pointer<T = any> extends Ref<T> {
     // TODO: JUST A WORKAROUND - if transform is a JS function, a DATEX Script can be provided to be stored as a transform method
     async setDatexTransform(datex_transform:string) {
         // TODO: fix and reenable
-        // this.#transform_scope = (await Runtime.executeDatexLocally(datex_transform)).transform_scope;
+        try {
+            this.#transform_scope = (await Runtime.executeDatexLocally(datex_transform)).transform_scope;
+        }
+        catch (e) {
+            console.log("transform error", e);
+        }
     }
 
     #registeredForGC = false;
@@ -2910,7 +2926,13 @@ export class Pointer<T = any> extends Ref<T> {
     // updates are from datex (external) and should not be distributed again or local update -> should be distributed to subscribers
     #update_endpoints: Disjunction<Endpoint>; // endpoint to update
 
-    #exclude_origin_from_updates:boolean;
+    get send_updates_to_origin() {
+        // assumes origin is not current endpoint
+        // don't send if exclude_origin_from_updates set or has a local transform_scope
+        return this.origin && !this.is_origin && !(this.#exclude_origin_from_updates || this.transform_scope)
+    }
+
+    #exclude_origin_from_updates?:boolean;
     public excludeEndpointFromUpdates(endpoint:Endpoint) {
         // TODO origin equals id also for remote endpoints!
         if (this.origin.equals(endpoint)) this.#exclude_origin_from_updates = true;
@@ -3399,8 +3421,8 @@ export class Pointer<T = any> extends Ref<T> {
         // get current value
         value = value ?? this.getProperty(key);
 
-        if (this.origin && !this.is_origin) {
-            if (!this.#exclude_origin_from_updates) this.handleDatexUpdate(key, Runtime.PRECOMPILED_DXB.SET_PROPERTY, [this, key, value], this.origin)
+        if (this.send_updates_to_origin) {
+            this.handleDatexUpdate(key, Runtime.PRECOMPILED_DXB.SET_PROPERTY, [this, key, value], this.origin)
         }
         if (this.update_endpoints.size) {
             this.handleDatexUpdate(key, Runtime.PRECOMPILED_DXB.SET_PROPERTY, [this, key, value], this.update_endpoints)
@@ -3451,8 +3473,8 @@ export class Pointer<T = any> extends Ref<T> {
         
 
         // propagate updates via datex
-        if (this.origin && !this.is_origin) {
-            if (!this.#exclude_origin_from_updates) this.handleDatexUpdate(null, '? += ?', [this, value], this.origin)
+        if (this.send_updates_to_origin) {
+            this.handleDatexUpdate(null, '? += ?', [this, value], this.origin)
         }
         if (this.update_endpoints.size) {
             this.handleDatexUpdate(null, '? += ?', [this, value], this.update_endpoints)
@@ -3482,9 +3504,9 @@ export class Pointer<T = any> extends Ref<T> {
 
         this.streaming.push(true); // also stream for all future subscribers
 
-        if (this.origin && !this.is_origin) {
+        if (this.send_updates_to_origin) {
             logger.info("streaming to parent " + this.origin);
-            if (!this.#exclude_origin_from_updates) this.handleDatexUpdate(null, '? << ?'/*DatexRuntime.PRECOMPILED_DXB.STREAM*/, [this, obj], this.origin)
+            this.handleDatexUpdate(null, '? << ?'/*DatexRuntime.PRECOMPILED_DXB.STREAM*/, [this, obj], this.origin)
         }
         if (this.update_endpoints.size) {
             logger.info("streaming to subscribers " + this.update_endpoints);
@@ -3516,8 +3538,8 @@ export class Pointer<T = any> extends Ref<T> {
 
 
         // propagate updates via datex?
-        if (this.origin && !this.is_origin) {
-            if (!this.#exclude_origin_from_updates) this.handleDatexUpdate(null, Runtime.PRECOMPILED_DXB.CLEAR_WILDCARD, [this], this.origin)
+        if (this.send_updates_to_origin) {
+            this.handleDatexUpdate(null, Runtime.PRECOMPILED_DXB.CLEAR_WILDCARD, [this], this.origin)
         }
         if (this.update_endpoints.size) {
             this.handleDatexUpdate(null, Runtime.PRECOMPILED_DXB.CLEAR_WILDCARD, [this], this.update_endpoints)
@@ -3572,11 +3594,9 @@ export class Pointer<T = any> extends Ref<T> {
         const ret = Array.prototype.splice.call(this.shadow_object, start_index, deleteCount, ...replace);
 
         // propagate updates via datex?
-        if (this.origin && !this.is_origin) {
-            if (!this.#exclude_origin_from_updates) {
-                if (!replace?.length) this.handleDatexUpdate(null, '#0 = ?0; #1 = count #0;#0.(?1..?2) = void;#0.(?1..#1) = #0.(?3..#1);', [this, start, end, start+size], this.origin) // no insert
-                else this.handleDatexUpdate(null, '#0=?0;#0.(?4..?1) = void; #0.(?2..((count #0) + ?3)) = #0.(?4..(count #0));#0.(?4..?5) = ?6;', [this, end, start-size+replace_length, replace_length, start, start+replace_length, replace], this.origin) // insert
-            }
+        if (this.send_updates_to_origin) {
+            if (!replace?.length) this.handleDatexUpdate(null, '#0 = ?0; #1 = count #0;#0.(?1..?2) = void;#0.(?1..#1) = #0.(?3..#1);', [this, start, end, start+size], this.origin) // no insert
+            else this.handleDatexUpdate(null, '#0=?0;#0.(?4..?1) = void; #0.(?2..((count #0) + ?3)) = #0.(?4..(count #0));#0.(?4..?5) = ?6;', [this, end, start-size+replace_length, replace_length, start, start+replace_length, replace], this.origin) // insert
         }
         if (this.update_endpoints.size) {
             if (!replace?.length) this.handleDatexUpdate(null, '#0 = ?0; #1 = count #0;#0.(?1..?2) = void;#0.(?1..#1) = #0.(?3..#1);', [this, start, end, start+size], this.update_endpoints) // no insert
@@ -3638,8 +3658,8 @@ export class Pointer<T = any> extends Ref<T> {
         
         if ((res == INVALID || res == NOT_EXISTING) && this.shadow_object instanceof Array) key = BigInt(key); // change to <Int> for DATEX if <Array>
 
-        if (this.origin && !this.is_origin) {
-            if (!this.#exclude_origin_from_updates) this.handleDatexUpdate(null, '?.? = void', [this, key], this.origin)
+        if (this.send_updates_to_origin) {
+            this.handleDatexUpdate(null, '?.? = void', [this, key], this.origin)
         }
         if (this.update_endpoints.size) {
             this.handleDatexUpdate(null, '?.? = void', [this, key], this.update_endpoints)
@@ -3677,8 +3697,8 @@ export class Pointer<T = any> extends Ref<T> {
         
 
         // propagate updates via datex
-        if (this.origin && !this.is_origin) {
-            if (!this.#exclude_origin_from_updates) this.handleDatexUpdate(null, '? -= ?', [this, value], this.origin)
+        if (this.send_updates_to_origin) {
+            this.handleDatexUpdate(null, '? -= ?', [this, value], this.origin)
         }
         if (this.update_endpoints.size) {
             logger.debug("forwarding delete to subscribers " + this.update_endpoints);

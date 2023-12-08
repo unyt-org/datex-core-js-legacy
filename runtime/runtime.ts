@@ -275,7 +275,7 @@ export class Runtime {
             always (
                 if (local_map.(lang)) (local_map.(lang))
                 else (
-                    'Could not translate to (lang)'
+                    local_map.'en' default '?'
                     /*
                     val text = local_map.'en';
                     val language = lang;
@@ -283,7 +283,7 @@ export class Runtime {
                     */
                 )
             )
-            ` // used for persistent DATEX storage
+            `, true // used for persistent DATEX storage
         );
     }
 
@@ -308,7 +308,7 @@ export class Runtime {
                     always (
                         if (local_map.(lang)) (local_map.(lang).(key))
                         else (
-                            'Could not translate to (lang)'
+                            local_map.'en' default '?'
                             /*
                             val text = local_map.'en'.(key);
                             val language = lang;
@@ -316,6 +316,7 @@ export class Runtime {
                             */
                         )
                     )` : '' // used for persistent DATEX storage
+                    , true
             );
             // add to saved string
             if(!saved_strings) this.#saved_local_strings.set(local_map, saved_strings = new Map());
@@ -3048,7 +3049,7 @@ export class Runtime {
                             // resolve
                             if (p[1]?.resolve) {
                                 p[1].resolve(ptr)
-                                Pointer.loading_pointers.delete(ptr.id); // TODO: only workaround, automaticall handle delete, but leads to promise rejection errors
+                                Pointer.loading_pointers.delete(ptr.id); // TODO: only workaround, automatically handle delete, but leads to promise rejection errors
                             }
                         }
                         else await Runtime.runtime_actions.handleAssignAction(SCOPE, p[1], null, null, el, p[0]); // other action on pointer
@@ -5795,10 +5796,25 @@ export class Runtime {
                     // TRANSFORM (always)
                     if (INNER_SCOPE.scope_block_for == BinaryCode.TRANSFORM) {
                         INNER_SCOPE.scope_block_for = null;
-                        await this.runtime_actions.insertToScope(
-                            SCOPE,
-                            Ref.collapseValue(await Pointer.createTransformAsync(INNER_SCOPE.scope_block_vars, code_block))
-                        )
+                        const waiting = [...SCOPE.inner_scope.waiting_ptrs??[]].at(-1);
+                        // assign always() to init ($xxx := always(...))
+                        if (waiting && typeof waiting[1] == "object") {  // is init 
+                            const ptr = waiting[0]
+                            ptr.handleTransformAsync(INNER_SCOPE.scope_block_vars, code_block);
+                            // resolve
+                            if (waiting[1]?.resolve) {
+                                waiting[1].resolve(ptr)
+                                Pointer.loading_pointers.delete(ptr.id); // TODO: only workaround, automatically handle delete, but leads to promise rejection errors
+                            }
+                            SCOPE.inner_scope.waiting_ptrs!.delete(waiting)
+                        }
+                        else {
+                            await this.runtime_actions.insertToScope(
+                                SCOPE,
+                                Ref.collapseValue(await Pointer.createTransformAsync(INNER_SCOPE.scope_block_vars, code_block))
+                            )
+                        }
+                        
                     }
 
                     // ASSERT
