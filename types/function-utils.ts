@@ -1,3 +1,4 @@
+import { LazyPointer } from "../runtime/lazy-pointer.ts";
 import { callWithMetadata, callWithMetadataAsync, getMeta } from "../utils/caller_metadata.ts";
 import { RuntimeError } from "./errors.ts";
 
@@ -134,12 +135,48 @@ const isArrowFunction = (fnSrc:string) => {
 	return !!fnSrc.match(/^(async\s+)?\([^)]*\)\s*=>/)
 }
 
+function resolveLazyDependencies(deps:Record<string,unknown>) {
+    for (const [key, value] of Object.entries(deps)) {
+        if (value instanceof LazyPointer) value.onLoad((v) => {
+            deps[key] = v
+        });
+    }
+}
+
+function assertLazyDependenciesResolved(deps:Record<string,unknown>) {
+    for (const [key, value] of Object.entries(deps)) {
+        // TODO non js-Function specific error
+        if (value instanceof LazyPointer) throw new Error("Cannot call <js:Function>, dependency variable '"+key+"' is not yet initialized")
+    }
+}
+
+/**
+ * Create a new function from JS source code with injected dependency variables
+ * Also resolves LazyPointer dependencies
+ * @param source 
+ * @param dependencies 
+ * @returns 
+ */
+export function createFunctionWithDependencyInjectionsResolveLazyPointers(source: string, dependencies: Record<string, unknown>): ((...args:unknown[]) => unknown) {
+    let fn: Function|undefined;
+
+    const intermediateFn = (...args:any[]) => {
+        if (!fn) {
+            assertLazyDependenciesResolved(dependencies);
+            fn = createFunctionWithDependencyInjections(source, dependencies)
+        }
+        return fn(...args)
+    }
+    resolveLazyDependencies(dependencies)
+    return intermediateFn;
+}
 
 /**
  * Create a new function from JS source code with injected dependency variables
  * @param source 
  * @param dependencies 
  * @returns 
+ * @deprecated use createFunctionWithDependencyInjectionsResolveLazyPointers
  */
 export function createFunctionWithDependencyInjections(source: string, dependencies: Record<string, unknown>): ((...args:unknown[]) => unknown) {
 	const hasThis = Object.keys(dependencies).includes('this');

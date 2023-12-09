@@ -2119,7 +2119,13 @@ export class Pointer<T = any> extends Ref<T> {
         this.id = id ?? Pointer.getUniquePointerID(this) // set id
         this.#is_placeholder = false; // after id change
         // first time actual visible pointer
-        for (let l of Pointer.pointer_add_listeners) l(this);
+        for (const l of Pointer.pointer_add_listeners) l(this);
+        // pointer for id listeners
+        if (Pointer.pointer_for_id_created_listeners.has(this.id)) {
+            for (const l of Pointer.pointer_for_id_created_listeners.get(this.id)!) l(this);
+            Pointer.pointer_for_id_created_listeners.delete(this.id)
+        }
+
     }
 
     // set id if not set initially set
@@ -2129,6 +2135,7 @@ export class Pointer<T = any> extends Ref<T> {
         // if (!this.is_placeholder && this.id !== undefined && !Pointer.#local_pointers.has(this)) {
         //     // console.log("TODO: pointer transfer map")
         // }
+        // is id transfer for placeholder, trigger value init
 
         if (typeof id == "string") {
             // convert string to buffer
@@ -2271,7 +2278,6 @@ export class Pointer<T = any> extends Ref<T> {
      * @param v initial value
      */
     protected initializeValue(v:RefOrValue<T>, is_transform?:boolean) {
-
         let val = Ref.collapseValue(v,true,true);
 
         if (typeof val == "symbol" && Symbol.keyFor(val) !== undefined) {

@@ -5,7 +5,7 @@
 import { LazyPointer } from "../runtime/lazy-pointer.ts";
 import { Pointer } from "../runtime/pointers.ts";
 import { Runtime } from "../runtime/runtime.ts";
-import { ExtensibleFunction, getDeclaredExternalVariables, getDeclaredExternalVariablesAsync, createFunctionWithDependencyInjections, getSourceWithoutUsingDeclaration, Callable } from "./function-utils.ts";
+import { ExtensibleFunction, getDeclaredExternalVariables, getDeclaredExternalVariablesAsync, getSourceWithoutUsingDeclaration, Callable, createFunctionWithDependencyInjectionsResolveLazyPointers } from "./function-utils.ts";
 
 
 export type JSTransferableFunctionOptions = {
@@ -32,32 +32,15 @@ export class JSTransferableFunction extends ExtensibleFunction {
 				if (origin !== Runtime.endpoint && !Runtime.trustedEndpoints.get(origin)?.includes("remote-js-execution")) {
 					throw new Error("Cannot execute js:Function, origin "+origin+" has no permission to execute js source code on this endpoint");
 				}
-				this.assertLazyDependenciesResolved();
-				if (this.deps.this) return intermediateFn.apply(this.deps.this, args)
-				else return intermediateFn(...args)
+				return intermediateFn(...args)
 			}
 			super(fn);
-			this.resolveLazyDependencies(); // make sure LazyPointer deps are resolved
 			this.#fn = fn;
 		}
 		
 		this.source = source;
 	}
 
-	private resolveLazyDependencies() {
-		for (const [key, value] of Object.entries(this.deps)) {
-			if (value instanceof LazyPointer) value.onLoad((v) => this.deps[key] = v);
-		}
-	}
-
-	#resolved = false;
-	private assertLazyDependenciesResolved() {
-		if (this.#resolved) return true;
-		for (const [key, value] of Object.entries(this.deps)) {
-			if (value instanceof LazyPointer) throw new Error("Cannot call <js:Function>, dependency variable '"+key+"' is not yet initialized")
-		}
-		this.#resolved = true;
-	}
 
 	call(...args:any[]) {
 		return this.#fn(...args)
@@ -110,7 +93,7 @@ export class JSTransferableFunction extends ExtensibleFunction {
 	}
 
 	static #createTransferableFunction(source: string, dependencies: Record<string, unknown>, flags?: string[], options?:JSTransferableFunctionOptions) {
-        const intermediateFn = createFunctionWithDependencyInjections(source, dependencies);
+        const intermediateFn = createFunctionWithDependencyInjectionsResolveLazyPointers(source, dependencies);
 		return new JSTransferableFunction(intermediateFn, dependencies, source, flags, options);
 	}
 
