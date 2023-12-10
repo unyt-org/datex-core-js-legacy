@@ -386,6 +386,15 @@ export class Logger {
             if (!Logger.loggers_by_origin.has(this.origin)) Logger.loggers_by_origin.set(this.origin, new Set());
             Logger.loggers_by_origin.get(this.origin)?.add(this);
         }
+
+        this.info = this.info.bind(this);
+        this.warn = this.warn.bind(this);
+        this.error = this.error.bind(this);
+        this.debug = this.debug.bind(this);
+        this.log = this.log.bind(this);
+        this.success = this.success.bind(this);
+        this.plain = this.plain.bind(this);
+        this.dynamic = this.dynamic.bind(this);
     }
 
     public destroy(){
