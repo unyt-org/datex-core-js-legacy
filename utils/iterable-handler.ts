@@ -1,5 +1,6 @@
 import { Datex } from "../mod.ts";
 import { ValueError } from "../datex_all.ts";
+import { weakAction } from "./weak-action.ts";
 
 export class IterableHandler<T, U = T> {
 
@@ -20,7 +21,7 @@ export class IterableHandler<T, U = T> {
 		onEmpty?: () => void
 	}) {
 		this.map = callbacks.map;
-		this.filter = callbacks.filter;
+		// this.filter = callbacks.filter;
 		this.onNewEntry = callbacks.onNewEntry;
 		this.onEntryRemoved = callbacks.onEntryRemoved;
 		this.onEmpty = callbacks.onEmpty;
@@ -30,9 +31,27 @@ export class IterableHandler<T, U = T> {
 	}
 
 	observe() {
-		Datex.Ref.observeAndInit(this.iterable, (v, k, t)=>{
-			this.onValueChanged(v, k, t)
-		});
+		// deno-lint-ignore no-this-alias
+		const self = this;
+		const iterable = this.iterable;
+		weakAction(
+			{self}, 
+			({self}) => {
+				const handler = this.workaroundGetHandler(self)
+				Datex.Ref.observeAndInit(iterable, handler);
+			}
+		);
+	}
+
+	workaroundGetHandler(handler: WeakRef<IterableHandler<any>>) {
+		return (v:any, k:any, t:any) => {
+			const deref = handler.deref();
+            if (!deref) {
+                console.warn("Undetected garbage collection (datex-w0001)");
+                return;
+            }
+			deref.onValueChanged(v, k, t)
+		}
 	}
 
 	#entries?: Map<number, U>;
