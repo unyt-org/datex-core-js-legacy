@@ -80,7 +80,7 @@ export function getDeclaredExternalVariables(fn: (...args:unknown[])=>unknown) {
 
     // call the function with EXTRACT_USED_VARS metadata
     try {
-        callWithMetadata({[EXTRACT_USED_VARS]: true}, fn as any)
+        callWithMetadata({[EXTRACT_USED_VARS]: true}, fn as any, [{}]) // TODO: provide call arguments that don't lead to a {}/[] destructuring error
     }
     catch (e) {
         // capture returned variables from use()
@@ -157,13 +157,13 @@ function assertLazyDependenciesResolved(deps:Record<string,unknown>) {
  * @param dependencies 
  * @returns 
  */
-export function createFunctionWithDependencyInjectionsResolveLazyPointers(source: string, dependencies: Record<string, unknown>): ((...args:unknown[]) => unknown) {
+export function createFunctionWithDependencyInjectionsResolveLazyPointers(source: string, dependencies: Record<string, unknown>, allowValueMutations = true): ((...args:unknown[]) => unknown) {
     let fn: Function|undefined;
 
     const intermediateFn = (...args:any[]) => {
         if (!fn) {
             assertLazyDependenciesResolved(dependencies);
-            fn = createFunctionWithDependencyInjections(source, dependencies)
+            fn = createFunctionWithDependencyInjections(source, dependencies, allowValueMutations)
         }
         return fn(...args)
     }
@@ -178,10 +178,10 @@ export function createFunctionWithDependencyInjectionsResolveLazyPointers(source
  * @returns 
  * @deprecated use createFunctionWithDependencyInjectionsResolveLazyPointers
  */
-export function createFunctionWithDependencyInjections(source: string, dependencies: Record<string, unknown>): ((...args:unknown[]) => unknown) {
+export function createFunctionWithDependencyInjections(source: string, dependencies: Record<string, unknown>, allowValueMutations = true): ((...args:unknown[]) => unknown) {
 	const hasThis = Object.keys(dependencies).includes('this');
     const renamedVars = Object.keys(dependencies).filter(d => d!=='this').map(k=>'_'+k);
-    const varMapping = renamedVars.map(k=>`const ${k.slice(1)} = createStaticObject(${k});`).join("\n");
+    const varMapping = renamedVars.map(k=>`const ${k.slice(1)} = ${allowValueMutations ? 'createStaticObject' : ''}(${k});`).join("\n");
 
     const createStaticFn = `function createStaticObject(val) {
         if (val && typeof val == "object" && !globalThis.Datex?.Ref.isRef(val)) {
@@ -192,7 +192,7 @@ export function createFunctionWithDependencyInjections(source: string, dependenc
     };`
 
     try {
-        let creatorFn = new Function(...renamedVars, `"use strict";${varMapping?createStaticFn:''}${varMapping}; return (${source})`)
+        let creatorFn = new Function(...renamedVars, `"use strict";${(varMapping&&allowValueMutations)?createStaticFn:''}${varMapping}; return (${source})`)
         if (hasThis) creatorFn = creatorFn.bind(dependencies['this'])
         return creatorFn(...Object.entries(dependencies).filter(([d]) => d!=='this').map(([_,v]) => v));
     }

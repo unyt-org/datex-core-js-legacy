@@ -1770,9 +1770,37 @@ export class Pointer<T = any> extends Ref<T> {
         Pointer.pointers.delete(this.#id);
         Pointer.primitive_pointers.delete(this.#id)
 
+        // remove disposables
+        for (const disposable of this.#boundDisposables) {
+            console.log("disposing", disposable)
+            disposable[Symbol.dispose]?.()
+        }
+
         // call remove listeners (todo: also for primitive pointers)
         if (!this.is_anonymous) for (const l of Pointer.pointer_remove_listeners) l(this);
     }
+
+    #boundDisposables = new Set<{[Symbol.dispose]: ()=>any}>()
+
+    // binds a disposable object to this pointer that gets disposed as soon as the pointer is garbage collected
+    public bindDisposable(disposable: {[Symbol.dispose]: ()=>any}) {
+        this.#boundDisposables.add(disposable);
+        if (!this.is_js_primitive) {
+            if (!this.val[Pointer.DISPOSABLES]) this.val[Pointer.DISPOSABLES] = []
+            this.val[Pointer.DISPOSABLES].push(disposable);
+        }
+    }
+
+    static DISPOSABLES = Symbol("DISPOSABLES")
+
+    public static bindDisposable(value: any, disposable: {[Symbol.dispose]: ()=>any}) {
+        const ptr = value instanceof Pointer ? value : this.getByValue(value);
+        if (ptr) {
+            ptr.bindDisposable(disposable);
+        }
+        else throw new Error("Cannot bind a disposable value to a non-pointer value")
+    }
+
 
     [Symbol.dispose]() {
         this.delete()

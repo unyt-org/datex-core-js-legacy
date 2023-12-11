@@ -79,6 +79,16 @@ export class Unyt {
         return info.app?.dynamicData?.domains ? info.app.dynamicData.domains.map(d=>'https://'+d) : [];
     }
 
+    /**
+     * Don't delete: required in docker-host
+     */
+    public formatEndpointURL(endpoint: Endpoint) {
+        const endpointName = endpoint.toString();
+        if (endpointName.startsWith("@+")) return `${endpointName.replace("@+","")}.unyt.app`
+        else if (endpointName.startsWith("@@")) return `${endpointName.replace("@@","")}.unyt.app`
+        else if (endpointName.startsWith("@")) return `${endpointName.replace("@","")}.unyt.me`
+    }
+
     // TODO add colored logo dark - light mode
     public static async logEndpointInfo(){
         const info = this.endpoint_info;

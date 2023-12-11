@@ -133,7 +133,7 @@ export function map<T, U, O extends 'array'|'map' = 'array'>(iterable: Iterable<
 		if (options?.outType == "map") {
 			mapped = $$(new Map())
 
-			new IterableHandler(iterable, {
+			const iterableHandler = new IterableHandler(iterable, {
 				map: (v,k)=>{
 					return mapFn(v,k,iterable)
 				},
@@ -143,6 +143,8 @@ export function map<T, U, O extends 'array'|'map' = 'array'>(iterable: Iterable<
 				onNewEntry: (v,k) => (mapped as Map<number,U>).set(k,v),
 				onEmpty: () => (mapped as Map<number,U>).clear()
 			})
+			// reverse transform binding
+			Datex.Pointer.bindDisposable(mapped, iterableHandler)
 		}
 
 		// return array
@@ -152,7 +154,7 @@ export function map<T, U, O extends 'array'|'map' = 'array'>(iterable: Iterable<
 			// no gaps in a set -> array splice required
 			const spliceArray = iterable instanceof Set; 
 
-			new IterableHandler(iterable, {
+			const iterableHandler = new IterableHandler(iterable, {
 				map: (v,k)=>{
 					return mapFn(v,k,iterable)
 				},
@@ -167,6 +169,8 @@ export function map<T, U, O extends 'array'|'map' = 'array'>(iterable: Iterable<
 					(mapped as U[]).length = 0
 				}
 			})
+			// reverse transform binding
+			Datex.Pointer.bindDisposable(mapped, iterableHandler)
 		}
 
 	}

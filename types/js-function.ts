@@ -2,14 +2,14 @@
  * Represents a JS function with source code that can be transferred between endpoints
  */
 
-import { LazyPointer } from "../runtime/lazy-pointer.ts";
 import { Pointer } from "../runtime/pointers.ts";
 import { Runtime } from "../runtime/runtime.ts";
 import { ExtensibleFunction, getDeclaredExternalVariables, getDeclaredExternalVariablesAsync, getSourceWithoutUsingDeclaration, Callable, createFunctionWithDependencyInjectionsResolveLazyPointers } from "./function-utils.ts";
 
 
 export type JSTransferableFunctionOptions = {
-	errorOnOriginContext?: Error
+	errorOnOriginContext?: Error,
+	isLocal?: boolean
 }
 
 export class JSTransferableFunction extends ExtensibleFunction {
@@ -26,11 +26,13 @@ export class JSTransferableFunction extends ExtensibleFunction {
 		else {
 			let ptr: Pointer|undefined;
 			const fn = (...args:any[]) => {
-				if (!ptr) ptr = Pointer.getByValue(this);
-				if (!ptr) throw new Error("Cannot execute js:Function, must be bound to a pointer");
-				const origin = ptr.origin.main;
-				if (origin !== Runtime.endpoint && !Runtime.trustedEndpoints.get(origin)?.includes("remote-js-execution")) {
-					throw new Error("Cannot execute js:Function, origin "+origin+" has no permission to execute js source code on this endpoint");
+				if (!options?.isLocal) {
+					if (!ptr) ptr = Pointer.getByValue(this);
+					if (!ptr) throw new Error("Cannot execute js:Function, must be bound to a pointer");
+					const origin = ptr.origin.main;
+					if (origin !== Runtime.endpoint.main && !Runtime.trustedEndpoints.get(origin)?.includes("remote-js-execution")) {
+						throw new Error("Cannot execute js:Function, origin "+origin+" has no permission to execute js source code on this endpoint");
+					}
 				}
 				return intermediateFn(...args)
 			}
@@ -68,8 +70,9 @@ export class JSTransferableFunction extends ExtensibleFunction {
 	 * Important: use createAsync for async functions instead
 	 * @param fn 
 	 */
-	static create<T extends (...args:unknown[])=>unknown>(fn: T, options?:JSTransferableFunctionOptions): JSTransferableFunction & Callable<Parameters<T>, ReturnType<T>> {
+	static create<T extends (...args:unknown[])=>unknown>(fn: T, options:JSTransferableFunctionOptions = {}): JSTransferableFunction & Callable<Parameters<T>, ReturnType<T>> {
         const {vars, flags} = getDeclaredExternalVariables(fn);
+		options.isLocal ??= true;
 		return this.#createTransferableFunction(getSourceWithoutUsingDeclaration(fn), vars, flags, options) as any;
 	}
 
@@ -78,8 +81,9 @@ export class JSTransferableFunction extends ExtensibleFunction {
 	 * Automatically determines dependency variables declared with use()
 	 * @param fn 
 	 */
-	static async createAsync<T extends (...args:unknown[])=>Promise<unknown>>(fn: T, options?:JSTransferableFunctionOptions): Promise<JSTransferableFunction & Callable<Parameters<T>, ReturnType<T>>> {
+	static async createAsync<T extends (...args:unknown[])=>Promise<unknown>>(fn: T, options:JSTransferableFunctionOptions = {}): Promise<JSTransferableFunction & Callable<Parameters<T>, ReturnType<T>>> {
 		const {vars, flags} = await getDeclaredExternalVariablesAsync(fn)	
+		options.isLocal ??= true;
 		return this.#createTransferableFunction(getSourceWithoutUsingDeclaration(fn), vars, flags, options) as any;
 	}
 
@@ -93,7 +97,7 @@ export class JSTransferableFunction extends ExtensibleFunction {
 	}
 
 	static #createTransferableFunction(source: string, dependencies: Record<string, unknown>, flags?: string[], options?:JSTransferableFunctionOptions) {
-        const intermediateFn = createFunctionWithDependencyInjectionsResolveLazyPointers(source, dependencies);
+        const intermediateFn = createFunctionWithDependencyInjectionsResolveLazyPointers(source, dependencies, !options?.isLocal);
 		return new JSTransferableFunction(intermediateFn, dependencies, source, flags, options);
 	}
 

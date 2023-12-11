@@ -6,15 +6,19 @@ export class VolatileMap<K,V> extends Map<K,V> {
 
 	static readonly MAX_MAP_ENTRIES = 2**24
 	static readonly MAP_ENTRIES_CLEANUP_CHUNK = 1000
+	static readonly DEFAULT_ENTRYPOINT_LIFETIME = 30*60 // 30min
 
 	#options: VolatileMapOptions
-	#timeouts = new Map<K, number>()
+	#liftimeStartTimes = new Map<K, number>()
+	#customLifetimes = new Map<K, number>()
 
 	constructor(iterable?: Iterable<readonly [K, V]> | null, options: Partial<VolatileMapOptions> = {}) {
 		super(iterable)
 		this.#options = options as VolatileMapOptions;
-		this.#options.entryLifetime ??= 30*60 // 30min
+		this.#options.entryLifetime ??= VolatileMap.DEFAULT_ENTRYPOINT_LIFETIME
 		this.#options.preventMapOverflow ??= true
+
+		this.#startInterval()
 	}
 
 	/**
@@ -24,6 +28,10 @@ export class VolatileMap<K,V> extends Map<K,V> {
 	 * @returns the current value for the key
 	 */
 	keepalive(key: K, overrideLifetime?: number) {
+		if (!this.has(key)) {
+			console.warn("key does not exist in VolatileMap")
+			return;
+		}
 		this.#setTimeout(key, overrideLifetime);
 		return this.get(key)
 	}
@@ -54,22 +62,33 @@ export class VolatileMap<K,V> extends Map<K,V> {
 		return super.clear();
 	}
 
+	#startInterval() {
+		setInterval(
+			() => {
+				const currentTime = new Date().getTime();
+				for (const [key, time] of this.#liftimeStartTimes) {
+					const lifetime = 1000 * (this.#customLifetimes.get(key) ?? this.#options.entryLifetime);
+					if (currentTime-time > lifetime) {
+						this.delete(key);
+					}
+				}
+			}, 
+			Math.min(this.#options.entryLifetime, (VolatileMap.DEFAULT_ENTRYPOINT_LIFETIME)) * 1000 / 5
+		)
+	}
 
 	#clearTimeout(key: K) {
-		if (this.#timeouts.has(key)) {
-			clearTimeout(this.#timeouts.get(key));
-			this.#timeouts.delete(key);
-		}
+		this.#liftimeStartTimes.delete(key);
 	}
 
 	#setTimeout(key: K, overrideLifetime?: number) {
 		// reset previous timeout
 		this.#clearTimeout(key);
+		// store custom lifetime
+		if (overrideLifetime != undefined) this.#customLifetimes.set(key, overrideLifetime)
 		const lifetime = overrideLifetime ?? this.#options.entryLifetime;
 		if (Number.isFinite(lifetime)) {
-			this.#timeouts.set(key, setTimeout(() => {
-				this.delete(key)
-			}, lifetime * 1000))
+			this.#liftimeStartTimes.set(key, new Date().getTime())
 		}
 	}
 }

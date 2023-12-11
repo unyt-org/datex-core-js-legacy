@@ -2,6 +2,18 @@ import { Datex } from "../mod.ts";
 import { ValueError } from "../datex_all.ts";
 import { weakAction } from "./weak-action.ts";
 
+
+function workaroundGetHandler(iterableHandler: WeakRef<IterableHandler<any>>) {
+	return (v:any, k:any, t:any) => {
+		const deref = iterableHandler.deref();
+		if (!deref) {
+			console.warn("Undetected garbage collection (datex-w0001)");
+			return;
+		}
+		deref.onValueChanged(v, k, t)
+	}
+}
+
 export class IterableHandler<T, U = T> {
 
 	private map: ((value: T, index: number, array: Iterable<T>) => U) | undefined
@@ -33,26 +45,41 @@ export class IterableHandler<T, U = T> {
 	observe() {
 		// deno-lint-ignore no-this-alias
 		const self = this;
-		const iterable = this.iterable;
+		const iterableRef = new WeakRef(this.iterable);
+
+		// const handler = this.workaroundGetHandler(self)
+		// Datex.Ref.observeAndInit(iterable, handler);
+
 		weakAction(
 			{self}, 
 			({self}) => {
-				const handler = this.workaroundGetHandler(self)
-				Datex.Ref.observeAndInit(iterable, handler);
+				use (iterableRef, Datex);
+
+				const iterable = iterableRef.deref()! // only here to fix closure scope bug, should always exist at this point
+				const callback = (v:any, k:any, t:any) => {
+					const deref = self.deref();
+					if (!deref) {
+						console.warn("Undetected garbage collection (datex-w0001)");
+						return;
+					}
+					deref.onValueChanged(v, k, t)
+				}
+				Datex.Ref.observeAndInit(iterable, callback);
+				return callback;
+			},
+			(callback) => {
+				use (iterableRef, Datex);
+
+				const deref = iterableRef.deref()
+				if (deref) Datex.Ref.unobserve(deref, callback);
 			}
 		);
 	}
 
-	workaroundGetHandler(handler: WeakRef<IterableHandler<any>>) {
-		return (v:any, k:any, t:any) => {
-			const deref = handler.deref();
-            if (!deref) {
-                console.warn("Undetected garbage collection (datex-w0001)");
-                return;
-            }
-			deref.onValueChanged(v, k, t)
-		}
+	[Symbol.dispose]() {
+		// TODO: unobserve
 	}
+
 
 	#entries?: Map<number, U>;
 	public get entries() {

@@ -595,7 +595,7 @@ export class Runtime {
             // possible js module import: fetch headers first and check content type:
             if (!raw && (url_string.endsWith("js") || url_string.endsWith("ts") || url_string.endsWith("tsx") || url_string.endsWith("jsx") || url_string.endsWith("dx")  || url_string.endsWith("dxb"))) {
                 try {
-                    response = await fetch(url, {method: 'HEAD'});
+                    response = await fetch(url, {method: 'HEAD', cache: 'no-store'});
                     const type = response.headers.get('content-type');
                     if (type?.startsWith("text/javascript") || type?.startsWith("application/javascript")) {
                         doFetch = false; // no body fetch required, can directly import() module
