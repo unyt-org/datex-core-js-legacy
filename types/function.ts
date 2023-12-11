@@ -235,7 +235,7 @@ export class Function<T extends (...args: any) => any = (...args: any) => any> e
     private setRemoteEndpoint(endpoint: Endpoint){
         //let my_pointer = <Pointer> Pointer.pointerifyValue(this);
 
-        const sid = Compiler.generateSID(); // fixed sid to keep order
+        const sid = Compiler.generateSID(true); // fixed sid to keep order
         
         // save pointer in variable:
         /**

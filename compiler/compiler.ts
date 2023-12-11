@@ -43,6 +43,7 @@ import { MessageLogger } from "../utils/message_logger.ts";
 import { JSTransferableFunction } from "../types/js-function.ts";
 import { client_type } from "../utils/constants.ts";
 import { normalizePath } from "../utils/normalize-path.ts";
+import { VolatileMap } from "../utils/volatile-map.ts";
 
 await wasm_init();
 wasm_init_runtime();
@@ -326,9 +327,9 @@ export class Compiler {
         return tmp.buffer;
     }
 
-    private static sid_return_indices:Map<number,number> = new Map();
-    private static sid_incs:Map<number,number> = new Map();
-    private static sid_incs_remote:Map<Target, Map<number,number>> = new Map();
+    private static sid_return_indices = new VolatileMap<number,number>();
+    private static sid_incs = new VolatileMap<number,number>();
+    private static sid_incs_remote:Map<Target, VolatileMap<number,number>> = new Map();
 
     public static readonly MAX_SID = 4_294_967_295;
     public static readonly MAX_BLOCK = 65_535;
@@ -336,7 +337,7 @@ export class Compiler {
     public static readonly MAX_DXB_BLOCK_SIZE = Compiler.MAX_UINT_16; // default max block size (Infinity)
 
     /** create a new random SID */
-    public static generateSID():number{
+    public static generateSID(keepalive = false):number{
         let sid:number;
         // get unique SID
         do {
@@ -345,17 +346,19 @@ export class Compiler {
 
         this.sid_return_indices.set(sid,0);
         this.sid_incs.set(sid,0);
+
+        // TODO: alternative solution? at some point, the map max size will be reached
+        if (keepalive) {
+            this.sid_return_indices.keepalive(sid, Infinity)
+            this.sid_incs.keepalive(sid, Infinity)
+        }
         return sid;
     }
-    /** delete an SID */
-    private static removeSID(sid:number){
-        this.sid_return_indices.delete(sid);
-        this.sid_incs.delete(sid);
-    }
+
     /** get return index ++ for a specific SID */
     public static getNextReturnIndexForSID(sid:number):number {
         if (!this.sid_return_indices.has(sid)) {this.sid_return_indices.set(sid,0);this.sid_incs.set(sid,0);} // sid not yet loaded?
-        let c = <number>this.sid_return_indices.get(sid);
+        let c = <number>this.sid_return_indices.keepalive(sid);
         if (c > this.MAX_BLOCK) c = 0;
         this.sid_return_indices.set(sid, c+1);
         return c; 
@@ -364,7 +367,7 @@ export class Compiler {
     private static getBlockInc(sid:number):number {
         if (!this.sid_return_indices.has(sid)) {this.sid_return_indices.set(sid,0);this.sid_incs.set(sid,0);} // sid not yet loaded?
 
-        let c = <number>this.sid_incs.get(sid);
+        let c = <number>this.sid_incs.keepalive(sid);
         if (c > this.MAX_BLOCK) c = 0;
         this.sid_incs.set(sid, c+1);
         return c;
@@ -373,16 +376,16 @@ export class Compiler {
     // count up inc individually for different remote receivers (important for RESPONSE dxb)
     private static getBlockIncForRemoteSID(sid: number, remote_endpoint:Endpoint, reset_inc = false) {
         if (!(remote_endpoint instanceof Target)) throw new CompilerError("Can only send datex responses to endpoint targets");
-        if (!this.sid_incs_remote.has(remote_endpoint)) this.sid_incs_remote.set(remote_endpoint, new Map());
+        if (!this.sid_incs_remote.has(remote_endpoint)) this.sid_incs_remote.set(remote_endpoint, new VolatileMap());
 
         const sid_incs = this.sid_incs_remote.get(remote_endpoint)!;
 
         if (!sid_incs.has(sid)) {
-            if (reset_inc) return 0; // don't even bother toc create a 0-entry, just return 0 directly
+            if (reset_inc) return 0; // don't even bother to create a 0-entry, just return 0 directly
             sid_incs.set(sid, 0); // sid not yet loaded?
         }
 
-        let c = sid_incs.get(sid)!;
+        let c = sid_incs.keepalive(sid)!;
         if (c > this.MAX_BLOCK) c = 0;
         sid_incs.set(sid, c+1);
         //logger.warn("INC for remote SID " + sid, c, (reset_inc?'RESET':''));
@@ -5914,3 +5917,14 @@ export const FILE_TYPE = {
 } as const;
 
 export type DATEX_FILE_TYPE = typeof FILE_TYPE[keyof typeof FILE_TYPE];
+
+
+// debug:
+setInterval(()=> {
+    console.log(
+        "SID cache sizes (VolatileMap): ", 
+        Compiler.sid_return_indices.size, 
+        Compiler.sid_incs.size, 
+        Compiler.sid_incs_remote.size
+    )
+}, 1000*60*30 /*30min*/)
