@@ -450,6 +450,10 @@ export abstract class Ref<T = any> extends EventTarget {
         // initial value init
         transformSource.update();
     }
+    
+    protected deleteTransformSource() {
+        this.#transformSource = undefined;
+    }
 
     /**
      * if there are no observers for this value and a live transform exists,
@@ -1758,10 +1762,11 @@ export class Pointer<T = any> extends Ref<T> {
         // disable transform source
         this.forceSetObserverCount(0) // make sure observer counter is 0
         this.setForcedLiveTransform(false);
+        this.deleteTransformSource();
 
         // remove property observers
-        for (const [value,handler] of this.#active_property_observers.values()) {
-            Ref.unobserve(value, handler, this);
+        for (const [value, handler] of this.#active_property_observers.values()) {
+            Ref.unobserve(value, handler, this.#unique);
         }
 
         // delete labels
@@ -2675,7 +2680,7 @@ export class Pointer<T = any> extends Ref<T> {
                         // unobserve no longer relevant dependencies
                         for (const dep of deps) {
                             if (!capturedGetters?.has(dep)) {
-                                dep.unobserve(update, this);
+                                dep.unobserve(update, this.#unique);
                                 deps.delete(dep)
                             }
                         }
@@ -2683,7 +2688,7 @@ export class Pointer<T = any> extends Ref<T> {
                         for (const getter of capturedGetters) {
                             if (deps.has(getter)) continue;
                             deps.add(getter)
-                            getter.observe(update, this);
+                            getter.observe(update, this.#unique);
                         }
                     }
 
@@ -2693,7 +2698,7 @@ export class Pointer<T = any> extends Ref<T> {
                             const capturedKeys = capturedGettersWithKeys.get(ptr);
                             for (const key of keys) {
                                 if (!capturedKeys?.has(key)) {
-                                    ptr.unobserve(update, this, key);
+                                    ptr.unobserve(update, this.#unique, key);
                                     keys.delete(key)
                                 }
                             }
@@ -2706,7 +2711,7 @@ export class Pointer<T = any> extends Ref<T> {
 
                             for (const key of keys) {
                                 if (storedKeys.has(key)) continue;
-                                ptr.observe(update, this, key);
+                                ptr.observe(update, this.#unique, key);
                                 storedKeys.add(key);
                             }
                            
@@ -2733,9 +2738,9 @@ export class Pointer<T = any> extends Ref<T> {
             disableLive: () => {
                 isLive = false;
                 // disable all observers
-                for (const dep of deps) dep.unobserve(update, this);
+                for (const dep of deps) dep.unobserve(update, this.#unique);
                 for (const [ptr, keys] of keyedDeps) {
-                    for (const key of keys) ptr.unobserve(update, this, key);
+                    for (const key of keys) ptr.unobserve(update, this.#unique, key);
                 }
 
                 deps.clear();
@@ -3788,6 +3793,7 @@ export class Pointer<T = any> extends Ref<T> {
     }
 
     #active_property_observers = new Map<string, [Ref, observe_handler<unknown, RefLike<any>>]>();
+    #unique = {}
 
     // set observer for internal changes in property value reference
     protected initShadowObjectPropertyObserver(key:string, value:Ref){
@@ -3796,18 +3802,22 @@ export class Pointer<T = any> extends Ref<T> {
         // remove previous observer for property
         if (this.#active_property_observers.has(key)) {
             const [value, handler] = this.#active_property_observers.get(key)!;
-            Ref.unobserve(value, handler, this);
+            Ref.unobserve(value, handler, this.#unique);
         }
 
-        // new observer
+        // new observer 
+        // TODO: is weak pointer reference correct here?
+        const ref = new WeakRef(this);
         const handler = (_value: unknown, _key?: unknown, _type?: Ref.UPDATE_TYPE, _is_transform?: boolean, _is_child_update?: boolean, previous?: any) => {
+            const self = ref.deref();
+            if (!self) return;
             // console.warn(_value,_key,_type,_is_transform)
             // inform observers (TODO: more update event info?, currently just acting as if it was a SET)
-            this.callObservers(_value, key, Ref.UPDATE_TYPE.SET, _is_transform, true, previous)
+            self.callObservers(_value, key, Ref.UPDATE_TYPE.SET, _is_transform, true, previous)
         };
-        Ref.observeAndInit(value, handler, this);
-        this.#active_property_observers.set(key, [value,handler]);
 
+        Ref.observeAndInit(value, handler, this.#unique);
+        this.#active_property_observers.set(key, [value, handler]);
     }
 
 
@@ -3847,7 +3857,9 @@ export class Pointer<T = any> extends Ref<T> {
             if (this.current_val instanceof Array) key = <K><unknown>Number(key);
 
             if (bound_object) {
-                if (!this.bound_change_observers.has(bound_object)) this.bound_change_observers.set(bound_object, new Map());
+                if (!this.bound_change_observers.has(bound_object)) {
+                    this.bound_change_observers.set(bound_object, new Map());
+                }
                 const bound_object_map = this.bound_change_observers.get(bound_object)!;
                 if (!bound_object_map.has(key)) bound_object_map.set(key, new Map());
                 bound_object_map.get(key)!.set(handler, options);

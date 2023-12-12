@@ -1,6 +1,6 @@
 // custom localstorage class that handles browser and node local storage and temporary (session) storage
 
-import { Deno, logger } from "../../utils/global_values.ts";
+import { logger } from "../../utils/global_values.ts";
 import { client_type } from "../../utils/constants.ts";
 import { ptr_cache_path } from "../cache_path.ts";
 import { normalizePath } from "../../utils/normalize-path.ts";
@@ -95,5 +95,25 @@ class LocalStorage implements Storage {
 // 	throw "no localStorage available (are you using the latest Deno version?)"
 // }
 
-export const localStorage = client_type == "deno" ? new LocalStorage() : globalThis.localStorage;
-if (client_type == "deno") globalThis.localStorage = localStorage;
+// export const localStorage = client_type == "deno" ? new LocalStorage() : globalThis.localStorage;
+// if (client_type == "deno") globalThis.localStorage = localStorage;
+
+
+// migrate from compat localStorage to deno localStorage
+// TODO: remove this at some point
+if (client_type == "deno") {
+	try {
+		const cache_file = new URL('@@local', ptr_cache_path);
+		const serialized = Deno.readFileSync(cache_file);
+		const data = JSON.parse(new TextDecoder().decode(serialized));
+		const entries = Object.entries(data);
+		for (const [key, value] of entries as [string, string][]) {
+			globalThis.localStorage.setItem(key, value);
+		}
+		await Deno.remove(cache_file);
+		logger.success("Migrated "+entries.length+" items from compat pointer storage to deno localStorage")
+	}
+	catch {}
+}
+
+export const localStorage = globalThis.localStorage

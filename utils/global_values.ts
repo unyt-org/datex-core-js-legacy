@@ -13,7 +13,7 @@ const is_worker = (typeof WorkerGlobalScope !== 'undefined' && self instanceof W
  */
 export const client_type = is_worker ? 'worker' : ("Deno" in globalThis && !(globalThis.Deno as any).isPolyfill ? 'deno' : 'browser')
 
-export const Deno = <any>globalThis.Deno;
+export const Deno = globalThis.Deno;
 
 export const logger = new Logger("DATEX");
 
