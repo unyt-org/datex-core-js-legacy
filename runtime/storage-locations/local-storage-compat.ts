@@ -110,7 +110,7 @@ if (client_type == "deno") {
 		for (const [key, value] of entries as [string, string][]) {
 			globalThis.localStorage.setItem(key, value);
 		}
-		await Deno.remove(cache_file);
+		await Deno.rename(cache_file, new URL('@@local.backup', ptr_cache_path));
 		logger.success("Migrated "+entries.length+" items from compat pointer storage to deno localStorage")
 	}
 	catch {}

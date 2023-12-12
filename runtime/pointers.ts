@@ -2507,6 +2507,12 @@ export class Pointer<T = any> extends Ref<T> {
     }
 
 
+    #transformMap?: Record<string,any>
+    set transformMap(transformMap:Record<string,any>) {
+        this.#transformMap = transformMap
+    }
+    get transformMap():Record<string,any>|undefined {return this.#transformMap}
+
     #transform_scope?:Scope;
     get transform_scope() {return this.#transform_scope}
 

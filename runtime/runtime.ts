@@ -264,7 +264,7 @@ export class Runtime {
     }
 
     public static getLocalString(local_map:{[lang:string]:string}):Pointer<string> {
-        return Pointer.createTransform([PointerProperty.get(Runtime.ENV, 'LANG')],
+        const ptr = Pointer.createTransform([PointerProperty.get(Runtime.ENV, 'LANG')],
             (lang:string) => {
                 return local_map[lang] ?? this.getTranslatedLocalString(local_map['en'], lang)
             }, // sync js mapping
@@ -283,7 +283,9 @@ export class Runtime {
                 )
             )
             `, true // used for persistent DATEX storage
-        );
+        ) as Pointer<string>;
+        ptr.transformMap = local_map;
+        return ptr;
     }
 
     public static getLocalStringFromMap(local_map:local_text_map, key:RefOrValue<string>):Pointer<string> {
