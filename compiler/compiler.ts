@@ -5921,10 +5921,10 @@ export type DATEX_FILE_TYPE = typeof FILE_TYPE[keyof typeof FILE_TYPE];
 
 // debug:
 setInterval(()=> {
-    console.log(
-        "SID cache sizes (VolatileMap): ", 
-        Compiler.sid_return_indices.size, 
-        Compiler.sid_incs.size, 
-        Compiler.sid_incs_remote.size
+    logger.debug(
+        "SID cache sizes (VolatileMap): " + 
+        Compiler.sid_return_indices.size +  "- " +
+        Compiler.sid_incs.size +  "- " +
+        Compiler.sid_incs_remote.size +  "- "
     )
 }, 1000*60*30 /*30min*/)

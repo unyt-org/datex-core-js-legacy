@@ -18,12 +18,13 @@ type interf = {new(...args:unknown[]):unknown};
  * @param module_name human readable short name of the module for logs, default is module_path_or_datex_get
 * @returns TS source code for the new module
  */
-export async function generateTSModuleForRemoteAccess(module_path_or_datex_get:URL|string, exports?: Set<string>, types = true, module_name = module_path_or_datex_get.toString(), caller?:string){
+export async function generateTSModuleForRemoteAccess(module_path_or_datex_get:URL|string, exports?: Set<string>, types = true, module_name = module_path_or_datex_get.toString(), caller?:string, ignoreFailure = false){
 
 	const values = await getModuleExports(
 		module_path_or_datex_get, 
 		caller, 
-		exports ?? await getAllExportNames(module_path_or_datex_get)
+		exports ?? await getAllExportNames(module_path_or_datex_get),
+		ignoreFailure
 	)
 
 	// TODO: is await Datex.Supranet.init(); required?
@@ -61,7 +62,7 @@ const implicitly_converted_primitives = new Map<string, Set<string>>().setAutoDe
 const implicitly_converted = new Map<string, Set<string>>().setAutoDefault(Set);
 
 
-async function getModuleExports(path_or_specifier:URL|string, caller:string|undefined, exports:Set<string>) {
+async function getModuleExports(path_or_specifier:URL|string, caller:string|undefined, exports:Set<string>, ignoreFailure = false) {
 	const values:[string, unknown, boolean, boolean][] = [];
 
 	try {
@@ -78,12 +79,16 @@ async function getModuleExports(path_or_specifier:URL|string, caller:string|unde
 			for (const exp of exports) {
 				if (exp == "default" && inject_default) continue;
 				const exists = !!exp && typeof module == "object" && exp in module;
-				if (!exists) {
-					if (typeof path_or_specifier == "string") logger.error((caller ? caller + ": " : "") + "'" + exp + "' is currently not a exported value in " + path_or_specifier)
-					else logger.error((caller ? caller + ": " : "") + "'" + exp + "' is currently not a exported value in module " + path_or_specifier + " - restart might be required")
+				if (!ignoreFailure && !exists) {
+					if (typeof path_or_specifier == "string") logger.error((caller ? caller + ": " : "") + "'" + exp + "' is currently not an exported value in " + path_or_specifier)
+					else logger.error((caller ? caller + ": " : "") + "'" + exp + "' is currently not an exported value in module " + path_or_specifier + " - restart might be required")
 				}
-				const val = module[exp];
-				values.push([exp, val, exists, dontConvertValueToPointer(exp, val)]);
+				// only add if exists or ignoreFailure is not enabled
+				if (!ignoreFailure || !exists) {
+					const val = module[exp];
+					values.push([exp, val, exists, dontConvertValueToPointer(exp, val)]);
+				}
+				
 			}
 		}
 
@@ -268,12 +273,13 @@ function getValueTSType(value:any) {
 
 
 // generate d.ts file (for DATEX module)
-export async function generateDTSModuleForRemoteAccess(module_path_or_datex_get:URL|string, exports?: Set<string>, module_name = module_path_or_datex_get.toString(), reference?: string) {
+export async function generateDTSModuleForRemoteAccess(module_path_or_datex_get:URL|string, exports?: Set<string>, module_name = module_path_or_datex_get.toString(), reference?: string, ignoreFailure = false) {
 	
 	const values = await getModuleExports(
 		module_path_or_datex_get, 
 		reference, 
-		exports ?? await getAllExportNames(module_path_or_datex_get)
+		exports ?? await getAllExportNames(module_path_or_datex_get),
+		ignoreFailure
 	)
 	
 	
