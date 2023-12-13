@@ -259,7 +259,7 @@ export class Endpoint extends Target {
 		} 
 		// probably network error, endpoint not reachable
 		catch (e) {
-			console.error("error getting '" + this + "." + key + "'",e)
+			console.debug("error getting '" + this + "." + key + "'",e)
 		}
 		// fallback: Blockchain
 		const res = Runtime.Blockchain.getEndpointProperty(this, key);

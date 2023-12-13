@@ -11,6 +11,7 @@ import { MessageLogger } from "../utils/message_logger.ts";
 import { displayFatalError } from "./display.ts"
 import { Type } from "../types/type.ts";
 import { addPersistentListener } from "../utils/persistent-listeners.ts";
+import { LOCAL_ENDPOINT } from "../types/addressing.ts";
 
 
 // displayInit();
@@ -492,7 +493,9 @@ export class Storage {
         // any value change
         let saving = false;
 
+
         const handler = (v:unknown,key:unknown,t?:Ref.UPDATE_TYPE)=>{
+
             if (saving) return;
             saving = true;
             this.setDirty(location, true)
@@ -876,9 +879,17 @@ export class Storage {
         }
         // create state
         else if (create){
-            const state = Pointer.createOrGet(await create()).js_value;
-            await this.setItem(state_name, state, true);
-            return <any>state;
+            const state = Pointer.createOrGet(await create());
+
+            // workaround: update item as soon as pointer id is changed with actual endpoint id (e.g. for Datex.Runtime.ENV)
+            if (Runtime.endpoint === LOCAL_ENDPOINT) {
+                Runtime.onEndpointChanged(() => {
+                    this.setItem(state_name, state.js_value, true);
+                })
+            }
+
+            await this.setItem(state_name, state.js_value, true);
+            return <any>state.js_value;
         }
         else throw new Error("Cannot find or create the state '" + id + "'")
     }

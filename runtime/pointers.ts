@@ -437,6 +437,10 @@ export abstract class Ref<T = any> extends EventTarget {
     #forceLiveTransform = false;
     #transformSource?: TransformSource
 
+    get transformSource() {
+        return this.#transformSource
+    }
+
     protected set _liveTransform(val: boolean) {
         this.#liveTransform = val;
     }
@@ -535,6 +539,10 @@ export type TransformSource = {
      * called to update the transformed value
      */
     update: ()=>void
+
+    // dependency values
+    deps: IterableWeakSet<Ref>
+    keyedDeps: IterableWeakMap<Pointer, Set<any>>
 }
 
 export type PointerPropertyParent<K,V> = Map<K,V> | Record<K & (string|symbol),V>;
@@ -2751,6 +2759,8 @@ export class Pointer<T = any> extends Ref<T> {
 
                 deps.clear();
             },
+            deps,
+            keyedDeps,
             update
         })
 
