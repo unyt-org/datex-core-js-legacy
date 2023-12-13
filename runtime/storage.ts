@@ -252,7 +252,7 @@ export class Storage {
 
     private static saveCurrentState(location:StorageLocation, isExit = false){
         if (this.#exit_without_save) {
-            console.log(`exiting without save`);
+            // console.log(`exiting without save`);
             return;
         }
 
@@ -864,8 +864,8 @@ export class Storage {
     public static async clearAndReload() {
         await Storage.clearAll();
         Storage.allowExitWithoutSave();
-        if (globalThis.window) window.location.reload();
-        else if (client_type === "deno") Deno.exit(1);
+        if (client_type === "deno") Deno.exit(1);
+        else if (globalThis.window?.location) window.location.reload();
         else logger.error("Could not reload in non-browser or Deno context")
     }
 
