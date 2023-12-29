@@ -1719,20 +1719,25 @@ export class Pointer<T = any> extends Ref<T> {
             this.id = Pointer.getUniquePointerID(this);
         }
 
-        // get origin based on pointer id if no origin provided
-        // TODO different pointer address formats / types
-        if (!this.origin && id && !anonymous && this.#id_buffer && (this.pointer_type == Pointer.POINTER_TYPE.ENDPOINT || this.pointer_type == Pointer.POINTER_TYPE.ENDPOINT_PERSONAL || this.pointer_type == Pointer.POINTER_TYPE.ENDPOINT_INSTITUTION)) {
-            this.origin = Pointer.getOriginFromPointerId(this.#id_buffer);
-            // <Endpoint>Target.get(this.#id_buffer.slice(1,19), this.#id_buffer.slice(19,21), this.pointer_type);
-            //console.log("pointer origin based on id: " + this.toString() + " -> " + this.origin)
-        }
-        else if (!this.origin) this.origin = Runtime.endpoint; // default origin is local endpoint
+        this.initOrigin()
 
         // set value
         if (<any>value != NOT_EXISTING) this.val = value;
 
         // set update_endpoint and trigger suscribers getter (get from cache)
         this.#update_endpoints = this.subscribers
+    }
+
+    private initOrigin(force_update = false) {
+        // get origin based on pointer id if no origin provided
+        // TODO different pointer address formats / types
+        if ((!this.origin||force_update) && this.id && !this.#is_anonymous && this.#id_buffer && (this.pointer_type == Pointer.POINTER_TYPE.ENDPOINT || this.pointer_type == Pointer.POINTER_TYPE.ENDPOINT_PERSONAL || this.pointer_type == Pointer.POINTER_TYPE.ENDPOINT_INSTITUTION)) {
+            this.origin = Pointer.getOriginFromPointerId(this.#id_buffer);
+            // <Endpoint>Target.get(this.#id_buffer.slice(1,19), this.#id_buffer.slice(19,21), this.pointer_type);
+            //console.log("pointer origin based on id: " + this.toString() + " -> " + this.origin)
+        }
+        else if (!this.origin||force_update) this.origin = Runtime.endpoint; // default origin is local endpoint
+
     }
 
     /**
@@ -2159,6 +2164,8 @@ export class Pointer<T = any> extends Ref<T> {
         this.#is_anonymous = false; // before id change
         this.id = id ?? Pointer.getUniquePointerID(this) // set id
         this.#is_placeholder = false; // after id change
+        // update origin to match id
+        this.initOrigin(true)
         // first time actual visible pointer
         for (const l of Pointer.pointer_add_listeners) l(this);
         // pointer for id listeners

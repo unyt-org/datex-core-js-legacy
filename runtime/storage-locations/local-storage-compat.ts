@@ -101,7 +101,7 @@ class LocalStorage implements Storage {
 
 // migrate from compat localStorage to deno localStorage
 // TODO: remove this at some point
-if (client_type == "deno") {
+if (client_type == "deno" && !globalThis.NO_INIT) {
 	try {
 		const cache_file = new URL('@@local', ptr_cache_path);
 		const serialized = Deno.readFileSync(cache_file);
