@@ -608,7 +608,10 @@ class WebsocketClientInterface extends CommonInterface {
         try {
             this.socket.send(block);
         } catch {
-            throw new NetworkError("No connection");
+            logger.warn("no connection, trying to send block again in 5s");
+            setTimeout(() => {
+                this.sendBlock(block)
+            }, 5000)
         }
     }
 
