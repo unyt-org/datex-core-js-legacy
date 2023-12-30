@@ -301,6 +301,9 @@ export class Supranet {
         // start runtime + set endpoint
         Runtime.init(endpoint);
 
+        // bind keys to initialized endpoint (already done for @@local in Crypto.loadOwnKeys)
+        Crypto.saveOwnPublicKeysInEndpointKeyMap()
+
         // setup interface manager
         if (!this.#interfaces_initialized) {
             this.#interfaces_initialized = true;

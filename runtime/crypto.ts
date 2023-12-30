@@ -187,6 +187,10 @@ export class Crypto {
      * Checks if the current public keys match the offical public keys for this endpoint
      */
     static async validateOwnKeysAgainstNetwork() {
+        if (!Supranet.connected) {
+            logger.debug("Could not validate local keys against registered public keys, not connected to Supranet")
+            return
+        }
         try {
             const ownKeys = await Promise.all(
                 this.getOwnPublicKeys().map(k => this.exportPublicKeyBase64(k))
@@ -318,8 +322,7 @@ export class Crypto {
     }
 
 
-
-    private static saveOwnPublicKeysInEndpointKeyMap () {
+    static saveOwnPublicKeysInEndpointKeyMap () {
         // save in local endpoint key storage
         if (!this.public_keys.has(Runtime.endpoint)) this.public_keys.set(Runtime.endpoint.main, [null,null]);
         (<[CryptoKey?, CryptoKey?]>this.public_keys.get(Runtime.endpoint.main))[0] = this.rsa_verify_key;

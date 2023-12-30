@@ -1980,10 +1980,10 @@ export class Compiler {
             // remember if js type def modules should be added to this scope
             if (SCOPE.addJSTypeDefs == undefined) {
                 const receiver = Compiler.builder.getScopeReceiver(SCOPE);
-                SCOPE.addJSTypeDefs = !!jsTypeDefModule && receiver != Runtime.endpoint && receiver != LOCAL_ENDPOINT;
+                SCOPE.addJSTypeDefs = receiver != Runtime.endpoint && receiver != LOCAL_ENDPOINT;
             }
 
-            if (SCOPE.addJSTypeDefs) {
+            if (SCOPE.addJSTypeDefs && jsTypeDefModule) {
                 Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+4, SCOPE);
                 SCOPE.uint8[SCOPE.b_index++] = BinaryCode.SUBSCOPE_START;
                 SCOPE.uint8[SCOPE.b_index++] = BinaryCode.GET;

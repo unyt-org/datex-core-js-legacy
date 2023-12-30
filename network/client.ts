@@ -557,6 +557,7 @@ class WebsocketClientInterface extends CommonInterface {
         try {
             this.socket = new WebSocket(`${this.protocol}://${this.host}`);    
             this.socket.binaryType = 'arraybuffer';
+
             return new Promise(resolve=>{
                 // Connection opened
                 this.socket!.addEventListener('open', () => {
