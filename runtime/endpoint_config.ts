@@ -65,7 +65,8 @@ class EndpointConfig implements EndpointConfigData {
 			let config_file = new URL('./'+this.DX_FILE_NAME, cache_path);
 			// try to open .dx from cache
 			try {
-				Deno.openSync(normalizePath(config_file));
+				const file = Deno.openSync(normalizePath(config_file));
+				file.close()
 				// console.log("using endpoint config cache: " + config_file);
 			} 
 			// use normal dx file

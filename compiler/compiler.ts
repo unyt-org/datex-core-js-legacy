@@ -1977,13 +1977,17 @@ export class Compiler {
         addTypeByNamespaceAndName: (SCOPE:compiler_scope, namespace:string, name:string, variation?:string, parameters?:any[]|true, jsTypeDefModule?:string|URL) => {
             Compiler.builder.handleRequiredBufferSize(SCOPE.b_index, SCOPE);
 
+            Compiler.builder.valueIndex(SCOPE);
+
             // remember if js type def modules should be added to this scope
             if (SCOPE.addJSTypeDefs == undefined) {
                 const receiver = Compiler.builder.getScopeReceiver(SCOPE);
                 SCOPE.addJSTypeDefs = receiver != Runtime.endpoint && receiver != LOCAL_ENDPOINT;
             }
 
-            if (SCOPE.addJSTypeDefs && jsTypeDefModule) {
+            const addTypeDefs = SCOPE.addJSTypeDefs && jsTypeDefModule;
+
+            if (addTypeDefs) {
                 Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+4, SCOPE);
                 SCOPE.uint8[SCOPE.b_index++] = BinaryCode.SUBSCOPE_START;
                 SCOPE.uint8[SCOPE.b_index++] = BinaryCode.GET;
@@ -1994,8 +1998,6 @@ export class Compiler {
                 }
                 SCOPE.uint8[SCOPE.b_index++] = BinaryCode.CLOSE_AND_STORE;
             }
-
-            Compiler.builder.valueIndex(SCOPE);
 
             const is_extended_type = !!(variation || parameters);
 
@@ -2053,7 +2055,7 @@ export class Compiler {
                 Compiler.builder.addTuple(new Tuple(parameters), SCOPE);
             }
 
-            if (SCOPE.addJSTypeDefs) {
+            if (addTypeDefs) {
                 SCOPE.uint8[SCOPE.b_index++] = BinaryCode.SUBSCOPE_END;
             }
         },
