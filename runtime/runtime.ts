@@ -1165,12 +1165,15 @@ export class Runtime {
      */
     static setActiveEndpoint(endpoint:Endpoint) {
         let endpoints:string[] = [];
-        try {
-            endpoints = JSON.parse(localStorage['active_endpoints']) as string[]
+        if (client_type == "browser") {
+            try {
+                endpoints = JSON.parse(localStorage['active_endpoints']) as string[]
+            }
+            catch {
+                localStorage['active_endpoints'] = ""
+            }
         }
-        catch {
-            localStorage['active_endpoints'] = ""
-        }
+        
         // remove previous local endpoint
         if (this.ownLastEndpoint && endpoints.includes(this.ownLastEndpoint?.toString())) endpoints.splice(endpoints.indexOf(this.ownLastEndpoint?.toString()), 1);
         
@@ -1192,14 +1195,16 @@ export class Runtime {
             this.lastEndpointUnloadHandler = () => {
                 // send goodbye
                 if (this.goodbyeMessage) sendDatexViaHTTPChannel(this.goodbyeMessage);
-                try {
-                    // remove from localstorage list
-                    endpoints = JSON.parse(localStorage['active_endpoints']) as string[]
-                    if (endpoints.includes(endpoint?.toString())) endpoints.splice(endpoints.indexOf(endpoint?.toString()), 1);
-                    localStorage['active_endpoints'] = JSON.stringify(endpoints)
-                }
-                catch {
-                    localStorage['active_endpoints'] = ""
+                if (client_type == "browser") {
+                    try {
+                        // remove from localstorage list
+                        endpoints = JSON.parse(localStorage['active_endpoints']) as string[]
+                        if (endpoints.includes(endpoint?.toString())) endpoints.splice(endpoints.indexOf(endpoint?.toString()), 1);
+                        localStorage['active_endpoints'] = JSON.stringify(endpoints)
+                    }
+                    catch {
+                        localStorage['active_endpoints'] = ""
+                    }
                 }
             }
             
@@ -1207,7 +1212,7 @@ export class Runtime {
             addPersistentListener(globalThis, "beforeunload", this.lastEndpointUnloadHandler)
         }
 
-        localStorage['active_endpoints'] = JSON.stringify(endpoints)
+        if (client_type == "browser") localStorage['active_endpoints'] = JSON.stringify(endpoints)
 
         // update endpoint cookie
         const endpointName = endpoint.toString();
@@ -1232,14 +1237,17 @@ export class Runtime {
     }
 
     static getActiveLocalStorageEndpoints() {
-        try {
-            const endpoints = JSON.parse(localStorage['active_endpoints']) as string[]
-            return endpoints.map((e) => Target.get(e) as Endpoint).filter((e) => e!==this.ownLastEndpoint)
+        if (client_type == "browser") {
+            try {
+                const endpoints = JSON.parse(localStorage['active_endpoints']) as string[]
+                return endpoints.map((e) => Target.get(e) as Endpoint).filter((e) => e!==this.ownLastEndpoint)
+            }
+            catch {
+                localStorage['active_endpoints'] = ""
+                return []
+            }
         }
-        catch {
-            localStorage['active_endpoints'] = ""
-            return []
-        }
+        else return []
     }
 
     /**

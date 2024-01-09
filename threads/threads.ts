@@ -171,6 +171,21 @@ export async function getServiceWorkerThread<imports extends Record<string,unkno
 }
 
 
+const availableThreads = new Set<ThreadModule>()
+// TODO: use for run()
+/**
+ * spawns a new thread or returns an existing thread from the pool
+ */
+async function getThread() {
+	if (!availableThreads.size) {
+		const thread = await spawnThread(null);
+		availableThreads.add(thread);
+		return thread;
+	}
+	console.log("using existing thread",availableThreads.values().next().value)
+	return availableThreads.values().next().value;
+}
+
 
 /**
  * Spawn a new worker thread.
@@ -409,7 +424,7 @@ export async function run<ReturnType>(task: (() => ReturnType)|JSTransferableFun
 	if (task instanceof Array) {
 		const args = [...arguments].slice(1);
 		for (const [name, val] of Object.entries(args)) {
-			moduleSource += `const x${name} = await datex(\`${Datex.Runtime.valueToDatexStringExperimental(val)}\`)\n`;	
+			moduleSource += `const x${name} = await datex(\`${Datex.Runtime.valueToDatexStringExperimental(val).replaceAll("\\","\\\\")}\`)}\`)\n`;	
 		}
 		moduleSource += 'export const task = () => datex' + ' `'
 		let i = 0;
@@ -428,8 +443,8 @@ export async function run<ReturnType>(task: (() => ReturnType)|JSTransferableFun
 				await JSTransferableFunction.createAsync(task) :
 				JSTransferableFunction.create(task)
 		)
-		moduleSource += `const taskFn = await datex(\`${Datex.Runtime.valueToDatexStringExperimental(transferableTaskFn)}\`)\n`
-		moduleSource += `export const task = () => taskFn()\n`;	
+		moduleSource += `const taskFn = $$(await datex(\`${Datex.Runtime.valueToDatexStringExperimental(transferableTaskFn).replaceAll("\\","\\\\")}\`))\n`
+		moduleSource += `export const task = () => taskFn(${('_taskIndex' in options as any) ? (options as any)?._taskIndex : ''})\n`;	
 	}
 
 	else throw new Error("task must be a function or template string");
@@ -481,7 +496,7 @@ type runInThreadsReturn<ReturnType, Mapping extends PromiseMappingFn = never> = 
  * 
  *   sharedArray.push(4);
  *   return btoa(token);
- * })
+ * }, 10)
  * ```
  * 
  * @param task function that is executed on one or more threads
@@ -489,9 +504,9 @@ type runInThreadsReturn<ReturnType, Mapping extends PromiseMappingFn = never> = 
  * @param outputMapping optional Promise function (e.g. Promise.all) to apply to the resulting promises
  * @returns 
  */
-export async function runConcurrent<ReturnType, Mapping extends PromiseMappingFn = never>(task: () => ReturnType, instances = 1, outputMapping?: Mapping): Promise<runInThreadsReturn<ReturnType, Mapping>> {
+export async function runConcurrent<ReturnType, Mapping extends PromiseMappingFn = never>(task: (taskId?: number) => ReturnType, instances = 1, outputMapping?: Mapping): Promise<runInThreadsReturn<ReturnType, Mapping>> {
 	const abortController = new AbortController()
-	const result = new Array(instances).fill(null).map(() => run(task, {signal:abortController.signal}));
+	const result = new Array(instances).fill(null).map((_, i) => run(task, {signal:abortController.signal, _taskIndex: i}));
 
 	if (outputMapping) {
 		try {
