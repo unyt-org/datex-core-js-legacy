@@ -67,6 +67,8 @@ addEventListener("message", async function (event) {
 			const endpoint = Datex.Target.get(data.endpoint as any) as DatexType.Endpoint;
 			await Datex.InterfaceManager.connect("worker", endpoint, [self])
 			messageTarget.postMessage({type: "INITIALIZED", remoteModule, endpoint: Datex.Runtime.endpoint.toString()});
+			// trust parent endpoint
+			Datex.Runtime.addTrustedEndpoint(endpoint);
 		}
 		
 	}

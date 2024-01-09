@@ -11,7 +11,7 @@ from the parent thread.
 
 ```ts
 /// file: thread.ts
-export function exportedFunction(x: number, y:nuumber) {
+export function exportedFunction(x: number, y: number) {
   return x + y
 }
 export const exportedValue = $$([1,2,3]);

@@ -11,6 +11,7 @@ import { Path } from "https://dev.cdn.unyt.org/uix/utils/path.ts";
 import { getCallerDir } from "../utils/caller_metadata.ts";
 import { PromiseMapReturnType, PromiseMappingFn } from "./promise-fn-types.ts";
 import { JSTransferableFunction } from "../types/js-function.ts";
+import { INSERT_MARK } from "../compiler/compiler.ts";
 
 export type ThreadModule<imports extends Record<string, unknown> = Record<string, unknown>> = {
 	[key in keyof imports]: imports[key] extends ((...args: infer args) => infer returnType) ? ((...args: args) => Promise<returnType>) : imports[key]
@@ -32,6 +33,7 @@ export type MessageFromWorker =
 class IdleThread {}
 const workerBlobUrl = await blobifyFile(new URL("./thread-worker.ts", import.meta.url))
 const threadWorkers = new WeakMap<ThreadModule, Worker|ServiceWorkerRegistration|null>()
+const threadEndpoints = new WeakMap<ThreadModule, Datex.Endpoint>()
 
 type threadOptions = {signal?: AbortSignal}
 
@@ -79,6 +81,18 @@ export function disposeThread(...threads:ThreadModule[]) {
 	}
 }
 
+function getNormalizedPath(path: string|URL, callerDir: string) {
+	if (path && !(path instanceof URL) && !Path.pathIsURL(path)) {
+		if (path.startsWith("./") || path.startsWith("../")) {
+			return new Path(path, callerDir);
+		}
+		else {
+			return import.meta.resolve(path)
+		}
+	}
+	else return path;
+}
+
 /**
  * Spawn multiple worker threads
  * @param modulePath JS/TS module path to load in the thread
@@ -87,7 +101,7 @@ export function disposeThread(...threads:ThreadModule[]) {
  */
 export async function spawnThreads<imports extends Record<string,unknown>>(modulePath: string|URL, count = 1): Promise<ThreadPool<imports>> {
 	// normalize module path
-	if (modulePath && !Path.pathIsURL(modulePath)) modulePath = new Path(modulePath, getCallerDir());
+	modulePath = getNormalizedPath(modulePath, getCallerDir());
 
 	const promises:Promise<ThreadModule<imports>>[] = new Array(count).fill(null).map(() => spawnThread(modulePath));
 	const pool = await Promise.all(promises) as unknown as ThreadPool<imports>;
@@ -154,8 +168,9 @@ export async function getServiceWorkerThread<imports extends Record<string,unkno
 export async function getServiceWorkerThread<imports extends Record<string,unknown>>(modulePath: null, serviceWorkerInitUrl: string|URL): Promise<ThreadModule<Record<string,never>>>
 export async function getServiceWorkerThread<imports extends Record<string,unknown>>(modulePath: string|URL|null|undefined, serviceWorkerInitUrl: string|URL): Promise<ThreadModule<imports>> {
 	// normalize module path
-	if (modulePath && !Path.pathIsURL(modulePath)) modulePath = new Path(modulePath, getCallerDir());
-	if (serviceWorkerInitUrl && !Path.pathIsURL(serviceWorkerInitUrl)) serviceWorkerInitUrl = new Path(serviceWorkerInitUrl, getCallerDir());
+	const callerDir = getCallerDir();
+	if (modulePath) modulePath = getNormalizedPath(modulePath, callerDir);
+	if (serviceWorkerInitUrl) serviceWorkerInitUrl = getNormalizedPath(serviceWorkerInitUrl, callerDir);
 
 	// make sure supranet is initialized (not connected)
 	if (!Datex.Supranet.initialized) await Datex.Supranet.init()
@@ -182,7 +197,6 @@ async function getThread() {
 		availableThreads.add(thread);
 		return thread;
 	}
-	console.log("using existing thread",availableThreads.values().next().value)
 	return availableThreads.values().next().value;
 }
 
@@ -217,7 +231,7 @@ export async function spawnThread<imports extends Record<string,unknown>>(module
 export async function spawnThread<imports extends Record<string,unknown>>(modulePath?: string|URL|null, options?: threadOptions): Promise<ThreadModule<imports>> {
 
 	// normalize module path
-	if (modulePath && !Path.pathIsURL(modulePath)) modulePath = new Path(modulePath, getCallerDir());
+	if (modulePath) modulePath = getNormalizedPath(modulePath, getCallerDir());
 	// make sure supranet is initialized (not connected)
 	if (!Datex.Supranet.initialized) await Datex.Supranet.init()
 
@@ -320,14 +334,15 @@ export async function _initWorker(worker: Worker|ServiceWorkerRegistration, modu
 
 		checkAborted();
 
-		const data = event.data as MessageFromWorker;
+		const data = (event as any).data as MessageFromWorker;
 
 		if (data.type == "ERROR") {
 			logger.error("thread worker error:", data.error);
 			reject(data.error);
 		}
 		else if (data.type == "INITIALIZED") {
-			const endpoint = f(data.endpoint as any)
+			const endpoint = f(data.endpoint as "@")
+			endpoint.setOnline(true); // always assumed to be online, without ping
 
 			// connect directly via worker com interface
 			logger.debug("connecting via worker com interface to " + data.endpoint);
@@ -364,15 +379,17 @@ export async function _initWorker(worker: Worker|ServiceWorkerRegistration, modu
 				})
 
 				threadWorkers.set(moduleProxy, worker)
+				threadEndpoints.set(moduleProxy, endpoint)
 				resolve(moduleProxy)
 			}
 			// just return an empty thread
 			else {
 				const idleThread = Object.freeze(new IdleThread() as ThreadModule);
 				threadWorkers.set(idleThread, worker)
+				threadEndpoints.set(idleThread, endpoint)
 				resolve(idleThread)
 			}
-			
+
 		}
 	});
 	return promise;
@@ -416,24 +433,17 @@ export async function run<ReturnType, Args extends unknown[]>(task: () => Return
  * @param task DATEX script that is executed on the thread
  * @returns 
  */
-export async function run<ReturnType=unknown>(task:TemplateStringsArray, ...args:unknown[]):Promise<ReturnType>
+export async function run<ReturnType=unknown>(task:TemplateStringsArray, ...args:any[]):Promise<ReturnType>
 
-export async function run<ReturnType>(task: (() => ReturnType)|JSTransferableFunction|TemplateStringsArray, options?: {signal?:AbortSignal}, ..._rest:any): Promise<ReturnType> {
-	let moduleSource = ""
+export async function run<ReturnType>(task: (() => ReturnType)|JSTransferableFunction|TemplateStringsArray, options?: {signal?:AbortSignal}, ..._rest:unknown[]): Promise<ReturnType> {
+	
+	let datexSource: string;
+	let datexArgs: unknown[];
+
 	// DATEX Script
 	if (task instanceof Array) {
-		const args = [...arguments].slice(1);
-		for (const [name, val] of Object.entries(args)) {
-			moduleSource += `const x${name} = await datex(\`${Datex.Runtime.valueToDatexStringExperimental(val).replaceAll("\\","\\\\")}\`)}\`)\n`;	
-		}
-		moduleSource += 'export const task = () => datex' + ' `'
-		let i = 0;
-		for (const section of task) {
-			moduleSource += section;
-			if (i in args) moduleSource += '${x'+i+'}'
-			i++;
-		}
-		moduleSource += '`;'
+		datexSource = task.raw.join(INSERT_MARK);
+		datexArgs = [...arguments].slice(1);
 	}
 
 	// JS Function (might already be a JSTransferableFunction)
@@ -443,23 +453,19 @@ export async function run<ReturnType>(task: (() => ReturnType)|JSTransferableFun
 				await JSTransferableFunction.createAsync(task) :
 				JSTransferableFunction.create(task)
 		)
-		moduleSource += `const taskFn = $$(await datex(\`${Datex.Runtime.valueToDatexStringExperimental(transferableTaskFn).replaceAll("\\","\\\\")}\`))\n`
-		moduleSource += `export const task = () => taskFn(${('_taskIndex' in options as any) ? (options as any)?._taskIndex : ''})\n`;	
+		datexSource = '?(?)';
+		datexArgs = [$$(transferableTaskFn), (options as any)?._taskIndex??0];
 	}
 
 	else throw new Error("task must be a function or template string");
 	
-	const functionScriptURL = blobifyScript(moduleSource);
-	const thread = await spawnThread(functionScriptURL, options);
+	const endpoint = threadEndpoints.get(await getThread());	
 
 	try {
 		if (options?.signal?.aborted) {
 			throw new Error("aborted");
 		}
-		const task = (thread["task"] as (...args:unknown[]) => Promise<ReturnType>);
-		(task as any).datex_timeout = Infinity;
-		const res = await task();
-		return res;
+		return await datex(datexSource, datexArgs, endpoint, false, false, undefined, undefined, Infinity);
 	}
 	catch (e) {
 		if (options?.signal?.aborted) throw new Error("aborted");
@@ -474,10 +480,6 @@ export async function run<ReturnType>(task: (() => ReturnType)|JSTransferableFun
 			throw new Error(e.message);
 		}
 		else throw e;
-	}
-	finally {
-		// if (threadWorkers.get(thread)) disposeThread(thread);
-		// if (functionScriptURL) URL.revokeObjectURL(functionScriptURL);
 	}
 }
 
@@ -504,7 +506,9 @@ type runInThreadsReturn<ReturnType, Mapping extends PromiseMappingFn = never> = 
  */
 export async function runConcurrent<ReturnType, Mapping extends PromiseMappingFn = never>(task: (taskIndex?: number) => ReturnType, instances = 1, outputMapping?: Mapping): Promise<runInThreadsReturn<ReturnType, Mapping>> {
 	const abortController = new AbortController()
-	const result = new Array(instances).fill(null).map((_, i) => run(task, {signal:abortController.signal, _taskIndex: i}));
+	const result = new Array(instances).fill(null).map((_, i) => run(task, {signal:abortController.signal, _taskIndex: i} as {
+		signal: AbortSignal
+	}));
 
 	if (outputMapping) {
 		try {
