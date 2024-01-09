@@ -27,7 +27,7 @@ Symbol.prototype.toJSON = function(){return globalThis.String(this)}
 
 /***** imports */
 import { Compiler, compiler_options, PrecompiledDXB, ProtocolDataTypesMap, DatexResponse} from "../compiler/compiler.ts"; // Compiler functions
-import { DecimalRef, IntegerRef, Pointer, PointerProperty, RefOrValue, Ref, TextRef, BooleanRef, ObjectWithDatexValues, JSValueWith$, MinimalJSRef, ObjectRef, RefLike} from "./pointers.ts";
+import { DecimalRef, IntegerRef, Pointer, PointerProperty, RefOrValue, Ref, TextRef, BooleanRef, ObjectWithDatexValues, JSValueWith$, MinimalJSRef, ObjectRef, RefLike, UpdateScheduler} from "./pointers.ts";
 import { Endpoint, endpoints, IdEndpoint, LOCAL_ENDPOINT, Target, target_clause, WildcardTarget } from "../types/addressing.ts";
 import { RuntimePerformance } from "./performance_measure.ts";
 import { NetworkError, PermissionError, PointerError, RuntimeError, SecurityError, ValueError, Error as DatexError, CompilerError, TypeError, SyntaxError, AssertionError } from "../types/errors.ts";
@@ -412,6 +412,21 @@ export class Runtime {
 
     // initialize std pointers if not yet initialized
     private static initialized = false;
+
+    /**
+     * resolves as soon as all schedulded DATEX updates are sent
+     */
+    public static get synchronized() {
+        // first force trigger all remaining schedulded pointer updates
+        UpdateScheduler.triggerAll();
+        
+        return new Promise<void>((resolve) => {
+            Runtime.datexOutAllSent().then(() => {
+                console.log("senttt all finisehed");
+                resolve()
+            });
+        });
+    }
 
     // binary codes that always indicate the end of a subscope
     private static END_BIN_CODES = [
@@ -883,6 +898,51 @@ export class Runtime {
         return Compiler.compile(...data) // TODO currently workaround bridge to get generator value
     }
 
+    static #prepocessingTasks = new Set<Promise<void>>();
+    static #sendingTasks = new Set<Promise<void>>();
+
+    /**
+     * resolves as soon as all datex out preprocessing tasks are finished
+     */
+    protected static datexOutPreprocessingFinished() {
+        return Promise.all(this.#prepocessingTasks);
+    }
+
+    /**
+     * resolves as soon as all currently scheduled outgoing datex messages are sent
+     */
+    protected static datexOutAllSent() {
+        // first await prepocessing, then await sending tasks
+        return this.datexOutPreprocessingFinished()
+            .then(() => Promise.all(this.#sendingTasks));
+    }
+
+    /**
+     * Creates a new preprocessing task
+     * @returns function that removes the task from the preprocessing tasks
+     */
+    protected static createPrepocessingTask() {
+        const {promise, reject, resolve} = Promise.withResolvers<void>();
+        this.#prepocessingTasks.add(promise);
+        return () => {
+            this.#prepocessingTasks.delete(promise);
+            resolve();
+        };
+    }
+
+    /**
+     * Creates a new sending task
+     * @returns function that removes the task from the sending tasks
+     */
+    protected static createDatexSendingTask() {
+        const {promise, reject, resolve} = Promise.withResolvers<void>();
+        this.#sendingTasks.add(promise);
+        return () => {
+            this.#sendingTasks.delete(promise);
+            resolve();
+        };
+    }
+
 
     /**
      * Sends DATEX to one or multiple endpoints
@@ -899,61 +959,69 @@ export class Runtime {
      */
     public static async datexOut(data:ArrayBuffer|compile_info, to:target_clause=Runtime.endpoint, sid?:number, wait_for_result=true, encrypt=false, detailed_result_callback?:(scope:datex_scope, header:dxb_header, error:Error)=>void, flood = false, flood_exclude?:Endpoint, timeout?:number, source?:Source):Promise<any>{
 
-        // external request, but datex out not yet initialized, wait for initialization
-        if (!(to instanceof Endpoint && Runtime.endpoint.equals(to)) && this.#datex_out_init_promise /*instanceof Promise*/) {
-            await this.#datex_out_init_promise;
-        }
-       
-        // one or multiple blocks
-        let dxb:ArrayBuffer|ReadableStream<ArrayBuffer>;
+        const finish = this.createPrepocessingTask();
 
-        // only info about what to compile, not yet compiled
-        if (data instanceof Array) {
-            if (!data[2]) data[2] = {}
-            if (!data[2].to && to!=null) data[2].to = to; // add receiver if not found in compile options
-            if (!data[2].sid && sid!=null) data[2].sid = sid; // add sid if not found in compile options
-            if (data[2].flood==null && flood!=null) data[2].flood = flood; // add flood if not found in compile options
-            if (data[2].encrypt==null && encrypt!=null) data[2].encrypt = encrypt; // add flood if not found in compile options
-            dxb = await this.compileAdvanced(data);
-            // override values from compiled data
-            sid = data[2].sid ?? sid;
-            flood = data[2].flood ?? flood;
-            encrypt = data[2].encrypt ?? encrypt;
-        }
-        // already compiled
-        else dxb = data;
-
-        // no sid provided, and not compiled with new sid
-        if (!sid) throw new RuntimeError("Could not get an SID for sending data");
-        if (!this.datex_out) throw new NetworkError(DATEX_ERROR.NO_OUTPUT);
-        if (!flood && !to) throw new NetworkError(DATEX_ERROR.NO_RECEIVERS);
-
-        const unique_sid = sid+"-"+(data[2]?.return_index??0); // sid + block index;
-        const evaluated_receivers = to ? <Disjunction<Endpoint>> Logical.collapse(to, Target) : null;
-
-        // single block
-        if (dxb instanceof ArrayBuffer) {
-            return this.datexOutSingleBlock(dxb, evaluated_receivers, sid, unique_sid, <compile_info>data, wait_for_result, encrypt, detailed_result_callback, flood, flood_exclude, timeout, source);
-        }
-
-        // multiple blocks
-        else {
-            const reader = dxb.getReader();
-            let next:ReadableStreamReadResult<ArrayBuffer>;
-            let end_of_scope = false;
-            // read all blocks (before the last block)
-            while (true) {
-                next = await reader.read()
-                if (next.done) break;
-
-                // empty arraybuffer indicates that next block is end_of_scope
-                if (next.value.byteLength == 0) end_of_scope = true;
-                // end_of_scope, now return result for last block (wait_for_result)
-                else if (end_of_scope) return this.datexOutSingleBlock(next.value, evaluated_receivers, sid, unique_sid, <compile_info>data, wait_for_result, encrypt, detailed_result_callback, flood, flood_exclude, timeout, source);
-                // not last block,  wait_for_result = false, no detailed_result_callback
-                else this.datexOutSingleBlock(next.value, evaluated_receivers, sid, unique_sid, <compile_info>data, false, encrypt, null, flood, flood_exclude, timeout, source);
+        try {
+            // external request, but datex out not yet initialized, wait for initialization
+            if (!(to instanceof Endpoint && Runtime.endpoint.equals(to)) && this.#datex_out_init_promise /*instanceof Promise*/) {
+                await this.#datex_out_init_promise;
             }
-            
+
+            // one or multiple blocks
+            let dxb:ArrayBuffer|ReadableStream<ArrayBuffer>;
+
+            // only info about what to compile, not yet compiled
+            if (data instanceof Array) {
+                if (!data[2]) data[2] = {}
+                if (!data[2].to && to!=null) data[2].to = to; // add receiver if not found in compile options
+                if (!data[2].sid && sid!=null) data[2].sid = sid; // add sid if not found in compile options
+                if (data[2].flood==null && flood!=null) data[2].flood = flood; // add flood if not found in compile options
+                if (data[2].encrypt==null && encrypt!=null) data[2].encrypt = encrypt; // add flood if not found in compile options
+                dxb = await this.compileAdvanced(data);
+                // override values from compiled data
+                sid = data[2].sid ?? sid;
+                flood = data[2].flood ?? flood;
+                encrypt = data[2].encrypt ?? encrypt;
+            }
+            // already compiled
+            else dxb = data;
+
+            // no sid provided, and not compiled with new sid
+            if (!sid) throw new RuntimeError("Could not get an SID for sending data");
+            if (!this.datex_out) throw new NetworkError(DATEX_ERROR.NO_OUTPUT);
+            if (!flood && !to) throw new NetworkError(DATEX_ERROR.NO_RECEIVERS);
+
+            const unique_sid = sid+"-"+(data[2]?.return_index??0); // sid + block index;
+            const evaluated_receivers = to ? <Disjunction<Endpoint>> Logical.collapse(to, Target) : null;
+
+            // single block
+            if (dxb instanceof ArrayBuffer) {
+                return this.datexOutSingleBlock(dxb, evaluated_receivers, sid, unique_sid, <compile_info>data, wait_for_result, encrypt, detailed_result_callback, flood, flood_exclude, timeout, source);
+            }
+
+            // multiple blocks
+            else {
+                const reader = dxb.getReader();
+                let next:ReadableStreamReadResult<ArrayBuffer>;
+                let end_of_scope = false;
+                // read all blocks (before the last block)
+                while (true) {
+                    next = await reader.read()
+                    if (next.done) break;
+
+                    // empty arraybuffer indicates that next block is end_of_scope
+                    if (next.value.byteLength == 0) end_of_scope = true;
+                    // end_of_scope, now return result for last block (wait_for_result)
+                    else if (end_of_scope) return this.datexOutSingleBlock(next.value, evaluated_receivers, sid, unique_sid, <compile_info>data, wait_for_result, encrypt, detailed_result_callback, flood, flood_exclude, timeout, source);
+                    // not last block,  wait_for_result = false, no detailed_result_callback
+                    else this.datexOutSingleBlock(next.value, evaluated_receivers, sid, unique_sid, <compile_info>data, false, encrypt, null, flood, flood_exclude, timeout, source);
+                }
+                
+            }
+        }
+
+        finally {
+            finish();
         }
         
     }
@@ -972,8 +1040,9 @@ export class Runtime {
             throw new NetworkError("No valid receivers");
         } 
 
-        return new Promise<any>((resolve, reject) => {
+        const finish = this.createDatexSendingTask();
 
+        return new Promise<any>((resolve, reject) => {
 
             // listener
             IOHandler.handleDatexSent(dxb, to)
@@ -981,6 +1050,7 @@ export class Runtime {
             // flood exclude flood_exclude receiver
             if (flood) {
                 this.datex_out(dxb, flood_exclude, true, source)
+                    .then(finish)
                     .catch(e=>reject(e));
             }           
             // send to receivers
@@ -992,6 +1062,7 @@ export class Runtime {
                     this._handleEndpointOffline(to_endpoint, reject)
                     // send dxb
                     this.datex_out(dxb, to_endpoint, undefined, source)
+                        .then(finish)
                         .catch(e=>reject(e));
                 }
             }

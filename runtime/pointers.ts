@@ -858,6 +858,8 @@ export type SmartTransformFunction<ReturnType> = ()=>Awaited<RestrictSameType<Re
 // either create new DatexUpdateScheduler(update_interval) or manually call trigger() to trigger an update for all pointers
 export class UpdateScheduler {
 
+    static #schedulers = new Set<UpdateScheduler>();
+
     updates_per_receiver: Map<target_clause, Map<Pointer, Map<string|symbol,[string|PrecompiledDXB, any[],boolean]>>> = new Map();
     update_interval?: number;
     active = false;
@@ -865,7 +867,8 @@ export class UpdateScheduler {
 
     datex_timeout?:number
 
-    constructor(update_interval?:number){
+    constructor(update_interval?:number) {
+        UpdateScheduler.#schedulers.add(this);
         this.update_interval = update_interval;
         this.start();
     }
@@ -881,16 +884,28 @@ export class UpdateScheduler {
         if (this.update_interval != null) clearInterval(this.#interval);
     }
 
-    // start all update triggers
+    /**
+     * start all update triggers
+     */
     start(){
         this.active = true;
         this.setUpdateInterval(); // set interval if update_interval defined
     }
 
-    // stop all update triggers
+    /**
+     * stop all update triggers
+     */
     stop(){
         this.active = false;
         this.clearUpdateInterval();
+    }
+
+    /**
+     * remove this scheduler
+     */
+    remove(){
+        this.stop();
+        UpdateScheduler.#schedulers.delete(this);
     }
 
     // trigger an update
@@ -902,7 +917,7 @@ export class UpdateScheduler {
             const pdxb_array = []; // precompiled datex
             let is_datex_strings = true;
 
-            for (const [ptr, entries] of map) {
+            for (const [_ptr, entries] of map) {
                 if (!entries.size) continue;
 
                 for (const [entry_datex, entry_data] of entries.values()) {
@@ -931,15 +946,15 @@ export class UpdateScheduler {
                 else datex = PrecompiledDXB.combine(...pdxb_array); // combine multiple
             }
 
-            (async ()=>{
-                if (receiver instanceof Disjunction && !receiver.size) return;
-                try {
-                    await Runtime.datexOut([datex, data, {end_of_scope:false, type:ProtocolDataType.UPDATE}], receiver, undefined, false, undefined, undefined, false, undefined, this.datex_timeout);
-                } catch(e) {
-                    logger.error("forwarding failed", e)
-                }
-            })()
-            
+            if (!(receiver instanceof Disjunction && !receiver.size)) {
+                Runtime.datexOut([datex, data, {end_of_scope:false, type:ProtocolDataType.UPDATE, preemptive_pointer_init: true}], receiver, undefined, false, undefined, undefined, false, undefined, this.datex_timeout)
+                    .then(() => {
+                        // Success
+                    })
+                    .catch((e) => {
+                        logger.error("forwarding failed", e);
+                    });
+            }            
         }
 
     }
@@ -972,6 +987,15 @@ export class UpdateScheduler {
         const ptr_map = this.updates_per_receiver.get(receiver)!;
         if (!ptr_map.has(pointer)) ptr_map.set(pointer, new Map())
         ptr_map.get(pointer)!.set((!this.intermediate_updates_pointers.has(pointer) && identifier) ? identifier : Symbol(), [datex, data, collapse_first_inserted]);
+    }
+
+    /**
+     * trigger all schedulers
+     */
+    static triggerAll(){
+        for (const scheduler of this.#schedulers) {
+            scheduler.trigger();
+        }
     }
 }
 
@@ -3793,7 +3817,7 @@ export class Pointer<T = any> extends Ref<T> {
         else {
             if (receiver instanceof Disjunction && !receiver.size) return;
             try {
-                await Runtime.datexOut([datex, data, {collapse_first_inserted, type:ProtocolDataType.UPDATE}], receiver, undefined, false, undefined, undefined, false, undefined, this.datex_timeout);
+                await Runtime.datexOut([datex, data, {collapse_first_inserted, type:ProtocolDataType.UPDATE, preemptive_pointer_init: true}], receiver, undefined, false, undefined, undefined, false, undefined, this.datex_timeout);
             } catch(e) {
                 //throw e;
                 logger.error("forwarding failed", e, datex, data)

@@ -5508,7 +5508,7 @@ export class Compiler {
                 // already compiled, in cache
                 if (compiled_cache.has(data[part])) buffer = compiled_cache.get(data[part])!;
                 // compile value
-                else compiled_cache.set(data[part], buffer = Compiler.compileValue(data[part], undefined, false));
+                else compiled_cache.set(data[part], buffer = Compiler.compileValue(data[part], options, false));
             }
             else throw new CompilerError("Missing data value for precompiled dxb");
 
