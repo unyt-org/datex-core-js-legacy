@@ -414,10 +414,10 @@ export class Runtime {
     private static initialized = false;
 
     /**
-     * resolves as soon as all schedulded DATEX updates are sent
+     * resolves as soon as all scheduled DATEX updates are sent
      */
     public static get synchronized() {
-        // first force trigger all remaining schedulded pointer updates
+        // first force trigger all remaining scheduled pointer updates
         UpdateScheduler.triggerAll();
         
         return new Promise<void>((resolve) => {
