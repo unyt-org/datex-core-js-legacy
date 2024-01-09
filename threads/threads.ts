@@ -489,13 +489,11 @@ type runInThreadsReturn<ReturnType, Mapping extends PromiseMappingFn = never> = 
  * 
  * Example:
  * ```ts
- * const token = "sm34ihncsdfn23kndovae";
- * const sharedArray = $$([1,2,3]);
- * const res = await runConcurrent(() => {
- *   use (token, sharedArray);
- * 
- *   sharedArray.push(4);
- *   return btoa(token);
+ * const sharedArray = $$ ([]);
+ * const res = await runConcurrent(i => {
+ *   use (sharedArray);
+ *   sharedArray.push(i);
+ *   return i;
  * }, 10)
  * ```
  * 
@@ -504,7 +502,7 @@ type runInThreadsReturn<ReturnType, Mapping extends PromiseMappingFn = never> = 
  * @param outputMapping optional Promise function (e.g. Promise.all) to apply to the resulting promises
  * @returns 
  */
-export async function runConcurrent<ReturnType, Mapping extends PromiseMappingFn = never>(task: (taskId?: number) => ReturnType, instances = 1, outputMapping?: Mapping): Promise<runInThreadsReturn<ReturnType, Mapping>> {
+export async function runConcurrent<ReturnType, Mapping extends PromiseMappingFn = never>(task: (taskIndex?: number) => ReturnType, instances = 1, outputMapping?: Mapping): Promise<runInThreadsReturn<ReturnType, Mapping>> {
 	const abortController = new AbortController()
 	const result = new Array(instances).fill(null).map((_, i) => run(task, {signal:abortController.signal, _taskIndex: i}));
 
