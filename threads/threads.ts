@@ -489,12 +489,12 @@ type runInThreadsReturn<ReturnType, Mapping extends PromiseMappingFn = never> = 
  * 
  * Example:
  * ```ts
- * const sharedArray = $$ ([]);
+ * const sharedSet = $$ (new Set());
  * const res = await runConcurrent(i => {
- *   use (sharedArray);
- *   sharedArray.push(i);
+ *   use (sharedSet);
+ *   sharedSet.add(i);
  *   return i;
- * }, 10)
+ * }, 10, Promise.all)
  * ```
  * 
  * @param task function that is executed on one or more threads

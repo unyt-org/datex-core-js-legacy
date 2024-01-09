@@ -142,6 +142,27 @@ let result = await runConcurrent(() => {
 }, 10, Promise.any);
 ```
 
+```ts
+const sharedSet = $$ (new Set());
+
+const results = await runConcurrent(
+  // i is the index of the current task
+  i => {
+    use (sharedSet);
+    sharedSet.add(i);
+    return i;
+  }, 
+  // spawn 10 threads
+  10, 
+  // collapse the returned values with Promise.all
+  Promise.all
+)
+
+console.log(sharedSet) // Set {0,1,2,3,4,5,6,7,8,9}
+console.log(results) // [0,1,2,3,4,5,6,7,8,9]
+```
+
+
 > [!NOTE]
 > Passing `Promise.any` to `runConcurrent` produces the same outcome as calling 
 > `Promise.any` on the result returned from `runConcurrent`.
