@@ -59,6 +59,7 @@ export class Function<T extends (...args: any) => any = (...args: any) => any> e
     serialize_result = false // return pointer values, not pointers
     anonymize_result:boolean
     params: Tuple<type_clause>
+    unknown_params?: boolean // set to true if params can be arbitrary, e.g. for native functions like console.log
     params_keys: string[]
 
     is_async = true;
@@ -159,6 +160,13 @@ export class Function<T extends (...args: any) => any = (...args: any) => any> e
             this.fn = (ctx && ntarget.bind) ? ntarget.bind(ctx) : ntarget;
             // is asnyc or sync fnc (TODO: only checks for AsyncFunction, function might still return a Promise!)
             this.is_async = this.fn.constructor.name == "AsyncFunction"
+
+            // for native functions like console.log, there are no param declarations in the function declaration
+            // we must assume that the function accepts any number of arguments
+            // setting this.unknown_params to true will disable parameter size constraints
+            if (ntarget.toString().match(/\[native code\]\s*\}/)) {
+                this.unknown_params = true
+            }
 
             // get external_variables dependencies from use() statement
             if (this.is_async) {
@@ -355,7 +363,7 @@ export class Function<T extends (...args: any) => any = (...args: any) => any> e
         else if (value == VOID) params = [];
         // single arg
         else {
-            if (this.params.size == 0) {
+            if (this.params.size == 0 && !this.unknown_params) {
                 // ignore if no params (TODO: just workaround to prevent errors)
                 // throw new RuntimeError("Maximum number of function arguments is " + (this.params.size), SCOPE);
                 params = [];
@@ -389,12 +397,11 @@ export class Function<T extends (...args: any) => any = (...args: any) => any> e
 
         const required_param_nr = this.params.size;
 
-
         // no meta index, still crop the params to the required size if possible
         // injects meta to stack trace, can be accessed via Datex.getMeta()
         if (this.meta_index==undefined) {
             const call = <CallableFunction&(typeof callWithMetadata)> (this.is_async ? callWithMetadataAsync : callWithMetadata);
-            if (required_param_nr==undefined || params.length<=required_param_nr) {
+            if (this.unknown_params || params.length<=required_param_nr) {
                 return call(meta, this.fn, params, context) // this.fn.call(context, ...params); 
             }
             else return call(meta, this.fn, params.slice(0,required_param_nr), context);// this.fn.call(context, ...params.slice(0,required_param_nr));
@@ -402,7 +409,7 @@ export class Function<T extends (...args: any) => any = (...args: any) => any> e
         // inject meta information at given index when calling the function
         else if (this.meta_index==-1) {
             // crop params to required size
-            if (required_param_nr==undefined || params.length==required_param_nr) return this.fn.call(context, ...params, meta);
+            if (this.unknown_params || params.length==required_param_nr) return this.fn.call(context, ...params, meta);
             else if (params.length>required_param_nr) return this.fn.call(context, ...params.slice(0,required_param_nr), meta);
             else return this.fn.call(context, ...params, ...Array(required_param_nr-params.length), meta);
         }

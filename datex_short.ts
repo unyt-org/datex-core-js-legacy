@@ -106,8 +106,8 @@ export async function get<T=unknown>(dx:string|URL|Endpoint, assert_type?:Type<T
 // sign per default if not local endpoint
 // do not encrypt per default
 function _datex<T=unknown>(dx:TemplateStringsArray, ...args:any[]):Promise<T>
-function _datex<T=unknown>(dx:string|PrecompiledDXB, data?:unknown[], to?:Target|target_clause|endpoint_name, sign?:boolean, encrypt?:boolean, context_location?:URL|string, plugins?:string[]):Promise<T>
-function _datex(dx:string|TemplateStringsArray|PrecompiledDXB, data?:unknown[], to?:Target|target_clause|endpoint_name, sign?:boolean, encrypt?:boolean, context_location?:URL|string, plugins?:string[]) {
+function _datex<T=unknown>(dx:string|PrecompiledDXB, data?:unknown[], to?:Target|target_clause|endpoint_name, sign?:boolean, encrypt?:boolean, context_location?:URL|string, plugins?:string[], timeout?: number):Promise<T>
+function _datex(dx:string|TemplateStringsArray|PrecompiledDXB, data?:unknown[], to?:Target|target_clause|endpoint_name, sign?:boolean, encrypt?:boolean, context_location?:URL|string, plugins?:string[], timeout?: number) {
 
     // auto retrieve location from stack
     if (!context_location) {
@@ -137,7 +137,7 @@ function _datex(dx:string|TemplateStringsArray|PrecompiledDXB, data?:unknown[], 
     // local execution
     if (to === Runtime.endpoint) return Runtime.executeDatexLocally(dx, data, {plugins, sign, encrypt}, context_location ? new URL(context_location.toString()) : undefined); 
     // remote execution
-    else return Runtime.datexOut([dx, data, {plugins, sign, encrypt, context_location: context_location ? new URL(context_location.toString()) : undefined}], typeof to == "string" ? f(<endpoint_name>to) : to);
+    else return Runtime.datexOut([dx, data, {plugins, sign, encrypt, context_location: context_location ? new URL(context_location.toString()) : undefined}], typeof to == "string" ? f(<endpoint_name>to) : to, undefined, undefined, undefined, undefined, undefined, undefined, timeout);
     
 }
 
