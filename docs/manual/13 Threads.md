@@ -274,17 +274,17 @@ with the `configure` function:
 import { configure } from "datex-core-legacy/threads/threads.ts";
 
 configure({
-	/**
-	 * Maximum number of threads that can run tasks concurrently
-	 * Module threads are excluded from this limit
-	 * Default: Infinity
-	 */
-	maxConcurrentThreads: number,
-	/**
-	 * Minimum lifetime of an idle thread in seconds
-	 * Default: 60
-	 */
-	minIdleThreadLifetime: number,
+  /**
+   * Maximum number of threads that can run tasks concurrently
+   * Module threads are excluded from this limit
+   * Default: Infinity
+   */
+  maxConcurrentThreads: number,
+  /**
+   * Minimum lifetime of an idle thread in seconds
+   * Default: 60
+   */
+  minIdleThreadLifetime: number,
   /**
    * Cluster used for remote execution
    */
