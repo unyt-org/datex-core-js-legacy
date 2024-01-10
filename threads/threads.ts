@@ -29,13 +29,47 @@ export type MessageFromWorker =
 	{type: "INITIALIZED", endpoint: string, remoteModule: string} |
 	{type: "ERROR", error: string}
 
+type threadOptions = {signal?: AbortSignal}
 
-class IdleThread {}
+/**
+ * Object representing an idle thread without an associated module
+ * Idle threads are used for run() and runConcurrent() calls and 
+ * are disposed after some time if not used
+ */
+class IdleThread {
+
+	#interval?: number;
+
+	constructor() {
+		this.checkForDispose();
+	}
+	
+	/**
+	 * remove idle thread after some time if not used
+	 */
+	checkForDispose() {
+		if (configuration.minIdleThreadLifetime == Infinity) return;
+		this.#interval = setInterval(() => {
+			if (availableThreads.get(this as ThreadModule) === 0) {
+				clearInterval(this.#interval);
+				availableThreads.delete(this  as ThreadModule);
+				disposeThread(this as ThreadModule);
+			}
+		}, configuration.minIdleThreadLifetime * 1000)
+	}
+
+	/**
+	 * reset the dispose timeout
+	 */
+	resetDisposeTimeout() {
+		clearInterval(this.#interval);
+		this.checkForDispose();
+	}
+}
+
 const workerBlobUrl = await blobifyFile(new URL("./thread-worker.ts", import.meta.url))
 const threadWorkers = new WeakMap<ThreadModule, Worker|ServiceWorkerRegistration|null>()
 const threadEndpoints = new WeakMap<ThreadModule, Datex.Endpoint>()
-
-type threadOptions = {signal?: AbortSignal}
 
 // default import map
 let importMap:{"imports":Record<string,string>} = {
@@ -60,6 +94,32 @@ export function setImportMap(json: {"imports":Record<string,string>}) {
 	importMap = json;
 }
 
+export type ThreadingConfiguration = {
+	/**
+	 * Maximum number of threads that can run tasks concurrently
+	 * Module threads are excluded from this limit
+	 * Default: Infinity
+	 */
+	maxConcurrentThreads: number,
+	/**
+	 * Minimum lifetime of an idle thread in seconds
+	 * Default: 60
+	 */
+	minIdleThreadLifetime: number
+}
+
+const configuration: ThreadingConfiguration = {
+	maxConcurrentThreads: Infinity,
+	minIdleThreadLifetime: 60
+}
+
+/**
+ * Override default threading options
+ */
+export function configure(config: Partial<ThreadingConfiguration>) {
+	Object.assign(configuration, config);
+}
+
 /**
  * Dispose a thread by terminating the worker
  * @param threads 
@@ -77,6 +137,7 @@ export function disposeThread(...threads:ThreadModule[]) {
 			if ('active' in worker) worker.unregister()
 			else worker.terminate();
 			threadWorkers.set(thread, null);
+			threadEndpoints.delete(thread);
 		}
 	}
 }
@@ -186,20 +247,72 @@ export async function getServiceWorkerThread<imports extends Record<string,unkno
 }
 
 
-const availableThreads = new Set<ThreadModule>()
-// TODO: use for run()
+// active threads -> number of tasks that are currently running on the thread
+const availableThreads = new Map<ThreadModule, number>();
+let spawningThreads = 0;
+globalThis.availableThreads = availableThreads;
+
 /**
  * spawns a new thread or returns an existing thread from the pool
  */
-async function getThread() {
-	if (!availableThreads.size) {
-		const thread = await spawnThread(null);
-		availableThreads.add(thread);
-		return thread;
+async function getThread(): Promise<ThreadModule> {
+	// find an existing thread that is not used
+	for (const [thread, tasks] of availableThreads) {
+		if (tasks == 0) {
+			availableThreads.set(thread, 1);
+			// reset dispose timeout
+			if (thread instanceof IdleThread) thread.resetDisposeTimeout();
+			return thread;
+		}
 	}
-	return availableThreads.values().next().value;
+
+	// max concurrent thread limit reached
+	const activeThreads = Array.from(availableThreads.values()).filter(v => v > 0).length;
+	if ((spawningThreads + activeThreads) >= configuration.maxConcurrentThreads) {
+
+		// wait until the currently spawning threads are all spawned
+		await new Promise<void>(resolve => {
+			const interval = setInterval(() => {
+				if (spawningThreads == 0) {
+					clearInterval(interval);
+					resolve();
+				}
+			}, 100)
+		});
+
+		// return thread with least tasks
+		let minTasks = Infinity;
+		let thread: ThreadModule|undefined;
+		for (const [availableThread, tasks] of availableThreads) {
+			if (tasks < minTasks) {
+				minTasks = tasks;
+				thread = availableThread;
+			}
+		}
+		if (thread) {
+			availableThreads.set(thread, minTasks+1);
+			// reset dispose timeout
+			if (thread instanceof IdleThread) thread.resetDisposeTimeout();
+			return thread;
+		}
+		else {
+			throw new Error("Max concurrent thread limit reached, but no thread available");
+		}
+	}
+
+	// create a new thread
+	const thread = await spawnThread(null);
+	availableThreads.set(thread, 1);
+
+	return thread;
 }
 
+function freeThread(thread: ThreadModule) {
+	if (!availableThreads.has(thread)) return;
+	availableThreads.set(thread, availableThreads.get(thread)! - 1); 
+	// restart dispose timeout after thread is no longer used
+	if (thread instanceof IdleThread) thread.resetDisposeTimeout();
+}
 
 /**
  * Spawn a new worker thread.
@@ -230,28 +343,36 @@ export async function spawnThread<imports extends Record<string,unknown>>(module
 export async function spawnThread<imports extends Record<string,unknown>>(modulePath?:null, options?: threadOptions): Promise<ThreadModule<Record<string,never>>>
 export async function spawnThread<imports extends Record<string,unknown>>(modulePath?: string|URL|null, options?: threadOptions): Promise<ThreadModule<imports>> {
 
-	// normalize module path
-	if (modulePath) modulePath = getNormalizedPath(modulePath, getCallerDir());
-	// make sure supranet is initialized (not connected)
-	if (!Datex.Supranet.initialized) await Datex.Supranet.init()
+	try {
+		spawningThreads++;
 
-	if (options?.signal?.aborted) throw new Error("aborted");
+		// normalize module path
+		if (modulePath) modulePath = getNormalizedPath(modulePath, getCallerDir());
+		// make sure supranet is initialized (not connected)
+		if (!Datex.Supranet.initialized) await Datex.Supranet.init()
 	
-	if (modulePath) logger.debug("spawning new thread: " + modulePath)
-	else logger.debug("spawning new empty thread")
+		if (options?.signal?.aborted) throw new Error("aborted");
+		
+		if (modulePath) logger.debug("spawning new thread: " + modulePath)
+		else logger.debug("spawning new empty thread")
+	
+		// create worker
+		const worker: Worker & {postMessage:(message:MessageToWorker)=>void} = new Worker(workerBlobUrl, {type: "module"});
+		worker.onerror = (e)=>console.error(e)
+	
+		const thread = await _initWorker(worker, modulePath, options);
+	
+		options?.signal?.addEventListener("abort", () => {
+			// only dispose if not already finished
+			if (threadWorkers.get(thread)) disposeThread(thread);
+		})
+	
+		return thread;
+	}
 
-	// create worker
-	const worker: Worker & {postMessage:(message:MessageToWorker)=>void} = new Worker(workerBlobUrl, {type: "module"});
-	worker.onerror = (e)=>console.error(e)
-
-	const thread = await _initWorker(worker, modulePath, options);
-
-	options?.signal?.addEventListener("abort", () => {
-		// only dispose if not already finished
-		if (threadWorkers.get(thread)) disposeThread(thread);
-	})
-
-	return thread;
+	finally {
+		spawningThreads--;
+	}
 }
 
 
@@ -384,7 +505,7 @@ export async function _initWorker(worker: Worker|ServiceWorkerRegistration, modu
 			}
 			// just return an empty thread
 			else {
-				const idleThread = Object.freeze(new IdleThread() as ThreadModule);
+				const idleThread = Object.freeze(new IdleThread() as unknown as ThreadModule);
 				threadWorkers.set(idleThread, worker)
 				threadEndpoints.set(idleThread, endpoint)
 				resolve(idleThread)
@@ -415,7 +536,7 @@ export async function _initWorker(worker: Worker|ServiceWorkerRegistration, modu
  * @param args input arguments for the function that are passed on to the execution thread
  * @returns 
  */
-export async function run<ReturnType, Args extends unknown[]>(task: () => ReturnType, options?: {signal?:AbortSignal}): Promise<ReturnType>
+export async function run<ReturnType, Args extends unknown[]>(task: () => ReturnType, options?: {signal?:AbortSignal}, _meta?: {taskIndex?: number}): Promise<ReturnType>
 /**
  * Run a DATEX script in a separate thread and return the result.
  * 
@@ -435,7 +556,7 @@ export async function run<ReturnType, Args extends unknown[]>(task: () => Return
  */
 export async function run<ReturnType=unknown>(task:TemplateStringsArray, ...args:any[]):Promise<ReturnType>
 
-export async function run<ReturnType>(task: (() => ReturnType)|JSTransferableFunction|TemplateStringsArray, options?: {signal?:AbortSignal}, ..._rest:unknown[]): Promise<ReturnType> {
+export async function run<ReturnType>(task: (() => ReturnType)|JSTransferableFunction|TemplateStringsArray, options?: {signal?:AbortSignal}, _meta?: {taskIndex?: number }, ..._rest:unknown[]): Promise<ReturnType> {
 	
 	let datexSource: string;
 	let datexArgs: unknown[];
@@ -454,12 +575,13 @@ export async function run<ReturnType>(task: (() => ReturnType)|JSTransferableFun
 				JSTransferableFunction.create(task)
 		)
 		datexSource = '?(?)';
-		datexArgs = [$$(transferableTaskFn), (options as any)?._taskIndex??0];
+		datexArgs = [$$(transferableTaskFn), _meta?.taskIndex??0];
 	}
 
 	else throw new Error("task must be a function or template string");
 	
-	const endpoint = threadEndpoints.get(await getThread());	
+	const thread = await getThread();
+	const endpoint = threadEndpoints.get(thread);	
 
 	try {
 		if (options?.signal?.aborted) {
@@ -480,6 +602,9 @@ export async function run<ReturnType>(task: (() => ReturnType)|JSTransferableFun
 			throw new Error(e.message);
 		}
 		else throw e;
+	}
+	finally {
+		freeThread(thread);
 	}
 }
 
@@ -506,9 +631,7 @@ type runInThreadsReturn<ReturnType, Mapping extends PromiseMappingFn = never> = 
  */
 export async function runConcurrent<ReturnType, Mapping extends PromiseMappingFn = never>(task: (taskIndex?: number) => ReturnType, instances = 1, outputMapping?: Mapping): Promise<runInThreadsReturn<ReturnType, Mapping>> {
 	const abortController = new AbortController()
-	const result = new Array(instances).fill(null).map((_, i) => run(task, {signal:abortController.signal, _taskIndex: i} as {
-		signal: AbortSignal
-	}));
+	const result = new Array(instances).fill(null).map((_, i) => run(task, {signal:abortController.signal}, {taskIndex: i}));
 
 	if (outputMapping) {
 		try {
