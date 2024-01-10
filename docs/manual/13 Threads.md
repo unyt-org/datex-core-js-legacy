@@ -80,6 +80,59 @@ let fibonacciNumber = await run(() => {
 > The maximum bigint value currently supported by DATEX is 18,446,744,073,709,551,615 (Maximum value for a Uint64)
 > When calculating larger fibonacci values, an overflow will occur.
 
+## Logging
+
+The `console` object from the parent context can be accessed with a `use()` declaration like any other value inside a task function:
+
+```ts
+await runConcurrent(i => {
+  use (console);
+  console.log(`Hello from Task ${i}`)
+}, 5);
+```
+
+Keep in mind that outputs to the console are only printed after a blocking (non-async) task is completed.
+In the following example, the console.log outputs are only shown after both while loops are finished:
+
+```ts
+await run(async i => {
+      use (console);
+
+      function sleep() {
+        while (Math.random() > 0.000000005) {}
+      }
+    
+      console.warn(`task checkpoint #1`);
+      sleep();
+      console.warn(`task checkpoint #2`);
+      sleep();
+});
+console.log("task finished")
+
+// logs:
+// "task finished"
+// "task checkpoint #1"
+// "task checkpoint #2"
+```
+
+This is not a problem when using async code:
+```ts
+await run(async i => {
+      use (console);
+    
+      console.warn(`task checkpoint #1`);
+      await sleep(1000);
+      console.warn(`task checkpoint #2`);
+      await sleep(1000);
+});
+console.log("task finished")
+
+// logs:
+// "task checkpoint #1"
+// "task checkpoint #2"
+// "task finished"
+```
+
 
 ### Executing DATEX Script
 
