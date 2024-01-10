@@ -1284,11 +1284,17 @@ export class Compiler {
             }
 
             // update jmp_indices
-            for (const [i] of SCOPE.jmp_indices) {
-                if (i > after) {
-                    const jmp_to = SCOPE.data_view.getUint32(i, true);
-                    if (jmp_to > after) SCOPE.data_view.setUint32(i, jmp_to + shift, true); // shift current jmp_to index in buffer
+            try {
+                for (const [i] of SCOPE.jmp_indices) {
+                    if (i > after) {
+                        const jmp_to = SCOPE.data_view.getUint32(i, true);
+                        if (jmp_to > after) SCOPE.data_view.setUint32(i, jmp_to + shift, true); // shift current jmp_to index in buffer
+                    }
                 }
+            }
+            // bug investigation https://github.com/unyt-org/datex-core-js-legacy/issues/23
+            catch (e) {
+                console.error("jmp_indices error (https://github.com/unyt-org/datex-core-js-legacy/issues/23)", e);
             }
 
             // update assignment_end_indices
@@ -1330,10 +1336,10 @@ export class Compiler {
 
             if (!SCOPE.internal_vars) {
                 // DEBUG message since CDN prod crashes here
-                logger.error("Scope is missing internal_vars", SCOPE, val);
+                console.error("Scope is missing internal_vars (https://github.com/unyt-org/datex-core-js-legacy/issues/23)", new Error().stack);
             }
             // already has an internal variable reference?
-            if (SCOPE.internal_vars?.has((val))) return SCOPE.internal_vars.get(val)!;
+            if (SCOPE.internal_vars.has((val))) return SCOPE.internal_vars.get(val)!;
             if (SCOPE.internal_primitive_vars?.has((val))) return SCOPE.internal_primitive_vars.get(val)!;
 
             // get value from dynamic index
