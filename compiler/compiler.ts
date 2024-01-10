@@ -1331,9 +1331,13 @@ export class Compiler {
         // add sub_result=_1234=... at a specific index (for recursive objects)
         createInternalVariableAtIndex: (index:number|[number], SCOPE:compiler_scope, val?:any):number => {
 
+            if (!SCOPE.internal_vars) {
+                // DEBUG message since CDN prod crashes here
+                logger.error("Scope is missing internal_vars", SCOPE, val);
+            }
             // already has an internal variable reference?
-            if (SCOPE.internal_vars.has((val))) return SCOPE.internal_vars.get(val)!;
-            if (SCOPE.internal_primitive_vars.has((val))) return SCOPE.internal_primitive_vars.get(val)!;
+            if (SCOPE.internal_vars?.has((val))) return SCOPE.internal_vars.get(val)!;
+            if (SCOPE.internal_primitive_vars?.has((val))) return SCOPE.internal_primitive_vars.get(val)!;
 
             // get value from dynamic index
             if (index instanceof Array) index = index[0];
