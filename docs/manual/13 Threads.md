@@ -11,7 +11,7 @@ from the parent thread.
 
 ```ts
 /// file: thread.ts
-export function exportedFunction(x: number, y:nuumber) {
+export function exportedFunction(x: number, y: number) {
   return x + y
 }
 export const exportedValue = $$([1,2,3]);
@@ -56,7 +56,7 @@ The `n` index variable is accessed from the parent scope.
 ```ts
 import { run } from "datex-core-legacy/threads/threads.ts";
 
-let n = 10000n;
+let n = 4000n;
 
 // calculate fibonacci number in a separate thread
 let fibonacciNumber = await run(() => {
@@ -76,6 +76,63 @@ let fibonacciNumber = await run(() => {
 });
 ```
 
+> [!WARNING]
+> The maximum bigint value currently supported by DATEX is 18,446,744,073,709,551,615 (Maximum value for a Uint64)
+> When calculating larger fibonacci values, an overflow will occur.
+
+## Logging
+
+The `console` object from the parent context can be accessed with a `use()` declaration like any other value inside a task function:
+
+```ts
+await runConcurrent(i => {
+  use (console);
+  console.log(`Hello from Task ${i}`)
+}, 5);
+```
+
+Keep in mind that outputs to the console are only printed after a blocking (non-async) task is completed.
+In the following example, the console.log outputs are only shown after both blocking `sleep()` calls are finished:
+
+```ts
+await run(async i => {
+      use (console);
+
+      function sleep() {
+        while (Math.random() > 0.000000005) {}
+      }
+    
+      console.warn(`task checkpoint #1`);
+      sleep();
+      console.warn(`task checkpoint #2`);
+      sleep();
+});
+console.log("task finished")
+
+// logs:
+// "task finished"
+// "task checkpoint #1"
+// "task checkpoint #2"
+```
+
+When using async (non-blocking) code, the logs are printed immediately and in the expected order:
+```ts
+await run(async i => {
+      use (console);
+    
+      console.warn(`task checkpoint #1`);
+      await sleep(1000);
+      console.warn(`task checkpoint #2`);
+      await sleep(1000);
+});
+console.log("task finished")
+
+// logs:
+// "task checkpoint #1"
+// "task checkpoint #2"
+// "task finished"
+```
+
 
 ### Executing DATEX Script
 
@@ -84,7 +141,7 @@ The `run` function can also be used to run a DATEX Script in a separate thread:
 ```ts
 import { run } from "datex-core-legacy/threads/threads.ts";
 
-let n = 10000n;
+let n = 4000n;
 
 // calculate fibonacci number in a separate thread
 let fibonacciNumber = await run `
@@ -158,21 +215,48 @@ const results = await runConcurrent(
   Promise.all
 )
 
-console.log(sharedSet) // Set {0,1,2,3,4,5,6,7,8,9}
 console.log(results) // [0,1,2,3,4,5,6,7,8,9]
+console.log(sharedSet) // Set {0,1,2,3,4,5,6,7,8,9} (not necessarily in this order)
 ```
 
 
-> [!NOTE]
+<!-- > [!NOTE]
 > Passing `Promise.any` to `runConcurrent` produces the same outcome as calling 
 > `Promise.any` on the result returned from `runConcurrent`.
 > 
 > However, there is a significant performance improvement when passing `Promise.any` as a 
 > parameter to `runConcurrent`: When one of the threads returns a result, 
 > all other threads are automatically prematurely terminated, instead of continuing until they are
-> finished. 
+> finished.  -->
 
 
-## Thread pools
+## Configuration
 
-TODO
+The behaviour for task threads spawned with `run` or `runConcurrent` can be configured
+with the `configure` function:
+
+```ts
+import { configure } from "datex-core-legacy/threads/threads.ts";
+
+configure({
+	/**
+	 * Maximum number of threads that can run tasks concurrently
+	 * Module threads are excluded from this limit
+	 * Default: Infinity
+	 */
+	maxConcurrentThreads: number,
+	/**
+	 * Minimum lifetime of an idle thread in seconds
+	 * Default: 60
+	 */
+	minIdleThreadLifetime: number
+})
+```
+
+The default configuration works fine for most use cases. 
+
+When you are running hundreds of small tasks in parallel, it might be more
+efficient to limit the maximum number of concurrent threads (`maxConcurrentThreads`) to improve performance.
+
+The `minIdleThreadLifetime` can be increased or set to `Infinity` if you are continually spawning new tasks because
+it is more efficient to reuse idle threads instead of spawning new ones.
