@@ -4730,7 +4730,11 @@ export class Compiler {
         // INT   
         else if (m = SCOPE.datex.match(Regex.INT)) {
             SCOPE.datex = SCOPE.datex.substring(m[0].length);  // pop datex
-            Compiler.builder.addInt(parseInt(m[0].replace(/[_ ]/g, "")), SCOPE)
+            const intString = m[0].replace(/[_ ]/g, "");
+            let int:number|bigint = parseInt(intString);
+            // use bigint if int is out of range
+            if (int < Number.MIN_SAFE_INTEGER || int > Number.MAX_SAFE_INTEGER) int = BigInt(intString);
+            Compiler.builder.addInt(int, SCOPE)
             isEffectiveValue = true;
         }
 
