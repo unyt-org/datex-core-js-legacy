@@ -1,6 +1,7 @@
 # Threads
 
-The DATEX JS Library supports multi-threading with [Workers](https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API).
+The DATEX JS Library supports local multi-threading with [Web Workers](https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API) as well as distributed multi-threading with [DATEX Compute Clusters](#compute-clusters).
+
 DATEX-compatible values like functions or complex objects can also be shared between threads.
 The library provides a way to use threads in a type-safe way.
 
