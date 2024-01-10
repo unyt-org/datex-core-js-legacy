@@ -64,7 +64,8 @@ pub fn init_runtime() {
 
 #[wasm_bindgen]
 pub fn compile(datex_script:&str) -> String {
-    compiler::compile(datex_script).to_string()
+    "TODO".to_string()
+    // compiler::compile(datex_script).expect("compiler error").to_string()
 }
 
 #[wasm_bindgen]
