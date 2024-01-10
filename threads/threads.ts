@@ -12,6 +12,7 @@ import { getCallerDir } from "../utils/caller_metadata.ts";
 import { PromiseMapReturnType, PromiseMappingFn } from "./promise-fn-types.ts";
 import { JSTransferableFunction } from "../types/js-function.ts";
 import { INSERT_MARK } from "../compiler/compiler.ts";
+import { ComputeCluster } from "./compute-clusters.ts";
 
 export type ThreadModule<imports extends Record<string, unknown> = Record<string, unknown>> = {
 	[key in keyof imports]: imports[key] extends ((...args: infer args) => infer returnType) ? ((...args: args) => Promise<returnType>) : imports[key]
@@ -36,7 +37,7 @@ type threadOptions = {signal?: AbortSignal}
  * Idle threads are used for run() and runConcurrent() calls and 
  * are disposed after some time if not used
  */
-class IdleThread {
+class IdleWorkerThread {
 
 	#interval?: number;
 
@@ -66,6 +67,54 @@ class IdleThread {
 		this.checkForDispose();
 	}
 }
+
+/**
+ * Object representing an idle thread without an associated module on a remote endpoint.
+ * Remote threads are only available when using a ComputeCluster. 
+ */
+class IdleRemoteThread {
+
+	/**
+	 * Map of all active idle remote threads
+	 */
+	static #threads = new Map<Datex.Endpoint, IdleRemoteThread>();
+
+	private constructor(public readonly endpoint: Datex.Endpoint) {
+		IdleRemoteThread.#threads.set(endpoint, this);
+	}
+
+	// TODO
+	public dispose() {
+		IdleRemoteThread.#threads.delete(this.endpoint);
+	}
+
+	/**
+	 * Tries to get a new remote endpoint thread from the cluster
+	 * @param cluster 
+	 */
+	static getFromCluster(cluster: ComputeCluster): IdleRemoteThread & ThreadModule {
+		// get endpoint with minimum usage
+		let minUsage = Infinity;
+		let preferredEndpoint: Datex.Endpoint|undefined;
+		for (const [endpoint] of cluster.endpoints) {
+			// get existing IdleRemoteThread for endpoint
+			const existingThread = IdleRemoteThread.#threads.get(endpoint) as IdleRemoteThread & ThreadModule;
+			const usage = existingThread ? (availableThreads.get(existingThread) ?? 0) : 0;
+			if (usage < minUsage) {
+				minUsage = usage;
+				preferredEndpoint = endpoint;
+			}
+		}
+		// create new thread if endpoint available
+		if (preferredEndpoint) {
+			if (IdleRemoteThread.#threads.has(preferredEndpoint)) return IdleRemoteThread.#threads.get(preferredEndpoint) as IdleRemoteThread & ThreadModule
+			else return new IdleRemoteThread(preferredEndpoint) as IdleRemoteThread & ThreadModule;
+		}
+		else throw new Error("No endpoint available in cluster");
+	}
+}
+
+
 
 const workerBlobUrl = await blobifyFile(new URL("./thread-worker.ts", import.meta.url))
 const threadWorkers = new WeakMap<ThreadModule, Worker|ServiceWorkerRegistration|null>()
@@ -105,7 +154,11 @@ export type ThreadingConfiguration = {
 	 * Minimum lifetime of an idle thread in seconds
 	 * Default: 60
 	 */
-	minIdleThreadLifetime: number
+	minIdleThreadLifetime: number,
+	/**
+	 * Cluster used for remote execution
+	 */
+	cluster?: ComputeCluster
 }
 
 const configuration: ThreadingConfiguration = {
@@ -251,6 +304,8 @@ export async function getServiceWorkerThread<imports extends Record<string,unkno
 const availableThreads = new Map<ThreadModule, number>();
 let spawningThreads = 0;
 
+globalThis.availableThreads = availableThreads;
+
 /**
  * spawns a new thread or returns an existing thread from the pool
  */
@@ -260,7 +315,7 @@ async function getThread(): Promise<ThreadModule> {
 		if (tasks == 0) {
 			availableThreads.set(thread, 1);
 			// reset dispose timeout
-			if (thread instanceof IdleThread) thread.resetDisposeTimeout();
+			if (thread instanceof IdleWorkerThread) thread.resetDisposeTimeout();
 			return thread;
 		}
 	}
@@ -291,11 +346,25 @@ async function getThread(): Promise<ThreadModule> {
 		if (thread) {
 			availableThreads.set(thread, minTasks+1);
 			// reset dispose timeout
-			if (thread instanceof IdleThread) thread.resetDisposeTimeout();
+			if (thread instanceof IdleWorkerThread) thread.resetDisposeTimeout();
 			return thread;
 		}
 		else {
 			throw new Error("Max concurrent thread limit reached, but no thread available");
+		}
+	}
+
+	// get remote thread if cluster available
+	if (configuration.cluster) {
+		try {
+			const thread = IdleRemoteThread.getFromCluster(configuration.cluster);
+			threadEndpoints.set(thread, thread.endpoint);
+			availableThreads.set(thread, (availableThreads.get(thread)??0) + 1);
+			return thread;
+		}
+		catch (e) {
+			console.debug(e);
+			logger.error("Cannot get remote thread from cluster, falling back to local thread");
 		}
 	}
 
@@ -304,13 +373,14 @@ async function getThread(): Promise<ThreadModule> {
 	availableThreads.set(thread, 1);
 
 	return thread;
+	
 }
 
 function freeThread(thread: ThreadModule) {
 	if (!availableThreads.has(thread)) return;
 	availableThreads.set(thread, availableThreads.get(thread)! - 1); 
 	// restart dispose timeout after thread is no longer used
-	if (thread instanceof IdleThread) thread.resetDisposeTimeout();
+	if (thread instanceof IdleWorkerThread) thread.resetDisposeTimeout();
 }
 
 /**
@@ -504,7 +574,7 @@ export async function _initWorker(worker: Worker|ServiceWorkerRegistration, modu
 			}
 			// just return an empty thread
 			else {
-				const idleThread = Object.freeze(new IdleThread() as unknown as ThreadModule);
+				const idleThread = Object.freeze(new IdleWorkerThread() as unknown as ThreadModule);
 				threadWorkers.set(idleThread, worker)
 				threadEndpoints.set(idleThread, endpoint)
 				resolve(idleThread)
