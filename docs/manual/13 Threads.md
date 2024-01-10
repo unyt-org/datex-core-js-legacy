@@ -77,10 +77,6 @@ let fibonacciNumber = await run(() => {
 });
 ```
 
-> [!WARNING]
-> The maximum bigint value currently supported by DATEX is 18,446,744,073,709,551,615 (Maximum value for a Uint64)
-> When calculating larger fibonacci values, an overflow will occur.
-
 
 ### Running multiple concurrent tasks
 
