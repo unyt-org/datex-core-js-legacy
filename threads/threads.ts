@@ -250,7 +250,6 @@ export async function getServiceWorkerThread<imports extends Record<string,unkno
 // active threads -> number of tasks that are currently running on the thread
 const availableThreads = new Map<ThreadModule, number>();
 let spawningThreads = 0;
-globalThis.availableThreads = availableThreads;
 
 /**
  * spawns a new thread or returns an existing thread from the pool
