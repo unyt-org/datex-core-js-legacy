@@ -115,7 +115,7 @@ console.log("task finished")
 // "task checkpoint #2"
 ```
 
-When using async code, the logs are printed immediately and in the expected order:
+When using async (non-blocking) code, the logs are printed immediately and in the expected order:
 ```ts
 await run(async i => {
       use (console);
