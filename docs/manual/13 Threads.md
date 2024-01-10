@@ -136,6 +136,41 @@ console.log(sharedSet) // Set {0,1,2,3,4,5,6,7,8,9} (not necessarily in this ord
 ```
 
 
+### Compute Clusters
+
+The DATEX threading library also provides a straightforward way for running concurrent threads distributed
+over multiple endpoints in the Supranet using **Endpoint Compute Clusters**.
+
+Per default, all threads spawned with `run` and `runConcurrent` are running in local worker threads.
+When the `cluster` property is set in the thread configuration, threads are executed on remote endpoints
+participating in the specified compute cluster.
+
+```ts
+import { ComputeCluster } from "datex-core-legacy/threads/compute-clusters.ts";
+import { configure } from "datex-core-legacy/threads/threads.ts";
+
+// create a new compute cluster
+const myComputeCluster = ComputeCluster.create("myComputeCluster");
+
+// use the cluster for threading
+configure({ cluster: myComputeCluster })
+```
+
+You will see a log output like this in the console when the compute cluster was sucessfully created:
+![Created new cluster "myComputeCluster". Call ComputeCluster.join('@@77C60C750E0000000020EF113CD85E8F.myComputeCluster') on external endpoints to add them to this cluster)](./assets/compute-clusters-log.png)
+
+When a task is now executed, it is still executed in a local thread as long as no endpoints have joined
+the compute cluster.
+
+An endpoint can be added to the cluster by calling 
+```ts
+ComputeCluster.join('@@77C60C750E0000000020EF113CD85E8F.myComputeCluster')
+```
+(using your own identifier from the log) on the endpoint itself.
+
+Tasks are now equally distributed among all available endpoints in the cluster.
+
+
 <!-- > [!NOTE]
 > Passing `Promise.any` to `runConcurrent` produces the same outcome as calling 
 > `Promise.any` on the result returned from `runConcurrent`.
@@ -248,7 +283,11 @@ configure({
 	 * Minimum lifetime of an idle thread in seconds
 	 * Default: 60
 	 */
-	minIdleThreadLifetime: number
+	minIdleThreadLifetime: number,
+  /**
+   * Cluster used for remote execution
+   */
+  cluster?: ComputeCluster
 })
 ```
 

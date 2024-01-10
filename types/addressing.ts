@@ -251,7 +251,6 @@ export class Endpoint extends Target {
 		}
 		try {
 			const res = await datex("#public.(?)", [key], this);
-			console.log("res",res);
 			if (res!==undefined) {
 				this.#properties.set(key, res)
 				return res;
