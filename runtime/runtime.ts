@@ -6626,7 +6626,7 @@ export class Runtime {
                     break;
                 }
 
-                // UNIT
+                // QUANTITY
                 case BinaryCode.QUANTITY: {
 
                     const sign = SCOPE.buffer_views.uint8[SCOPE.current_index++] == 0 ? -1n : 1n;  // 0 for negative, 1 for positive (and 0)
@@ -6655,6 +6655,23 @@ export class Runtime {
                     let unit = new Quantity([num, den], unit_factors);
 
                     await this.runtime_actions.insertToScope(SCOPE, unit);
+                    break;
+                }
+
+                // BIG_INT
+                case BinaryCode.BIG_INT: {
+
+                    const sign = SCOPE.buffer_views.uint8[SCOPE.current_index++] == 0 ? -1n : 1n;  // 0 for negative, 1 for positive (and 0)
+
+                    // buffer size
+                    const size = SCOPE.buffer_views.data_view.getUint16(SCOPE.current_index, true)
+                    SCOPE.current_index+=Uint16Array.BYTES_PER_ELEMENT;
+                    
+                    // bigint from buffer
+                    const bigint_buffer = SCOPE.buffer_views.uint8.subarray(SCOPE.current_index, SCOPE.current_index+=size);
+                    const bigint = Quantity.bufferToBigInt(bigint_buffer) * sign;
+
+                    await this.runtime_actions.insertToScope(SCOPE, bigint);
                     break;
                 }
 
