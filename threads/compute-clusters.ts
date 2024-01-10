@@ -57,7 +57,7 @@ export class ComputeCluster {
 	}
 	
 	/**
-	 * Join a cluster with the given identifier.
+	 * Join an existing compute cluster.
 	 * By joining a cluster, the current endpoint allows authorized
 	 * users of the cluster to perform computations on this endpoint.
 	 * @param cluster ComputeCluster or DATEX identifier of the cluster (e.g. "@myEndpoint.myComputCluster")
