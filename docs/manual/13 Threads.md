@@ -92,7 +92,7 @@ await runConcurrent(i => {
 ```
 
 Keep in mind that outputs to the console are only printed after a blocking (non-async) task is completed.
-In the following example, the console.log outputs are only shown after both while loops are finished:
+In the following example, the console.log outputs are only shown after both blocking `sleep()` calls are finished:
 
 ```ts
 await run(async i => {
@@ -115,7 +115,7 @@ console.log("task finished")
 // "task checkpoint #2"
 ```
 
-This is not a problem when using async code:
+When using async code, the logs are printed immediately and in the expected order:
 ```ts
 await run(async i => {
       use (console);
