@@ -300,6 +300,9 @@ export class Compiler {
     static MAX_INT_32 = 2_147_483_647;
     static MIN_INT_32 = -2_147_483_648;
 
+    static MIN_INT_64 = -9223372036854775808n;
+    static MAX_INT_64 = 9223372036854775807n;
+
     static MAX_INT_8 = 127;
     static MIN_INT_8 = -128;
 
@@ -1629,7 +1632,8 @@ export class Compiler {
             if (i<=Compiler.MAX_INT_8 && i>=Compiler.MIN_INT_8)   return Compiler.builder.addInt8(i, SCOPE); // INT8
             if (i<=Compiler.MAX_INT_16 && i>=Compiler.MIN_INT_16) return Compiler.builder.addInt16(i, SCOPE); // INT16
             if (i<=Compiler.MAX_INT_32 && i>=Compiler.MIN_INT_32) return Compiler.builder.addInt32(i, SCOPE); // INT32
-            else return Compiler.builder.addInt64(i, SCOPE); // INT64
+            else if (i<=Compiler.MAX_INT_64 && i>=Compiler.MIN_INT_64) return Compiler.builder.addInt64(i, SCOPE); // INT64
+            else return Compiler.builder.addBigInt(i, SCOPE); // BIG_INT
         },
         addInt8: (i:bigint|number, SCOPE:compiler_scope) => {    
             Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+Int8Array.BYTES_PER_ELEMENT+1, SCOPE);
@@ -1658,6 +1662,24 @@ export class Compiler {
             SCOPE.uint8[SCOPE.b_index++] = BinaryCode.INT_64;
             SCOPE.data_view.setBigInt64(SCOPE.b_index, BigInt(i), true);
             SCOPE.b_index+=BigInt64Array.BYTES_PER_ELEMENT;
+        },
+        addBigInt: (i:bigint|number, SCOPE:compiler_scope) => {    
+            Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+BigInt64Array.BYTES_PER_ELEMENT+2, SCOPE);
+            Compiler.builder.valueIndex(SCOPE);
+            SCOPE.uint8[SCOPE.b_index++] = BinaryCode.BIG_INT;
+            
+            SCOPE.uint8[SCOPE.b_index++] = i < 0 ? 0 : 1; // 0 for negative, 1 for positive (and 0)
+
+            const bigint_buffer = Quantity.bigIntToBuffer(BigInt(i < 0 ? -i : i));
+            Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+(Uint16Array.BYTES_PER_ELEMENT*2)+bigint_buffer.byteLength, SCOPE);
+
+            // buffer size
+            SCOPE.data_view.setUint16(SCOPE.b_index, bigint_buffer.byteLength, true)
+            SCOPE.b_index+=Uint16Array.BYTES_PER_ELEMENT;
+
+            // bigint
+            SCOPE.uint8.set(bigint_buffer, SCOPE.b_index);
+            SCOPE.b_index += bigint_buffer.byteLength;
         },
         addQuantity: (u:Quantity, SCOPE:compiler_scope) => {
             Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+Float64Array.BYTES_PER_ELEMENT+2, SCOPE);
