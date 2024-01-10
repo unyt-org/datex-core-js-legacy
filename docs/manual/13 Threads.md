@@ -4,9 +4,9 @@ The DATEX JS Library supports multi-threading with [Workers](https://developer.m
 DATEX-compatible values like functions or complex objects can also be shared between threads.
 The library provides a way to use threads in a type-safe way.
 
-## Usage
+## Module-level threads
 
-The following example demonstrates the creation of a new thread with exports that can be accessed
+The following example demonstrates the creation of a new thread from a module with exports that can be accessed
 from the parent thread.
 
 ```ts
@@ -28,7 +28,7 @@ const res = await thread.exportedFunction(1,2);
 thread.exportedValue.push(4);
 ```
 
-## Thread disposal
+### Thread disposal
 
 When a new thread is created with the `using` specifier, it is automatically disposed on scope exit.
 Alternatively, you can explicitly dispose a thread with the `disposeThread` function:
@@ -44,11 +44,12 @@ disposeThread(thread)
 ```
 
 
-## Immediately evaluated tasks
+## Task threads
 
-Instead of declaring a thread module in a separate file, a function can be passed to `run` to be executed in a new thread immediately.
-Values from the parent scope can be passed to the thread by explicitly adding them to the `use()` declaration at the beginning of the
-function body.
+### Running task threads
+
+Instead of declaring a thread module in a separate file, a task function can be passed to `run` to be executed in a new thread immediately.
+Values from the parent scope can be passed to the thread by explicitly adding them to the `use()` declaration at the beginning of the function body.
 
 In the following example, a function calculates the nth fibonacci number in a thread.
 The `n` index variable is accessed from the parent scope.
@@ -56,7 +57,7 @@ The `n` index variable is accessed from the parent scope.
 ```ts
 import { run } from "datex-core-legacy/threads/threads.ts";
 
-let n = 4000n;
+let n = 10000n;
 
 // calculate fibonacci number in a separate thread
 let fibonacciNumber = await run(() => {
@@ -66,7 +67,7 @@ let fibonacciNumber = await run(() => {
   let n2 = 1n;
   let nextTerm = 0n;
 
-  for (let i = 1; i < n; i++) {
+  for (let i = 0; i < n; i++) {
       console.log(n1);
       nextTerm = n1 + n2;
       n1 = n2;
@@ -80,87 +81,6 @@ let fibonacciNumber = await run(() => {
 > The maximum bigint value currently supported by DATEX is 18,446,744,073,709,551,615 (Maximum value for a Uint64)
 > When calculating larger fibonacci values, an overflow will occur.
 
-## Logging
-
-The `console` object from the parent context can be accessed with a `use()` declaration like any other value inside a task function:
-
-```ts
-await runConcurrent(i => {
-  use (console);
-  console.log(`Hello from Task ${i}`)
-}, 5);
-```
-
-Keep in mind that outputs to the console are only printed after a blocking (non-async) task is completed.
-In the following example, the console.log outputs are only shown after both blocking `sleep()` calls are finished:
-
-```ts
-await run(async i => {
-      use (console);
-
-      function sleep() {
-        while (Math.random() > 0.000000005) {}
-      }
-    
-      console.warn(`task checkpoint #1`);
-      sleep();
-      console.warn(`task checkpoint #2`);
-      sleep();
-});
-console.log("task finished")
-
-// logs:
-// "task finished"
-// "task checkpoint #1"
-// "task checkpoint #2"
-```
-
-When using async (non-blocking) code, the logs are printed immediately and in the expected order:
-```ts
-await run(async i => {
-      use (console);
-    
-      console.warn(`task checkpoint #1`);
-      await sleep(1000);
-      console.warn(`task checkpoint #2`);
-      await sleep(1000);
-});
-console.log("task finished")
-
-// logs:
-// "task checkpoint #1"
-// "task checkpoint #2"
-// "task finished"
-```
-
-
-### Executing DATEX Script
-
-The `run` function can also be used to run a DATEX Script in a separate thread:
-
-```ts
-import { run } from "datex-core-legacy/threads/threads.ts";
-
-let n = 4000n;
-
-// calculate fibonacci number in a separate thread
-let fibonacciNumber = await run `
-  val n1 = 0;
-  val n2 = 1;
-  val nextTerm = 0;
-  val i = 0;
-
-  iterate (i..${n}) (
-    print n1;
-    nextTerm = n1 + n2;
-    n1 = n2;
-    n2 = nextTerm;
-  );
-  n1;
-`
-```
-
-Values from the parent scope can be injected in template string as with the [`datex` function](./5%20The%20DATEX%20API.md#the-datex-template-function)
 
 ### Running multiple concurrent tasks
 
@@ -229,8 +149,91 @@ console.log(sharedSet) // Set {0,1,2,3,4,5,6,7,8,9} (not necessarily in this ord
 > all other threads are automatically prematurely terminated, instead of continuing until they are
 > finished.  -->
 
+### Logging
 
-## Configuration
+The `console` object from the parent context can be accessed with a `use()` declaration like any other value inside a task function:
+
+```ts
+await runConcurrent(i => {
+  use (console);
+  console.log(`Hello from Task ${i}`)
+}, 5);
+```
+
+Keep in mind that outputs to the console are only printed after a blocking (non-async) task is completed.
+In the following example, the console.log outputs are only shown after both blocking `sleep()` calls are finished:
+
+```ts
+await run(async i => {
+      use (console);
+
+      function sleep() {
+        while (Math.random() > 0.000000005) {}
+      }
+    
+      console.warn(`task checkpoint #1`);
+      sleep();
+      console.warn(`task checkpoint #2`);
+      sleep();
+});
+console.log("task finished")
+
+// logs:
+// "task finished"
+// "task checkpoint #1"
+// "task checkpoint #2"
+```
+
+When using async (non-blocking) code, the logs are printed immediately and in the expected order:
+```ts
+await run(async i => {
+      use (console);
+    
+      console.warn(`task checkpoint #1`);
+      await sleep(1000);
+      console.warn(`task checkpoint #2`);
+      await sleep(1000);
+});
+console.log("task finished")
+
+// logs:
+// "task checkpoint #1"
+// "task checkpoint #2"
+// "task finished"
+```
+
+
+### Executing DATEX Script
+
+The `run` function can also be used to run a DATEX Script in a separate thread:
+
+```ts
+import { run } from "datex-core-legacy/threads/threads.ts";
+
+let n = 10000n;
+
+// calculate fibonacci number in a separate thread
+let fibonacciNumber = await run `
+  val n1 = 0;
+  val n2 = 1;
+  val nextTerm = 0;
+  val i = 0;
+
+  iterate (i..${n}) (
+    print n1;
+    nextTerm = n1 + n2;
+    n1 = n2;
+    n2 = nextTerm;
+  );
+  n1;
+`
+```
+
+Values from the parent scope can be injected in template string as with the [`datex` function](./5%20The%20DATEX%20API.md#the-datex-template-function)
+
+
+
+### Configuration
 
 The behaviour for task threads spawned with `run` or `runConcurrent` can be configured
 with the `configure` function:
