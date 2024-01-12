@@ -2975,10 +2975,21 @@ export class Pointer<T = any> extends Ref<T> {
     }
 
     public addSubscriber(subscriber: Endpoint) {
-        if (this.subscribers.has(subscriber)) {
-            // logger.warn(subscriber.toString() + " re-subscribed to " + this.idString());
-            //return;
+
+        // TODO also check pointer permission for 'to'
+
+        // request sync endpoint is self, cannot subscribe to own pointers!
+        if (Runtime.endpoint.equals(subscriber)) {
+            throw new PointerError("Cannot sync pointer with own origin");
         }
+
+        logger.debug(subscriber + " subscribed to " + this.idString());
+
+        // not existing pointer or no access to this pointer
+        // TODO check access permission
+        // || (pointer.allowed_access && !pointer.allowed_access.test(SCOPE.sender))
+        if (!this.value_initialized) throw new PointerError("Pointer does not exist")
+     
         this.subscribers.add(subscriber);
         if (this.subscribers.size == 1) this.updateGarbageCollection() // first subscriber
         if (this.streaming.length) setTimeout(()=>this.startStreamOutForEndpoint(subscriber), 1000); // TODO do without timeout?

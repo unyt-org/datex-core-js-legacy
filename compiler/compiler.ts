@@ -2198,6 +2198,7 @@ export class Compiler {
             Compiler.builder.addPointerBodyByID(id, SCOPE);
             
             if (action_type == ACTION_TYPE.INIT) {
+                
                 if (value == NOT_EXISTING) {
                     if (!SCOPE.datex) throw new CompilerError("cannot insert init block in scope, missing datex source code");
                     return Compiler.builder.addInitBlock(<compiler_scope>SCOPE, init_brackets) // async
@@ -2255,6 +2256,24 @@ export class Compiler {
                 Compiler.builder.addPointerNormal(SCOPE, id, ACTION_TYPE.GET); // sync
                 Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+1, SCOPE);
                 SCOPE.uint8[SCOPE.b_index++] = BinaryCode.SUBSCOPE_END;
+
+                // auto add receivers as subscribers for preemptively loaded pointers
+                // they don't have to explicitly subscribe to the pointer after it was loaded
+                if (ptr.is_origin && SCOPE.options.to) {
+                    for (const endpoint of Logical.collapse(SCOPE.options.to, Target)) {
+                        // should not happen
+                        if (!(endpoint instanceof Endpoint)) {
+                            logger.error("Not a valid endpoint:" + endpoint);
+                            continue;
+                        }
+                        // subscribing to own pointers is not allowed
+                        // should not happen because pointers are not sent with preemptive loading to own endpoint anyway
+                        if (Runtime.endpoint.equals(endpoint)) continue;
+                        logger.debug("auto subscribing " + endpoint + " to " + ptr.idString());
+                        ptr.addSubscriber(endpoint);
+                    }
+                }
+
             }
             // just add normal pointer
             else {

@@ -4507,28 +4507,14 @@ export class Runtime {
                 if (to instanceof Endpoint) {
                     if (!(pointer instanceof Pointer) || pointer.is_anonymous) throw new ValueError("sync expects a pointer value", SCOPE);
 
-                    // TODO also check pointer permission for 'to'
-
-                    // request sync endpoint is self, cannot subscribe to own pointers!
-                    if (Runtime.endpoint.equals(to)) {
-                        throw new PointerError("Cannot sync pointer with own origin", SCOPE);
-                    }
+                    
                     // remote sender, only allowed if endpoint equals sender
                     if (!Runtime.endpoint.equals(SCOPE.sender) /*remote sender*/ && !SCOPE.sender.equals(to) /** different endpoint than sender */) {
                         if (!SCOPE.sender.equals(to)) throw new PointerError("Sender has no permission to sync pointer to another origin", SCOPE);
                     }
 
-                    logger.debug(SCOPE.sender + " subscribed to " + pointer.idString());
-
-                    // not existing pointer or no access to this pointer
-                    // TODO check access permission
-                    // || (pointer.allowed_access && !pointer.allowed_access.test(SCOPE.sender))
-                    if (!pointer.value_initialized) throw new PointerError("Pointer does not exist", SCOPE)
-                    // valid, add subscriber
-                    else {
-                        pointer.addSubscriber(SCOPE.sender);
-                        if (!silent) INNER_SCOPE.active_value = await Runtime.cloneValue(pointer.val);
-                    }
+                    pointer.addSubscriber(SCOPE.sender);
+                    if (!silent) INNER_SCOPE.active_value = await Runtime.cloneValue(pointer.val);
 
                     // }
                     // // redirect to actual parent
