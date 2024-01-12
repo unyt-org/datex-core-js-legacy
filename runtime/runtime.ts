@@ -3120,11 +3120,22 @@ export class Runtime {
                 for (const p of INNER_SCOPE.waiting_ptrs) {
                     try {
                         if (SCOPE.header.type==ProtocolDataType.UPDATE) p[0].excludeEndpointFromUpdates(SCOPE.sender); 
-                        if (typeof p[1] == "object" || p[1] == undefined) {  // is set / init
+                        const isSet = p[1] == undefined;
+                        const isInit = typeof p[1] == "object";
+                        if (isSet || isInit) {
                             const ptr = p[0].setValue(el);
-                            // remote pointer value was set - subscribe to updates per default
+
+                            // remote pointer value was set - handle subscription
                             if (!ptr.is_origin) {
-                                ptr.subscribeForPointerUpdates();
+                                // subscription was already added by pointer origin for preemptively loaded pointer, just finalize
+                                if (isInit) {
+                                    ptr.finalizeSubscribe()
+                                }
+                                // subscribe for updates at pointer origin
+                                else {
+                                    ptr.subscribeForPointerUpdates();
+                                }
+                                
                             }
                             // resolve
                             if (p[1]?.resolve) {

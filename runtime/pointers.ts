@@ -2056,8 +2056,8 @@ export class Pointer<T = any> extends Ref<T> {
             return this;
         }
 
+        // already subscribed
         if (this.#subscribed) {
-            // logger.debug("already subscribed to " + this.idString());
             return this;
         }
         
@@ -2067,37 +2067,37 @@ export class Pointer<T = any> extends Ref<T> {
         else logger.debug `subscribing to #color(65, 102, 238)${this.idString()}, origin: ${this.origin.toString()}, request: ${endpoint.toString()}${get_value?', getting value':''}`
 
 
-        if (get_value) {
-            // try {
-            const pointer_value = await Runtime.datexOut(['#origin <== ?', [this]], endpoint) 
-            if (pointer_value === VOID) { // TODO: could be allowed, but is currently considered a bug
-                throw new RuntimeError("pointer value "+this.idString()+" was resolved to void");
-            }
-            this.#subscribed = endpoint;
-
-            // // set function receiver
-            // if (pointer_value instanceof Function) {
-            //     pointer_value.setRemoteEndpoint(endpoint);
-            // }
-            if (!keep_pointer_origin) this.origin = endpoint;
-
-            // fall back to trusted endpoint when origin is offline, if not already a override endpoint 
-            if (!override_endpoint) {
-                Pointer.observeOriginOnline(this.origin, this.id);
-            }
-
-            if (!this.#loaded) return this.setValue(pointer_value); // set value
-            else return this;
+        const pointer_value = await Runtime.datexOut(['#origin <== ?', [this]], endpoint) 
+        if (pointer_value === VOID) { // TODO: could be allowed, but is currently considered a bug
+            throw new RuntimeError("pointer value "+this.idString()+" was resolved to void");
         }
+        
+        this.finalizeSubscribe(override_endpoint, keep_pointer_origin)
 
-        // value already cached, don't wait for it, no response
-        else {
-            Pointer.addToSubscriberPool(this, endpoint);
-            this.#subscribed = endpoint;
-            this.origin = endpoint;
-            return this;
+        if (!this.#loaded) return this.setValue(pointer_value); // set value
+        else return this;
+    }
+
+
+    /**
+     * Finish pointer subscription. Set subscribed endpoint and add online state observer
+     * @param override_endpoint custom endpoint that differs from pointer origin
+     * @param keep_pointer_origin if false, update pointer origin to override_endpoint
+     */
+    public finalizeSubscribe(override_endpoint?: Endpoint, keep_pointer_origin = false) {
+        // never subscribe if pointer is bound to a transform function
+        if (this.transform_scope) return;
+        // already subscribed
+        if (this.#subscribed) return;
+
+        this.#subscribed = override_endpoint ?? this.origin;
+
+        if (!keep_pointer_origin && override_endpoint) this.origin = override_endpoint;
+
+        // fall back to trusted endpoint when origin is offline, if not already a override endpoint 
+        if (!override_endpoint) {
+            Pointer.observeOriginOnline(this.origin, this.id);
         }
-    
     }
 
     /**
@@ -2134,37 +2134,6 @@ export class Pointer<T = any> extends Ref<T> {
             }
         }
         origin.online.observe(handler)
-    }
-
-    static #subscriber_pool = new Map<Endpoint, Set<Pointer>>().setAutoDefault(Set)
-
-    private static addToSubscriberPool(pointer:Pointer, endpoint:Endpoint) {
-        const pool = this.#subscriber_pool.getAuto(endpoint);
-        if (!pool) {
-            logger.error("getAuto not working");
-            return;
-        }
-        pool.add(pointer);
-
-        // immediately clear pool if limit reached
-        if (pool.size >= 40) this.subscribeSubscriberPool(endpoint);
-        // otherwise, wait some time until subscribing
-        else setTimeout(()=>this.subscribeSubscriberPool(endpoint),2000);
-    }
-
-    private static subscribeSubscriberPool(endpoint:Endpoint) {
-        const pool = this.#subscriber_pool.get(endpoint);
-        if (!pool) return;
-        this.#subscriber_pool.delete(endpoint);
-
-        let datex = '';
-        const pointers = [];
-        for (const ptr of pool) {
-            datex += '#origin <==: ?;'
-            pointers.push(ptr)
-        }
-        logger.debug("subscription pool for " + endpoint + ", " + pointers.length + " pointers");
-        Runtime.datexOut([datex, pointers, {type:ProtocolDataType.UPDATE}], endpoint, undefined, false); 
     }
 
 
