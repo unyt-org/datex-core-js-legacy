@@ -60,6 +60,8 @@ export async function init() {
 		else Pointer.is_local = true;
 	})
 
+	// enable periodic pointer subscriber cleanup
+	Pointer.enablePeriodicSubscriberCleanup(10);
 
 
 	// set runtime endpoint

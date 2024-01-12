@@ -1119,8 +1119,22 @@ export class Pointer<T = any> extends Ref<T> {
     public static pointer_value_map  = new WeakMap<any, Pointer>(); // value -> pointer
     public static pointer_label_map  = new Map<string|number, Pointer>(); // label -> pointer
 
-    public static getAllPointers(): Pointer[] {
-        return [...this.pointers.values(), ...[...this.primitive_pointers.values()].map(r => r.deref()).filter(p=>!!p) as Pointer[]] 
+    /**
+     * @returns an array containing all primitive and non-primitive pointers
+     */
+    public static getAllPointers() {
+        return [...this.iterateAllPointers()] 
+    }
+
+    /**
+     * @returns an iterable that iterates over all primitive and non-primitive pointers
+     */
+    public static *iterateAllPointers(): Iterable<Pointer> {
+        yield* this.pointers.values();
+        for (const r of this.primitive_pointers.values()) {
+            const p = r.deref();
+            if (p) yield p;
+        }
     }
 
     /**
@@ -2970,6 +2984,8 @@ export class Pointer<T = any> extends Ref<T> {
     }
 
     public removeSubscriber(subscriber: Endpoint) {
+        logger.debug("removed subscriber " + subscriber + " for " + this.idString());
+
         this.subscribers.delete(subscriber);
         // no subscribers left
         if (this.subscribers.size == 0) {
@@ -2987,6 +3003,49 @@ export class Pointer<T = any> extends Ref<T> {
         }
     }
     
+    static #periodicSubscriberCleanup?: number
+
+    /**
+     * Enables a periodic cleanup of pointer subscribers that are no longer onlinea
+     * @param interval interval in seconds (default: 5 minutes)
+     */
+    public static enablePeriodicSubscriberCleanup(interval = 5 * 60) {
+        logger.debug(`periodic pointer subscriber cleanup enabled (interval: ${interval} seconds)`);
+        if (Pointer.#periodicSubscriberCleanup) clearInterval(Pointer.#periodicSubscriberCleanup);
+        Pointer.#periodicSubscriberCleanup = setInterval(() => this.cleanupSubscribers(), interval * 1000); 
+    }
+
+    /**
+     * Disables the periodic cleanup of pointer subscribers
+     */
+    public static disablePeriodicSubscriberCleanup() {
+        logger.debug("periodic pointer subscriber cleanup disabled");
+        if (Pointer.#periodicSubscriberCleanup) {
+            clearInterval(Pointer.#periodicSubscriberCleanup);
+            Pointer.#periodicSubscriberCleanup = undefined;
+        }
+    }
+
+    /**
+     * Removes all subscribers that are no longer online
+     */
+    public static async cleanupSubscribers() {
+        logger.debug("cleaning up subscribers");
+        const onlineCache = new Map<Endpoint, boolean>();
+        let removeCount = 0;
+        
+        for (const pointer of Pointer.iterateAllPointers()) {
+            for (const subscriber of pointer.subscribers) {
+                const isOnline = onlineCache.get(subscriber) ?? await subscriber.isOnline();
+                onlineCache.set(subscriber, isOnline);
+                if (!isOnline) {
+                    pointer.removeSubscriber(subscriber);
+                    removeCount++;
+                }
+            }
+        }
+        logger.debug("removed " + removeCount + " subscribers");
+    }
 
 
     // updates are from datex (external) and should not be distributed again or local update -> should be distributed to subscribers

@@ -4580,8 +4580,6 @@ export class Runtime {
                         if (!SCOPE.sender.equals(to)) throw new PointerError("Sender has no permission to stop sync pointer to another origin", SCOPE);
                     }
 
-                    logger.debug(SCOPE.sender + " unsubscribed from " + pointer.idString());
-
                     // not existing pointer or no access to this pointer
                     if (!pointer.value_initialized) throw new PointerError("Pointer does not exist", SCOPE)
                     // valid, remove subscriber
