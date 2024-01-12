@@ -1212,6 +1212,8 @@ export class Runtime {
             addPersistentListener(globalThis, "beforeunload", this.lastEndpointUnloadHandler)
         }
 
+        this.compileGoodByeMessage()
+
         if (client_type == "browser") localStorage['active_endpoints'] = JSON.stringify(endpoints)
 
         // update endpoint cookie
@@ -1231,9 +1233,15 @@ export class Runtime {
                         setCookie("datex-endpoint-validation", arrayBufferToBase64(await Crypto.sign(nonce)), endpoint_config.temporary ? 0 : undefined);
                     }
                 })()
-            }
-           
+            }  
         }
+    }
+
+    /**
+     * Compiles GOODBYE message with current endpoint instance as sender
+     */
+    static async compileGoodByeMessage() {
+        this.goodbyeMessage = <ArrayBuffer> await Compiler.compile("", [], {type:ProtocolDataType.GOODBYE, sign:true, flood:true, __routing_ttl:10})
     }
 
     static getActiveLocalStorageEndpoints() {
