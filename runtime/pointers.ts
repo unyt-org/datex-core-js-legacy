@@ -3044,7 +3044,7 @@ export class Pointer<T = any> extends Ref<T> {
                 }
             }
         }
-        logger.debug("removed " + removeCount + " subscribers");
+        logger.debug("removed " + removeCount + " subscriptions");
     }
 
 
