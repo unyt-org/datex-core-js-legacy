@@ -79,14 +79,14 @@ async function getModuleExports(path_or_specifier:URL|string, caller:string|unde
 			for (const exp of exports) {
 				if (exp == "default" && inject_default) continue;
 				const exists = !!exp && typeof module == "object" && exp in module;
-				const isFailure = !exists && (!ignoreFailure || (ignoreFailure instanceof Set && !ignoreFailure.has(exp)))
+				const ignoreForExp = ignoreFailure instanceof Set && ignoreFailure.has(exp);
 				
-				if (isFailure) {
+				if (!exists && !ignoreForExp) {
 					if (typeof path_or_specifier == "string") logger.error((caller ? caller + ": " : "") + "'" + exp + "' is currently not an exported value in " + path_or_specifier)
 					else logger.error((caller ? caller + ": " : "") + "'" + exp + "' is currently not an exported value in module " + path_or_specifier + " - restart might be required")
 				}
-				// only add if exists or ignoreFailure is not enabled
-				if (isFailure) {
+				// only add if exists
+				if (exists) {
 					const val = module[exp];
 					values.push([exp, val, exists, dontConvertValueToPointer(exp, val)]);
 				}
