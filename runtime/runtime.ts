@@ -1811,14 +1811,19 @@ export class Runtime {
             if (header.type == ProtocolDataType.GOODBYE) {
                 if (header.signed) {
                     logger.debug("GOODBYE from " + header.sender)
-                    header.sender.setOnline(false)  
+                    header.sender.setOnline(false)
+                    Pointer.clearEndpointSubscriptions(header.sender)
                 }
                 else {
                     logger.error("ignoring unsigned GOODBYE message")
                 }
             }
             // other message, assume sender endpoint is online now
-            else header.sender.setOnline(true)   
+            else {
+                header.sender.setOnline(true)
+                // new login to network, reset previous subscriptions
+                if (header.type == ProtocolDataType.HELLO) Pointer.clearEndpointSubscriptions(header.sender)
+            }
         }
     }
 

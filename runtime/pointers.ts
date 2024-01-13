@@ -2958,6 +2958,8 @@ export class Pointer<T = any> extends Ref<T> {
         return this.canReadProperty(property_name) && (!this.sealed_properties || !this.sealed_properties.has(property_name));
     }
 
+    static #endpoint_subscriptions = new Map<Endpoint, Set<Pointer>>().setAutoDefault(Set);
+
     #subscribers?: Disjunction<Endpoint>
 
     public get subscribers() {
@@ -2995,6 +2997,9 @@ export class Pointer<T = any> extends Ref<T> {
 
         // update subscriber_cache
         Runtime.subscriber_cache?.getAuto(this.id).add(subscriber)
+
+        // add to endpoint subscriptions map
+        Pointer.#endpoint_subscriptions.getAuto(subscriber).add(this)
     }
 
     public removeSubscriber(subscriber: Endpoint) {
@@ -3015,15 +3020,21 @@ export class Pointer<T = any> extends Ref<T> {
         else {
             Runtime.subscriber_cache?.getAuto(this.id).delete(subscriber)
         }
+
+        // remove from endpoint subscriptions map
+        Pointer.#endpoint_subscriptions.get(subscriber)?.delete(this)
+        if (Pointer.#endpoint_subscriptions.get(subscriber)?.size == 0) {
+            Pointer.#endpoint_subscriptions.delete(subscriber)
+        }
     }
     
     static #periodicSubscriberCleanup?: number
 
     /**
      * Enables a periodic cleanup of pointer subscribers that are no longer onlinea
-     * @param interval interval in seconds (default: 5 minutes)
+     * @param interval interval in seconds (default: 15 minutes)
      */
-    public static enablePeriodicSubscriberCleanup(interval = 5 * 60) {
+    public static enablePeriodicSubscriberCleanup(interval = 15 * 60) {
         logger.debug(`periodic pointer subscriber cleanup enabled (interval: ${interval} seconds)`);
         if (Pointer.#periodicSubscriberCleanup) clearInterval(Pointer.#periodicSubscriberCleanup);
         Pointer.#periodicSubscriberCleanup = setInterval(() => this.cleanupSubscribers(), interval * 1000); 
@@ -3045,20 +3056,31 @@ export class Pointer<T = any> extends Ref<T> {
      */
     public static async cleanupSubscribers() {
         logger.debug("cleaning up subscribers");
-        const onlineCache = new Map<Endpoint, boolean>();
         let removeCount = 0;
-        
-        for (const pointer of Pointer.iterateAllPointers()) {
-            for (const subscriber of pointer.subscribers) {
-                const isOnline = onlineCache.get(subscriber) ?? await subscriber.isOnline();
-                onlineCache.set(subscriber, isOnline);
-                if (!isOnline) {
-                    pointer.removeSubscriber(subscriber);
-                    removeCount++;
-                }
+
+        for (const [endpoint, pointers] of Pointer.#endpoint_subscriptions) {
+            if (await endpoint.isOnline()) continue;
+            for (const pointer of pointers) {
+                pointer.removeSubscriber(endpoint);
+                removeCount++;
             }
         }
+
         logger.debug("removed " + removeCount + " subscriptions");
+    }
+
+    /**
+     * Removes all subscriptions for an endpoint
+     */
+    public static clearEndpointSubscriptions(endpoint: Endpoint) {
+        let removeCount = 0;
+
+        for (const pointer of Pointer.#endpoint_subscriptions.get(endpoint) ?? []) {
+            pointer.removeSubscriber(endpoint);
+            removeCount++;
+        }
+
+        if (removeCount) console.log("removed " + removeCount + " subscriptions for " + endpoint);
     }
 
 
