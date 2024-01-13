@@ -2083,7 +2083,6 @@ export class Pointer<T = any> extends Ref<T> {
 
         // don't get value, just request subscription
         if (!get_value) {
-            console.warn("no not wtf");
             await Runtime.datexOut(['#origin <==: ?', [this]], endpoint) 
             return this;
         } 
