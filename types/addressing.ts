@@ -421,6 +421,8 @@ export class Endpoint extends Target {
 	 * @param online 
 	 */
 	public setOnline(online = true) {
+		if (this.#current_online === online) return; // no change
+		
 		this.#online = new Promise(resolve => resolve(online));
 		this.#current_online = online;
 		if (this.#onlinePointer) this.#onlinePointer.val = online;
@@ -468,7 +470,8 @@ export class Endpoint extends Target {
 	 * Resets the current online state cache after some time (Endpoint.cache_life_offline/Endpoint.cache_life_online)
 	 */
 	#resetOnlineCache() {
-		setTimeout(()=>this.#online=undefined, this.#current_online ? Endpoint.cache_life_online : Endpoint.cache_life_offline);
+		console.log("trigger reset " + this)
+		setTimeout(()=>{console.log("> reset " + this);this.#online=undefined}, this.#current_online ? Endpoint.cache_life_online : Endpoint.cache_life_offline);
 	}
 
 
