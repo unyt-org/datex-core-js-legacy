@@ -2133,7 +2133,6 @@ export class Pointer<T = any> extends Ref<T> {
     private static observeOriginOnline(origin: Endpoint, ptrId: string) {
 
         const handler = async function(online: boolean) {
-            console.warn("state change " + ptrId + " - " + origin, online)
             if (online) return;
 
             const ptr = Pointer.get(ptrId);
