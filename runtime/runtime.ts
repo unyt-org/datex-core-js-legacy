@@ -1797,6 +1797,27 @@ export class Runtime {
     }
 
     /**
+     * Updates the online state of the sender endpoint of an incoming DXB message
+     * @param header DXB header of incoming message
+     */
+    private static updateEndpointOnlineState(header: dxb_header) {
+        if (header.sender) {
+            // received signed GOODBYE message -> endpoint is offline
+            if (header.type == ProtocolDataType.GOODBYE) {
+                if (header.signed) {
+                    logger.debug("GOODBYE from " + header.sender)
+                    header.sender.setOnline(false)  
+                }
+                else {
+                    logger.error("ignoring unsigned GOODBYE message")
+                }
+            }
+            // other message, assume sender endpoint is online now
+            else header.sender.setOnline(true)   
+        }
+    }
+
+    /**
      * handle incoming DATEX Binary
      * @param dxb DATEX Binary Message
      * @param last_endpoint the endpoint that the message was redirected from (to prevent recursive flooding)
@@ -1816,15 +1837,20 @@ export class Runtime {
             // e is [dxb_header, Error]
             //throw e
             console.error(e[1]??e)
-            this.handleScopeError(e[0], e[1]);
+            const header = e[0];
+            this.handleScopeError(header, e[1]);
+            this.updateEndpointOnlineState(header);
             return;
         }
+        
 
         // normal request
         if (res instanceof Array) {
 
             [header, data_uint8] = res;
             if (await this.checkDuplicate(header)) return header;
+
+            this.updateEndpointOnlineState(header);
 
             // + flood, exclude last_endpoint - don't send back in flooding tree
             if (header.routing && header.routing.flood) {
@@ -1834,6 +1860,8 @@ export class Runtime {
             // callback for header info
             if (header_callback instanceof globalThis.Function) header_callback(header);
 
+            // assume sender endpoint is online now  
+            if (header.sender) header.sender.setOnline(true)
         }
 
         // needs to be redirected 
@@ -2028,9 +2056,6 @@ export class Runtime {
             return;
         }
 
-        // assume sender endpoint is online now
-        if (header.sender && header.signed) header.sender.setOnline(true)
-
         // return error to sender (if request)
         if (header.type == ProtocolDataType.REQUEST) {
             // is not a DatexError -> convert to DatexError
@@ -2078,8 +2103,6 @@ export class Runtime {
         
         const unique_sid = header.sid+"-"+header.return_index;
         
-        // assume sender endpoint is online now
-        if (header.sender && header.signed) header.sender.setOnline(true)
 
         // return global result to sender (if request)
         if (header.type == ProtocolDataType.REQUEST) {
@@ -2126,8 +2149,6 @@ export class Runtime {
                     if (header.routing?.ttl)
                         header.routing.ttl--;
                     
-                    // set online to true (even if HELLO message not signed)
-                    header.sender.setOnline(true)
                     logger.debug("HELLO ("+header.sid+"/" + header.inc+ "/" + header.return_index + ") from " + header.sender +  ", keys "+(keys_updated?"":"not ")+"updated, ttl = " + header.routing?.ttl);
                 }
                 catch (e) {
@@ -2135,20 +2156,12 @@ export class Runtime {
                 }
             }
             else {
-                // set online to true (even if HELLO message not signed)
-                header.sender.setOnline(true)
                 logger.debug("HELLO from " + header.sender +  ", no keys, ttl = " + header.routing?.ttl);
             }
         }
 
         else if (header.type == ProtocolDataType.GOODBYE) {
-            if (header.signed && header.sender) {
-                logger.debug("GOODBYE from " + header.sender)
-                header.sender.setOnline(false)
-            }
-            else {
-                logger.error("ignoring unsigned GOODBYE message")
-            }
+            
         }
 
         else if (header.type == ProtocolDataType.TRACE) {

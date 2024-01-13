@@ -2074,22 +2074,33 @@ export class Pointer<T = any> extends Ref<T> {
         if (this.#subscribed) {
             return this;
         }
-        
+
         const endpoint = override_endpoint ?? this.origin;
         // logger.debug("subscribing to " + this.idString() + ", origin = " +  this.origin +  (this.origin!=endpoint ? ", requesting from: " + endpoint : '') + ', get value: ' + get_value);
         if (this.origin==endpoint) logger.debug `subscribing to #color(65, 102, 238)${this.idString()}, origin: ${this.origin.toString()}${get_value?', getting value':''}`
         else logger.debug `subscribing to #color(65, 102, 238)${this.idString()}, origin: ${this.origin.toString()}, request: ${endpoint.toString()}${get_value?', getting value':''}`
 
 
-        const pointer_value = await Runtime.datexOut(['#origin <== ?', [this]], endpoint) 
-        if (pointer_value === VOID) { // TODO: could be allowed, but is currently considered a bug
-            throw new RuntimeError("pointer value "+this.idString()+" was resolved to void");
+        // don't get value, just request subscription
+        if (!get_value) {
+            console.warn("no not wtf");
+            await Runtime.datexOut(['#origin <==: ?', [this]], endpoint) 
+            return this;
+        } 
+
+        // subscribe and get latest value
+        else {
+            const pointer_value = await Runtime.datexOut(['#origin <== ?', [this]], endpoint) 
+            if (pointer_value === VOID) { // TODO: could be allowed, but is currently considered a bug
+                throw new RuntimeError("pointer value "+this.idString()+" was resolved to void");
+            }
+            
+            this.finalizeSubscribe(override_endpoint, keep_pointer_origin)
+
+            if (!this.#loaded) return this.setValue(pointer_value); // set value
+            else return this;
         }
         
-        this.finalizeSubscribe(override_endpoint, keep_pointer_origin)
-
-        if (!this.#loaded) return this.setValue(pointer_value); // set value
-        else return this;
     }
 
 
@@ -2120,7 +2131,11 @@ export class Pointer<T = any> extends Ref<T> {
      * @param ptrId 
      */
     private static observeOriginOnline(origin: Endpoint, ptrId: string) {
+
         const handler = async function(online: boolean) {
+            console.warn("state change " + ptrId + " - " + origin, online)
+            if (online) return;
+
             const ptr = Pointer.get(ptrId);
             // pointer no longer exists, unobserve
             if (!ptr) {

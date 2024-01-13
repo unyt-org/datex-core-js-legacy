@@ -403,7 +403,7 @@ export class Endpoint extends Target {
 			return this.#onlinePointer;
 		const interval = setInterval(()=>this.isOnline(), 10_000);
 		this.isOnline();
-		this.#onlinePointer = $$(this.#current_online ?? false);
+		this.#onlinePointer = $$(this.#current_online ?? false) as Pointer<boolean>;
 		this.#onlinePointer.onGargabeCollection(()=> clearInterval(interval));
 		return this.#onlinePointer;
 	}
