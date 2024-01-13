@@ -2187,8 +2187,8 @@ export class Compiler {
                 SCOPE.options.preemptive_pointer_init !== false && // preemptive_pointer_init enabled
                 action_type == ACTION_TYPE.GET && // is get
                 Runtime.endpoint.equals(pointer_origin) &&  // is own pointer
-                SCOPE.options.to != Runtime.endpoint && // not sending to self
-                // TODO: enable - currently not useful because this prevents preemptive loading from working after frontend reload, because the endpoint is still considered a subscriber
+                SCOPE.options.to != Runtime.endpoint // not sending to self
+                // && TODO: enable - currently not useful because this prevents preemptive loading from working after frontend reload, because the endpoint is still considered a subscriber
                 // !Pointer.get(id)?.subscribers?.has(singleReceiver) // receiver is subscribed to pointer - assume it already has the current pointer value
             ) {
                 return Compiler.builder.addPreemptivePointer(SCOPE, id)
