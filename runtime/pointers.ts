@@ -3080,7 +3080,7 @@ export class Pointer<T = any> extends Ref<T> {
             removeCount++;
         }
 
-        if (removeCount) console.log("removed " + removeCount + " subscriptions for " + endpoint);
+        if (removeCount) logger.debug("removed " + removeCount + " subscriptions for " + endpoint);
     }
 
 
