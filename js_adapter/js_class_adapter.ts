@@ -419,18 +419,17 @@ export class Decorators {
                 else if (original_class[METADATA]?.[Decorators.FORCE_TYPE]?.constructor) type = original_class[METADATA]?.[Decorators.FORCE_TYPE]?.constructor
                 else type = Type.get("ext", original_class.name);
 
+                let callerFile:string|undefined;
+
                 if (client_type == "deno" && type.namespace !== "std") {
-                    const callerFile = getCallerInfo()?.[2]?.file;
+                    callerFile = getCallerInfo()?.[2]?.file ?? undefined;
                     if (!callerFile) {
                         logger.error("Could not determine JS module URL for type '" + type + "'")
-                    }
-                    else {
-                        type.jsTypeDefModule = callerFile;
                     }
                 }
                 
                 // return new templated class
-                return createTemplateClass(original_class, type);
+                return createTemplateClass(original_class, type, true, true, callerFile);
             }
           
         }
@@ -1020,7 +1019,7 @@ function _old_publicStaticClass(original_class:Class) {
 
 const templated_classes = new Map<Function, Function>() // original class, templated class
 
-export function createTemplateClass(original_class:{ new(...args: any[]): any; }, type:Type, sync = true, add_js_interface = true){
+export function createTemplateClass(original_class:{ new(...args: any[]): any; }, type:Type, sync = true, add_js_interface = true, callerFile?:string){
 
     if (templated_classes.has(original_class)) return templated_classes.get(original_class);
 
@@ -1033,6 +1032,10 @@ export function createTemplateClass(original_class:{ new(...args: any[]): any; }
             proxify_children: true, // proxify children per default
             is_normal_object: true, // handle like a normal object
         });
+    }
+
+    if (callerFile) {
+        type.jsTypeDefModule = callerFile;
     }
 
 

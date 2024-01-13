@@ -593,6 +593,11 @@ export class Runtime {
 
         if (url_string.toString().startsWith("route:") && window.location?.origin) url_string = new URL(url_string.toString().replace("route:", ""), window.location.origin)
 
+        // catch fatal route errors here
+        if (url_string.toString().startsWith("fatal:")) {
+            throw new Error(url_string.toString().replace("fatal:",""))
+        }
+
         const url = url_string instanceof URL ? url_string : new URL(url_string, baseURL);
         url_string = url.toString();
 
