@@ -2145,9 +2145,13 @@ export class Compiler {
             SCOPE.b_index += Uint32Array.BYTES_PER_ELEMENT; // leave space for JMP
             SCOPE.uint8.set(new Uint8Array(compiled), SCOPE.b_index)
             SCOPE.b_index += compiled.byteLength;
-
         },
 
+        insertInitBlockPlaceholder: (SCOPE: compiler_scope|extract_var_scope) => {
+            const insertIndex = SCOPE.b_index; 
+            SCOPE.b_index += Uint32Array.BYTES_PER_ELEMENT; // leave space for JMP
+            return insertIndex
+        },
 
         addValVarRefDeclaration: async (name:string, type:'val'|'var'|'ref'|'const', SCOPE:compiler_scope, init = false, init_brackets = false) => {
             const INNER_SCOPE = SCOPE.inner_scope;
@@ -2215,23 +2219,10 @@ export class Compiler {
                     return Compiler.builder.addInitBlock(<compiler_scope>SCOPE, init_brackets) // async
                 }
                 else if (transform_scope) {
-                    const temp_scope = <extract_var_scope>{
-                        b_index: 0,
-                        buffer: new ArrayBuffer(400),
-                        inner_scope: {},
-                        dynamic_indices: [],
-                        inserted_values: new Map(),
-                        preemptive_pointers: new Map(),
-                        assignment_end_indices: new Set(),
-                        options: SCOPE.options
-                    }
-                    temp_scope.uint8 = new Uint8Array(temp_scope.buffer);
-                    temp_scope.data_view = new DataView(temp_scope.buffer);
-                    Compiler.builder.insert_transform_scope(temp_scope, transform_scope);
-                    const compiled = temp_scope.uint8.slice(0,temp_scope.b_index)
-
-                    Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+compiled.byteLength+1, SCOPE);
-                    Compiler.builder.insertInitBlock(SCOPE, compiled.buffer);
+                    const insertIndex = Compiler.builder.insertInitBlockPlaceholder(SCOPE);
+                    Compiler.builder.insert_transform_scope(SCOPE, transform_scope);
+                    const size = SCOPE.b_index-insertIndex-Uint32Array.BYTES_PER_ELEMENT;
+                    SCOPE.data_view.setUint32(insertIndex, size, true);
                 }
                 else return Compiler.builder.addInitBlockForValue(SCOPE, value) // sync
             }
