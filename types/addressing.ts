@@ -403,20 +403,33 @@ export class Endpoint extends Target {
 			return this.#onlinePointer;
 		const interval = setInterval(()=>this.isOnline(), 10_000);
 		this.isOnline();
-		this.#onlinePointer = $$(this.#current_online ?? false);
+		this.#onlinePointer = $$(this.#current_online ?? false) as Pointer<boolean>;
 		this.#onlinePointer.onGargabeCollection(()=> clearInterval(interval));
 		return this.#onlinePointer;
 	}
 
+
+	// max allowed time for DATEX online ping response
+	static max_ping_response_time = 1000;
+	// online state cache reload time if currently online/offline
+	static cache_life_offline = 3_000;
+	static cache_life_online = 15_000;
+
 	/**
 	 * Override online state (e.g. when retrieving a GOODBYE or other message)
+	 * Gets reset after some time (Endpoint.cache_life_offline/Endpoint.cache_life_online)
 	 * @param online 
 	 */
 	public setOnline(online = true) {
+		if (this.#current_online === online) return; // no change
+
 		this.#online = new Promise(resolve => resolve(online));
 		this.#current_online = online;
 		if (this.#onlinePointer) this.#onlinePointer.val = online;
+		// reset overriden online state after some time
+		this.#resetOnlineCache();
 	}
+
 
 	// returns (cached) online status
 	public async isOnline(): Promise<boolean> {
@@ -424,9 +437,6 @@ export class Endpoint extends Target {
 		
 		if (this.#online != undefined) return this.#online;
 		
-		const timeout = 1000; // 500ms
-		const cache_life_offline = 3_000; // reload cache faster if offline
-		const cache_life_online = 15_000;
 
 		const prev_online = this.#current_online;
 
@@ -435,7 +445,7 @@ export class Endpoint extends Target {
 
 		try {
 			// ping
-			await Runtime.datexOut(['', [], {sign:false, encrypt:false}], this, undefined, true, false, undefined, false, undefined, timeout);
+			await Runtime.datexOut(['"ping"', [], {sign:false, encrypt:false}], this, undefined, true, false, undefined, false, undefined, Endpoint.max_ping_response_time);
 			resolve_online!(this.#current_online = true)
 		}
 		// could not reach endpoint
@@ -451,9 +461,16 @@ export class Endpoint extends Target {
 		}
 
 		// clear online state after some time
-		setTimeout(()=>this.#online=undefined, this.#current_online ? cache_life_online : cache_life_offline);
+		this.#resetOnlineCache();
 
 		return this.#online;
+	}
+
+	/**
+	 * Resets the current online state cache after some time (Endpoint.cache_life_offline/Endpoint.cache_life_online)
+	 */
+	#resetOnlineCache() {
+		setTimeout(() => this.#online=undefined, this.#current_online ? Endpoint.cache_life_online : Endpoint.cache_life_offline);
 	}
 
 

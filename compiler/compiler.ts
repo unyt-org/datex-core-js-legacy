@@ -2176,8 +2176,19 @@ export class Compiler {
             // insert preemptive pointer
             const id_buffer = typeof id == "string" ? hex2buffer(id, Pointer.MAX_POINTER_ID_SIZE, true) : id;
             const pointer_origin = (id_buffer[0]==BinaryCode.ENDPOINT || id_buffer[0]==BinaryCode.PERSON_ALIAS || id_buffer[0]==BinaryCode.INSTITUTION_ALIAS) ? <IdEndpoint> Target.get(id_buffer.slice(1,19), id_buffer.slice(19,21), id_buffer[0]) : null;
-            // preemptive_pointer_init enabled, is get, is own pointer, not sending to self
-            if (pointer_origin && SCOPE.options.preemptive_pointer_init !== false && action_type == ACTION_TYPE.GET && Runtime.endpoint.equals(pointer_origin) && SCOPE.options.to != Runtime.endpoint) {
+            
+            const singleReceiver = 
+                (SCOPE.options.to instanceof Endpoint && SCOPE.options.to) ||
+                (SCOPE.options.to instanceof Disjunction && SCOPE.options.to.size == 1 && [...SCOPE.options.to][0] instanceof Endpoint && [...SCOPE.options.to][0])
+
+            if (
+                pointer_origin && 
+                SCOPE.options.preemptive_pointer_init !== false && // preemptive_pointer_init enabled
+                action_type == ACTION_TYPE.GET && // is get
+                Runtime.endpoint.equals(pointer_origin) &&  // is own pointer
+                SCOPE.options.to != Runtime.endpoint && // not sending to self
+                !Pointer.get(id)?.subscribers?.has(singleReceiver) // receiver is subscribed to pointer - assume it already has the current pointer value
+            ) {
                 return Compiler.builder.addPreemptivePointer(SCOPE, id)
             }
 
@@ -2198,6 +2209,7 @@ export class Compiler {
             Compiler.builder.addPointerBodyByID(id, SCOPE);
             
             if (action_type == ACTION_TYPE.INIT) {
+                
                 if (value == NOT_EXISTING) {
                     if (!SCOPE.datex) throw new CompilerError("cannot insert init block in scope, missing datex source code");
                     return Compiler.builder.addInitBlock(<compiler_scope>SCOPE, init_brackets) // async
@@ -2255,6 +2267,24 @@ export class Compiler {
                 Compiler.builder.addPointerNormal(SCOPE, id, ACTION_TYPE.GET); // sync
                 Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+1, SCOPE);
                 SCOPE.uint8[SCOPE.b_index++] = BinaryCode.SUBSCOPE_END;
+
+                // auto add receivers as subscribers for preemptively loaded pointers
+                // they don't have to explicitly subscribe to the pointer after it was loaded
+                if (ptr.is_origin && SCOPE.options.to) {
+                    for (const endpoint of Logical.collapse(SCOPE.options.to, Target)) {
+                        // should not happen
+                        if (!(endpoint instanceof Endpoint)) {
+                            logger.error("Not a valid endpoint:" + endpoint);
+                            continue;
+                        }
+                        // subscribing to own pointers is not allowed
+                        // should not happen because pointers are not sent with preemptive loading to own endpoint anyway
+                        if (Runtime.endpoint.equals(endpoint)) continue;
+                        logger.debug("auto subscribing " + endpoint + " to " + ptr.idString());
+                        ptr.addSubscriber(endpoint);
+                    }
+                }
+
             }
             // just add normal pointer
             else {

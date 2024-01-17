@@ -593,6 +593,11 @@ export class Runtime {
 
         if (url_string.toString().startsWith("route:") && window.location?.origin) url_string = new URL(url_string.toString().replace("route:", ""), window.location.origin)
 
+        // catch fatal route errors here
+        if (url_string.toString().startsWith("fatal:")) {
+            throw new Error(url_string.toString().replace("fatal:",""))
+        }
+
         const url = url_string instanceof URL ? url_string : new URL(url_string, baseURL);
         url_string = url.toString();
 
@@ -1212,6 +1217,8 @@ export class Runtime {
             addPersistentListener(globalThis, "beforeunload", this.lastEndpointUnloadHandler)
         }
 
+        this.compileGoodByeMessage()
+
         if (client_type == "browser") localStorage['active_endpoints'] = JSON.stringify(endpoints)
 
         // update endpoint cookie
@@ -1231,9 +1238,15 @@ export class Runtime {
                         setCookie("datex-endpoint-validation", arrayBufferToBase64(await Crypto.sign(nonce)), endpoint_config.temporary ? 0 : undefined);
                     }
                 })()
-            }
-           
+            }  
         }
+    }
+
+    /**
+     * Compiles GOODBYE message with current endpoint instance as sender
+     */
+    static async compileGoodByeMessage() {
+        this.goodbyeMessage = <ArrayBuffer> await Compiler.compile("", [], {type:ProtocolDataType.GOODBYE, sign:true, flood:true, __routing_ttl:10})
     }
 
     static getActiveLocalStorageEndpoints() {
@@ -1789,6 +1802,32 @@ export class Runtime {
     }
 
     /**
+     * Updates the online state of the sender endpoint of an incoming DXB message
+     * @param header DXB header of incoming message
+     */
+    private static updateEndpointOnlineState(header: dxb_header) {
+        if (header.sender) {
+            // received signed GOODBYE message -> endpoint is offline
+            if (header.type == ProtocolDataType.GOODBYE) {
+                if (header.signed) {
+                    logger.debug("GOODBYE from " + header.sender)
+                    header.sender.setOnline(false)
+                    Pointer.clearEndpointSubscriptions(header.sender)
+                }
+                else {
+                    logger.error("ignoring unsigned GOODBYE message")
+                }
+            }
+            // other message, assume sender endpoint is online now
+            else {
+                header.sender.setOnline(true)
+                // new login to network, reset previous subscriptions
+                if (header.type == ProtocolDataType.HELLO) Pointer.clearEndpointSubscriptions(header.sender)
+            }
+        }
+    }
+
+    /**
      * handle incoming DATEX Binary
      * @param dxb DATEX Binary Message
      * @param last_endpoint the endpoint that the message was redirected from (to prevent recursive flooding)
@@ -1808,15 +1847,20 @@ export class Runtime {
             // e is [dxb_header, Error]
             //throw e
             console.error(e[1]??e)
-            this.handleScopeError(e[0], e[1]);
+            const header = e[0];
+            this.handleScopeError(header, e[1]);
+            this.updateEndpointOnlineState(header);
             return;
         }
+        
 
         // normal request
         if (res instanceof Array) {
 
             [header, data_uint8] = res;
             if (await this.checkDuplicate(header)) return header;
+
+            this.updateEndpointOnlineState(header);
 
             // + flood, exclude last_endpoint - don't send back in flooding tree
             if (header.routing && header.routing.flood) {
@@ -1826,6 +1870,8 @@ export class Runtime {
             // callback for header info
             if (header_callback instanceof globalThis.Function) header_callback(header);
 
+            // assume sender endpoint is online now  
+            if (header.sender) header.sender.setOnline(true)
         }
 
         // needs to be redirected 
@@ -2020,9 +2066,6 @@ export class Runtime {
             return;
         }
 
-        // assume sender endpoint is online now
-        if (header.sender && header.signed) header.sender.setOnline(true)
-
         // return error to sender (if request)
         if (header.type == ProtocolDataType.REQUEST) {
             // is not a DatexError -> convert to DatexError
@@ -2070,8 +2113,6 @@ export class Runtime {
         
         const unique_sid = header.sid+"-"+header.return_index;
         
-        // assume sender endpoint is online now
-        if (header.sender && header.signed) header.sender.setOnline(true)
 
         // return global result to sender (if request)
         if (header.type == ProtocolDataType.REQUEST) {
@@ -2118,8 +2159,6 @@ export class Runtime {
                     if (header.routing?.ttl)
                         header.routing.ttl--;
                     
-                    // set online to true (even if HELLO message not signed)
-                    header.sender.setOnline(true)
                     logger.debug("HELLO ("+header.sid+"/" + header.inc+ "/" + header.return_index + ") from " + header.sender +  ", keys "+(keys_updated?"":"not ")+"updated, ttl = " + header.routing?.ttl);
                 }
                 catch (e) {
@@ -2127,20 +2166,12 @@ export class Runtime {
                 }
             }
             else {
-                // set online to true (even if HELLO message not signed)
-                header.sender.setOnline(true)
                 logger.debug("HELLO from " + header.sender +  ", no keys, ttl = " + header.routing?.ttl);
             }
         }
 
         else if (header.type == ProtocolDataType.GOODBYE) {
-            if (header.signed && header.sender) {
-                logger.debug("GOODBYE from " + header.sender)
-                header.sender.setOnline(false)
-            }
-            else {
-                logger.error("ignoring unsigned GOODBYE message")
-            }
+            
         }
 
         else if (header.type == ProtocolDataType.TRACE) {
@@ -3120,11 +3151,22 @@ export class Runtime {
                 for (const p of INNER_SCOPE.waiting_ptrs) {
                     try {
                         if (SCOPE.header.type==ProtocolDataType.UPDATE) p[0].excludeEndpointFromUpdates(SCOPE.sender); 
-                        if (typeof p[1] == "object" || p[1] == undefined) {  // is set / init
+                        const isSet = p[1] == undefined;
+                        const isInit = typeof p[1] == "object";
+                        if (isSet || isInit) {
                             const ptr = p[0].setValue(el);
-                            // remote pointer value was set - subscribe to updates per default
+
+                            // remote pointer value was set - handle subscription
                             if (!ptr.is_origin) {
-                                ptr.subscribeForPointerUpdates();
+                                // subscription was already added by pointer origin for preemptively loaded pointer, just finalize
+                                if (isInit) {
+                                    ptr.finalizeSubscribe()
+                                }
+                                // subscribe for updates at pointer origin
+                                else {
+                                    ptr.subscribeForPointerUpdates();
+                                }
+                                
                             }
                             // resolve
                             if (p[1]?.resolve) {
@@ -4507,28 +4549,14 @@ export class Runtime {
                 if (to instanceof Endpoint) {
                     if (!(pointer instanceof Pointer) || pointer.is_anonymous) throw new ValueError("sync expects a pointer value", SCOPE);
 
-                    // TODO also check pointer permission for 'to'
-
-                    // request sync endpoint is self, cannot subscribe to own pointers!
-                    if (Runtime.endpoint.equals(to)) {
-                        throw new PointerError("Cannot sync pointer with own origin", SCOPE);
-                    }
+                    
                     // remote sender, only allowed if endpoint equals sender
                     if (!Runtime.endpoint.equals(SCOPE.sender) /*remote sender*/ && !SCOPE.sender.equals(to) /** different endpoint than sender */) {
                         if (!SCOPE.sender.equals(to)) throw new PointerError("Sender has no permission to sync pointer to another origin", SCOPE);
                     }
 
-                    logger.debug(SCOPE.sender + " subscribed to " + pointer.idString());
-
-                    // not existing pointer or no access to this pointer
-                    // TODO check access permission
-                    // || (pointer.allowed_access && !pointer.allowed_access.test(SCOPE.sender))
-                    if (!pointer.value_initialized) throw new PointerError("Pointer does not exist", SCOPE)
-                    // valid, add subscriber
-                    else {
-                        pointer.addSubscriber(SCOPE.sender);
-                        if (!silent) INNER_SCOPE.active_value = await Runtime.cloneValue(pointer.val);
-                    }
+                    pointer.addSubscriber(SCOPE.sender);
+                    if (!silent) INNER_SCOPE.active_value = await Runtime.cloneValue(pointer.val);
 
                     // }
                     // // redirect to actual parent
@@ -4582,8 +4610,6 @@ export class Runtime {
                     if (!Runtime.endpoint.equals(SCOPE.sender) /*remote sender*/ && !SCOPE.sender.equals(to) /** different endpoint than sender */) {
                         if (!SCOPE.sender.equals(to)) throw new PointerError("Sender has no permission to stop sync pointer to another origin", SCOPE);
                     }
-
-                    logger.debug(SCOPE.sender + " unsubscribed from " + pointer.idString());
 
                     // not existing pointer or no access to this pointer
                     if (!pointer.value_initialized) throw new PointerError("Pointer does not exist", SCOPE)

@@ -59,7 +59,7 @@ export class Type<T = any> extends ExtensibleFunction {
 
     get jsTypeDefModule():string|URL|undefined {return this.#jsTypeDefModule}
     set jsTypeDefModule(url: string|URL) {
-        if (Type.#jsTypeDefModuleMapper) this.#jsTypeDefModule = Type.#jsTypeDefModuleMapper(url);
+        if (Type.#jsTypeDefModuleMapper) this.#jsTypeDefModule = Type.#jsTypeDefModuleMapper(url, this);
         else this.#jsTypeDefModule = url;
     }
 
@@ -78,9 +78,9 @@ export class Type<T = any> extends ExtensibleFunction {
     #proxify_children = false // proxify all (new) children of this type
     children_timeouts?: Map<string, number> // individual timeouts for children
     
-    static #jsTypeDefModuleMapper?: (url:string|URL) => string|URL|undefined
+    static #jsTypeDefModuleMapper?: (url:string|URLL, type: Type) => string|URL|undefined
     
-    static setJSTypeDefModuleMapper(fn:  (url:string|URL) => string|URL|undefined) {
+    static setJSTypeDefModuleMapper(fn:  (url:string|URL, type: Type) => string|URL|undefined) {
         this.#jsTypeDefModuleMapper = fn;
         // update existing typedef modules
         for (const type of this.types.values()) {

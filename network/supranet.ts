@@ -175,16 +175,13 @@ export class Supranet {
         Runtime.setMainNode(node);
 
         if (!connected) logger.error("connection failed")
-        else if (handleOnConnect) this.handleConnect();
-
-        this.#connected = connected;
+        else if (handleOnConnect) await this.handleConnect();
 
         // validate current keys against official public keys in network 
         // TODO: (does not work because response never reaches endpoint if valid endpoint already exists in network)
         // Crypto.validateOwnKeysAgainstNetwork();
 
-        // send goodbye on process close
-        Runtime.goodbyeMessage = <ArrayBuffer> await Datex.Compiler.compile("", [], {type:Datex.ProtocolDataType.GOODBYE, sign:true, flood:true, __routing_ttl:10})
+        this.#connected = connected;
 
         return connected;
     }
