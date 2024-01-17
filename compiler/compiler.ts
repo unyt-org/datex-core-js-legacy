@@ -310,6 +310,7 @@ export class Compiler {
     static MIN_INT_16 = -32_768;
 
     static MAX_UINT_16 = 65_535;
+    static MAX_UINT_32 = 4_294_967_295;
 
     static readonly signature_size = 96 // 256;
 
@@ -1681,13 +1682,13 @@ export class Compiler {
             SCOPE.uint8[SCOPE.b_index++] = i < 0 ? 0 : 1; // 0 for negative, 1 for positive (and 0)
 
             const bigint_buffer = Quantity.bigIntToBuffer(BigInt(i < 0 ? -i : i));
-            Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+(Uint16Array.BYTES_PER_ELEMENT*2)+bigint_buffer.byteLength, SCOPE);
+            Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+Uint32Array.BYTES_PER_ELEMENT+bigint_buffer.byteLength, SCOPE);
 
             // invalid bigint size
-            if (bigint_buffer.byteLength > Compiler.MAX_UINT_16) throw new CompilerError("Integer too big");
+            if (bigint_buffer.byteLength > Compiler.MAX_UINT_32) throw new CompilerError("Integer too big");
 
             // buffer size
-            SCOPE.data_view.setUint16(SCOPE.b_index, bigint_buffer.byteLength, true)
+            SCOPE.data_view.setUint32(SCOPE.b_index, bigint_buffer.byteLength, true)
             SCOPE.b_index+=Uint16Array.BYTES_PER_ELEMENT;
 
             // bigint

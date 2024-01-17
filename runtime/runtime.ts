@@ -6690,8 +6690,8 @@ export class Runtime {
                     const sign = SCOPE.buffer_views.uint8[SCOPE.current_index++] == 0 ? -1n : 1n;  // 0 for negative, 1 for positive (and 0)
 
                     // buffer size
-                    const size = SCOPE.buffer_views.data_view.getUint16(SCOPE.current_index, true)
-                    SCOPE.current_index+=Uint16Array.BYTES_PER_ELEMENT;
+                    const size = SCOPE.buffer_views.data_view.getUint32(SCOPE.current_index, true)
+                    SCOPE.current_index+=Uint32Array.BYTES_PER_ELEMENT;
                     
                     // bigint from buffer
                     const bigint_buffer = SCOPE.buffer_views.uint8.subarray(SCOPE.current_index, SCOPE.current_index+=size);
