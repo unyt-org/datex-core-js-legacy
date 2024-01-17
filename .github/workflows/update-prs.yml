@@ -13,7 +13,7 @@ jobs:
                     // Get a list of all issues created by the PR opener
                     // See: https://octokit.github.io/rest.js/#pagination
                     const creator = context.payload.sender.login
-                    const prs = gawait github.rest.request('GET /repos/{owner}/{repo}/pulls', {
+                    const prs = await github.rest.request('GET /repos/{owner}/{repo}/pulls', {
                         owner: context.repo.owner,
                         repo: context.repo.repo
                         headers: {
