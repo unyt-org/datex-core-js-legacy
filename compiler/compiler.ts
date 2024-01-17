@@ -1683,6 +1683,9 @@ export class Compiler {
             const bigint_buffer = Quantity.bigIntToBuffer(BigInt(i < 0 ? -i : i));
             Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+(Uint16Array.BYTES_PER_ELEMENT*2)+bigint_buffer.byteLength, SCOPE);
 
+            // invalid bigint size
+            if (bigint_buffer.byteLength > Compiler.MAX_UINT_16) throw new CompilerError("Integer too big");
+
             // buffer size
             SCOPE.data_view.setUint16(SCOPE.b_index, bigint_buffer.byteLength, true)
             SCOPE.b_index+=Uint16Array.BYTES_PER_ELEMENT;
