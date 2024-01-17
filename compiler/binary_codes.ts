@@ -183,7 +183,7 @@ export enum BinaryCode {
 
     // values 0xc0 - 0xdf
 
-    TEXT              = 0xc0,
+    TEXT                = 0xc0,
     INT_8               = 0xc1, // byte
     INT_16              = 0xc2, 
     INT_32              = 0xc3,
@@ -198,6 +198,7 @@ export enum BinaryCode {
     QUANTITY            = 0xcc,
     FLOAT_AS_INT_32     = 0xcd,
     FLOAT_AS_INT_8      = 0xde,
+    BIG_INT             = 0xdf,
 
     SHORT_TEXT          = 0xce, // string with max. 255 characters
 

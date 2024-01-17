@@ -4,9 +4,9 @@ The DATEX JS Library supports multi-threading with [Workers](https://developer.m
 DATEX-compatible values like functions or complex objects can also be shared between threads.
 The library provides a way to use threads in a type-safe way.
 
-## Usage
+## Module-level threads
 
-The following example demonstrates the creation of a new thread with exports that can be accessed
+The following example demonstrates the creation of a new thread from a module with exports that can be accessed
 from the parent thread.
 
 ```ts
@@ -28,7 +28,7 @@ const res = await thread.exportedFunction(1,2);
 thread.exportedValue.push(4);
 ```
 
-## Thread disposal
+### Thread disposal
 
 When a new thread is created with the `using` specifier, it is automatically disposed on scope exit.
 Alternatively, you can explicitly dispose a thread with the `disposeThread` function:
@@ -44,11 +44,12 @@ disposeThread(thread)
 ```
 
 
-## Immediately evaluated tasks
+## Task threads
 
-Instead of declaring a thread module in a separate file, a function can be passed to `run` to be executed in a new thread immediately.
-Values from the parent scope can be passed to the thread by explicitly adding them to the `use()` declaration at the beginning of the
-function body.
+### Running task threads
+
+Instead of declaring a thread module in a separate file, a task function can be passed to `run` to be executed in a new thread immediately.
+Values from the parent scope can be passed to the thread by explicitly adding them to the `use()` declaration at the beginning of the function body.
 
 In the following example, a function calculates the nth fibonacci number in a thread.
 The `n` index variable is accessed from the parent scope.
@@ -56,7 +57,7 @@ The `n` index variable is accessed from the parent scope.
 ```ts
 import { run } from "datex-core-legacy/threads/threads.ts";
 
-let n = 4000n;
+let n = 10000n;
 
 // calculate fibonacci number in a separate thread
 let fibonacciNumber = await run(() => {
@@ -66,7 +67,7 @@ let fibonacciNumber = await run(() => {
   let n2 = 1n;
   let nextTerm = 0n;
 
-  for (let i = 1; i < n; i++) {
+  for (let i = 0; i < n; i++) {
       console.log(n1);
       nextTerm = n1 + n2;
       n1 = n2;
@@ -76,11 +77,74 @@ let fibonacciNumber = await run(() => {
 });
 ```
 
-> [!WARNING]
-> The maximum bigint value currently supported by DATEX is 18,446,744,073,709,551,615 (Maximum value for a Uint64)
-> When calculating larger fibonacci values, an overflow will occur.
 
-## Logging
+### Running multiple concurrent tasks
+
+With the `runConcurrent` functions, multiple threads can be spawned to run a task concurrently.
+Per default, `runConcurrent` returns an array of Promises containing the results of all the threads.
+
+```ts
+import { runConcurrent } from "datex-core-legacy/threads/threads.ts";
+
+// spawn 10 threads to find a random number >= 0.999
+// 'results' is an Array<Promise<number>>
+let results = await runConcurrent(() => {
+  let value = 0
+  while (value < 0.999) {
+    value = Math.random();
+  }
+  return value;
+}, 10);
+```
+
+Optionally, a Promise mapping function (e.g. `Promise.all`) can be passed to `runConcurrent` to return a mapped result:
+
+```ts
+import { runConcurrent } from "datex-core-legacy/threads/threads.ts";
+
+// spawn 10 threads to find a random number >= 0.999
+// and stop if one thread is finished
+// 'result' is a number
+let result = await runConcurrent(() => {
+  let value = 0;
+  while (value < 0.999) {
+    value = Math.random();
+  }
+  return value;
+}, 10, Promise.any);
+```
+
+```ts
+const sharedSet = $$ (new Set());
+
+const results = await runConcurrent(
+  // i is the index of the current task
+  i => {
+    use (sharedSet);
+    sharedSet.add(i);
+    return i;
+  }, 
+  // spawn 10 threads
+  10, 
+  // collapse the returned values with Promise.all
+  Promise.all
+)
+
+console.log(results) // [0,1,2,3,4,5,6,7,8,9]
+console.log(sharedSet) // Set {0,1,2,3,4,5,6,7,8,9} (not necessarily in this order)
+```
+
+
+<!-- > [!NOTE]
+> Passing `Promise.any` to `runConcurrent` produces the same outcome as calling 
+> `Promise.any` on the result returned from `runConcurrent`.
+> 
+> However, there is a significant performance improvement when passing `Promise.any` as a 
+> parameter to `runConcurrent`: When one of the threads returns a result, 
+> all other threads are automatically prematurely terminated, instead of continuing until they are
+> finished.  -->
+
+### Logging
 
 The `console` object from the parent context can be accessed with a `use()` declaration like any other value inside a task function:
 
@@ -141,7 +205,7 @@ The `run` function can also be used to run a DATEX Script in a separate thread:
 ```ts
 import { run } from "datex-core-legacy/threads/threads.ts";
 
-let n = 4000n;
+let n = 10000n;
 
 // calculate fibonacci number in a separate thread
 let fibonacciNumber = await run `
@@ -162,75 +226,9 @@ let fibonacciNumber = await run `
 
 Values from the parent scope can be injected in template string as with the [`datex` function](./5%20The%20DATEX%20API.md#the-datex-template-function)
 
-### Running multiple concurrent tasks
-
-With the `runConcurrent` functions, multiple threads can be spawned to run a task concurrently.
-Per default, `runConcurrent` returns an array of Promises containing the results of all the threads.
-
-Optionally, a Promise mapping function (e.g. `Promise.all`) can be passed to `runConcurrent` to return a mapped result
 
 
-```ts
-import { runConcurrent } from "datex-core-legacy/threads/threads.ts";
-
-// spawn 10 threads to find a random number >= 0.999
-// 'results' is an Array<Promise<number>>
-let results = await runConcurrent(() => {
-  let value = 0
-  while (value < 0.999) {
-    value = Math.random();
-  }
-  return value;
-}, 10);
-```
-
-```ts
-import { runConcurrent } from "datex-core-legacy/threads/threads.ts";
-
-// spawn 10 threads to find a random number >= 0.999
-// and stop if one thread is finished
-// 'result' is a number
-let result = await runConcurrent(() => {
-  let value = 0;
-  while (value < 0.999) {
-    value = Math.random();
-  }
-  return value;
-}, 10, Promise.any);
-```
-
-```ts
-const sharedSet = $$ (new Set());
-
-const results = await runConcurrent(
-  // i is the index of the current task
-  i => {
-    use (sharedSet);
-    sharedSet.add(i);
-    return i;
-  }, 
-  // spawn 10 threads
-  10, 
-  // collapse the returned values with Promise.all
-  Promise.all
-)
-
-console.log(results) // [0,1,2,3,4,5,6,7,8,9]
-console.log(sharedSet) // Set {0,1,2,3,4,5,6,7,8,9} (not necessarily in this order)
-```
-
-
-<!-- > [!NOTE]
-> Passing `Promise.any` to `runConcurrent` produces the same outcome as calling 
-> `Promise.any` on the result returned from `runConcurrent`.
-> 
-> However, there is a significant performance improvement when passing `Promise.any` as a 
-> parameter to `runConcurrent`: When one of the threads returns a result, 
-> all other threads are automatically prematurely terminated, instead of continuing until they are
-> finished.  -->
-
-
-## Configuration
+### Configuration
 
 The behaviour for task threads spawned with `run` or `runConcurrent` can be configured
 with the `configure` function:
