@@ -6693,6 +6693,10 @@ export class Runtime {
                     const size = SCOPE.buffer_views.data_view.getUint32(SCOPE.current_index, true)
                     SCOPE.current_index+=Uint32Array.BYTES_PER_ELEMENT;
                     
+                    /** wait for buffer */
+                    if (SCOPE.current_index+size > SCOPE.buffer_views.uint8.byteLength) return Runtime.runtime_actions.waitForBuffer(SCOPE);
+                    /********************/
+
                     // bigint from buffer
                     const bigint_buffer = SCOPE.buffer_views.uint8.subarray(SCOPE.current_index, SCOPE.current_index+=size);
                     const bigint = Quantity.bufferToBigInt(bigint_buffer) * sign;

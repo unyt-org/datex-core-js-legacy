@@ -1689,7 +1689,7 @@ export class Compiler {
 
             // buffer size
             SCOPE.data_view.setUint32(SCOPE.b_index, bigint_buffer.byteLength, true)
-            SCOPE.b_index+=Uint16Array.BYTES_PER_ELEMENT;
+            SCOPE.b_index+=Uint32Array.BYTES_PER_ELEMENT;
 
             // bigint
             SCOPE.uint8.set(bigint_buffer, SCOPE.b_index);
