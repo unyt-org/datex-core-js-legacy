@@ -1,5 +1,8 @@
+name: Refresh PRs
 on:
   push:
+    branches:
+      - main
     
 permissions:
     pull-requests: write
