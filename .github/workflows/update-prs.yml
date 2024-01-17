@@ -15,7 +15,7 @@ jobs:
                     const creator = context.payload.sender.login
                     const prs = await github.rest.request('GET /repos/{owner}/{repo}/pulls', {
                         owner: context.repo.owner,
-                        repo: context.repo.repo
+                        repo: context.repo.repo,
                         headers: {
                             'X-GitHub-Api-Version': '2022-11-28'
                         }
