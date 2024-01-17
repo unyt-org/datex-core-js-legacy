@@ -1,0 +1,14 @@
+on:
+  push:
+    
+
+jobs:
+      trigger-pr-update:
+          runs-on: ubuntu-latest
+  
+          steps:
+            - name: Setup Node.js
+              uses: actions/setup-node@v3
+
+            - name: Run JavaScript file
+              run: node ./update-prs.js
