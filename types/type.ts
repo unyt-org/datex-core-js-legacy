@@ -695,12 +695,12 @@ export class Type<T = any> extends ExtensibleFunction {
     }
 
     public static assertMatches<T extends Type>(value:RefOrValue<any>, type:type_clause): asserts value is (T extends Type<infer TT> ? TT : any) {
-        const res = Type.matchesType(Type.ofValue(value), type, value, true);
+        const res = Type.matches(value, type, true);
         if (!res) throw new ValueError("Value must be of type " + type)
     }
 
     // check if root type of value matches exactly
-    public static matches<T extends Type>(value:RefOrValue<any>, type:type_clause): value is (T extends Type<infer TT> ? TT : any)  {
+    public static matches<T extends Type>(value:RefOrValue<any>, type:type_clause, throwInvalidAssertion = false): value is (T extends Type<infer TT> ? TT : any)  {
         value = Ref.collapseValue(value, true, true);
         // value has a matching DX_TEMPLATE
         if (type instanceof Type && type.template && value[DX_TEMPLATE] && this.matchesTemplate(value[DX_TEMPLATE], type.template)) return true;
@@ -712,7 +712,7 @@ export class Type<T = any> extends ExtensibleFunction {
             return value.length <= type.parameters[0];
         }
 
-        return Type.matchesType(Type.ofValue(value), type, value);
+        return Type.matchesType(Type.ofValue(value), type, value, throwInvalidAssertion);
     }
 
     public static extends(type:Type, extends_type:type_clause){
