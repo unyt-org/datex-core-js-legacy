@@ -20,5 +20,17 @@ jobs:
                             'X-GitHub-Api-Version': '2022-11-28'
                         }
                     })
-                      
-                    console.log(prs)
+                    
+                    console.log(prs);
+                    for (const pr of prs.data) {
+                        await github.request('PATCH /repos/{owner}/{repo}/pulls/{pull_number}', {
+                            owner: context.repo.owner,
+                            repo: context.repo.repo,
+                            pull_number: pr.number,
+                            base: 'develop',
+                            headers: {
+                                'X-GitHub-Api-Version': '2022-11-28'
+                            }
+                        })
+                        break;
+                    }
