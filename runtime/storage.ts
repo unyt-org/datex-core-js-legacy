@@ -407,7 +407,6 @@ export class Storage {
 	}
 
     public static setPointer(pointer:Pointer, listen_for_changes = true, location:StorageLocation|undefined = this.#primary_location, partialUpdateKey: unknown = NOT_EXISTING): Promise<boolean>|boolean {
-
         if (!pointer.value_initialized) {
             // logger.warn("pointer value " + pointer.idString() + " not available, cannot save in storage");
             this.#storage_active_pointers.delete(pointer);
