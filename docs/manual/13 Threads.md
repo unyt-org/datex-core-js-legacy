@@ -83,9 +83,6 @@ let fibonacciNumber = await run(() => {
 With the `runConcurrent` functions, multiple threads can be spawned to run a task concurrently.
 Per default, `runConcurrent` returns an array of Promises containing the results of all the threads.
 
-Optionally, a Promise mapping function (e.g. `Promise.all`) can be passed to `runConcurrent` to return a mapped result
-
-
 ```ts
 import { runConcurrent } from "datex-core-legacy/threads/threads.ts";
 
@@ -99,6 +96,8 @@ let results = await runConcurrent(() => {
   return value;
 }, 10);
 ```
+
+Optionally, a Promise mapping function (e.g. `Promise.all`) can be passed to `runConcurrent` to return a mapped result:
 
 ```ts
 import { runConcurrent } from "datex-core-legacy/threads/threads.ts";
