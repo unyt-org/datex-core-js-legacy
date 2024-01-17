@@ -23,8 +23,9 @@ jobs:
                         }
                     })
                     
-                    console.log(prs);
                     for (const pr of prs.data) {
+                        if (pr.state !== 'open') continue;
+                        console.log("Refreshing PR diff for #" + pr.number + " (" + pr.title + ")");
                         await github.request('PATCH /repos/{owner}/{repo}/pulls/{pull_number}', {
                             owner: context.repo.owner,
                             repo: context.repo.repo,
@@ -34,5 +35,13 @@ jobs:
                                 'X-GitHub-Api-Version': '2022-11-28'
                             }
                         })
-                        break;
+                        await github.request('PATCH /repos/{owner}/{repo}/pulls/{pull_number}', {
+                            owner: context.repo.owner,
+                            repo: context.repo.repo,
+                            pull_number: pr.number,
+                            base: 'main',
+                            headers: {
+                                'X-GitHub-Api-Version': '2022-11-28'
+                            }
+                        })
                     }
