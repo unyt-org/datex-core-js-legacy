@@ -1,6 +1,8 @@
 on:
   push:
     
+permissions:
+    pull-requests: write
 
 jobs:
       trigger-pr-update:
