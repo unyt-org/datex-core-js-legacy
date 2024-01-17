@@ -204,8 +204,8 @@ export function createFunctionWithDependencyInjections(source: string, dependenc
 }
 
 export class ExtensibleFunction {
-    constructor(f:globalThis.Function) {
-        return Object.setPrototypeOf(f, new.target.prototype);
+    constructor(f?:globalThis.Function) {
+        if (f) return Object.setPrototypeOf(f, new.target.prototype);
     }
 }
 
