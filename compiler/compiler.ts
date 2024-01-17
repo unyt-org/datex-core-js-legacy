@@ -4733,7 +4733,7 @@ export class Compiler {
             const intString = m[0].replace(/[_ ]/g, "");
             let int:number|bigint = parseInt(intString);
             // use bigint if int is out of range
-            if (int < Number.MIN_SAFE_INTEGER || int > Number.MAX_SAFE_INTEGER) int = BigInt(intString);
+            if (!Number.isSafeInteger(int)) int = BigInt(intString);
             Compiler.builder.addInt(int, SCOPE)
             isEffectiveValue = true;
         }
