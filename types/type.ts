@@ -78,7 +78,7 @@ export class Type<T = any> extends ExtensibleFunction {
     #proxify_children = false // proxify all (new) children of this type
     children_timeouts?: Map<string, number> // individual timeouts for children
     
-    static #jsTypeDefModuleMapper?: (url:string|URLL, type: Type) => string|URL|undefined
+    static #jsTypeDefModuleMapper?: (url:string|URL, type: Type) => string|URL|undefined
     
     static setJSTypeDefModuleMapper(fn:  (url:string|URL, type: Type) => string|URL|undefined) {
         this.#jsTypeDefModuleMapper = fn;
