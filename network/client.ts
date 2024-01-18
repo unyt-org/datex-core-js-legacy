@@ -32,6 +32,7 @@ export interface ComInterface {
     endpoint?: Endpoint // connected directly to a single endpoint
     endpoints?: Set<Endpoint> // multiple endpoints
     is_bidirectional_hub?: boolean, // allow the same block to go in and out eg a -> this interface -> this runtime -> this interface again -> b
+    immediate?: boolean // can send immediately (eg. for local interfaces, workers)
     isEqualSource?:(source: Partial<ComInterface>, to: Endpoint) => boolean
     in: boolean // can receive data
     out: boolean // can send data
@@ -162,6 +163,7 @@ export abstract class CommonInterface<Args extends unknown[] = []> implements Co
     public in = true
     public out = true
     public global = true
+    public immediate = false
 
     public get endpoint() {
         return this._endpoint
@@ -197,7 +199,17 @@ export abstract class CommonInterface<Args extends unknown[] = []> implements Co
         this.initial_arguments = args;
 
         this.connected = await this.connect();
-        if (this.connected) this.updateEndpoint();
+        console.log("connect",this)
+        if (this.connected) {
+            this.updateEndpoint();
+            // immediately consider endpoint as online
+            if (this.endpoint && this.immediate) {
+                console.warn("immediate online " + endpoint,this)
+                this.endpoint.setOnline(true)
+                // don't trigger online state change (to offline) once first HELLO message is received
+                this.endpoint.ignoreHello = true;
+            }
+        }
         return this.connected;
     }
     

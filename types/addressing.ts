@@ -473,6 +473,10 @@ export class Endpoint extends Target {
 		setTimeout(() => this.#online=undefined, this.#current_online ? Endpoint.cache_life_online : Endpoint.cache_life_offline);
 	}
 
+	/**
+	 * Ignore HELLO messages from this endpoint in regards to online state
+	 */
+	public ignoreHello = false;
 
 	// get endpoint from string
 	public static fromString(string:string) {
