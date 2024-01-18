@@ -199,12 +199,10 @@ export abstract class CommonInterface<Args extends unknown[] = []> implements Co
         this.initial_arguments = args;
 
         this.connected = await this.connect();
-        console.log("connect",this)
         if (this.connected) {
             this.updateEndpoint();
             // immediately consider endpoint as online
             if (this.endpoint && this.immediate) {
-                console.warn("immediate online " + endpoint,this)
                 this.endpoint.setOnline(true)
                 // don't trigger subscription cleanup once first HELLO message is received
                 this.endpoint.ignoreHello = true;
