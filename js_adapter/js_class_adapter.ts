@@ -387,8 +387,8 @@ export class Decorators {
             if (typeof params[0] == "string" || params[0] instanceof Type) {
                 type = normalizeType(params[0], false, "ext");
             }
-            else if (original_class[METADATA]?.[Decorators.FORCE_TYPE]?.constructor) type = original_class[METADATA]?.[Decorators.FORCE_TYPE]?.constructor.replace(/^_/, '') // remove leading _ from type name
-            else type = Type.get("ext", original_class.name);
+            else if (original_class[METADATA]?.[Decorators.FORCE_TYPE]?.constructor) type = original_class[METADATA]?.[Decorators.FORCE_TYPE]?.constructor
+            else type = Type.get("ext", original_class.name.replace(/^_/, '')); // remove leading _ from type name
 
 
             // return new templated class
@@ -419,8 +419,8 @@ export class Decorators {
                 if (typeof params[0] == "string" || params[0] instanceof Type) {
                     type = normalizeType(params[0], false, "ext");
                 }
-                else if (original_class[METADATA]?.[Decorators.FORCE_TYPE]?.constructor) type = original_class[METADATA]?.[Decorators.FORCE_TYPE]?.constructor.replace(/^_/, '') // remove leading _ from type name
-                else type = Type.get("ext", original_class.name);
+                else if (original_class[METADATA]?.[Decorators.FORCE_TYPE]?.constructor) type = original_class[METADATA]?.[Decorators.FORCE_TYPE]?.constructor
+                else type = Type.get("ext", original_class.name.replace(/^_/, '')); // remove leading _ from type name
 
                 let callerFile:string|undefined;
 
