@@ -39,7 +39,7 @@ export interface StorageLocation<SupportedModes extends Storage.Mode = Storage.M
     onAfterExit?(): void // called when deno process exits
     onAfterSnapshot?(isExit: boolean): void // called after a snapshot was saved to the storage (e.g. triggered by interval or exit event)
 
-    setItem(key:string, value:unknown): Promise<boolean>|boolean
+    setItem(key:string, value:unknown): Promise<Set<Pointer>>|Set<Pointer>
     getItem(key:string, conditions?:ExecConditions): Promise<unknown>|unknown
     hasItem(key:string):Promise<boolean>|boolean
     removeItem(key:string): Promise<void>|void
@@ -65,7 +65,7 @@ export abstract class SyncStorageLocation implements StorageLocation<Storage.Mod
     abstract isSupported(): boolean
     onAfterExit() {}
 
-    abstract setItem(key: string,value: unknown): boolean
+    abstract setItem(key: string,value: unknown): Set<Pointer>
     abstract getItem(key:string, conditions?:ExecConditions): Promise<unknown>|unknown
     abstract hasItem(key:string): boolean
     abstract getItemKeys(): Generator<string, void, unknown>
@@ -74,7 +74,7 @@ export abstract class SyncStorageLocation implements StorageLocation<Storage.Mod
     abstract getItemValueDXB(key: string): ArrayBuffer|null
     abstract setItemValueDXB(key:string, value: ArrayBuffer):void
 
-    abstract setPointer(pointer: Pointer<any>, partialUpdateKey: unknown|typeof NOT_EXISTING): Set<Pointer<any>>
+    abstract setPointer(pointer: Pointer, partialUpdateKey: unknown|typeof NOT_EXISTING): Set<Pointer>
     abstract getPointerValue(pointerId: string, outer_serialized:boolean, conditions?:ExecConditions): unknown
     abstract getPointerIds(): Generator<string, void, unknown>
 
@@ -93,7 +93,7 @@ export abstract class AsyncStorageLocation implements StorageLocation<Storage.Mo
     abstract isSupported(): boolean
     onAfterExit() {}
 
-    abstract setItem(key: string,value: unknown): Promise<boolean>
+    abstract setItem(key: string,value: unknown): Promise<Set<Pointer>>
     abstract getItem(key:string, conditions?:ExecConditions): Promise<unknown>
     abstract hasItem(key:string): Promise<boolean>
     abstract getItemKeys(): Promise<Generator<string, void, unknown>>
@@ -102,7 +102,7 @@ export abstract class AsyncStorageLocation implements StorageLocation<Storage.Mo
     abstract getItemValueDXB(key: string): Promise<ArrayBuffer|null> 
     abstract setItemValueDXB(key:string, value: ArrayBuffer):Promise<void>
 
-    abstract setPointer(pointer: Pointer<any>, partialUpdateKey: unknown|typeof NOT_EXISTING): Promise<Set<Pointer<any>>>
+    abstract setPointer(pointer: Pointer, partialUpdateKey: unknown|typeof NOT_EXISTING): Promise<Set<Pointer>>
     abstract getPointerValue(pointerId: string, outer_serialized:boolean, conditions?:ExecConditions): Promise<unknown>
     abstract getPointerIds(): Promise<Generator<string, void, unknown>>
 
@@ -373,37 +373,27 @@ export class Storage {
         Storage.cache.set(key, value); // save in cache
         // cache deletion does not work, problems with storage item backup
         // setTimeout(()=>Storage.cache.delete(key), 10000);
-        const pointer = value instanceof Pointer ? value : Pointer.getByValue(value);
 
 		if (location)  {
-			if (location.isAsync) return this.setItemAsync(location as AsyncStorageLocation, key, value, pointer, listen_for_pointer_changes);
-			else return this.setItemSync(location as SyncStorageLocation, key, value, pointer, listen_for_pointer_changes);
+			if (location.isAsync) return this.setItemAsync(location as AsyncStorageLocation, key, value, listen_for_pointer_changes);
+			else return this.setItemSync(location as SyncStorageLocation, key, value, listen_for_pointer_changes);
 		}
         else return false;
     }
 
-	static async setItemAsync(location:AsyncStorageLocation, key: string,value: unknown,pointer: Pointer<any>|undefined,listen_for_pointer_changes: boolean): Promise<boolean> {
-		this.setDirty(location, true)
-        // also store pointer
-        if (pointer) {
-            const res = await this.setPointer(pointer, listen_for_pointer_changes, location);
-            if (!res) return false;
-        }
+	static async setItemAsync(location:AsyncStorageLocation, key: string,value: unknown,listen_for_pointer_changes: boolean) {
         this.setDirty(location, true)
         // store value (might be pointer reference)
-        const res = await location.setItem(key, value);
+        const dependencies = await location.setItem(key, value);
+        await this.saveDependencyPointersAsync(dependencies, listen_for_pointer_changes, location);
         this.setDirty(location, false)
-        return res;
+        return true;
 	}
 
-	static setItemSync(location:SyncStorageLocation, key: string,value: unknown,pointer: Pointer<any>|undefined,listen_for_pointer_changes: boolean): boolean {
-		// also store pointer
-        if (pointer) {
-            const res = this.setPointer(pointer, listen_for_pointer_changes, location);
-            if (!res) return false;
-        }
-
-        return location.setItem(key, value);
+	static setItemSync(location:SyncStorageLocation, key: string,value: unknown,listen_for_pointer_changes: boolean) {
+        const dependencies = location.setItem(key, value);
+        this.saveDependencyPointersSync(dependencies, listen_for_pointer_changes, location);
+        return true;
 	}
 
     public static setPointer(pointer:Pointer, listen_for_changes = true, location:StorageLocation|undefined = this.#primary_location, partialUpdateKey: unknown = NOT_EXISTING): Promise<boolean>|boolean {
@@ -425,12 +415,8 @@ export class Storage {
         // if (pointer.transform_scope && this.hasPointer(pointer)) return true; // ignore transform pointer, initial transform scope already stored, does not change
 
         const dependencies = this.updatePointerSync(location, pointer, partialUpdateKey);
-
-        // add required pointers for this pointer (only same-origin pointers)
-        for (const ptr of dependencies) {
-            // add if not yet in storage
-            if (ptr != pointer && /*ptr.is_origin &&*/ !localStorage.getItem(this.pointer_prefix+ptr.id)) this.setPointer(ptr, listen_for_changes, location)
-        }
+        dependencies.delete(pointer);
+        this.saveDependencyPointersSync(dependencies, listen_for_changes, location);
 
         // listen for changes
         if (listen_for_changes) this.syncPointer(pointer, location);
@@ -448,12 +434,8 @@ export class Storage {
         // if (pointer.transform_scope && await this.hasPointer(pointer)) return true; // ignore transform pointer, initial transform scope already stored, does not change
 
         const dependencies = await this.updatePointerAsync(location, pointer, partialUpdateKey);
-
-        // add required pointers for this pointer (only same-origin pointers)
-        for (const ptr of dependencies) {
-            // add if not yet in storage
-            if (ptr != pointer && /*ptr.is_origin &&*/ !await this.hasPointer(ptr)) await this.setPointer(ptr, listen_for_changes, location)
-        }
+        dependencies.delete(pointer);
+        await this.saveDependencyPointersAsync(dependencies, listen_for_changes, location);
 
         // listen for changes
         if (listen_for_changes) this.syncPointer(pointer, location);
@@ -468,6 +450,34 @@ export class Storage {
 		const res = await location.setPointer(pointer, partialUpdateKey);
 		this.setDirty(location, false)
 		return res;
+    }
+
+    /**
+     * Save dependency pointers to storage (SyncStorageLocation)
+     * Not all pointers in the set are saved, only those which are not yet in storage or not accessible in other ways
+     * @param dependencies List of dependency pointers
+     * @param listen_for_changes should update pointers in storage when value changes
+     * @param location storage location
+     */
+    private static saveDependencyPointersSync(dependencies: Set<Pointer>, listen_for_changes = true, location: SyncStorageLocation) {
+        for (const ptr of dependencies) {
+            // add if not yet in storage
+            if (!location.hasPointer(ptr.id)) this.setPointer(ptr, listen_for_changes, location)
+        }
+    }
+
+    /**
+     * Save dependency pointers to storage (AsyncStorageLocation)
+     * Not all pointers in the set are saved, only those which are not yet in storage or not accessible in other ways
+     * @param dependencies List of dependency pointers
+     * @param listen_for_changes should update pointers in storage when value changes
+     * @param location storage location
+     */
+    private static async saveDependencyPointersAsync(dependencies: Set<Pointer>, listen_for_changes = true, location: AsyncStorageLocation) {
+        for (const ptr of dependencies) {
+            // add if not yet in storage
+            if (!await location.hasPointer(ptr.id)) await this.setPointer(ptr, listen_for_changes, location)
+        }
     }
 
 
