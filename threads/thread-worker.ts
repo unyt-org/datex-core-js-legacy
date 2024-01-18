@@ -3,7 +3,7 @@ import type { Datex as DatexType } from "../mod.ts";
 
 const isServiceWorker = 'registration' in globalThis && (globalThis as any).registration instanceof ServiceWorkerRegistration;
 
-console.log("initialized thread worker", {isServiceWorker})
+console.log("spawned new thread worker")
 
 if (isServiceWorker) {
 	// https://developer.mozilla.org/en-US/docs/Web/API/Clients/claim
