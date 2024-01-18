@@ -224,8 +224,8 @@ export class Type<T = any> extends ExtensibleFunction {
                 // TODO: catch required? for readonly properties
                 // error while assigning to readonly property from prototype chain might still occur
 
-                // logger.debug("ignoring unwriteable template prototype property " + key);
-                throw e;
+                logger.debug("ignoring unwriteable template prototype property " + key);
+                // throw e;
             }
             
         }

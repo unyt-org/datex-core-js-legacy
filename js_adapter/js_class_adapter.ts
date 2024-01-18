@@ -384,7 +384,10 @@ export class Decorators {
             let type: Type;
 
             // get template type
-            if (typeof params[0] == "string") type = Type.get(params[0].replace(/^\</,'').replace(/\>$/,''))
+            if (typeof params[0] == "string") {
+                const typeString = params[0].replace(/^\</,'').replace(/\>$/,'')
+                type = Type.get(typeString.includes(":") ? typeString : "ext:"+typeString)
+            }
             else if (params[0] instanceof Type) type = params[0];
             else if (original_class[METADATA]?.[Decorators.FORCE_TYPE]?.constructor) type = original_class[METADATA]?.[Decorators.FORCE_TYPE]?.constructor
             else type = Type.get("ext", original_class.name);
@@ -414,7 +417,10 @@ export class Decorators {
                 let type: Type;
     
                 // get template type
-                if (typeof params[0] == "string") type = Type.get(params[0].replace(/^\</,'').replace(/\>$/,''))
+                if (typeof params[0] == "string") {
+                    const typeString = params[0].replace(/^\</,'').replace(/\>$/,'')
+                    type = Type.get(typeString.includes(":") ? typeString : "ext:"+typeString)
+                }
                 else if (params[0] instanceof Type) type = params[0];
                 else if (original_class[METADATA]?.[Decorators.FORCE_TYPE]?.constructor) type = original_class[METADATA]?.[Decorators.FORCE_TYPE]?.constructor
                 else type = Type.get("ext", original_class.name);
@@ -1192,7 +1198,7 @@ interface DatexClass<T extends Object = any> {
     room_id?: number;
 }
 
-type dc<T extends Record<string,any>&{new (...args:unknown[]):unknown}> = DatexClass<T> & T & ((struct:InstanceType<T>) => InstanceType<T>);
+type dc<T extends Record<string,any>&{new (...args:unknown[]):unknown}> = DatexClass<T> & T & ((struct:InstanceType<T>) => datexClassType<T>);
 
 /**
  * Workaround to enable correct @sync class typing, until new decorators support it.
