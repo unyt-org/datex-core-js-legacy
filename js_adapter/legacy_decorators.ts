@@ -228,7 +228,7 @@ export function each(...args:any[]): any {
     return handleDecoratorArgs(args, Decorators.each);
 }
 
-export function sync(type:string|Type):any
+export function sync(type:string):any
 export function sync(target: any, name?: string, method?:any):any
 export function sync(...args:any[]): any {
     return handleDecoratorArgs(args, Decorators.sync);
@@ -237,7 +237,7 @@ export function sync(...args:any[]): any {
 /** 
  * @deprecated use \@sync
  */
-export function template(type:string|Type):any
+export function template(type:string):any
 /** 
  * @deprecated use \@sync
  */
@@ -288,7 +288,7 @@ export function anonymous(...args:any[]) {
 
 export function type(type:string|Type):any
 export function type(...args:any[]): any {
-    return handleDecoratorArgs(args, Decorators.type);
+    return handleDecoratorArgs(args, Decorators.type, true);
 }
 
 export function assert(assertion:(val:any)=>boolean|string|undefined|null):any
