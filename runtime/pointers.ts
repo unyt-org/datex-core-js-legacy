@@ -3073,7 +3073,6 @@ export class Pointer<T = any> extends Ref<T> {
      * Removes all subscriptions for an endpoint
      */
     public static clearEndpointSubscriptions(endpoint: Endpoint) {
-        console.warn("cler frpr " + endpoint)
         let removeCount = 0;
 
         for (const pointer of Pointer.#endpoint_subscriptions.get(endpoint) ?? []) {
