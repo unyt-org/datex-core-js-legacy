@@ -474,7 +474,7 @@ export class Endpoint extends Target {
 	}
 
 	/**
-	 * Ignore HELLO messages from this endpoint in regards to online state
+	 * Ignore HELLO messages from this endpoint (don't clean up subscriptions)
 	 */
 	public ignoreHello = false;
 

@@ -206,7 +206,7 @@ export abstract class CommonInterface<Args extends unknown[] = []> implements Co
             if (this.endpoint && this.immediate) {
                 console.warn("immediate online " + endpoint,this)
                 this.endpoint.setOnline(true)
-                // don't trigger online state change (to offline) once first HELLO message is received
+                // don't trigger subscription cleanup once first HELLO message is received
                 this.endpoint.ignoreHello = true;
             }
         }
