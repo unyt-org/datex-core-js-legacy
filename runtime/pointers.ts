@@ -1497,7 +1497,7 @@ export class Pointer<T = any> extends Ref<T> {
                 // else
                 if (!allow_failure) displayFatalError('pointer-not-found');
                 pointer.delete();
-                throw new PointerError("Pointer $"+id_string+" has no assigned value", SCOPE);
+                throw new PointerError("Pointer $"+id_string+" does not exist", SCOPE);
             }
         }
 
