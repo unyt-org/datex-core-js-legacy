@@ -367,7 +367,7 @@ export class Type<T = any> extends ExtensibleFunction {
 
     // never call the constructor directly!! should be private
     constructor(namespace?:string, name?:string, variation?:string, parameters?:any[]) {
-        super((val:any) => this.cast(val))
+        super(namespace && namespace != "std" ? (val:any) => this.cast(val) : undefined)
         if (name) this.name = name;
         if (namespace) this.namespace = namespace;
         if (variation) this.variation = variation;
@@ -1081,15 +1081,15 @@ Type.std.Assertion.setJSInterface({
 })
 
 
-Type.std.StorageMap.setJSInterface({
-    class: StorageMap,
+Type.std.StorageWeakMap.setJSInterface({
+    class: StorageWeakMap,
     is_normal_object: true,
     proxify_children: true,
     visible_children: new Set(),
 })
 
-Type.std.StorageWeakMap.setJSInterface({
-    class: StorageWeakMap,
+Type.std.StorageMap.setJSInterface({
+    class: StorageMap,
     is_normal_object: true,
     proxify_children: true,
     visible_children: new Set(),

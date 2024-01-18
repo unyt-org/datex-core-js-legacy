@@ -1806,6 +1806,10 @@ export class Runtime {
      * @param header DXB header of incoming message
      */
     private static updateEndpointOnlineState(header: dxb_header) {
+        if (!header) {
+            logger.error("updateEndpointOnlineState: no header provided");
+            return;
+        }
         if (header.sender) {
             // received signed GOODBYE message -> endpoint is offline
             if (header.type == ProtocolDataType.GOODBYE) {
