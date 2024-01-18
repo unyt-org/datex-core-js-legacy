@@ -2182,8 +2182,7 @@ export class Compiler {
                 (
                     SCOPE.options.to instanceof Disjunction && 
                     SCOPE.options.to.size == 1 && 
-                    [...SCOPE.options.to][0] instanceof Endpoint && 
-                    [...SCOPE.options.to][0]
+                    [...SCOPE.options.to][0] instanceof Endpoint
                 )
 
             if (
