@@ -58,6 +58,9 @@ addEventListener("message", async function (event) {
 			// await import("https://ga.jspm.io/npm:es-module-shims@1.8.0/dist/es-module-shims.wasm.js");
 			// if (data.importMap) importShim.addImportMap(data.importMap);
 
+			// inherit theme from parent
+			(globalThis as any)._override_console_theme = data.theme;
+
 			await initDatex(data.datexURL);
 			await initWorkerComInterface(data.comInterfaceURL);
 			await initTsInterfaceGenerator(data.tsInterfaceGeneratorURL);
