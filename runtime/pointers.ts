@@ -1506,6 +1506,7 @@ export class Pointer<T = any> extends Ref<T> {
         // check read permissions
         pointer.assertEndpointCanRead(SCOPE?.sender)
 
+
         return pointer;
     }
 
