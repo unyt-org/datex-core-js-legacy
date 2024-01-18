@@ -2178,8 +2178,12 @@ export class Compiler {
             const pointer_origin = (id_buffer[0]==BinaryCode.ENDPOINT || id_buffer[0]==BinaryCode.PERSON_ALIAS || id_buffer[0]==BinaryCode.INSTITUTION_ALIAS) ? <IdEndpoint> Target.get(id_buffer.slice(1,19), id_buffer.slice(19,21), id_buffer[0]) : null;
             
             const singleReceiver = 
-                (SCOPE.options.to instanceof Endpoint && SCOPE.options.to) ||
-                (SCOPE.options.to instanceof Disjunction && SCOPE.options.to.size == 1 && [...SCOPE.options.to][0] instanceof Endpoint && [...SCOPE.options.to][0])
+                SCOPE.options.to instanceof Endpoint ||
+                (
+                    SCOPE.options.to instanceof Disjunction && 
+                    SCOPE.options.to.size == 1 && 
+                    [...SCOPE.options.to][0] instanceof Endpoint
+                )
 
             if (
                 pointer_origin && 

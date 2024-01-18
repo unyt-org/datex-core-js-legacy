@@ -2083,7 +2083,6 @@ export class Pointer<T = any> extends Ref<T> {
 
         // don't get value, just request subscription
         if (!get_value) {
-            console.warn("no not wtf");
             await Runtime.datexOut(['#origin <==: ?', [this]], endpoint) 
             return this;
         } 
@@ -3056,17 +3055,12 @@ export class Pointer<T = any> extends Ref<T> {
      */
     public static async cleanupSubscribers() {
         logger.debug("cleaning up subscribers");
-        let removeCount = 0;
 
-        for (const [endpoint, pointers] of Pointer.#endpoint_subscriptions) {
-            if (await endpoint.isOnline()) continue;
-            for (const pointer of pointers) {
-                pointer.removeSubscriber(endpoint);
-                removeCount++;
+        for (const endpoint of Pointer.#endpoint_subscriptions.keys()) {
+            if (!(await endpoint.isOnline())) {
+                this.clearEndpointSubscriptions(endpoint);
             }
         }
-
-        logger.debug("removed " + removeCount + " subscriptions");
     }
 
     /**
