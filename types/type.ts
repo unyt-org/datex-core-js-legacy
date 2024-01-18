@@ -1081,15 +1081,15 @@ Type.std.Assertion.setJSInterface({
 })
 
 
-Type.std.StorageMap.setJSInterface({
-    class: StorageMap,
+Type.std.StorageWeakMap.setJSInterface({
+    class: StorageWeakMap,
     is_normal_object: true,
     proxify_children: true,
     visible_children: new Set(),
 })
 
-Type.std.StorageWeakMap.setJSInterface({
-    class: StorageWeakMap,
+Type.std.StorageMap.setJSInterface({
+    class: StorageMap,
     is_normal_object: true,
     proxify_children: true,
     visible_children: new Set(),
