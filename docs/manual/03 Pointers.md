@@ -245,6 +245,32 @@ it is garbage colleted and the effect is removed.
 
 Weak value bindings can be used with all *object* values, not just with pointers.
 
+### Async effects
+
+Effect callbacks cannot be `async` functions.
+To handle async operations, you can always call an async function from inside the
+effect callback:
+
+```ts
+const searchName = $$("");
+const searchAge = $$(18);
+
+// async function that searches for a user and shows the result somewhere
+async function searchUser(name: string, age: number) {
+    const user = await query({type: "user", name, age});
+    showUser(user);
+}
+
+// effect that triggers the user search every time searchName or searchAge is changed
+effect(() => searchUser(searchName.val, searchAge.val))
+```
+
+All dependency values of the effect must be accessed synchronously.
+This means that the variables inside the async function don't trigger the effect, only the ones passed
+into the `searchUser` call.
+
+
+
 ## Observing pointer changes
 
 For more fine grained control, the `observe()` function can be used to handle pointer value updates.
