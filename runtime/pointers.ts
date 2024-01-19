@@ -1004,7 +1004,8 @@ export type pointer_type = number;
 // mock pointer used for garbage collection
 type MockPointer = {id: string, origin: Endpoint, subscribed?: Endpoint|false, is_origin: boolean} 
 
-export type SmartTransformOptions = {
+export type SmartTransformOptions<T=unknown> = {
+    initial?: T,
 	cache?: boolean
 }
 
@@ -1582,7 +1583,7 @@ export class Pointer<T = any> extends Ref<T> {
      * @returns 
      */
     static createSmartTransform<const T>(transform:SmartTransformFunction<T>, persistent_datex_transform?:string, forceLive = false, ignoreReturnValue = false, options?:SmartTransformOptions):Pointer<T> {
-        return Pointer.create(undefined, NOT_EXISTING).smartTransform(transform, persistent_datex_transform, forceLive, ignoreReturnValue, options);
+        return Pointer.create(undefined, options?.initial??NOT_EXISTING).smartTransform(transform, persistent_datex_transform, forceLive, ignoreReturnValue, options);
     }
 
     static createTransformAsync<const T,V extends TransformFunctionInputs>(observe_values:V, transform:AsyncTransformFunction<V,T>, persistent_datex_transform?:string):Promise<Pointer<T>>
@@ -1938,6 +1939,10 @@ export class Pointer<T = any> extends Ref<T> {
 
     get labels(){return this.#labels}
     get pointer_type(){return this.#pointer_type}
+
+    #waiting_for_always_promise = false;
+    get waiting_for_always_promise() {return this.#waiting_for_always_promise}
+    always_promise_resolve_callback?: () => void
 
     #updateIsJSPrimitive(val:any = this.val) {
         const type = this.#type ?? Type.ofValue(val);
@@ -2701,18 +2706,36 @@ export class Pointer<T = any> extends Ref<T> {
                     }
     
     
-                    if (ignoreReturnValue) {
-                        console.log("retur", transform, val)
+                    // promise returned, wait for promise to resolve
+                    if (val instanceof Promise) {
+                        // force live required for async transforms (cannot synchronously calculate the value in a getter)
+                        this.enableLiveTransforms(false)
+
+                        this.#waiting_for_always_promise = true;
+                        val.then((val)=>{
+                            this.#waiting_for_always_promise = false;
+                            if (this.always_promise_resolve_callback) this.always_promise_resolve_callback()
+                            this.handleTransformValue(
+                                val,
+                                capturedGetters,
+                                capturedGettersWithKeys,
+                                state,
+                                ignoreReturnValue,
+                                options
+                            )
+                        })
                     }
-                    
-                    this.handleTransformValue(
-                        val,
-                        capturedGetters,
-                        capturedGettersWithKeys,
-                        state,
-                        ignoreReturnValue,
-                        options
-                    )
+                    // normal sync transform
+                    else {
+                        this.handleTransformValue(
+                            val,
+                            capturedGetters,
+                            capturedGettersWithKeys,
+                            state,
+                            ignoreReturnValue,
+                            options
+                        )
+                    }
                 }
                 
             }
