@@ -154,7 +154,7 @@ Read more about transform functions in the chapter [Functional Programming](./09
 
 ## Using effects
 
-With transform functions, value can be defined declaratively.
+With transform functions, values can be defined declaratively.
 Still, there are some scenarios where the actual pointer value change event must be handled with custom logic.
 For this scenario, the `effect()` function can be used.
 
