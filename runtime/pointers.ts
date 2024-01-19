@@ -1940,9 +1940,8 @@ export class Pointer<T = any> extends Ref<T> {
     get labels(){return this.#labels}
     get pointer_type(){return this.#pointer_type}
 
-    #waiting_for_always_promise = false;
+    #waiting_for_always_promise?: Promise<unknown>;
     get waiting_for_always_promise() {return this.#waiting_for_always_promise}
-    always_promise_resolve_callback?: () => void
 
     #updateIsJSPrimitive(val:any = this.val) {
         const type = this.#type ?? Type.ofValue(val);
@@ -2711,12 +2710,18 @@ export class Pointer<T = any> extends Ref<T> {
                         // force live required for async transforms (cannot synchronously calculate the value in a getter)
                         this.enableLiveTransforms(false)
 
-                        this.#waiting_for_always_promise = true;
-                        val.then((val)=>{
-                            this.#waiting_for_always_promise = false;
-                            if (this.always_promise_resolve_callback) this.always_promise_resolve_callback()
+                        // remember latest transform promise
+                        this.#waiting_for_always_promise = val; 
+
+                        // wait until val promise resolves
+                        val.then((resolvedVal)=>{
+                            // got a more recent promise result in the meantime, ignore this one
+                            if (val !== this.#waiting_for_always_promise) {
+                                return;
+                            }
+                            this.#waiting_for_always_promise = undefined;
                             this.handleTransformValue(
-                                val,
+                                resolvedVal,
                                 capturedGetters,
                                 capturedGettersWithKeys,
                                 state,

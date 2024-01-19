@@ -4,7 +4,7 @@
  */
 
 
-import { AsyncTransformFunction, BooleanRef, CollapsedValue, CollapsedValueAdvanced, Decorators, INSERT_MARK, METADATA, MaybeObjectRef, MinimalJSRef, Pointer, Ref, RefLike, RefOrValue, Runtime, SmartTransformFunction, SmartTransformOptions, TransformFunction, TransformFunctionInputs, handleDecoratorArgs, primitive } from "./datex_all.ts";
+import { AsyncTransformFunction, BooleanRef, CollapsedValue, CollapsedValueAdvanced, Decorators, INSERT_MARK, METADATA, MaybeObjectRef, MinimalJSRef, Pointer, Ref, RefLike, RefOrValue, Runtime, SmartTransformFunction, SmartTransformOptions, TransformFunction, TransformFunctionInputs, handleDecoratorArgs, logger, primitive } from "./datex_all.ts";
 import { Datex } from "./mod.ts";
 import { PointerError } from "./types/errors.ts";
 import { IterableHandler } from "./utils/iterable-handler.ts";
@@ -71,7 +71,10 @@ export async function asyncAlways<T>(transform:SmartTransformFunction<T>, option
 	}
 	const ptr = Pointer.createSmartTransform(transform, undefined, undefined, undefined, options);
 	if (!ptr.value_initialized && ptr.waiting_for_always_promise) {
-		await new Promise<void>((resolve) => ptr.always_promise_resolve_callback = resolve);
+		await ptr.waiting_for_always_promise;
+	}
+	else {
+		logger.warn("asyncAlways: transform function did not return a Promise, you should use 'always' instead")
 	}
 	return Ref.collapseValue(ptr) as MinimalJSRef<T>
 }
