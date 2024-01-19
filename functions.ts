@@ -31,7 +31,13 @@ export function always<T>(transform:SmartTransformFunction<T>, options?: SmartTr
 export function always<T=unknown>(script:TemplateStringsArray, ...vars:any[]): Promise<MinimalJSRef<T>>
 export function always(scriptOrJSTransform:TemplateStringsArray|SmartTransformFunction<any>, ...vars:any[]) {
     // js function
-    if (typeof scriptOrJSTransform == "function") return Ref.collapseValue(Pointer.createSmartTransform(scriptOrJSTransform, undefined, undefined, undefined, vars[0]));
+    if (typeof scriptOrJSTransform == "function") {
+		// make sure handler is not an async function
+		if (scriptOrJSTransform.constructor.name == "AsyncFunction") {
+			throw new Error("Async functions are not allowed as always transforms")
+		}
+		return Ref.collapseValue(Pointer.createSmartTransform(scriptOrJSTransform, undefined, undefined, undefined, vars[0]));
+	}
     // datex script
     else return (async ()=>Ref.collapseValue(await datex(`always (${scriptOrJSTransform.raw.join(INSERT_MARK)})`, vars)))()
 }
