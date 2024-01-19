@@ -55,9 +55,14 @@ export function always(scriptOrJSTransform:TemplateStringsArray|SmartTransformFu
  * x.val = 6; // no log
  * ```
  */
-export function effect<W extends Record<string, WeakKey>|undefined>(handler:W extends undefined ? () => void :(weakVariables: W) => void, weakVariables?: W): {dispose: () => void, [Symbol.dispose]: () => void} {
+export function effect<W extends Record<string, WeakKey>|undefined>(handler:W extends undefined ? () => void|Promise<void> :(weakVariables: W) => void|Promise<void>, weakVariables?: W): {dispose: () => void, [Symbol.dispose]: () => void} {
     
 	let ptr: Pointer;
+
+	// make sure handler is not an async function
+	if (handler.constructor.name == "AsyncFunction") {
+		throw new Error("Async functions are not allowed as effect handlers")
+	}
 
 	// weak variable binding
 	if (weakVariables) {
