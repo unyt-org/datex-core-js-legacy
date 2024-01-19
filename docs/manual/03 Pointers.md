@@ -248,7 +248,7 @@ Weak value bindings can be used with all *object* values, not just with pointers
 ### Async effects
 
 Effect callbacks cannot be `async` functions.
-To handle async operations, you can always call an async function from inside the
+If you need to handle async operations, you can instead call an async function from inside the
 effect callback:
 
 ```ts
@@ -257,7 +257,7 @@ const searchAge = $$(18);
 
 // async function that searches for a user and shows the result somewhere
 async function searchUser(name: string, age: number) {
-    const user = await query({type: "user", name, age});
+    const user = await fetchUserFromServer({name, age});
     showUser(user);
 }
 
@@ -269,6 +269,28 @@ All dependency values of the effect must be accessed synchronously.
 This means that the variables inside the async function don't trigger the effect, only the ones passed
 into the `searchUser` call.
 
+
+#### Sequential async effect execution
+
+Due to the nature of JavaScript, synchronous effects are always executed sequentially.
+But often, effects need to be asynchronous, e.g. to fetch some data from the network.
+
+Per default, if an effect is triggered multiple times in quick succession (e.g. due to a user input in a search field), the fetch requests are executed in parallel, but it cannot be guaranteed that the fetch for the last triggered effect is also resolved last. This leads to indeterministic behaviour.
+
+To prevent this, you can force sequential execution of effects by returning a `Promise` from the 
+effect handler function. 
+With this, it is guaranteed that the effect will not be triggered again before the last `Promise` has resolved.
+
+In the [example above](#async-effects), sequential execution is enabled because the `Promise` returned by the `searchValue()` call is returned from the effect handler.
+
+You can achieve parallel effect execution by not returning the `Promise`, e.g.:
+```ts
+effect(() => {searchUser(searchName.val, searchAge.val)})
+```
+
+> [!NOTE]
+> With sequential async execution, it is not guaranteed that the effect is triggered for each state change - some states might be skipped.
+> However, it is always guaranteed that the effect is triggered for the latest state at some point in time.
 
 
 ## Observing pointer changes
