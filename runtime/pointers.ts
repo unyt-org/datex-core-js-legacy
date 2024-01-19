@@ -2746,6 +2746,67 @@ export class Pointer<T = any> extends Ref<T> {
             }
         }
 
+        // only for effects (indicated by ignoreReturnValue=true):
+        // execute an *async* transform call after the previous one has finished, not in parallel
+        if (ignoreReturnValue) {
+            let blocked = false; // if true, the update() method is blocked until the previous transform resolves
+            let requestingUpdate = false; // if true, an update is requested after the previous transform promise resolves
+
+            const originalUpdate = state.update;
+
+            /**
+             * execute update() and block if the transform method returns a promise
+             */
+            const safeUpdate = () => {
+                try {
+                    originalUpdate()
+                }
+                finally {
+                    blockLoop()
+                }
+            }
+            
+
+            /**
+             * if the transform triggeed by update() method returns a promise, block further updates until the promise resolves
+             */
+            const blockLoop = () => {
+                if (this.#waiting_for_always_promise) {
+                    blocked = true;
+                    this.#waiting_for_always_promise.then(()=>{
+                        // now trigger requested update
+                        if (requestingUpdate) {
+                            requestingUpdate = false;
+                            safeUpdate()
+                        }
+                        // unblock
+                        else {
+                            blocked = false;
+                        }
+                    })
+                }
+                else {
+                    blocked = false;
+                }
+            }
+            
+            /**
+             * overridden update method that makes sure transforms returning a Promise are executed in order
+             */
+            state.update = () => {
+                // already awaiting a promise, update is requested and handled by blockLoop()
+                if (blocked) {
+                    requestingUpdate = true;
+                }
+                // not awaiting a promise, execute update immediately
+                else {
+                    safeUpdate()
+                }
+                
+            }
+        }
+
+
         // set transform source with TransformSource interface
         this.setTransformSource({
             enableLive: (doUpdate = true) => {
