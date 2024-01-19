@@ -94,21 +94,29 @@ class EndpointConfig implements EndpointConfigData {
 				config = <EndpointConfigData> await Runtime.executeDatexLocally(serialized, undefined, undefined, globalThis.location?.href ? new URL(globalThis.location.href) : undefined)
 			}
 			// try to get from .dx url
-			else {
-				if (!path) path = new URL('/'+this.DX_FILE_NAME, globalThis.location.href)
-				try {
-					config = await datex.get(path);
+			if (!path) path = new URL('/'+this.DX_FILE_NAME, globalThis.location.href)
+			try {
+				const configUpdate = await datex.get<EndpointConfigData>(path);
+				if (!config) {
+					config = configUpdate;
 					logger.info("loaded endpoint config from " + path);
 				}
-				catch (e) {
-					// ignore if no .dx file found
-					if (!(await fetch(path)).ok) {}
-					else {
-						logger.error `Could not read config file ${path}: ${e.toString()}`;
-						throw "invalid config file"
+				else {
+					for (const [key, value] of DatexObject.entries(configUpdate as Record<string|symbol,unknown>)) {
+						DatexObject.set(config as Record<string|symbol,unknown>, key as string, value);
 					}
+					logger.debug("updated endpoint config from " + path);
 				}
 			}
+			catch (e) {
+				// ignore if no .dx file found
+				if (!(await fetch(path)).ok) {}
+				else {
+					logger.error `Could not read config file ${path}: ${e.toString()}`;
+					throw "invalid config file"
+				}
+			}
+			
 		}
 		else {
 			logger.debug("Cannot load endpoint config file for client type '" + client_type + "'")
