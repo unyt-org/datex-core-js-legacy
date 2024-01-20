@@ -2093,6 +2093,7 @@ export class Pointer<T = any> extends Ref<T> {
         }
 
         const endpoint = override_endpoint ?? this.origin;
+
         // logger.debug("subscribing to " + this.idString() + ", origin = " +  this.origin +  (this.origin!=endpoint ? ", requesting from: " + endpoint : '') + ', get value: ' + get_value);
         if (this.origin==endpoint) logger.debug `subscribing to #color(65, 102, 238)${this.idString()}, origin: ${this.origin.toString()}${get_value?', getting value':''}`
         else logger.debug `subscribing to #color(65, 102, 238)${this.idString()}, origin: ${this.origin.toString()}, request: ${endpoint.toString()}${get_value?', getting value':''}`
