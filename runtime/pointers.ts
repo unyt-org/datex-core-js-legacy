@@ -2254,7 +2254,10 @@ export class Pointer<T = any> extends Ref<T> {
         }
         //placeholder replacement
         if (Pointer.pointer_value_map.has(v)) {
-            if (this.#loaded) {throw new PointerError("Cannot assign a new value to an already initialized pointer")}
+            if (this.#loaded) {
+                console.log("value",v)
+                throw new PointerError("Cannot assign a new value to an already initialized pointer")
+            }
             const existing_pointer = Pointer.pointer_value_map.get(v)!;
             existing_pointer.unPlaceholder(this.id) // no longer placeholder, this pointer gets 'overriden' by existing_pointer
             return existing_pointer;
