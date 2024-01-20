@@ -1394,13 +1394,16 @@ export class Pointer<T = any> extends Ref<T> {
             }
 
             if (stored!=NOT_EXISTING) {
-                // if the value is a pointer with a tranform scope, copy the transform, not the value (TODO still just a workaround to preserve transforms in storage, maybe better solution?)
-                if (stored instanceof Pointer && stored.transform_scope) {
-                    await pointer.handleTransformAsync(stored.transform_scope.internal_vars, stored.transform_scope);
+                // set value if pointer still not loaded during source.getPointer
+                if (!pointer.#loaded) {
+                    // if the value is a pointer with a tranform scope, copy the transform, not the value (TODO still just a workaround to preserve transforms in storage, maybe better solution?)
+                    if (stored instanceof Pointer && stored.transform_scope) {
+                        await pointer.handleTransformAsync(stored.transform_scope.internal_vars, stored.transform_scope);
+                    }
+                    // set normal value
+                    else pointer = pointer.setValue(stored);
                 }
-                // set normal value
-                else pointer = pointer.setValue(stored);
-
+               
                 // now sync if source (pointer storage) can sync pointer
                 if (source?.syncPointer) source.syncPointer(pointer);
 
