@@ -14,10 +14,32 @@ import { MessageLogger } from "./utils/message_logger.ts";
 
 
 /**
+ * Load the subscriber cache from storage and
+ * reset if a remote pointer is required
+ */
+async function initSubscriberCache() {
+	try {
+		Runtime.subscriber_cache = (await Storage.loadOrCreate(
+			"Datex.Runtime.SUBSCRIBER_CACHE", 
+			() => new Map(), 
+			{onlyLocalPointers: true}
+		)).setAutoDefault(Set);
+	}
+	catch (e) {
+		logger.debug("resetting subscriber cache (" + e?.message + ")")
+		Runtime.subscriber_cache = (await Storage.loadOrCreate(
+			"Datex.Runtime.SUBSCRIBER_CACHE", 
+			() => new Map(), 
+			undefined, 
+			true
+		)).setAutoDefault(Set);
+	}
+}
+
+/**
  * Runtime init (sets ENV, storage, endpoint, ...)
  */
 export async function init() {
-
 
 	// register DatexStorage as pointer source
 	registerStorageAsPointerSource();
@@ -56,7 +78,11 @@ export async function init() {
 	Runtime.onEndpointChanged((endpoint) => {
 		Pointer.pointer_prefix = endpoint.getPointerPrefix();
 		// has only local endpoint id (%0000) or global id?
-		if (endpoint != LOCAL_ENDPOINT) Pointer.is_local = false;
+		if (endpoint != LOCAL_ENDPOINT) {
+			Pointer.is_local = false;
+			// init subscriber cache as soon as endpoint is available
+			initSubscriberCache();
+		}
 		else Pointer.is_local = true;
 	})
 
@@ -104,26 +130,6 @@ export async function init() {
 
 	// init persistent memory
 	Runtime.persistent_memory = (await Storage.loadOrCreate("Datex.Runtime.MEMORY", ()=>new Map())).setAutoDefault(Object);
-
-	// init persistent subscriber cache
-	(async () => {
-		try {
-			Runtime.subscriber_cache = (await Storage.loadOrCreate(
-				"Datex.Runtime.SUBSCRIBER_CACHE", 
-				() => new Map(), 
-				{onlyLocalPointers: true}
-			)).setAutoDefault(Set);
-		}
-		catch (e) {
-			logger.debug("resetting subscriber cache (" + e?.message + ")")
-			Runtime.subscriber_cache = (await Storage.loadOrCreate(
-				"Datex.Runtime.SUBSCRIBER_CACHE", 
-				() => new Map(), 
-				undefined, 
-				true
-			)).setAutoDefault(Set);
-		}
-	})()
 
 
 	if (!globalThis.NO_INIT) {
