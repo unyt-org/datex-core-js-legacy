@@ -2094,6 +2094,12 @@ export class Pointer<T = any> extends Ref<T> {
 
         const endpoint = override_endpoint ?? this.origin;
 
+        // early return, trying to subscribe to the own main endpoint, guaranteed to be routed back to self, which is not allowed
+        if (endpoint.equals(Runtime.endpoint.main)) {
+            logger.warn("tried to subscribe to own pointer: " + this.idString() + "(pointer origin: " + this.origin + ", own endpoint instance: " + Runtime.endpoint + ")");
+            return this;
+        }
+
         // logger.debug("subscribing to " + this.idString() + ", origin = " +  this.origin +  (this.origin!=endpoint ? ", requesting from: " + endpoint : '') + ', get value: ' + get_value);
         if (this.origin==endpoint) logger.debug `subscribing to #color(65, 102, 238)${this.idString()}, origin: ${this.origin.toString()}${get_value?', getting value':''}`
         else logger.debug `subscribing to #color(65, 102, 238)${this.idString()}, origin: ${this.origin.toString()}, request: ${endpoint.toString()}${get_value?', getting value':''}`

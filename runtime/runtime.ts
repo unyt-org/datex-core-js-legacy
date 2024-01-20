@@ -3161,7 +3161,8 @@ export class Runtime {
                             const ptr = p[0].setValue(el);
 
                             // remote pointer value was set - handle subscription - ignore if sent from self
-                            if (!ptr.is_origin && !Runtime.endpoint.equals(SCOPE.sender)) {
+                            if (!ptr.is_origin) {
+
                                 // subscription was already added by pointer origin for preemptively loaded pointer, just finalize
                                 if (isInit) {
                                     ptr.finalizeSubscribe()
