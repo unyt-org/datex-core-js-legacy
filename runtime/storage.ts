@@ -1031,29 +1031,50 @@ export class Storage {
         const COLOR_PTR = `\x1b[38;2;${[65,102,238].join(';')}m`
         const COLOR_NUMBER = `\x1b[38;2;${[253,139,25].join(';')}m`
 
-        let string = "Storage Locations:"
+        let string = ESCAPE_SEQUENCES.BOLD+"Storage Locations\n\n"+ESCAPE_SEQUENCES.RESET
+        string += `${ESCAPE_SEQUENCES.ITALIC}A list of all currently used storage locations and their corresponding store strategies.\n${ESCAPE_SEQUENCES.RESET}`
+
         for (const [location, options] of this.#locations) {
-            string += `\n  ${location.name} ${ESCAPE_SEQUENCES.GREY}(${options.modes.map(m=>Storage.Mode[m]).join(', ')})${ESCAPE_SEQUENCES.RESET}`
+            string += `\n  • ${location.name} ${ESCAPE_SEQUENCES.GREY}(${options.modes.map(m=>Storage.Mode[m]).join(', ')})${ESCAPE_SEQUENCES.RESET}`
         }
-        console.log(string);
+
+        string += `\n\n${ESCAPE_SEQUENCES.BOLD}Trusted Location:${ESCAPE_SEQUENCES.RESET} ${this.#trusted_location?.name ?? "none"}`
+        string += `\n${ESCAPE_SEQUENCES.BOLD}Primary Location:${ESCAPE_SEQUENCES.RESET} ${this.#primary_location?.name ?? "none"}`
+
+        console.log(string+"\n\n");
 
         // pointers
-        string = "Pointers:\n\n"
-        for (const [key, [value, location]] of pointers.snapshot) {
-            string += ` ${COLOR_PTR}$${key}${ESCAPE_SEQUENCES.GREY} (${location.name}) = ${this.#replaceLastOccurenceOf("\n  ", "", value.replaceAll("\n", "\n  "))}\n`
+        string = ESCAPE_SEQUENCES.BOLD+"Pointers\n\n"+ESCAPE_SEQUENCES.RESET
+        string += `${ESCAPE_SEQUENCES.ITALIC}A list of all pointers stored in any storage location. Pointers are only stored as long as they are referenced somwhere else in the storage.\n\n${ESCAPE_SEQUENCES.RESET}`
+
+        for (const [key, storageMap] of pointers.snapshot) {
+            // check if stored in all locations, otherwise print in which location it is stored (functional programming)
+            const locations = [...storageMap.keys()]
+            const storedInAll = [...this.#locations.keys()].every(l => locations.includes(l));
+            
+            const value = [...storageMap.values()][0];
+            string += `  • ${COLOR_PTR}$${key}${ESCAPE_SEQUENCES.GREY}${storedInAll ? "" : (` (only in ${locations.map(l=>l.name).join(",")})`)} = ${this.#replaceLastOccurenceOf("\n  ", "", value.replaceAll("\n", "\n  "))}\n`
         }
-        console.log(string);
+        console.log(string+"\n");
 
         // items
-        string = "Items:\n\n"
-        for (const [key, [value, location]] of items.snapshot) {
-            string += ` ${key}${ESCAPE_SEQUENCES.GREY} (${location.name}) = ${value}`
+        string = ESCAPE_SEQUENCES.BOLD+"Items\n\n"+ESCAPE_SEQUENCES.RESET
+        string += `${ESCAPE_SEQUENCES.ITALIC}A list of all named items stored in any storage location.\n\n${ESCAPE_SEQUENCES.RESET}`
+
+        for (const [key, storageMap] of items.snapshot) {
+            // check if stored in all locations, otherwise print in which location it is stored (functional programming)
+            const locations = [...storageMap.keys()]
+            const storedInAll = [...this.#locations.keys()].every(l => locations.includes(l));
+            
+            const value = [...storageMap.values()][0];
+            string += `  • ${key}${ESCAPE_SEQUENCES.GREY}${storedInAll ? "" : (` (only in ${locations.map(l=>l.name).join(",")})`)} = ${value}`
         }
-        console.log(string);
+        console.log(string+"\n");
 
         // memory management
         if (options?.internalItems) {
-            string = "Memory Management:\n\n"
+            string = ESCAPE_SEQUENCES.BOLD+"Memory Management\n\n"+ESCAPE_SEQUENCES.RESET
+            string += `${ESCAPE_SEQUENCES.ITALIC}This section shows the reference count (rc::) of pointers and the dependencies (deps::) of items and pointers. The reference count of a pointer tracks the number of items and pointers that reference this pointer.\n\n${ESCAPE_SEQUENCES.RESET}`
             let rc_string = ""
             let item_deps_string = ""
             let pointer_deps_string = ""
@@ -1062,24 +1083,60 @@ export class Storage {
                 if (key.startsWith(this.rc_prefix)) {
                     const ptrId = key.substring(this.rc_prefix.length);
                     const count = this.getReferenceCount(ptrId);
-                    rc_string += `\x1b[0m ${key} = ${COLOR_NUMBER}${count}\n`
+                    rc_string += `\x1b[0m  • ${key} = ${COLOR_NUMBER}${count}\n`
                 }
                 else if (key.startsWith(this.item_deps_prefix)) {
-                    let deps = localStorage.getItem(key)!.split(",").join(`\x1b[0m,\n   ${COLOR_PTR}$`)
-                    if (deps) deps = `   ${COLOR_PTR}$`+deps
-                    item_deps_string += `\x1b[0m ${key} = (\n${COLOR_PTR}${deps}\x1b[0m\n )\n`
+                    const depsRaw = localStorage.getItem(key);
+                    // single entry
+                    if (!depsRaw?.includes(",")) {
+                        item_deps_string += `\x1b[0m  • ${key} = (${COLOR_PTR}${depsRaw}\x1b[0m)\n`
+                    }
+                    // multiple entries
+                    else {
+                        let deps = localStorage.getItem(key)!.split(",").join(`\x1b[0m,\n      ${COLOR_PTR}$`)
+                        if (deps) deps = `      ${COLOR_PTR}$`+deps
+                        item_deps_string += `\x1b[0m  • ${key} = (\n${COLOR_PTR}${deps}\x1b[0m\n    )\n`
+                    }
                 }
                 else if (key.startsWith(this.pointer_deps_prefix)) {
-                    let deps = localStorage.getItem(key)!.split(",").join(`\x1b[0m,\n   ${COLOR_PTR}$`)
-                    if (deps) deps = `   ${COLOR_PTR}$`+deps
-                    pointer_deps_string += `\x1b[0m ${key} = (\n${COLOR_PTR}${deps}\x1b[0m\n )\n`
+                    const depsRaw = localStorage.getItem(key);
+                    // single entry
+                    if (!depsRaw?.includes(",")) {
+                        pointer_deps_string += `\x1b[0m  • ${key} = (${COLOR_PTR}${depsRaw}\x1b[0m)\n`
+                    }
+                    // multiple entries
+                    else {
+                        let deps = localStorage.getItem(key)!.split(",").join(`\x1b[0m,\n      ${COLOR_PTR}$`)
+                        if (deps) deps = `      ${COLOR_PTR}$`+deps
+                        pointer_deps_string += `\x1b[0m  • ${key} = (\n${COLOR_PTR}${deps}\x1b[0m\n    )\n`
+                    }
                 }
             }
 
             string += rc_string + "\n" + item_deps_string + "\n" + pointer_deps_string;
-            console.log(string);
-
+            console.log(string+"\n");
         }
+
+        // inconsistencies
+        if (pointers.inconsistencies.size > 0 || items.inconsistencies.size > 0) {
+            string = ESCAPE_SEQUENCES.BOLD+"Inconsistencies\n\n"+ESCAPE_SEQUENCES.RESET
+            string += `${ESCAPE_SEQUENCES.ITALIC}Inconsistencies between storage locations don't necessarily indicate that something is wrong. They can occur when a storage location is not updated immediately (e.g. when only using SAVE_ON_EXIT).\n\n${ESCAPE_SEQUENCES.RESET}`
+            for (const [key, storageMap] of pointers.inconsistencies) {
+                for (const [location, value] of storageMap) {
+                    string += `  • ${COLOR_PTR}$${key}${ESCAPE_SEQUENCES.GREY} (${(location.name+")").padEnd(15, " ")} = ${this.#replaceLastOccurenceOf("\n  ", "", value.replaceAll("\n", "\n  "))}\n`
+                }
+                string += `\n`
+            }
+            for (const [key, storageMap] of items.inconsistencies) {
+                for (const [location, value] of storageMap) {
+                    string += `  • ${key}${ESCAPE_SEQUENCES.GREY} (${(location.name+")").padEnd(15, " ")} = ${value}`
+                }
+                string += `\n`
+            }
+
+            console.info(string+"\n");
+        }
+        
 
     }
 
@@ -1087,14 +1144,19 @@ export class Storage {
         const items = await this.createSnapshot(this.getItemKeys.bind(this), this.getItemDecompiled.bind(this));
         const pointers = await this.createSnapshot(this.getPointerKeys.bind(this), this.getPointerDecompiledFromLocation.bind(this));
 
+        // remove internal items
         if (!options.internalItems) {
             for (const [key] of items.snapshot) {
                 if (key.startsWith("keys_")) items.snapshot.delete(key);
             }
         }
 
+        // iterate over storage maps and sets and render all entries
         if (options.expandStorageMapsAndSets) {
-            for (const [ptrId, [value, location]] of pointers.snapshot) {
+            for (const [ptrId, storageMap] of pointers.snapshot) {
+                // display entry from first storage
+                const [location, value] = [...storageMap.entries()][0];
+
                 if (value.startsWith("\x1b[38;2;50;153;220m<StorageMap>") || value.startsWith("\x1b[38;2;50;153;220m<StorageSet>")) {
                     const ptr = await Pointer.load(ptrId, undefined, true);
                     if (ptr.val instanceof StorageMap) {
@@ -1103,7 +1165,7 @@ export class Storage {
                         for await (const [key, val] of map) {
                             inner += `   ${Runtime.valueToDatexStringExperimental(key, true, true)}\x1b[0m => ${Runtime.valueToDatexStringExperimental(val, true, true)}\n`
                         }
-                        if (inner) pointers.snapshot.set(ptrId, ["\x1b[38;2;50;153;220m<StorageMap> \x1b[0m{\n"+inner+"\x1b[0m\n}", location])
+                        if (inner) storageMap.set(location, "\x1b[38;2;50;153;220m<StorageMap> \x1b[0m{\n"+inner+"\x1b[0m\n}")
                     }
                     else if (ptr.val instanceof StorageSet) {
                         const set = ptr.val;
@@ -1111,7 +1173,7 @@ export class Storage {
                         for await (const val of set) {
                             inner += `   ${Runtime.valueToDatexStringExperimental(val, true, true)},\n`
                         }
-                        if (inner) pointers.snapshot.set(ptrId, ["\x1b[38;2;50;153;220m<StorageSet> \x1b[0m{\n"+inner+"\x1b[0m\n}", location])
+                        if (inner) storageMap.set(location, "\x1b[38;2;50;153;220m<StorageSet> \x1b[0m{\n"+inner+"\x1b[0m\n}")
                     }
                 }
             }
@@ -1124,24 +1186,33 @@ export class Storage {
         keyGenerator: (location?: StorageLocation<Storage.Mode> | undefined) => Promise<Generator<string, void, unknown>>,
         itemGetter: (key: string, colorized: boolean, location: StorageLocation<Storage.Mode>) => Promise<string|symbol>,
     ) {
-        const snapshot = new Map<string, [string, StorageLocation]>();
-        const inconsistentItems = new Map<string, Map<StorageLocation, string>>().setAutoDefault(Map);
+        const snapshot = new Map<string, Map<StorageLocation, string>>().setAutoDefault(Map);
+        const inconsistencies = new Map<string, Map<StorageLocation, string>>().setAutoDefault(Map);
         for (const location of new Set([this.#primary_location!, ...this.#locations.keys()].filter(l=>!!l))) {
             for (const key of await keyGenerator(location)) {
                 const decompiled = await itemGetter(key, true, location);
                 if (typeof decompiled !== "string") {
                     console.error("Invalid entry in storage (" + location.name + "): " + key);
+                    continue;
                 }
-                else if (snapshot.has(key) && snapshot.get(key)![0] != decompiled) {
-                    inconsistentItems.getAuto(key).set(snapshot.get(key)![1], snapshot.get(key)![0]);
-                    inconsistentItems.getAuto(key).set(location, decompiled);
-                }
-                else {
-                    snapshot.set(key, [decompiled, location]);
+                snapshot.getAuto(key).set(location, decompiled);
+            }
+        }
+
+
+        // find inconsistencies
+        for (const [key, storageMap] of snapshot) {
+            const [location, value] = [...storageMap.entries()][0];
+            // compare with first entry
+            for (const [location2, value2] of storageMap) {
+                if (value !== value2) {
+                    inconsistencies.getAuto(key).set(location, value);
+                    inconsistencies.getAuto(key).set(location2, value2);
                 }
             }
         }
-        return {snapshot, inconsistentItems};
+
+        return {snapshot, inconsistencies};
     }
 
 }
