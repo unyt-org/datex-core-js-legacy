@@ -646,15 +646,22 @@ export class Storage {
 
         // create pointer with saved id and value + start syncing, if pointer not already created in DATEX
         if (pointerify) {
-            let pointer: Pointer;
+            let pointer = Pointer.get(pointer_id)
 
             // if the value is a pointer with a tranform scope, copy the transform, not the value (TODO still just a workaround to preserve transforms in storage, maybe better solution?)
             if (val instanceof Pointer && val.transform_scope) {
                 console.log("init value",val);
                 pointer = await Pointer.createTransformAsync(val.transform_scope.internal_vars, val.transform_scope);
             }
-            // normal pointer from value
-            else pointer = Pointer.create(pointer_id, val, false, Runtime.endpoint);
+            // set value of existing pointer
+            else if (pointer) {
+                if (pointer.value_initialized) logger.warn("pointer value " + pointer.idString() + " already initialized, setting new value from storage");
+                pointer = pointer.setValue(val);
+            }
+            // create new pointer from value
+            else {
+                pointer = Pointer.create(pointer_id, val, false, Runtime.endpoint);
+            }
 
             this.syncPointer(pointer);
             this.#storage_active_pointers.add(pointer);
