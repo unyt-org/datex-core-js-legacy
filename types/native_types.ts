@@ -278,6 +278,11 @@ Type.std.Set.setJSInterface({
     get_property: (parent:Set<any>, key) => NOT_EXISTING,
     has_property: (parent:Set<any>, key) => parent.has(key),
 
+    // implemented to support self-referencing serialization, not actual properties
+    // small issue with this approach: the Set always contains 'undefined'
+    set_property_silently: (parent:Set<unknown>, key, value, pointer) => Set.prototype.add.call(parent, value),
+    set_property: (parent:Set<unknown>, key, value) => parent.add(value),
+
 
     count: (parent:Set<any>) => parent.size,
     keys: (parent:Set<any>) => [...parent],
