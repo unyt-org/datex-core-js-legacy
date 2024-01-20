@@ -18,7 +18,7 @@ export class StorageSet<V> {
 
 	constructor(){
 		// TODO: does not work with eternal pointers!
-		// Pointer.proxifyValue(this)
+		Pointer.proxifyValue(this)
 	}
 
 	static async from<V>(values: readonly V[]) {
@@ -66,8 +66,8 @@ export class StorageSet<V> {
 		}, 60_000);
 	}
 
-	protected getStorageKey(value: V) {
-		const keyHash = Compiler.getUniqueValueIdentifier(value);
+	protected async getStorageKey(value: V) {
+		const keyHash = await Compiler.getUniqueValueIdentifier(value);
 		// @ts-ignore DX_PTR
 		return this.prefix + keyHash;
 	}
