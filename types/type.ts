@@ -56,6 +56,7 @@ export class Type<T = any> extends ExtensibleFunction {
     parameters:any[] // special type parameters
 
     #jsTypeDefModule?: string|URL // URL for the JS module that creates the corresponding type definition
+    #potentialJsTypeDefModule?: string|URL // remember jsTypeDefModule if jsTypeDefModuleMapper is added later
 
     get jsTypeDefModule():string|URL|undefined {return this.#jsTypeDefModule}
     set jsTypeDefModule(url: string|URL) {
@@ -65,6 +66,7 @@ export class Type<T = any> extends ExtensibleFunction {
         else if (url.toString().startsWith("http://") || url.toString().startsWith("https://")) {
             this.#jsTypeDefModule = url;
         }
+        this.#potentialJsTypeDefModule = url;
     }
 
     root_type: Type; // DatexType without parameters and variation
@@ -88,7 +90,7 @@ export class Type<T = any> extends ExtensibleFunction {
         this.#jsTypeDefModuleMapper = fn;
         // update existing typedef modules
         for (const type of this.types.values()) {
-            if (type.#jsTypeDefModule) type.jsTypeDefModule = type.#jsTypeDefModule;
+            if (type.#potentialJsTypeDefModule) type.jsTypeDefModule = type.#potentialJsTypeDefModule;
         }
     }
 
