@@ -574,9 +574,11 @@ export class Decorators {
 function normalizeType(type:Type|string, allowTypeParams = true, defaultNamespace = "std") {
     if (typeof type == "string") {
         // extract type name and parameters
-        const [typeName, paramsString] = type.replace(/^\</,'').replace(/\>$/,'').match(/^((?:\w+\:)?\w*)(?:\((.*)\))?$/)?.slice(1) ?? [];
+        const [typeName, paramsString] = type.replace(/^\</,'').replace(/\>$/,'').match(/^((?:[\w-]+\:)?[\w-]*)(?:\((.*)\))?$/)?.slice(1) ?? [];
         if (paramsString && !allowTypeParams) throw new Error(`Type parameters not allowed (${type})`);
         
+        if (!typeName) throw new Error("Invalid type: " + type);
+
         // TODO: only json-compatible params are allowed for now to avoid async
         const parsedParams = paramsString ? JSON.parse(`[${paramsString}]`) : undefined;
         return Type.get(typeName.includes(":") ? typeName : defaultNamespace+":"+typeName, parsedParams)

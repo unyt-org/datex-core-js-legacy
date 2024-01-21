@@ -1005,9 +1005,21 @@ export type pointer_type = number;
 // mock pointer used for garbage collection
 type MockPointer = {id: string, origin: Endpoint, subscribed?: Endpoint|false, is_origin: boolean} 
 
-export type SmartTransformOptions = {
+export type SmartTransformOptions<T=unknown> = {
+    initial?: T,
 	cache?: boolean
 }
+
+type TransformState = {
+    isLive: boolean;
+    isFirst: boolean;
+    deps: IterableWeakSet<Ref<any>>;
+    keyedDeps: AutoMap<any, Set<any>>;
+    returnCache: Map<string, any>;
+    getDepsHash: () => string;
+    update: () => void;
+}
+
 
 const observableArrayMethods = new Set<string>([
     "entries",
@@ -1035,6 +1047,7 @@ const observableArrayMethods = new Set<string>([
     "values",
     "with"
 ])
+
 
 /** Wrapper class for all pointer values ($xxxxxxxx) */
 export class Pointer<T = any> extends Ref<T> {
@@ -1571,7 +1584,7 @@ export class Pointer<T = any> extends Ref<T> {
      * @returns 
      */
     static createSmartTransform<const T>(transform:SmartTransformFunction<T>, persistent_datex_transform?:string, forceLive = false, ignoreReturnValue = false, options?:SmartTransformOptions):Pointer<T> {
-        return Pointer.create(undefined, NOT_EXISTING).smartTransform(transform, persistent_datex_transform, forceLive, ignoreReturnValue, options);
+        return Pointer.create(undefined, options?.initial??NOT_EXISTING).smartTransform(transform, persistent_datex_transform, forceLive, ignoreReturnValue, options);
     }
 
     static createTransformAsync<const T,V extends TransformFunctionInputs>(observe_values:V, transform:AsyncTransformFunction<V,T>, persistent_datex_transform?:string):Promise<Pointer<T>>
@@ -1928,6 +1941,9 @@ export class Pointer<T = any> extends Ref<T> {
     get labels(){return this.#labels}
     get pointer_type(){return this.#pointer_type}
 
+    #waiting_for_always_promise?: Promise<unknown>;
+    get waiting_for_always_promise() {return this.#waiting_for_always_promise}
+
     #updateIsJSPrimitive(val:any = this.val) {
         const type = this.#type ?? Type.ofValue(val);
         this.#is_js_primitive = (typeof val !== "symbol") && !(Object(val) === val && !type.is_js_pseudo_primitive && !(type == Type.js.NativeObject && globalThis.Element && val instanceof globalThis.Element))
@@ -2253,7 +2269,10 @@ export class Pointer<T = any> extends Ref<T> {
         }
         //placeholder replacement
         if (Pointer.pointer_value_map.has(v)) {
-            if (this.#loaded) {throw new PointerError("Cannot assign a new value to an already initialized pointer")}
+            if (this.#loaded) {
+                console.log("value",v)
+                throw new PointerError("Cannot assign a new value to an already initialized pointer")
+            }
             const existing_pointer = Pointer.pointer_value_map.get(v)!;
             existing_pointer.unPlaceholder(this.id) // no longer placeholder, this pointer gets 'overriden' by existing_pointer
             return existing_pointer;
@@ -2655,173 +2674,282 @@ export class Pointer<T = any> extends Ref<T> {
     protected smartTransform<R>(transform:SmartTransformFunction<T&R>, persistent_datex_transform?:string, forceLive = false, ignoreReturnValue = false, options?:SmartTransformOptions): Pointer<R> {
         if (persistent_datex_transform) this.setDatexTransform(persistent_datex_transform) // TODO: only workaround
 
-        const deps = new IterableWeakSet<Ref>();
-        const keyedDeps = new IterableWeakMap<Pointer, Set<any>>().setAutoDefault(Set);
+        const state: TransformState = {
+            isLive: false,
+            isFirst: true,
+            deps: new IterableWeakSet<Ref>(),
+            keyedDeps: new IterableWeakMap<Pointer, Set<any>>().setAutoDefault(Set),
+            returnCache: new Map<string, any>(),
 
-        let isLive = false;
-        let isFirst = true;
+            getDepsHash: () => {
+                const norm = 
+                    [...state.deps].map(v=>Runtime.valueToDatexStringExperimental(v, false, false, false, true)).join("\n") + "\n" +
+                    [...state.keyedDeps].map(([ptr, keys]) => 
+                        [...keys].map(key => Runtime.valueToDatexStringExperimental(ptr.getProperty(key), false, false, false, false)).join("\n")
+                    ).join("\n")
+                const hash = sha256(norm) as string
+                return hash;
+            },
 
-        const returnCache = new Map<string, any>()
-
-        const getDepsHash = () => {
-            const norm = 
-                [...deps].map(v=>Runtime.valueToDatexStringExperimental(v, false, false, false, true)).join("\n") + "\n" +
-                [...keyedDeps].map(([ptr, keys]) => 
-                    [...keys].map(key => Runtime.valueToDatexStringExperimental(ptr.getProperty(key), false, false, false, false)).join("\n")
-                ).join("\n")
-            const hash = sha256(norm)
-            return hash;
-        }
-
-        const update = () => {
-            // no live transforms needed, just get current value
-            // capture getters in first update() call to check if there
-            // is a static transform and show a warning
-            if (!isLive && !isFirst) {
-                this.setVal(transform() as T, true, true);
-            }
-            // get transform value and update dependency observers
-            else {
-                isFirst = false;
-
-                let val!: T
-                let capturedGetters: Set<Ref<any>> | undefined;
-                let capturedGettersWithKeys: AutoMap<Pointer<any>, Set<any>> | undefined;
-
-                if (options?.cache) {
-                    const hash = getDepsHash()
-                    if (returnCache.has(hash)) {
-                        logger.debug("using cached transform result with hash " + hash)
-                        val = returnCache.get(hash)
-                    } 
+            update: () => {
+                // no live transforms needed, just get current value
+                // capture getters in first update() call to check if there
+                // is a static transform and show a warning
+                if (!state.isLive && !state.isFirst) {
+                    this.setVal(transform() as T, true, true);
                 }
-
-                // no cached value found, run transform function
-                if (val === undefined) {
-                    Ref.captureGetters();
+                // get transform value and update dependency observers
+                else {
+                    state.isFirst = false;
     
-                    try {
-                        val = transform() as T;
-                        // also trigger getter if pointer is returned
-                        Ref.collapseValue(val, true, true); 
+                    let val!: T
+                    let capturedGetters: Set<Ref<any>> | undefined;
+                    let capturedGettersWithKeys: AutoMap<Pointer<any>, Set<any>> | undefined;
+    
+                    if (options?.cache) {
+                        const hash = state.getDepsHash()
+                        if (state.returnCache.has(hash)) {
+                            logger.debug("using cached transform result with hash " + hash)
+                            val = state.returnCache.get(hash)
+                        } 
                     }
-                    catch (e) {
-                        if (e !== Pointer.WEAK_EFFECT_DISPOSED) console.error(e);
-                        // invalid result, no update
-                        return;
+    
+                    // no cached value found, run transform function
+                    if (val === undefined) {
+                        Ref.captureGetters();
+        
+                        try {
+                            val = transform() as T;
+                            // also trigger getter if pointer is returned
+                            Ref.collapseValue(val, true, true); 
+                        }
+                        catch (e) {
+                            if (e !== Pointer.WEAK_EFFECT_DISPOSED) console.error(e);
+                            // invalid result, no update
+                            return;
+                        }
+                        // always cleanup capturing
+                        finally {
+                            ({capturedGetters, capturedGettersWithKeys} = Ref.getCapturedGetters());
+                        }
                     }
-                    // always cleanup capturing
-                    finally {
-                        ({capturedGetters, capturedGettersWithKeys} = Ref.getCapturedGetters());
-                    }
-                }
+    
+    
+                    // promise returned, wait for promise to resolve
+                    if (val instanceof Promise) {
+                        // force live required for async transforms (cannot synchronously calculate the value in a getter)
+                        this.enableLiveTransforms(false)
 
-                if (!ignoreReturnValue && !this.value_initialized) {
-                    if (val == undefined) this.#is_js_primitive = true;
-                    else this.#updateIsJSPrimitive(Ref.collapseValue(val,true,true));
+                        // remember latest transform promise
+                        this.#waiting_for_always_promise = val; 
+
+                        // wait until val promise resolves
+                        val.then((resolvedVal)=>{
+                            // got a more recent promise result in the meantime, ignore this one
+                            if (val !== this.#waiting_for_always_promise) {
+                                return;
+                            }
+                            this.#waiting_for_always_promise = undefined;
+                            this.handleTransformValue(
+                                resolvedVal,
+                                capturedGetters,
+                                capturedGettersWithKeys,
+                                state,
+                                ignoreReturnValue,
+                                options
+                            )
+                        })
+                    }
+                    // normal sync transform
+                    else {
+                        this.handleTransformValue(
+                            val,
+                            capturedGetters,
+                            capturedGettersWithKeys,
+                            state,
+                            ignoreReturnValue,
+                            options
+                        )
+                    }
                 }
                 
-                // set isLive to true, if not primitive
-                if (!this.is_js_primitive) {
-                    isLive = true;
-                    this._liveTransform = true
+            }
+        }
+
+        // only for effects (indicated by ignoreReturnValue=true):
+        // execute an *async* transform call after the previous one has finished, not in parallel
+        if (ignoreReturnValue) {
+            let blocked = false; // if true, the update() method is blocked until the previous transform resolves
+            let requestingUpdate = false; // if true, an update is requested after the previous transform promise resolves
+
+            const originalUpdate = state.update;
+
+            /**
+             * execute update() and block if the transform method returns a promise
+             */
+            const safeUpdate = () => {
+                try {
+                    originalUpdate()
                 }
-    
-                // update value
-                if (!ignoreReturnValue) this.setVal(val, true, true);
-
-                // remove return value if captured by getters
-                // TODO: this this work as intended?
-                capturedGetters?.delete(val instanceof Pointer ? val : Pointer.getByValue(val));
-                capturedGettersWithKeys?.delete(val instanceof Pointer ? val : Pointer.getByValue(val));
-
-                const hasGetters = capturedGetters||capturedGettersWithKeys;
-                const gettersCount = (capturedGetters?.size??0) + (capturedGettersWithKeys?.size??0);
-
-                // no dependencies, will never change, this is not the intention of the transform
-                if (!ignoreReturnValue && hasGetters && !gettersCount) {
-                    logger.warn("The transform value for " + this.idString() + " is a static value:", val);
-                }
-
-                if (isLive) {
-
-                    if (capturedGetters) {
-                        // unobserve no longer relevant dependencies
-                        for (const dep of deps) {
-                            if (!capturedGetters?.has(dep)) {
-                                dep.unobserve(update, this.#unique);
-                                deps.delete(dep)
-                            }
-                        }
-                        // observe newly discovered dependencies
-                        for (const getter of capturedGetters) {
-                            if (deps.has(getter)) continue;
-                            deps.add(getter)
-                            getter.observe(update, this.#unique);
-                        }
-                    }
-
-                    if (capturedGettersWithKeys) {
-                        // unobserve no longer relevant dependencies
-                        for (const [ptr, keys] of keyedDeps) {
-                            const capturedKeys = capturedGettersWithKeys.get(ptr);
-                            for (const key of keys) {
-                                if (!capturedKeys?.has(key)) {
-                                    ptr.unobserve(update, this.#unique, key);
-                                    keys.delete(key)
-                                }
-                            }
-                            if (keys.size == 0) keyedDeps.delete(ptr);
-                        }
-
-                        // observe newly discovered dependencies
-                        for (const [ptr, keys] of capturedGettersWithKeys) {
-                            const storedKeys = keyedDeps.getAuto(ptr);
-
-                            for (const key of keys) {
-                                if (storedKeys.has(key)) continue;
-                                ptr.observe(update, this.#unique, key);
-                                storedKeys.add(key);
-                            }
-                           
-                        }
-                    }
-                    
-
-                    if (options?.cache) {
-                        const hash = getDepsHash()
-                        returnCache.set(hash, val);
-                    }
+                finally {
+                    blockLoop()
                 }
             }
             
+
+            /**
+             * if the transform triggeed by update() method returns a promise, block further updates until the promise resolves
+             */
+            const blockLoop = () => {
+                if (this.#waiting_for_always_promise) {
+                    blocked = true;
+                    this.#waiting_for_always_promise.then(()=>{
+                        // now trigger requested update
+                        if (requestingUpdate) {
+                            requestingUpdate = false;
+                            safeUpdate()
+                        }
+                        // unblock
+                        else {
+                            blocked = false;
+                        }
+                    })
+                }
+                else {
+                    blocked = false;
+                }
+            }
+            
+            /**
+             * overridden update method that makes sure transforms returning a Promise are executed in order
+             */
+            state.update = () => {
+                // already awaiting a promise, update is requested and handled by blockLoop()
+                if (blocked) {
+                    requestingUpdate = true;
+                }
+                // not awaiting a promise, execute update immediately
+                else {
+                    safeUpdate()
+                }
+                
+            }
         }
+
 
         // set transform source with TransformSource interface
         this.setTransformSource({
             enableLive: (doUpdate = true) => {
-                isLive = true;
+                state.isLive = true;
                 // get current value and automatically reenable observers
-                if (doUpdate) update(); 
+                if (doUpdate) state.update(); 
             },
             disableLive: () => {
-                isLive = false;
+                state.isLive = false;
                 // disable all observers
-                for (const dep of deps) dep.unobserve(update, this.#unique);
-                for (const [ptr, keys] of keyedDeps) {
-                    for (const key of keys) ptr.unobserve(update, this.#unique, key);
+                for (const dep of state.deps) dep.unobserve(state.update, this.#unique);
+                for (const [ptr, keys] of state.keyedDeps) {
+                    for (const key of keys) ptr.unobserve(state.update, this.#unique, key);
                 }
 
-                deps.clear();
+                state.deps.clear();
             },
-            deps,
-            keyedDeps,
-            update
+            deps: state.deps,
+            keyedDeps: state.keyedDeps,
+            update: state.update
         })
 
         if (forceLive) this.enableLiveTransforms(false);
 
         return this as unknown as Pointer<R>;
+    }
+
+
+    private handleTransformValue(
+        val: T,
+        capturedGetters: Set<Ref<any>>|undefined,
+        capturedGettersWithKeys: AutoMap<Pointer<any>, Set<any>>|undefined,
+        state: TransformState,
+        ignoreReturnValue: boolean,
+        options?: SmartTransformOptions
+    ) {
+        if (!ignoreReturnValue && !this.value_initialized) {
+            if (val == undefined) this.#is_js_primitive = true;
+            else this.#updateIsJSPrimitive(Ref.collapseValue(val,true,true));
+        }
+        
+        // set isLive to true, if not primitive
+        if (!this.is_js_primitive) {
+            state.isLive = true;
+            this._liveTransform = true
+        }
+
+        // update value
+        if (!ignoreReturnValue) this.setVal(val, true, true);
+
+        // remove return value if captured by getters
+        // TODO: this this work as intended?
+        capturedGetters?.delete(val instanceof Pointer ? val : Pointer.getByValue(val));
+        capturedGettersWithKeys?.delete(val instanceof Pointer ? val : Pointer.getByValue(val));
+
+        const hasGetters = capturedGetters||capturedGettersWithKeys;
+        const gettersCount = (capturedGetters?.size??0) + (capturedGettersWithKeys?.size??0);
+
+        // no dependencies, will never change, this is not the intention of the transform
+        if (!ignoreReturnValue && hasGetters && !gettersCount) {
+            logger.warn("The transform value for " + this.idString() + " is a static value:", val);
+        }
+
+        if (state.isLive) {
+
+            if (capturedGetters) {
+                // unobserve no longer relevant dependencies
+                for (const dep of state.deps) {
+                    if (!capturedGetters?.has(dep)) {
+                        dep.unobserve(state.update, this.#unique);
+                        state.deps.delete(dep)
+                    }
+                }
+                // observe newly discovered dependencies
+                for (const getter of capturedGetters) {
+                    if (state.deps.has(getter)) continue;
+                    state.deps.add(getter)
+                    getter.observe(state.update, this.#unique);
+                }
+            }
+
+            if (capturedGettersWithKeys) {
+                // unobserve no longer relevant dependencies
+                for (const [ptr, keys] of state.keyedDeps) {
+                    const capturedKeys = capturedGettersWithKeys.get(ptr);
+                    for (const key of keys) {
+                        if (!capturedKeys?.has(key)) {
+                            ptr.unobserve(state.update, this.#unique, key);
+                            keys.delete(key)
+                        }
+                    }
+                    if (keys.size == 0) state.keyedDeps.delete(ptr);
+                }
+
+                // observe newly discovered dependencies
+                for (const [ptr, keys] of capturedGettersWithKeys) {
+                    const storedKeys = state.keyedDeps.getAuto(ptr);
+
+                    for (const key of keys) {
+                        if (storedKeys.has(key)) continue;
+                        ptr.observe(state.update, this.#unique, key);
+                        storedKeys.add(key);
+                    }
+                   
+                }
+            }
+            
+
+            if (options?.cache) {
+                const hash = state.getDepsHash()
+                state.returnCache.set(hash, val);
+            }
+        }
     }
 
 

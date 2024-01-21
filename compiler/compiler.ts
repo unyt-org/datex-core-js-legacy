@@ -2021,7 +2021,8 @@ export class Compiler {
                 SCOPE.addJSTypeDefs = receiver != Runtime.endpoint && receiver != LOCAL_ENDPOINT;
             }
 
-            const addTypeDefs = SCOPE.addJSTypeDefs && jsTypeDefModule;
+            // add js type module only if http(s) url
+            const addTypeDefs = SCOPE.addJSTypeDefs && jsTypeDefModule && (jsTypeDefModule.toString().startsWith("http://") || jsTypeDefModule.toString().startsWith("https://"));
 
             if (addTypeDefs) {
                 Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+4, SCOPE);

@@ -84,7 +84,7 @@ c.val = 20;
 >  The `always` transform function must always be synchronous and must not return a Promise
 
 
-### Caching `always` output values
+## Caching `always` output values
 
 Since `always` functions are always required to be pure functions, it is possible to
 cache the result of a calculation with given input values and return it at a later point in time.
@@ -169,6 +169,35 @@ const urlContent = transformAsync([url], async url => (await fetch(url)).json())
 ```
 
 The same restrictions as for `transform` functions apply
+
+
+### The `asyncAlways` transform function
+
+The `asyncAlways` function is similar to the `always` function, but can be used for async transforms.
+The `asyncAlways` function does not accept `async` functions as transform functions, but allows promises as return values:
+
+```ts
+const input = $$(10);
+
+const output = await asyncAlways(() => input.val * 10)       // 🔶 Runtime warning: use 'always' instead
+const output = await asyncAlways(async () => input.val * 10) // ❌ Runtime error: asyncAlways cannot be used with async functions
+const output = await asyncAlways(() => (async () => input.val * 10)()) // ❌ No runtime error, but not recommended
+
+const fn = async () => {
+    const res = await asyncOperation();
+    return res + input.val // input is not captured here!
+}
+const output = await asyncAlways(() => fn()) // ❌ No runtime error, but 'output' is not recalculated when 'input' changes!
+
+const output = await asyncAlways(() => asyncFunction(input.val)) // ✅ Correct usage
+const output = await asyncAlways(() => (async (val) => val * 10)(input.val) ) // ✅ Correct usage
+``` 
+
+> [!NOTE]
+> In some cases, async transform functions would work correctly with `asyncAlways`, but
+> any dependency value after the first `await` is not captured. 
+> To avoid confusion, async transform functions are always disallowed for `asyncAlways`.
+
 
 ## Dedicated transform functions
 

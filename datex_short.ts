@@ -5,7 +5,7 @@ import { baseURL, Runtime, PrecompiledDXB, Type, Pointer, Ref, PointerProperty, 
 
 /** make decorators global */
 import { assert as _assert, property as _property, sync as _sync, endpoint as _endpoint, template as _template, jsdoc as _jsdoc} from "./datex_all.ts";
-import { effect as _effect, always as _always, toggle as _toggle, map as _map, equals as _equals, selectProperty as _selectProperty, not as _not } from "./functions.ts";
+import { effect as _effect, always as _always, asyncAlways as _asyncAlways, toggle as _toggle, map as _map, equals as _equals, selectProperty as _selectProperty, not as _not } from "./functions.ts";
 export * from "./functions.ts";
 import { NOT_EXISTING, DX_SLOTS, SLOT_GET, SLOT_SET } from "./runtime/constants.ts";
 import { AssertionError } from "./types/errors.ts";
@@ -24,6 +24,7 @@ declare global {
 	const sync: typeof _sync;
 	const endpoint: typeof _endpoint;
     const always: typeof _always;
+    const asyncAlways: typeof _asyncAlways;
     const toggle: typeof _toggle;
     const map: typeof _map;
     const equals: typeof _equals;
@@ -611,6 +612,7 @@ export function translocate<T extends Map<unknown,unknown>|Set<unknown>|Array<un
 
 Object.defineProperty(globalThis, 'once', {value:once, configurable:false})
 Object.defineProperty(globalThis, 'always', {value:_always, configurable:false})
+Object.defineProperty(globalThis, 'asyncAlways', {value:_asyncAlways, configurable:false})
 Object.defineProperty(globalThis, 'toggle', {value:_toggle, configurable:false})
 Object.defineProperty(globalThis, 'map', {value:_map, configurable:false})
 Object.defineProperty(globalThis, 'equals', {value:_equals, configurable:false})
