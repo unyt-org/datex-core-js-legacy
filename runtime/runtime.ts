@@ -3162,6 +3162,7 @@ export class Runtime {
 
                             // remote pointer value was set - handle subscription
                             if (!ptr.is_origin) {
+
                                 // subscription was already added by pointer origin for preemptively loaded pointer, just finalize
                                 if (isInit) {
                                     ptr.finalizeSubscribe()
