@@ -380,6 +380,7 @@ export class Storage {
 
     static setItem(key:string, value:any, listen_for_pointer_changes = true, location:StorageLocation|null|undefined = this.#primary_location):Promise<boolean>|boolean {
         Storage.cache.set(key, value); // save in cache
+
         // cache deletion does not work, problems with storage item backup
         // setTimeout(()=>Storage.cache.delete(key), 10000);
 
@@ -845,6 +846,7 @@ export class Storage {
 
 		Storage.cache.set(key, val);
 		await this.initItemFromTrustedLocation(key, val, location)
+
 		return val;
     }
 
@@ -1031,7 +1033,7 @@ export class Storage {
     }
 
     public static async printSnapshot(options: StorageSnapshotOptions = {internalItems: false, expandStorageMapsAndSets: true}) {
-        const {items, pointers} = await this.getSnapshot();
+        const {items, pointers} = await this.getSnapshot(options);
 
         const COLOR_PTR = `\x1b[38;2;${[65,102,238].join(';')}m`
         const COLOR_NUMBER = `\x1b[38;2;${[253,139,25].join(';')}m`
@@ -1149,11 +1151,9 @@ export class Storage {
         const items = await this.createSnapshot(this.getItemKeys.bind(this), this.getItemDecompiled.bind(this));
         const pointers = await this.createSnapshot(this.getPointerKeys.bind(this), this.getPointerDecompiledFromLocation.bind(this));
 
-        // remove internal items
-        if (!options.internalItems) {
-            for (const [key] of items.snapshot) {
-                if (key.startsWith("keys_")) items.snapshot.delete(key);
-            }
+        // remove keys items that are unrelated to normal storage
+        for (const [key] of items.snapshot) {
+            if (key.startsWith("keys_")) items.snapshot.delete(key);
         }
 
         // iterate over storage maps and sets and render all entries
