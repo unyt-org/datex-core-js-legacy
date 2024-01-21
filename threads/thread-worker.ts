@@ -3,7 +3,7 @@ import type { Datex as DatexType } from "../mod.ts";
 
 const isServiceWorker = 'registration' in globalThis && (globalThis as any).registration instanceof ServiceWorkerRegistration;
 
-console.log("initialized thread worker", {isServiceWorker})
+console.log("spawned new thread worker")
 
 if (isServiceWorker) {
 	// https://developer.mozilla.org/en-US/docs/Web/API/Clients/claim
@@ -57,6 +57,9 @@ addEventListener("message", async function (event) {
 			// TODO:
 			// await import("https://ga.jspm.io/npm:es-module-shims@1.8.0/dist/es-module-shims.wasm.js");
 			// if (data.importMap) importShim.addImportMap(data.importMap);
+
+			// inherit theme from parent
+			(globalThis as any)._override_console_theme = data.theme;
 
 			await initDatex(data.datexURL);
 			await initWorkerComInterface(data.comInterfaceURL);
