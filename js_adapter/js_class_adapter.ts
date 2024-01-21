@@ -388,7 +388,7 @@ export class Decorators {
                 type = normalizeType(params[0], false, "ext");
             }
             else if (original_class[METADATA]?.[Decorators.FORCE_TYPE]?.constructor) type = original_class[METADATA]?.[Decorators.FORCE_TYPE]?.constructor
-            else type = Type.get("ext", original_class.name);
+            else type = Type.get("ext", original_class.name.replace(/^_/, '')); // remove leading _ from type name
 
 
             // return new templated class
@@ -420,7 +420,7 @@ export class Decorators {
                     type = normalizeType(params[0], false, "ext");
                 }
                 else if (original_class[METADATA]?.[Decorators.FORCE_TYPE]?.constructor) type = original_class[METADATA]?.[Decorators.FORCE_TYPE]?.constructor
-                else type = Type.get("ext", original_class.name);
+                else type = Type.get("ext", original_class.name.replace(/^_/, '')); // remove leading _ from type name
 
                 let callerFile:string|undefined;
 
@@ -1198,7 +1198,9 @@ DatexFunction.setMethodMetaIndexSource(getMetaParamIndex)
 
 // new version for implemented feature functions / attributes: call datex_advanced() on the class (ideally usa as a decorator, currently not supported by ts)
 
-interface DatexClass<T extends Object = any> {
+interface DatexClass<T extends (new (...args: unknown[]) => unknown) = (new (...args: unknown[]) => unknown), Construct = InstanceType<T>["construct"]> {
+
+    new(...args: Construct extends (...args: any) => any ? Parameters<Construct> : ConstructorParameters<T>): datexClassType<T>;
 
     // special functions
     on_result: (call: (data:any, meta:{station_id:number, station_bundle:number[]})=>any) => dc<T>;
@@ -1225,7 +1227,7 @@ type dc<T extends Record<string,any>&{new (...args:unknown[]):unknown}> = DatexC
  * export type MyClass = datexClassType<typeof _MyClass>
  * ```
  */
-export function datexClass<T extends Record<string,any>&{new (...args:unknown[]):unknown}>(_class:T) {
+export function datexClass<T extends Record<string,any>&{new (...args:any[]):any}>(_class:T) {
     return <dc<ObjectRef<T>>> _class;
 }
 

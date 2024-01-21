@@ -1946,7 +1946,7 @@ export class Pointer<T = any> extends Ref<T> {
             && (!endpoint || !Logical.matches(endpoint, this.allowed_access, Target))
             && (endpoint && !Runtime.trustedEndpoints.get(endpoint.main)?.includes("protected-pointer-access"))
         ) {
-            throw new PermissionError("Endpoint has no read permissions for this pointer")
+            throw new PermissionError("Endpoint has no read permissions for this pointer ("+this.idString()+")");
         }
     }
 
