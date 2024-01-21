@@ -167,3 +167,39 @@ const x2 = await $.ABCDEF
 assert (x1 === x2)
 ```
 
+The identity of a pointer is always preserved. Even if you receive the pointer
+from a remote endpoint call, it is still identical to the local instance:
+
+```ts
+// remote endpoint
+
+type User = {name: string, age: number}
+
+const happyBirthday = $$(
+   function (user: User) {
+      user.age++;
+      return user;
+   }
+)
+```
+
+```ts
+// local endpoint
+
+const user = $$({
+   name: "Luke",
+   age: 20
+})
+
+const happyBirthday = await $.DEFABCDEF // <- pointer id for the remote "happyBirthday" function
+const olderUser = await happyBirthday(user);
+
+user === olderUser // true
+olderUser.age === 21 // true
+user.age === 21 // true
+```
+
+Like we would expect if this was a normal, local JavaScript function call, the returned
+`user` object is identical to the object we passed to the function.
+This is not only true for this simple example, but also for more complex scenarios.
+For example, reference identities are also preserved within [eternal values](./05%20Eternal%20Pointers.md).
