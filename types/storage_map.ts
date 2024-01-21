@@ -11,10 +11,10 @@ const logger = new Logger("StorageMap");
 
 /**
  * WeakMap that outsources values to storage.
- * In contrast to JS WeakMaps, primitive keys are also allowed
- * Entries are not automatically garbage collected but must be
- * explicitly deleted
- * all methods are async
+ * The API is similar to the JS WeakMap API, but all methods are async.
+ * In contrast to JS WeakMaps, primitive keys are also allowed.
+ * The StorageWeakMap holds no strong references to its keys in storage.
+ * This means that the pointer of a key can be garbage collected.
  */
 export class StorageWeakMap<K,V> {
 
@@ -95,7 +95,8 @@ export class StorageWeakMap<K,V> {
 }
 
 /**
- * Map that outsources values to storage.
+ * Set that outsources values to storage.
+ * The API is similar to the JS Map API, but all methods are async.
  */
 export class StorageMap<K,V> extends StorageWeakMap<K,V> {
 

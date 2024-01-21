@@ -20,7 +20,7 @@ import type { Task } from "./task.ts";
 import { Assertion } from "./assertion.ts";
 import type { Iterator } from "./iterator.ts";
 import {StorageMap, StorageWeakMap} from "./storage_map.ts"
-import {StorageSet} from "./storage_set.ts"
+import {StorageSet, StorageWeakSet} from "./storage_set.ts"
 import { ExtensibleFunction } from "./function-utils.ts";
 import type { JSTransferableFunction } from "./js-function.ts";
 
@@ -1012,6 +1012,7 @@ export class Type<T = any> extends ExtensibleFunction {
         StorageMap: Type.get<StorageMap<unknown, unknown>>("std:StorageMap"),
         StorageWeakMap: Type.get<StorageWeakMap<unknown, unknown>>("std:StorageWeakMap"),
         StorageSet: Type.get<StorageSet<unknown>>("std:StorageSet"),
+        StorageWeakSet: Type.get<StorageWeakSet<unknown>>("std:StorageWeakSet"),
 
         Error: Type.get<Error>("std:Error"),
         SyntaxError: Type.get("std:SyntaxError"),
@@ -1090,6 +1091,13 @@ Type.std.StorageWeakMap.setJSInterface({
 
 Type.std.StorageMap.setJSInterface({
     class: StorageMap,
+    is_normal_object: true,
+    proxify_children: true,
+    visible_children: new Set(),
+})
+
+Type.std.StorageWeakSet.setJSInterface({
+    class: StorageWeakSet,
     is_normal_object: true,
     proxify_children: true,
     visible_children: new Set(),
