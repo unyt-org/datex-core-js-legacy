@@ -1198,7 +1198,8 @@ export class Pointer<T = any> extends Ref<T> {
         // update pointer ids if no longer local
         if (!this.#is_local) {
             for (const pointer of this.#local_pointers) {
-                pointer.id = Pointer.getUniquePointerID(pointer);
+                // still local?
+                if (pointer.origin == LOCAL_ENDPOINT) pointer.id = Pointer.getUniquePointerID(pointer);
             }
             this.#local_pointers.clear();
         }
