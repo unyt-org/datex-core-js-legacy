@@ -2277,10 +2277,7 @@ export class Pointer<T = any> extends Ref<T> {
             this.val = <any>v;
             return <any>this;
         }
-    }
-
-
-    
+    }    
 
     override get val():T {
         if (this.#garbage_collected) throw new PointerError("Pointer was garbage collected");
@@ -2288,7 +2285,7 @@ export class Pointer<T = any> extends Ref<T> {
             throw new PointerError("Cannot get value of uninitialized pointer")
         }
         // deref and check if not garbage collected
-        if (!this.is_persistent && !this.is_js_primitive && super.val instanceof WeakRef) {
+        if (!this.is_persistent && !this.is_js_primitive && super.val instanceof WeakRef && this.type !== Type.std.WeakRef) {
             const val = super.val.deref();
             // seems to be garbage collected
             if (val === undefined && this.#loaded && !this.#is_js_primitive) {
@@ -2316,7 +2313,7 @@ export class Pointer<T = any> extends Ref<T> {
             throw new PointerError("Cannot get value of uninitialized pointer")
         }
         // deref and check if not garbage collected
-        if (!this.is_persistent && !this.is_js_primitive && super.current_val instanceof WeakRef) {
+        if (!this.is_persistent && !this.is_js_primitive && super.current_val instanceof WeakRef && this.type !== Type.std.WeakRef) {
             const val = super.current_val.deref();
             // seems to be garbage collected
             if (val === undefined && this.#loaded && !this.#is_js_primitive) {
@@ -3384,7 +3381,7 @@ export class Pointer<T = any> extends Ref<T> {
         const res = JSInterface.createProxy(obj, this, this.type);
         if (res != INVALID && res != NOT_EXISTING) return res; // proxy created successfully
 
-        if (typeof obj == "symbol" || obj instanceof Stream || obj instanceof DatexFunction || obj instanceof JSTransferableFunction) { // no proxy needed?!
+        if (typeof obj == "symbol" || obj instanceof WeakRef || obj instanceof Stream || obj instanceof DatexFunction || obj instanceof JSTransferableFunction) { // no proxy needed?!
             return obj;
         }
 
