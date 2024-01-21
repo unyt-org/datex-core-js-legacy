@@ -59,8 +59,12 @@ export class Type<T = any> extends ExtensibleFunction {
 
     get jsTypeDefModule():string|URL|undefined {return this.#jsTypeDefModule}
     set jsTypeDefModule(url: string|URL) {
+        // custom module mapper
         if (Type.#jsTypeDefModuleMapper) this.#jsTypeDefModule = Type.#jsTypeDefModuleMapper(url, this);
-        else this.#jsTypeDefModule = url;
+        // default: only allow http/https modules
+        else if (url.toString().startsWith("http://") || url.toString().startsWith("https://")) {
+            this.#jsTypeDefModule = url;
+        }
     }
 
     root_type: Type; // DatexType without parameters and variation
