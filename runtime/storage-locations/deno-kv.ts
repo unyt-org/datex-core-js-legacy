@@ -34,9 +34,10 @@ export class DenoKVStorageLocation extends AsyncStorageLocation {
 		return client_type == "deno" && !!globalThis.Deno?.openKv;
 	}
 
-	async setItem(key: string, value: unknown): Promise<boolean> {
-		await this.set(itemDB!, key, Compiler.encodeValue(value));
-		return true;
+	async setItem(key: string, value: unknown) {
+		const inserted_ptrs = new Set<Pointer>();
+		await this.set(itemDB!, key, Compiler.encodeValue(value, inserted_ptrs));
+        return inserted_ptrs;
 	}
 	async getItem(key: string, conditions?: ExecConditions): Promise<unknown> {
 		const result = await this.get(itemDB!, key);
