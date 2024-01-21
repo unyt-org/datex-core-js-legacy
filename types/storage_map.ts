@@ -21,8 +21,7 @@ export class StorageWeakMap<K,V> {
 	#prefix?: string;
 
 	constructor(){
-		// TODO: does not work with eternal pointers!
-		// Pointer.proxifyValue(this)
+		Pointer.proxifyValue(this)
 	}
 
 
@@ -32,9 +31,8 @@ export class StorageWeakMap<K,V> {
 		return map;
 	}
 
-	get prefix() {
-		// @ts-ignore
-		if (!this.#prefix) this.#prefix = 'dxmap::'+this[DX_PTR].idString()+'.';
+	protected get _prefix() {
+		if (!this.#prefix) this.#prefix = 'dxmap::'+(this as any)[DX_PTR].idString()+'.';
 		return this.#prefix;
 	}
 
@@ -83,12 +81,12 @@ export class StorageWeakMap<K,V> {
 	protected async getStorageKey(key: K) {
 		const keyHash = await Compiler.getUniqueValueIdentifier(key);
 		// @ts-ignore DX_PTR
-		return this.prefix + keyHash;
+		return this._prefix + keyHash;
 	}
 
 	async clear() {
 		const promises = [];
-		for (const key of await Storage.getItemKeysStartingWith(this.prefix)) {
+		for (const key of await Storage.getItemKeysStartingWith(this._prefix)) {
 			promises.push(await Storage.removeItem(key));
 		}
 		await Promise.all(promises);
@@ -128,11 +126,14 @@ export class StorageMap<K,V> extends StorageWeakMap<K,V> {
 		return Storage.removeItem(storage_item_key)
 	}
 
+	/**
+	 * Async iterator that returns all keys.
+	 */
 	keys() {
 		const self = this;
 		const key_prefix = this.#key_prefix;
 		return (async function*(){
-			const keyGenerator = await Storage.getItemKeysStartingWith(self.prefix);
+			const keyGenerator = await Storage.getItemKeysStartingWith(self._prefix);
 			
 			for (const key of keyGenerator) {
 				const keyValue = await Storage.getItem(key_prefix+key);
@@ -140,16 +141,24 @@ export class StorageMap<K,V> extends StorageWeakMap<K,V> {
 			}
 		})()
 	}
+
+	/**
+	 * Returns an array containing all keys.
+	 * This can be used to iterate over the keys without using a (for await of) loop.
+	 */
 	async keysArray() {
 		const keys = [];
 		for await (const key of this.keys()) keys.push(key);
 		return keys;
 	}
 
+	/**
+	 * Async iterator that returns all values.
+	 */
 	values() {
 		const self = this;
 		return (async function*(){
-			const keyGenerator = await Storage.getItemKeysStartingWith(self.prefix);
+			const keyGenerator = await Storage.getItemKeysStartingWith(self._prefix);
 			
 			for (const key of keyGenerator) {
 				const value = await Storage.getItem(key);
@@ -157,15 +166,28 @@ export class StorageMap<K,V> extends StorageWeakMap<K,V> {
 			}
 		})()
 	}
+
+	/**
+	 * Returns an array containing all values.
+	 * This can be used to iterate over the values without using a (for await of) loop.
+	 */
 	async valuesArray() {
 		const values = [];
 		for await (const value of this.values()) values.push(value);
 		return values;
 	}
 
+	/**
+	 * Async iterator that returns all entries.
+	 */
 	entries() {
 		return this[Symbol.asyncIterator]()
 	}
+
+	/**
+	 * Returns an array containing all entries.
+	 * This can be used to iterate over the entries without using a (for await of) loop.
+	 */
 	async entriesArray() {
 		const entries = [];
 		for await (const entry of this.entries()) entries.push(entry);
@@ -173,7 +195,7 @@ export class StorageMap<K,V> extends StorageWeakMap<K,V> {
 	}
 
 	async *[Symbol.asyncIterator]() {
-		const keyGenerator = await Storage.getItemKeysStartingWith(this.prefix);
+		const keyGenerator = await Storage.getItemKeysStartingWith(this._prefix);
 		
 		for (const key of keyGenerator) {
 			const keyValue = await Storage.getItem(this.#key_prefix+key);
@@ -184,7 +206,7 @@ export class StorageMap<K,V> extends StorageWeakMap<K,V> {
 
 	override async clear() {
 		const promises = [];
-		for (const key of await Storage.getItemKeysStartingWith(this.prefix)) {
+		for (const key of await Storage.getItemKeysStartingWith(this._prefix)) {
 			promises.push(await Storage.removeItem(key));
 			promises.push(await Storage.removeItem(this.#key_prefix+key));
 		}
