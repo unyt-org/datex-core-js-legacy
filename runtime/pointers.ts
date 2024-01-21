@@ -1498,7 +1498,7 @@ export class Pointer<T = any> extends Ref<T> {
                 // else
                 if (!allow_failure) displayFatalError('pointer-not-found');
                 pointer.delete();
-                throw new PointerError("Pointer $"+id_string+" has no assigned value", SCOPE);
+                throw new PointerError("Pointer $"+id_string+" does not exist", SCOPE);
             }
         }
 
@@ -1506,6 +1506,7 @@ export class Pointer<T = any> extends Ref<T> {
 
         // check read permissions
         pointer.assertEndpointCanRead(SCOPE?.sender)
+
 
         return pointer;
     }
@@ -1946,7 +1947,7 @@ export class Pointer<T = any> extends Ref<T> {
             && (!endpoint || !Logical.matches(endpoint, this.allowed_access, Target))
             && (endpoint && !Runtime.trustedEndpoints.get(endpoint.main)?.includes("protected-pointer-access"))
         ) {
-            throw new PermissionError("Endpoint has no read permissions for this pointer")
+            throw new PermissionError("Endpoint has no read permissions for this pointer ("+this.idString()+")");
         }
     }
 
@@ -3082,17 +3083,12 @@ export class Pointer<T = any> extends Ref<T> {
      */
     public static async cleanupSubscribers() {
         logger.debug("cleaning up subscribers");
-        let removeCount = 0;
 
-        for (const [endpoint, pointers] of Pointer.#endpoint_subscriptions) {
-            if (await endpoint.isOnline()) continue;
-            for (const pointer of pointers) {
-                pointer.removeSubscriber(endpoint);
-                removeCount++;
+        for (const endpoint of Pointer.#endpoint_subscriptions.keys()) {
+            if (!(await endpoint.isOnline())) {
+                this.clearEndpointSubscriptions(endpoint);
             }
         }
-
-        logger.debug("removed " + removeCount + " subscriptions");
     }
 
     /**

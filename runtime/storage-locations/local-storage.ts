@@ -22,9 +22,10 @@ export class LocalStorageLocation extends SyncStorageLocation {
 		if (!isExit && localStorage.saveFile) localStorage.saveFile(); // deno local storage, save file afer save on exit or interval
 	}
 
-	setItem(key: string, value: unknown): boolean {
-        localStorage.setItem(Storage.item_prefix+key, Compiler.encodeValueBase64(value))
-        return true;
+	setItem(key: string, value: unknown) {
+		const inserted_ptrs = new Set<Pointer>();
+        localStorage.setItem(Storage.item_prefix+key, Compiler.encodeValueBase64(value, inserted_ptrs));  // serialized pointer
+        return inserted_ptrs;
 	}
 
 	getItem(key: string, conditions?: ExecConditions) {

@@ -182,6 +182,7 @@ export function createFunctionWithDependencyInjections(source: string, dependenc
 	const hasThis = Object.keys(dependencies).includes('this');
     const renamedVars = Object.keys(dependencies).filter(d => d!=='this').map(k=>'_'+k);
     const varMapping = renamedVars.map(k=>`const ${k.slice(1)} = ${allowValueMutations ? 'createStaticObject' : ''}(${k});`).join("\n");
+    const isArrow = isArrowFunction(source);
 
     const createStaticFn = `function createStaticObject(val) {
         if (val && typeof val == "object" && !globalThis.Datex?.Ref.isRef(val)) {
@@ -193,8 +194,12 @@ export function createFunctionWithDependencyInjections(source: string, dependenc
 
     try {
         let creatorFn = new Function(...renamedVars, `"use strict";${(varMapping&&allowValueMutations)?createStaticFn:''}${varMapping}; return (${source})`)
-        if (hasThis) creatorFn = creatorFn.bind(dependencies['this'])
-        return creatorFn(...Object.entries(dependencies).filter(([d]) => d!=='this').map(([_,v]) => v));
+        // arrow function without own this context - bind creatorFn to this
+        if (hasThis && isArrow) creatorFn = creatorFn.bind(dependencies['this']) 
+        const fn = creatorFn(...Object.entries(dependencies).filter(([d]) => d!=='this').map(([_,v]) => v));
+        // normal function - bind directly to this
+        if (hasThis && !isArrow) return fn.bind(dependencies['this'])
+        else return fn;
     }
     catch (e) {
         console.error(source)
@@ -204,8 +209,8 @@ export function createFunctionWithDependencyInjections(source: string, dependenc
 }
 
 export class ExtensibleFunction {
-    constructor(f:globalThis.Function) {
-        return Object.setPrototypeOf(f, new.target.prototype);
+    constructor(f?:globalThis.Function) {
+        if (f) return Object.setPrototypeOf(f, new.target.prototype);
     }
 }
 

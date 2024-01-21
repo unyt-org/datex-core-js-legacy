@@ -384,13 +384,12 @@ export class Decorators {
             let type: Type;
 
             // get template type
-            if (typeof params[0] == "string") {
-                const typeString = params[0].replace(/^\</,'').replace(/\>$/,'')
-                type = Type.get(typeString.includes(":") ? typeString : "ext:"+typeString)
+            if (typeof params[0] == "string" || params[0] instanceof Type) {
+                type = normalizeType(params[0], false, "ext");
             }
-            else if (params[0] instanceof Type) type = params[0];
             else if (original_class[METADATA]?.[Decorators.FORCE_TYPE]?.constructor) type = original_class[METADATA]?.[Decorators.FORCE_TYPE]?.constructor
-            else type = Type.get("ext", original_class.name);
+            else type = Type.get("ext", original_class.name.replace(/^_/, '')); // remove leading _ from type name
+
 
             // return new templated class
             return createTemplateClass(original_class, type);
@@ -417,13 +416,11 @@ export class Decorators {
                 let type: Type;
     
                 // get template type
-                if (typeof params[0] == "string") {
-                    const typeString = params[0].replace(/^\</,'').replace(/\>$/,'')
-                    type = Type.get(typeString.includes(":") ? typeString : "ext:"+typeString)
+                if (typeof params[0] == "string" || params[0] instanceof Type) {
+                    type = normalizeType(params[0], false, "ext");
                 }
-                else if (params[0] instanceof Type) type = params[0];
                 else if (original_class[METADATA]?.[Decorators.FORCE_TYPE]?.constructor) type = original_class[METADATA]?.[Decorators.FORCE_TYPE]?.constructor
-                else type = Type.get("ext", original_class.name);
+                else type = Type.get("ext", original_class.name.replace(/^_/, '')); // remove leading _ from type name
 
                 let callerFile:string|undefined;
 
@@ -488,15 +485,9 @@ export class Decorators {
 
     /** @type(type:string|DatexType)/ (namespace:name)
      * sync class with type */
-    static type(value:any, name:context_name, kind:context_kind, is_static:boolean, is_private:boolean, setMetadata:context_meta_setter, getMetadata:context_meta_getter, params:[(string|Type)?] = []) {
-
-        // handle decorator
-        if (typeof params[0] == "string") {
-            const [typeName, paramsString] = params[0].replace(/^\</,'').replace(/\>$/,'').match(/^(\w*)(?:\((.*)\))?$/)?.slice(1) ?? [];
-            const parsedParams = paramsString ? JSON.parse(`[${paramsString}]`) : undefined;
-            setMetadata(Decorators.FORCE_TYPE, Type.get(typeName, parsedParams))
-        }
-        else if (params[0] instanceof Type) setMetadata(Decorators.FORCE_TYPE, params[0])
+    static type(value:any, name:context_name, kind:context_kind, is_static:boolean, is_private:boolean, setMetadata:context_meta_setter, getMetadata:context_meta_getter, params:[(string|Type)] = []) {
+        const type = normalizeType(params[0]);
+        setMetadata(Decorators.FORCE_TYPE, type)
     }
 
     /** @from(type:string|DatexType): sync class from type */
@@ -574,7 +565,32 @@ export class Decorators {
     }
 }
 
-globalThis.Decorators = Decorators;
+/**
+ * Converts strings into Datex.Type and checks if type parameters are allowed
+ * @param type 
+ * @param allowTypeParams 
+ * @returns 
+ */
+function normalizeType(type:Type|string, allowTypeParams = true, defaultNamespace = "std") {
+    if (typeof type == "string") {
+        // extract type name and parameters
+        const [typeName, paramsString] = type.replace(/^\</,'').replace(/\>$/,'').match(/^((?:\w+\:)?\w*)(?:\((.*)\))?$/)?.slice(1) ?? [];
+        if (paramsString && !allowTypeParams) throw new Error(`Type parameters not allowed (${type})`);
+        
+        // TODO: only json-compatible params are allowed for now to avoid async
+        const parsedParams = paramsString ? JSON.parse(`[${paramsString}]`) : undefined;
+        return Type.get(typeName.includes(":") ? typeName : defaultNamespace+":"+typeName, parsedParams)
+    }
+    else if (type instanceof Type) {
+        if (!allowTypeParams && type.parameters?.length) throw new Error(`Type parameters not allowed (${type})`);
+        return type
+    }
+    else {
+        console.log(type)
+        throw new Error("Invalid type")
+    }
+}
+
 
 const initialized_static_scope_classes = new Map<Function,StaticScope>();
 
@@ -1182,7 +1198,9 @@ DatexFunction.setMethodMetaIndexSource(getMetaParamIndex)
 
 // new version for implemented feature functions / attributes: call datex_advanced() on the class (ideally usa as a decorator, currently not supported by ts)
 
-interface DatexClass<T extends Object = any> {
+interface DatexClass<T extends (new (...args: unknown[]) => unknown) = (new (...args: unknown[]) => unknown), Construct = InstanceType<T>["construct"]> {
+
+    new(...args: Construct extends (...args: any) => any ? Parameters<Construct> : ConstructorParameters<T>): datexClassType<T>;
 
     // special functions
     on_result: (call: (data:any, meta:{station_id:number, station_bundle:number[]})=>any) => dc<T>;
@@ -1209,7 +1227,7 @@ type dc<T extends Record<string,any>&{new (...args:unknown[]):unknown}> = DatexC
  * export type MyClass = datexClassType<typeof _MyClass>
  * ```
  */
-export function datexClass<T extends Record<string,any>&{new (...args:unknown[]):unknown}>(_class:T) {
+export function datexClass<T extends Record<string,any>&{new (...args:any[]):any}>(_class:T) {
     return <dc<ObjectRef<T>>> _class;
 }
 

@@ -1,4 +1,4 @@
-import { Logger } from "../utils/logger.ts";
+import { Logger, console_theme } from "../utils/logger.ts";
 import "./worker-com-interface.ts";
 import { Equals } from "../utils/global_types.ts";
 
@@ -23,7 +23,7 @@ export type ThreadPool<imports extends Record<string, unknown> = Record<string, 
 	& {readonly __tag: unique symbol} & {[Symbol.dispose]: ()=>void}
 
 export type MessageToWorker = 
-	{type: "INIT", datexURL: string, comInterfaceURL: string, moduleURL: string, tsInterfaceGeneratorURL:string, endpoint: string, importMap:Record<string,any>} |
+	{type: "INIT", datexURL: string, comInterfaceURL: string, moduleURL: string, tsInterfaceGeneratorURL:string, endpoint: string, importMap:Record<string,any>, theme:"dark"|"light"} |
 	{type: "INIT_PORT"}
 
 export type MessageFromWorker = 
@@ -503,7 +503,8 @@ export async function _initWorker(worker: Worker|ServiceWorkerRegistration, modu
 		comInterfaceURL: import.meta.resolve("./worker-com-interface.ts"),
 		tsInterfaceGeneratorURL: import.meta.resolve("../utils/interface-generator.ts"),
 		moduleURL: modulePath ? import.meta.resolve(modulePath.toString()): null,
-		endpoint: Datex.Runtime.endpoint.toString()
+		endpoint: Datex.Runtime.endpoint.toString(),
+		theme: console_theme
 	});
 
 	let resolve: Function;

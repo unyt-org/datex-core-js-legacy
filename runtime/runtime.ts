@@ -1806,6 +1806,10 @@ export class Runtime {
      * @param header DXB header of incoming message
      */
     private static updateEndpointOnlineState(header: dxb_header) {
+        if (!header) {
+            logger.error("updateEndpointOnlineState: no header provided");
+            return;
+        }
         if (header.sender) {
             // received signed GOODBYE message -> endpoint is offline
             if (header.type == ProtocolDataType.GOODBYE) {
@@ -1820,9 +1824,9 @@ export class Runtime {
             }
             // other message, assume sender endpoint is online now
             else {
+                // HELLO message received, regard as new login to network, reset previous subscriptions
+                if (header.type == ProtocolDataType.HELLO && !header.sender.ignoreHello) Pointer.clearEndpointSubscriptions(header.sender)
                 header.sender.setOnline(true)
-                // new login to network, reset previous subscriptions
-                if (header.type == ProtocolDataType.HELLO) Pointer.clearEndpointSubscriptions(header.sender)
             }
         }
     }

@@ -23,9 +23,10 @@ export class IndexedDBStorageLocation extends AsyncStorageLocation {
 		return !!globalThis.indexedDB;
 	}
 
-	async setItem(key: string,value: unknown): Promise<boolean> {
-		await datex_item_storage.setItem(key, <any>Compiler.encodeValue(value));  // value to buffer (no header)
-		return true;
+	async setItem(key: string,value: unknown) {
+		const inserted_ptrs = new Set<Pointer>();
+        await datex_item_storage.setItem(key, <any>Compiler.encodeValue(value, inserted_ptrs));
+        return inserted_ptrs;
 	}
 	async getItem(key: string, conditions: ExecConditions): Promise<unknown> {
 		const buffer = <ArrayBuffer><any>await datex_item_storage.getItem(key);

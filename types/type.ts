@@ -78,7 +78,7 @@ export class Type<T = any> extends ExtensibleFunction {
     #proxify_children = false // proxify all (new) children of this type
     children_timeouts?: Map<string, number> // individual timeouts for children
     
-    static #jsTypeDefModuleMapper?: (url:string|URLL, type: Type) => string|URL|undefined
+    static #jsTypeDefModuleMapper?: (url:string|URL, type: Type) => string|URL|undefined
     
     static setJSTypeDefModuleMapper(fn:  (url:string|URL, type: Type) => string|URL|undefined) {
         this.#jsTypeDefModuleMapper = fn;
@@ -367,7 +367,7 @@ export class Type<T = any> extends ExtensibleFunction {
 
     // never call the constructor directly!! should be private
     constructor(namespace?:string, name?:string, variation?:string, parameters?:any[]) {
-        super((val:any) => this.cast(val))
+        super(namespace && namespace != "std" ? (val:any) => this.cast(val) : undefined)
         if (name) this.name = name;
         if (namespace) this.namespace = namespace;
         if (variation) this.variation = variation;
@@ -695,12 +695,12 @@ export class Type<T = any> extends ExtensibleFunction {
     }
 
     public static assertMatches<T extends Type>(value:RefOrValue<any>, type:type_clause): asserts value is (T extends Type<infer TT> ? TT : any) {
-        const res = Type.matchesType(Type.ofValue(value), type, value, true);
+        const res = Type.matches(value, type, true);
         if (!res) throw new ValueError("Value must be of type " + type)
     }
 
     // check if root type of value matches exactly
-    public static matches<T extends Type>(value:RefOrValue<any>, type:type_clause): value is (T extends Type<infer TT> ? TT : any)  {
+    public static matches<T extends Type>(value:RefOrValue<any>, type:type_clause, throwInvalidAssertion = false): value is (T extends Type<infer TT> ? TT : any)  {
         value = Ref.collapseValue(value, true, true);
         // value has a matching DX_TEMPLATE
         if (type instanceof Type && type.template && value[DX_TEMPLATE] && this.matchesTemplate(value[DX_TEMPLATE], type.template)) return true;
@@ -712,7 +712,7 @@ export class Type<T = any> extends ExtensibleFunction {
             return value.length <= type.parameters[0];
         }
 
-        return Type.matchesType(Type.ofValue(value), type, value);
+        return Type.matchesType(Type.ofValue(value), type, value, throwInvalidAssertion);
     }
 
     public static extends(type:Type, extends_type:type_clause){
@@ -1081,15 +1081,15 @@ Type.std.Assertion.setJSInterface({
 })
 
 
-Type.std.StorageMap.setJSInterface({
-    class: StorageMap,
+Type.std.StorageWeakMap.setJSInterface({
+    class: StorageWeakMap,
     is_normal_object: true,
     proxify_children: true,
     visible_children: new Set(),
 })
 
-Type.std.StorageWeakMap.setJSInterface({
-    class: StorageWeakMap,
+Type.std.StorageMap.setJSInterface({
+    class: StorageMap,
     is_normal_object: true,
     proxify_children: true,
     visible_children: new Set(),

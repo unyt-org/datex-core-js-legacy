@@ -273,7 +273,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		return client_type === "deno";
 	}
 
-	async setItem(key: string,value: unknown): Promise<boolean> {
+	async setItem(key: string,value: unknown) {
 		
 	}
 	async getItem(key: string): Promise<unknown> {
