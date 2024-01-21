@@ -447,6 +447,7 @@ export class Storage {
 
         const dependencies = await this.updatePointerAsync(location, pointer, partialUpdateKey);
         dependencies.delete(pointer);
+        this.updatePointerDependencies(pointer.id, [...dependencies].map(p=>p.id));
         await this.saveDependencyPointersAsync(dependencies, listen_for_changes, location);
 
         // listen for changes
@@ -690,6 +691,10 @@ export class Storage {
             // clear dependencies
             this.updatePointerDependencies(pointer_id, [])
 
+            const ptr = Pointer.get(pointer_id)
+            if (ptr) this.#storage_active_pointers.delete(ptr);
+            this.#storage_active_pointer_ids.delete(pointer_id);
+
 			for (const location of this.#locations.keys()) {
 				await location.removePointer(pointer_id);
 			}
@@ -873,7 +878,7 @@ export class Storage {
 		if (location) return location.removeItem(key);
 		// remove from all
 		else {
-            if (Storage.cache.has(key)) Storage.cache.delete(key); // delete from cache
+            Storage.cache.delete(key); // delete from cache
             
             // clear dependencies
             this.updateItemDependencies(key, [])
