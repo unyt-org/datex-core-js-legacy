@@ -571,7 +571,7 @@ export class PointerProperty<T=any> extends Ref<T> {
      * @returns 
      */
     public static get<const Key, Parent extends PointerPropertyParent<Key,unknown>>(parent: Parent|Pointer<Parent>, key: Key, leak_js_properties = false): PointerProperty<Parent extends Map<unknown, infer MV> ? MV : Parent[Key&keyof Parent]> {
-        
+        console.warn("getpp",parent,key)
         if (Pointer.isRef(key)) throw new Error("Cannot use a reference as a pointer property key");
         
         let pointer:Pointer;
@@ -587,7 +587,13 @@ export class PointerProperty<T=any> extends Ref<T> {
     // get current pointer property
     public override get val():T {
         // this.handleBeforePrimitiveValueGet();
-        return this.pointer.getProperty(this.key, this.#leak_js_properties);
+        const val = this.pointer.getProperty(this.key, this.#leak_js_properties);
+        if (this.pointer instanceof LazyPointer) return "lazy..."
+        else if (val === NOT_EXISTING) {
+            console.log(this)
+            throw new Error(`Property ${this.key} does not exist in ${this.pointer}`);
+        }
+        else return val;
     }
 
     public override get current_val():T {

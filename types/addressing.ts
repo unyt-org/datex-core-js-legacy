@@ -469,7 +469,6 @@ export class Endpoint extends Target {
 		}
 		// could not reach endpoint
 		catch (e) {
-			console.warn("ping out failed " + this, e, new Date().getTime())
 			resolve_online!(this.#current_online = false)
 		}
 
