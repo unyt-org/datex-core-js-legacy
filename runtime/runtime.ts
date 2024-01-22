@@ -1948,6 +1948,7 @@ export class Runtime {
         }
         let scope_map = sender_map?.get(sid);
 
+
         // this is the next block or the only block (immediately closed)
         if (!scope_map || (scope_map.next == header.inc)) {
 

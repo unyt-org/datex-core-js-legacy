@@ -410,7 +410,14 @@ export class Endpoint extends Target {
 
 
 	// max allowed time for DATEX online ping response
-	static max_ping_response_time = 1000;
+	static max_ping_response_time = 2000;
+	static max_ping_response_time_unyt_node = 5000;
+	static unyt_nodes = [
+		"@+unyt1",
+		"@+unyt2",
+		"@+unyt3"
+	]
+
 	// online state cache reload time if currently online/offline
 	static cache_life_offline = 3_000;
 	static cache_life_online = 15_000;
@@ -445,11 +452,24 @@ export class Endpoint extends Target {
 
 		try {
 			// ping
-			await Runtime.datexOut(['"ping"', [], {sign:false, encrypt:false}], this, undefined, true, false, undefined, false, undefined, Endpoint.max_ping_response_time);
+			await Runtime.datexOut(
+				['"ping"', [], {sign:false, encrypt:false}], 
+				this, 
+				undefined, 
+				true, 
+				false, 
+				undefined, 
+				false, 
+				undefined,
+				Endpoint.unyt_nodes.includes(this.main.toString()) ? 
+					Endpoint.max_ping_response_time_unyt_node : 
+					Endpoint.max_ping_response_time
+				);
 			resolve_online!(this.#current_online = true)
 		}
 		// could not reach endpoint
-		catch {
+		catch (e) {
+			console.warn("ping out failed " + this, e, new Date().getTime())
 			resolve_online!(this.#current_online = false)
 		}
 
