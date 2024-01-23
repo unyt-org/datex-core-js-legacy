@@ -28,6 +28,7 @@ import { IterableWeakSet } from "../utils/iterable-weak-set.ts";
 import { IterableWeakMap } from "../utils/iterable-weak-map.ts";
 import { LazyPointer } from "./lazy-pointer.ts";
 import { ReactiveArrayMethods } from "../types/reactive-methods/array.ts";
+import { Assertion } from "../types/assertion.ts";
 
 export type observe_handler<K=any, V extends RefLike = any> = (value:V extends RefLike<infer T> ? T : V, key?:K, type?:Ref.UPDATE_TYPE, transform?:boolean, is_child_update?:boolean, previous?: any, atomic_id?:symbol)=>void|boolean
 export type observe_options = {types?:Ref.UPDATE_TYPE[], ignore_transforms?:boolean, recursive?:boolean}
@@ -2096,6 +2097,20 @@ export class Pointer<T = any> extends Ref<T> {
         else return val[propName]
     }
 
+    #typeAssertions?: Conjunction<Assertion>
+
+    /**
+     * Add an assertion that is validated when the pointer value is changed
+     * Only works for primitive pointers
+     * @param assertion 
+     */
+    public assert(assertion:(val:any)=>boolean|string|undefined|null) {
+        if (!this.is_js_primitive) throw new PointerError("Assertions are not yet supported for non-primitive pointer")
+        if (!this.#typeAssertions) this.#typeAssertions = new Conjunction();
+        this.#typeAssertions.add(Assertion.get(undefined, assertion, false));
+        return this;
+    }
+
     /**
      * Changes the id of the pointer to point to the new origin (and also changes the .origin)
      * @param new_owner
@@ -2609,7 +2624,19 @@ export class Pointer<T = any> extends Ref<T> {
                 throw new ValueError("Invalid value type for transform pointer "+this.idString()+": " + newType + (error ? " - " + error : ""));
             }
         }
-        else if ((v!==null&&v!==undefined) && !Type.matchesType(newType, this.type)) throw new ValueError("Invalid value type for pointer "+this.idString()+": " + newType + " - must be " + this.type);
+        else if ((v!==null&&v!==undefined)) {
+            if (
+                // validate pointer type
+                !Type.matchesType(newType, this.type, val, true) ||
+                // validate custom type assertions
+                (
+                    this.#typeAssertions && 
+                    !Type.matchesType(newType, this.#typeAssertions, val, true)
+                )
+            ) {
+                throw new ValueError("Invalid value type for pointer "+this.idString()+": " + newType + " - must be " + this.type);
+            }
+        }
 
         let updatePromise: Promise<any>|void;
 
@@ -3270,17 +3297,12 @@ export class Pointer<T = any> extends Ref<T> {
      */
     public static async cleanupSubscribers() {
         logger.debug("cleaning up subscribers");
-        let removeCount = 0;
 
-        for (const [endpoint, pointers] of Pointer.#endpoint_subscriptions) {
-            if (await endpoint.isOnline()) continue;
-            for (const pointer of pointers) {
-                pointer.removeSubscriber(endpoint);
-                removeCount++;
+        for (const endpoint of Pointer.#endpoint_subscriptions.keys()) {
+            if (!(await endpoint.isOnline())) {
+                this.clearEndpointSubscriptions(endpoint);
             }
         }
-
-        logger.debug("removed " + removeCount + " subscriptions");
     }
 
     /**

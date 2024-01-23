@@ -127,7 +127,7 @@ const COLOR = {
     POINTER:  [ESCAPE_SEQUENCES.BLUE, ESCAPE_SEQUENCES.UNYT_POINTER] as COLOR,
 } as const;
 
-export let console_theme:"dark"|"light" = (client_type=="deno" || (<any>globalThis).matchMedia && (<any>globalThis).matchMedia('(prefers-color-scheme: dark)')?.matches) ? "dark" : "light";
+export let console_theme:"dark"|"light" = (globalThis as any)._override_console_theme ?? ((client_type=="deno" || (<any>globalThis).matchMedia && (<any>globalThis).matchMedia('(prefers-color-scheme: dark)')?.matches) ? "dark" : "light");
 
 try {
     (<any>globalThis).matchMedia && (<any>globalThis).matchMedia('(prefers-color-scheme: dark)')?.addEventListener("change", (e:any)=>{

@@ -1824,9 +1824,9 @@ export class Runtime {
             }
             // other message, assume sender endpoint is online now
             else {
+                // HELLO message received, regard as new login to network, reset previous subscriptions
+                if (header.type == ProtocolDataType.HELLO && !header.sender.ignoreHello) Pointer.clearEndpointSubscriptions(header.sender)
                 header.sender.setOnline(true)
-                // new login to network, reset previous subscriptions
-                if (header.type == ProtocolDataType.HELLO) Pointer.clearEndpointSubscriptions(header.sender)
             }
         }
     }
@@ -3196,7 +3196,7 @@ export class Runtime {
                         if (isSet || isInit) {
                             const ptr = p[0].setValue(el);
 
-                            // remote pointer value was set - handle subscription - ignore if sent from self
+                            // remote pointer value was set - handle subscription
                             if (!ptr.is_origin) {
 
                                 // subscription was already added by pointer origin for preemptively loaded pointer, just finalize
@@ -6730,9 +6730,13 @@ export class Runtime {
                     const sign = SCOPE.buffer_views.uint8[SCOPE.current_index++] == 0 ? -1n : 1n;  // 0 for negative, 1 for positive (and 0)
 
                     // buffer size
-                    const size = SCOPE.buffer_views.data_view.getUint16(SCOPE.current_index, true)
-                    SCOPE.current_index+=Uint16Array.BYTES_PER_ELEMENT;
+                    const size = SCOPE.buffer_views.data_view.getUint32(SCOPE.current_index, true)
+                    SCOPE.current_index+=Uint32Array.BYTES_PER_ELEMENT;
                     
+                    /** wait for buffer */
+                    if (SCOPE.current_index+size > SCOPE.buffer_views.uint8.byteLength) return Runtime.runtime_actions.waitForBuffer(SCOPE);
+                    /********************/
+
                     // bigint from buffer
                     const bigint_buffer = SCOPE.buffer_views.uint8.subarray(SCOPE.current_index, SCOPE.current_index+=size);
                     const bigint = Quantity.bufferToBigInt(bigint_buffer) * sign;

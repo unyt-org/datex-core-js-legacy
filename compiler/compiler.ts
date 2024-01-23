@@ -310,6 +310,7 @@ export class Compiler {
     static MIN_INT_16 = -32_768;
 
     static MAX_UINT_16 = 65_535;
+    static MAX_UINT_32 = 4_294_967_295;
 
     static readonly signature_size = 96 // 256;
 
@@ -1482,7 +1483,7 @@ export class Compiler {
             // insert at top of scope dxb if new
             if (insert_new) {
                 // pointer
-                if (base_type == BinaryCode.POINTER) Compiler.builder.addPointerByID(SCOPE.extract_var_scope, <string>v_name, ACTION_TYPE.GET); // sync
+                if (base_type == BinaryCode.POINTER) Compiler.builder.addPointerByID(SCOPE.extract_var_scope, <string>v_name, ACTION_TYPE.GET, undefined, undefined, NOT_EXISTING); // sync
                 // variable/label
                 else Compiler.builder.insertVariable(SCOPE.extract_var_scope, v_name, ACTION_TYPE.GET, undefined, base_type)
             }
@@ -1681,11 +1682,14 @@ export class Compiler {
             SCOPE.uint8[SCOPE.b_index++] = i < 0 ? 0 : 1; // 0 for negative, 1 for positive (and 0)
 
             const bigint_buffer = Quantity.bigIntToBuffer(BigInt(i < 0 ? -i : i));
-            Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+(Uint16Array.BYTES_PER_ELEMENT*2)+bigint_buffer.byteLength, SCOPE);
+            Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+Uint32Array.BYTES_PER_ELEMENT+bigint_buffer.byteLength, SCOPE);
+
+            // invalid bigint size
+            if (bigint_buffer.byteLength > Compiler.MAX_UINT_32) throw new CompilerError("Integer too big");
 
             // buffer size
-            SCOPE.data_view.setUint16(SCOPE.b_index, bigint_buffer.byteLength, true)
-            SCOPE.b_index+=Uint16Array.BYTES_PER_ELEMENT;
+            SCOPE.data_view.setUint32(SCOPE.b_index, bigint_buffer.byteLength, true)
+            SCOPE.b_index+=Uint32Array.BYTES_PER_ELEMENT;
 
             // bigint
             SCOPE.uint8.set(bigint_buffer, SCOPE.b_index);
@@ -2175,15 +2179,19 @@ export class Compiler {
             }
         },
 
-        addPointerByID: (SCOPE:compiler_scope|extract_var_scope, id:string|Uint8Array, action_type:ACTION_TYPE = ACTION_TYPE.GET, action_specifier?:BinaryCode, init_brackets = false, value:any = NOT_EXISTING):Promise<void>|void => {
+        addPointerByID: (SCOPE:compiler_scope|extract_var_scope, id:string|Uint8Array, action_type:ACTION_TYPE = ACTION_TYPE.GET, action_specifier?:BinaryCode, init_brackets = false, value?:any):Promise<void>|void => {
 
             // insert preemptive pointer
             const id_buffer = typeof id == "string" ? hex2buffer(id, Pointer.MAX_POINTER_ID_SIZE, true) : id;
             const pointer_origin = (id_buffer[0]==BinaryCode.ENDPOINT || id_buffer[0]==BinaryCode.PERSON_ALIAS || id_buffer[0]==BinaryCode.INSTITUTION_ALIAS) ? <IdEndpoint> Target.get(id_buffer.slice(1,19), id_buffer.slice(19,21), id_buffer[0]) : null;
             
             const singleReceiver = 
-                (SCOPE.options.to instanceof Endpoint && SCOPE.options.to) ||
-                (SCOPE.options.to instanceof Disjunction && SCOPE.options.to.size == 1 && [...SCOPE.options.to][0] instanceof Endpoint && [...SCOPE.options.to][0])
+                SCOPE.options.to instanceof Endpoint ||
+                (
+                    SCOPE.options.to instanceof Disjunction && 
+                    SCOPE.options.to.size == 1 && 
+                    [...SCOPE.options.to][0] instanceof Endpoint
+                )
 
             if (
                 pointer_origin && 
@@ -2201,7 +2209,7 @@ export class Compiler {
         },
 
         // just $aabbcc = 
-        addPointerNormal: (SCOPE:compiler_scope|extract_var_scope, id:string|Uint8Array, action_type:ACTION_TYPE = ACTION_TYPE.GET, action_specifier?:BinaryCode, init_brackets = false, value:any = NOT_EXISTING, transform_scope?: Scope<any>):Promise<void>|void => {
+        addPointerNormal: (SCOPE:compiler_scope|extract_var_scope, id:string|Uint8Array, action_type:ACTION_TYPE = ACTION_TYPE.GET, action_specifier?:BinaryCode, init_brackets = false, value?:any, transform_scope?: Scope<any>):Promise<void>|void => {
         
             Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+1, SCOPE);
             Compiler.builder.valueIndex(SCOPE);
@@ -2255,7 +2263,7 @@ export class Compiler {
                 Compiler.builder.addPointerNormal(SCOPE, id, ACTION_TYPE.INIT, undefined, true, ptr.val, (ptr.force_local_transform && ptr.transform_scope) ? ptr.transform_scope : undefined); // sync
                 Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+1, SCOPE);
                 SCOPE.uint8[SCOPE.b_index++] = BinaryCode.CLOSE_AND_STORE;
-                Compiler.builder.addPointerNormal(SCOPE, id, ACTION_TYPE.GET); // sync
+                Compiler.builder.addPointerNormal(SCOPE, id, ACTION_TYPE.GET, undefined, undefined, ptr.val); // sync
                 Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+1, SCOPE);
                 SCOPE.uint8[SCOPE.b_index++] = BinaryCode.SUBSCOPE_END;
 
@@ -2285,7 +2293,7 @@ export class Compiler {
                     deferSizeIndex = SCOPE.b_index;
                     SCOPE.b_index += Uint32Array.BYTES_PER_ELEMENT;
                 }
-                Compiler.builder.addPointerNormal(SCOPE, id, ACTION_TYPE.GET); // sync
+                Compiler.builder.addPointerNormal(SCOPE, id, ACTION_TYPE.GET, undefined, undefined, NOT_EXISTING); // sync
                 if (defer) SCOPE.data_view.setUint32(deferSizeIndex, SCOPE.b_index-deferSizeIndex-Uint32Array.BYTES_PER_ELEMENT, true);
             }
         },
@@ -2311,7 +2319,7 @@ export class Compiler {
                 Compiler.builder.insertExtractedVariable(<compiler_scope>SCOPE, BinaryCode.POINTER, buffer2hex(p.id_buffer));
             }
             // add normally
-            else return Compiler.builder.addPointerByID (SCOPE, p.id_buffer, action_type, action_specifier)
+            else return Compiler.builder.addPointerByID (SCOPE, p.id_buffer, action_type, action_specifier, undefined, NOT_EXISTING)
         },
 
         // add <Array>
@@ -4590,7 +4598,7 @@ export class Compiler {
                 Compiler.builder.insertExtractedVariable(SCOPE, BinaryCode.POINTER, id)
             }
             // insert normally
-            else await Compiler.builder.addPointerByID(SCOPE, id, action_type, action_specifier, init_brackets)
+            else await Compiler.builder.addPointerByID(SCOPE, id, action_type, action_specifier, init_brackets, NOT_EXISTING)
             isEffectiveValue = true;
         }
 

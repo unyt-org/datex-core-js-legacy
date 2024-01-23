@@ -12,6 +12,7 @@ export class WorkerCommunicationInterface extends CommonInterface<[Worker]> {
     override global = false;
     override authorization_required = false; // don't connect with public keys
     override type = "worker";
+    override immediate = true;
     
     protected connect() {
 
