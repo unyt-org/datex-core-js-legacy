@@ -3472,10 +3472,9 @@ export class Runtime {
 
         // get parent[key] as DatexPointerProperty if possible
         getReferencedProperty(SCOPE: datex_scope, parent:any, key:any){
-            const pointer = Pointer.createOrGet(parent);
+            const pointer = Pointer.createOrGetLazy(parent);
             if (pointer) {
-                pointer.assertEndpointCanRead(SCOPE?.sender)
-
+                if (pointer instanceof Pointer) pointer.assertEndpointCanRead(SCOPE?.sender)
                 return PointerProperty.get(pointer, key);
             }
             else throw new RuntimeError("Could not get a child reference");

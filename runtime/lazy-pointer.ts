@@ -7,8 +7,8 @@ export class LazyPointer<T> {
 		return "Unresolved Pointer ($" + this.id + ")"
 	}
 
-	onLoad(callback:(val:MinimalJSRef<T>)=>void) {
-		Pointer.onPointerForIdAdded(this.id, p => callback(Pointer.collapseValue(p) as MinimalJSRef<T>))
+	onLoad(callback:(val:MinimalJSRef<T>, ptr: Pointer<T>)=>void) {
+		Pointer.onPointerForIdAdded(this.id, p => callback(Pointer.collapseValue(p) as MinimalJSRef<T>, p))
 	}
 
 	static withVal(val:any, callback:(val:MinimalJSRef<any>)=>void) {

@@ -23,7 +23,7 @@ import { Error as DatexError, ValueError } from "../types/errors.ts";
 import { Function as DatexFunction } from "../types/function.ts";
 import { DatexObject } from "../types/object.ts";
 import { Tuple } from "../types/tuple.ts";
-import { DX_PERMISSIONS, DX_TYPE, INIT_PROPS } from "../runtime/constants.ts";
+import { DX_PERMISSIONS, DX_TYPE, DX_ROOT, INIT_PROPS } from "../runtime/constants.ts";
 import { type Class } from "../utils/global_types.ts";
 import { Conjunction, Disjunction, Logical } from "../types/logic.ts";
 import { client_type } from "../utils/constants.ts";
@@ -1087,6 +1087,8 @@ export function createTemplateClass(original_class:{ new(...args: any[]): any; }
             DatexObject.extend(template, prototype[DX_TYPE].template);
             break;
         }
+        // is root of dx prototype chain, stop
+        if (prototype[DX_ROOT]) break;
     }
 
 
