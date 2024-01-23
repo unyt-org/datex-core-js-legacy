@@ -580,6 +580,16 @@ export class PointerProperty<T=any> extends Ref<T> {
         PointerProperty.synced_pairs.get(ptr)!.set(this.key, this); // save in map
     }
 
+    /**
+     * Called when the bound lazy pointer is loaded.
+     * If there is no lazy pointer, the callback is called immediately
+     * @param callback 
+     */
+    public onLoad(callback: (val:PointerProperty<T>, ref: PointerProperty<T>)=>void) {
+        if (this.lazy_pointer) this.lazy_pointer.onLoad(() => callback(this, this));
+        else callback(this, this);
+    }
+
     private static synced_pairs = new WeakMap<Pointer, Map<any, PointerProperty>>()
 
     // TODO: use InferredPointerProperty (does not collapse)

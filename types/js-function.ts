@@ -4,7 +4,7 @@
 
 import { Pointer } from "../runtime/pointers.ts";
 import { Runtime } from "../runtime/runtime.ts";
-import { ExtensibleFunction, getDeclaredExternalVariables, getDeclaredExternalVariablesAsync, getSourceWithoutUsingDeclaration, Callable, createFunctionWithDependencyInjectionsResolveLazyPointers } from "./function-utils.ts";
+import { ExtensibleFunction, getDeclaredExternalVariables, getDeclaredExternalVariablesAsync, getSourceWithoutUsingDeclaration, Callable, createFunctionWithDependencyInjectionsResolveLazyPointers, hasUnresolvedLazyDependencies } from "./function-utils.ts";
 
 
 export type JSTransferableFunctionOptions = {
@@ -16,8 +16,11 @@ export class JSTransferableFunction extends ExtensibleFunction {
 	
 	#fn: (...args:unknown[])=>unknown
 
+	// promise that resolves when all lazy dependencies are resolved
+	public lazyResolved: Promise<void>
+
 	// deno-lint-ignore constructor-super
-	private constructor(intermediateFn: (...args:unknown[])=>unknown, public deps: Record<string,unknown>, public source: string, public flags?: string[], options?: JSTransferableFunctionOptions) {
+	private constructor(intermediateFn: (...args:unknown[])=>unknown, lazyResolved: Promise<void>, public deps: Record<string,unknown>, public source: string, public flags?: string[], options?: JSTransferableFunctionOptions) {
 		if (options?.errorOnOriginContext) {
 			const invalidIntermediateFunction = () => {throw options.errorOnOriginContext};
 			super(invalidIntermediateFunction);
@@ -39,13 +42,25 @@ export class JSTransferableFunction extends ExtensibleFunction {
 			super(fn);
 			this.#fn = fn;
 		}
-		
+
+		this.lazyResolved = lazyResolved;
+
 		this.source = source;
 	}
 
 
 	call(...args:any[]) {
 		return this.#fn(...args)
+	}
+
+	// waits until all lazy dependencies are resolved and then calls the function
+	async callLazy() {
+		await this.lazyResolved;
+		return this.call()
+	}
+
+	public get hasUnresolvedLazyDependencies() {
+		return hasUnresolvedLazyDependencies(this.deps)
 	}
 
 	/**
@@ -97,8 +112,8 @@ export class JSTransferableFunction extends ExtensibleFunction {
 	}
 
 	static #createTransferableFunction(source: string, dependencies: Record<string, unknown>, flags?: string[], options?:JSTransferableFunctionOptions) {
-        const intermediateFn = createFunctionWithDependencyInjectionsResolveLazyPointers(source, dependencies, !options?.isLocal);
-		return new JSTransferableFunction(intermediateFn, dependencies, source, flags, options);
+        const {intermediateFn, lazyResolved} = createFunctionWithDependencyInjectionsResolveLazyPointers(source, dependencies, !options?.isLocal);
+		return new JSTransferableFunction(intermediateFn, lazyResolved, dependencies, source, flags, options);
 	}
 
 }
