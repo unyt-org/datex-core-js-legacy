@@ -1007,7 +1007,7 @@ export class UpdateScheduler {
                         // Success
                     })
                     .catch((e) => {
-                        logger.error("forwarding failed", e);
+                        console.error("forwarding failed", e);
                     });
             }            
         }
@@ -2051,7 +2051,7 @@ export class Pointer<T = any> extends Ref<T> {
 
 
     #updateIsOrigin() {
-        this.#is_origin = !!Runtime.endpoint?.equals(this.#origin);
+        this.#is_origin = !!Runtime.endpoint.equals(this.#origin) || !!Runtime.endpoint.main.equals(this.#origin) || this.#origin.equals(LOCAL_ENDPOINT);
     }
 
 
@@ -2192,7 +2192,7 @@ export class Pointer<T = any> extends Ref<T> {
         const endpoint = override_endpoint ?? this.origin;
 
         // early return, trying to subscribe to the own main endpoint, guaranteed to be routed back to self, which is not allowed
-        if (endpoint.equals(Runtime.endpoint.main) || endpoint.equals(Runtime.endpoint)) {
+        if (endpoint.equals(Runtime.endpoint.main) || endpoint.equals(Runtime.endpoint) || endpoint.equals(LOCAL_ENDPOINT)) {
             logger.warn("tried to subscribe to own pointer: " + this.idString() + "(pointer origin: " + this.origin + ", own endpoint instance: " + Runtime.endpoint + ")");
             return this;
         }
@@ -3219,7 +3219,7 @@ export class Pointer<T = any> extends Ref<T> {
         // TODO also check pointer permission for 'to'
 
         // request sync endpoint is self, cannot subscribe to own pointers!
-        if (Runtime.endpoint.equals(subscriber)) {
+        if (Runtime.endpoint.equals(subscriber) || subscriber.equals(LOCAL_ENDPOINT)) {
             throw new PointerError("Cannot sync pointer with own origin");
         }
 
@@ -4131,7 +4131,7 @@ export class Pointer<T = any> extends Ref<T> {
                 await Runtime.datexOut([datex, data, {collapse_first_inserted, type:ProtocolDataType.UPDATE, preemptive_pointer_init: true}], receiver, undefined, false, undefined, undefined, false, undefined, this.datex_timeout);
             } catch(e) {
                 //throw e;
-                logger.error("forwarding failed", e, datex, data)
+                console.error("forwarding failed", e, datex, data)
             }
         }
 

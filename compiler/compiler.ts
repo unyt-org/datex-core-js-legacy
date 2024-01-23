@@ -2278,7 +2278,7 @@ export class Compiler {
                         }
                         // subscribing to own pointers is not allowed
                         // should not happen because pointers are not sent with preemptive loading to own endpoint anyway
-                        if (Runtime.endpoint.equals(endpoint)) continue;
+                        if (Runtime.endpoint.equals(endpoint) || endpoint.equals(LOCAL_ENDPOINT)) continue;
                         logger.debug("auto subscribing " + endpoint + " to " + ptr.idString());
                         ptr.addSubscriber(endpoint);
                     }
