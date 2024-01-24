@@ -572,7 +572,7 @@ export class PointerProperty<T=any> extends Ref<T> {
      * @returns 
      */
     public static get<const Key, Parent extends PointerPropertyParent<Key,unknown>>(parent: Parent|Pointer<Parent>, key: Key, leak_js_properties = false): PointerProperty<Parent extends Map<unknown, infer MV> ? MV : Parent[Key&keyof Parent]> {
-        
+        console.warn("getpp",parent,key)
         if (Pointer.isRef(key)) throw new Error("Cannot use a reference as a pointer property key");
         
         let pointer:Pointer;
@@ -588,7 +588,13 @@ export class PointerProperty<T=any> extends Ref<T> {
     // get current pointer property
     public override get val():T {
         // this.handleBeforePrimitiveValueGet();
-        return this.pointer.getProperty(this.key, this.#leak_js_properties);
+        const val = this.pointer.getProperty(this.key, this.#leak_js_properties);
+        if (this.pointer instanceof LazyPointer) return "lazy..."
+        else if (val === NOT_EXISTING) {
+            console.log(this)
+            throw new Error(`Property ${this.key} does not exist in ${this.pointer}`);
+        }
+        else return val;
     }
 
     public override get current_val():T {
@@ -2292,10 +2298,7 @@ export class Pointer<T = any> extends Ref<T> {
             this.val = <any>v;
             return <any>this;
         }
-    }
-
-
-    
+    }    
 
     override get val():T {
         if (this.#garbage_collected) throw new PointerError("Pointer was garbage collected");
@@ -2303,7 +2306,7 @@ export class Pointer<T = any> extends Ref<T> {
             throw new PointerError("Cannot get value of uninitialized pointer")
         }
         // deref and check if not garbage collected
-        if (!this.is_persistent && !this.is_js_primitive && super.val instanceof WeakRef) {
+        if (!this.is_persistent && !this.is_js_primitive && super.val instanceof WeakRef && this.type !== Type.std.WeakRef) {
             const val = super.val.deref();
             // seems to be garbage collected
             if (val === undefined && this.#loaded && !this.#is_js_primitive) {
@@ -2331,7 +2334,7 @@ export class Pointer<T = any> extends Ref<T> {
             throw new PointerError("Cannot get value of uninitialized pointer")
         }
         // deref and check if not garbage collected
-        if (!this.is_persistent && !this.is_js_primitive && super.current_val instanceof WeakRef) {
+        if (!this.is_persistent && !this.is_js_primitive && super.current_val instanceof WeakRef && this.type !== Type.std.WeakRef) {
             const val = super.current_val.deref();
             // seems to be garbage collected
             if (val === undefined && this.#loaded && !this.#is_js_primitive) {
@@ -3406,7 +3409,7 @@ export class Pointer<T = any> extends Ref<T> {
         const res = JSInterface.createProxy(obj, this, this.type);
         if (res != INVALID && res != NOT_EXISTING) return res; // proxy created successfully
 
-        if (typeof obj == "symbol" || obj instanceof Stream || obj instanceof DatexFunction || obj instanceof JSTransferableFunction) { // no proxy needed?!
+        if (typeof obj == "symbol" || obj instanceof WeakRef || obj instanceof Stream || obj instanceof DatexFunction || obj instanceof JSTransferableFunction) { // no proxy needed?!
             return obj;
         }
 

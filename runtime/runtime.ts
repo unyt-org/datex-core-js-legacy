@@ -1948,6 +1948,7 @@ export class Runtime {
         }
         let scope_map = sender_map?.get(sid);
 
+
         // this is the next block or the only block (immediately closed)
         if (!scope_map || (scope_map.next == header.inc)) {
 
@@ -2224,7 +2225,6 @@ export class Runtime {
         
         let old_type = Type.ofValue(value);
         let old_value = value instanceof UnresolvedValue ? value[DX_VALUE] : value;
-
         // already the right type
         if (old_type == type) return old_value;
         
@@ -2232,6 +2232,7 @@ export class Runtime {
 
         // only handle std namespace / js:Object / js:Symbol
         if (type.namespace == "std" || type == Type.js.NativeObject || type == Type.js.Symbol) {
+            const uncollapsed_old_value = old_value
             if (old_value instanceof Pointer) old_value = old_value.val;
 
             // handle default casts
@@ -2431,6 +2432,31 @@ export class Runtime {
                     break;
                 }
 
+                case Type.std.WeakRef: {
+                    if (old_value === VOID) {
+                        // empty weakref
+                        new_value = new WeakRef(Symbol("EMPTY"));
+                        new_value.deref = ()=>{};
+                    }
+                    else if (typeof uncollapsed_old_value == "symbol" || typeof uncollapsed_old_value == "object" || typeof uncollapsed_old_value == "function") {
+                        const ptr = Pointer.collapseValue(Pointer.createOrGet(uncollapsed_old_value))
+                        new_value = new WeakRef(ptr);
+                    }
+                    // pointer id -> resolve pointer
+                    else if (typeof old_value == "string" && old_value.startsWith("$")) {
+                        try {
+                            const ptr = Pointer.collapseValue(await Pointer.load(old_value.slice(1)))
+                            new_value = new WeakRef(ptr);
+                        }
+                        catch {
+                            // pointer not found, empty weakref
+                            new_value = new WeakRef(Symbol("EMPTY"));
+                            new_value.deref = ()=>{};
+                        }
+                    }
+                    else new_value = INVALID;
+                    break;
+                }
 
                 case Type.std.time: {
                     if (old_value === VOID) new_value = new Time(Date.now());
@@ -2627,6 +2653,16 @@ export class Runtime {
         
         // symbol
         if (typeof value == "symbol") return value.toString().slice(7,-1) || undefined
+
+        // weakref
+        if (value instanceof WeakRef) {
+            const deref = value.deref();
+            // empty weak ref
+            if (!deref) return VOID;
+            const ptr = Pointer.createOrGet(deref)
+            if (ptr) return "$"+ptr.id;
+            else throw new TypeError("Cannot serialize weakref to non-pointer value");
+        }
         
         // directly return, cannot be overwritten
         if (value === VOID || value === null || value instanceof Endpoint || value instanceof Type) return value;

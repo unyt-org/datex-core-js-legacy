@@ -784,6 +784,8 @@ export class Type<T = any> extends ExtensibleFunction {
         if (value instanceof Disjunction) return <Type<T>>Type.std.Disjunction;
         if (value instanceof Negation) return <Type<T>>Type.std.Negation;
 
+        if (value instanceof WeakRef) return <Type<T>>Type.std.WeakRef;
+
         // get type from DX_TYPE property
         if (value?.[DX_TYPE]) return value[DX_TYPE];
 
@@ -879,6 +881,7 @@ export class Type<T = any> extends ExtensibleFunction {
             if (_forClass == Number || Number.isPrototypeOf(_forClass)) return <Type<T>>Type.std.decimal;
             if (_forClass == globalThis.Boolean || globalThis.Boolean.isPrototypeOf(_forClass)) return <Type<T>>Type.std.boolean;
             if (_forClass == Symbol || Symbol.isPrototypeOf(_forClass)) return <Type<T>>Type.js.Symbol;
+            if (_forClass == WeakRef || WeakRef.isPrototypeOf(_forClass)) return <Type<T>>Type.std.WeakRef;
 
             if (_forClass == ArrayBuffer || TypedArray.isPrototypeOf(_forClass)) return <Type<T>>Type.std.buffer;
             if (_forClass == Tuple || Tuple.isPrototypeOf(_forClass)) return <Type<T>>Type.std.Tuple;
@@ -1031,6 +1034,8 @@ export class Type<T = any> extends ExtensibleFunction {
         RuntimeError: Type.get("std:RuntimeError"),
         SecurityError: Type.get("std:DatexSecurityError"),
         AssertionError: Type.get("std:AssertionError"),
+
+        WeakRef: Type.get("std:WeakRef"),
 
         Scope: Type.get<Scope>("std:Scope"),
 
