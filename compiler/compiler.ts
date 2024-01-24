@@ -2300,6 +2300,9 @@ export class Compiler {
 
         addPointer: (p:Pointer, SCOPE:compiler_scope|extract_var_scope, action_type:ACTION_TYPE = ACTION_TYPE.GET, action_specifier?:BinaryCode):Promise<void>|void => {
 
+            // pointer get
+            if (SCOPE.options.inserted_ptrs && action_type == ACTION_TYPE.GET) SCOPE.options.inserted_ptrs.add(p)
+
             // ignore value - insert void
             if (p.value_initialized && p.val?.[DX_IGNORE]) {
                 Compiler.builder.addVoid(SCOPE);
@@ -2981,14 +2984,9 @@ export class Compiler {
                         action_type = ACTION_TYPE.OTHER;
                         action_specifier = BinaryCode.CREATE_POINTER;
                     }
-                    else {
-                        // pointer get
-                        if (SCOPE.options.inserted_ptrs) SCOPE.options.inserted_ptrs.add(value)
-                    }
                     Compiler.builder.addPointer(value, SCOPE, action_type, action_specifier); // POINTER (assignment)
                 }
                 else {
-                    if (SCOPE.options.inserted_ptrs) SCOPE.options.inserted_ptrs.add(value)
                     Compiler.builder.addPointer(value, SCOPE); // POINTER
                 }
             }
