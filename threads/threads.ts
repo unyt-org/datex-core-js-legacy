@@ -376,6 +376,20 @@ async function getThread(): Promise<ThreadModule> {
 	
 }
 
+function removeThreadEndpoint(thread: ThreadModule) {
+	const endpoint = threadEndpoints.get(thread);
+	if (endpoint) {
+		availableThreads.set(thread, 0);
+		threadEndpoints.delete(thread);
+		if (configuration.cluster) {
+			configuration.cluster.endpoints.delete(endpoint);
+		}
+	}
+	else {
+		throw new Error("Thread is not a remote thread")
+	}
+}
+
 function freeThread(thread: ThreadModule) {
 	if (!availableThreads.has(thread)) return;
 	availableThreads.set(thread, availableThreads.get(thread)! - 1); 
@@ -667,6 +681,11 @@ export async function run<ReturnType>(task: (() => ReturnType)|JSTransferableFun
 		else if (e instanceof Error && e.message.match(/ReferenceError - \S* is not defined/)) {
 			const variableName = e.message.match(/ReferenceError - (\S*)/)![1];
 			throw new RuntimeError("Variable '"+variableName+"' from the parent scope must be explicitly declared at the beginning of the function body with 'use ("+variableName+")'.")
+		}
+		else if (e instanceof Error && e.message.endsWith("is offline")) {
+			console.log("cluster endpoint " + endpoint + " is offline");
+			removeThreadEndpoint(thread);
+			return run(task, options, _meta);
 		}
 		else if (e instanceof Error) {
 			throw new Error(e.message);

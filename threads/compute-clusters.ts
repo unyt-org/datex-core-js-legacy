@@ -68,6 +68,7 @@ export class ComputeCluster {
 			cluster = await datex(cluster);
 			if (!(cluster instanceof ComputeCluster)) throw new Error(`"${cluster}" is not a ComputeCluster`)
 		}
+		else if (!(cluster instanceof ComputeCluster)) throw new Error(`cluster must be a ComputeCluster or a DATEX identifier (e.g. "@myEndpoint.myComputCluster")`)
 
 		const ptr = Datex.Pointer.getByValue(cluster);
 		if (!ptr) throw new Error(`ComputeCluster "${cluster.name}" is not a bound to a pointer`)
