@@ -1858,8 +1858,10 @@ export class Runtime {
             //throw e
             console.error(e[1]??e)
             const header = e[0];
-            this.handleScopeError(header, e[1]);
-            this.updateEndpointOnlineState(header);
+            if (header) {
+                this.handleScopeError(header, e[1]);
+                this.updateEndpointOnlineState(header);
+            }
             return;
         }
         
