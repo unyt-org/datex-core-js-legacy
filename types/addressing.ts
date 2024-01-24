@@ -283,7 +283,10 @@ export class Endpoint extends Target {
 		return this.#entrypoint = Runtime.Blockchain.getEndpointDefault(this);
 	}
 
-	public async getAlias(){
+	public async getAlias(useCache = true){
+		// use cached alias
+		if (this.#alias && useCache) return this.#alias;
+
 		// resolve alias from Blockchain
 		try {
 			this.#alias = <string | undefined> await Runtime.Blockchain.resolveAlias(this);
