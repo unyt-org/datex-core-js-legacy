@@ -87,7 +87,7 @@ export class StorageWeakMap<K,V> {
 	async clear() {
 		const promises = [];
 		for (const key of await Storage.getItemKeysStartingWith(this._prefix)) {
-			promises.push(await Storage.removeItem(key));
+			promises.push(Storage.removeItem(key));
 		}
 		await Promise.all(promises);
 	}
