@@ -99,7 +99,7 @@ async function getModuleExports(path_or_specifier:URL|string, caller:string|unde
 		}
 	}
 	catch (e) {
-		throw "error loading module:" + e?.message??e;
+		throw new Error("Could not load module '"+path_or_specifier+"' " + e?.message??e);
 	} // network error, etc.., TODO: show warning somewhere
 	
 

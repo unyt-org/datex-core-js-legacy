@@ -135,10 +135,15 @@ const isArrowFunction = (fnSrc:string) => {
 	return !!fnSrc.match(/^(async\s+)?\([^)]*\)\s*=>/)
 }
 
-function resolveLazyDependencies(deps:Record<string,unknown>) {
+function resolveLazyDependencies(deps:Record<string,unknown>, resolve?: ()=>void) {
+    let resolved = false;
     for (const [key, value] of Object.entries(deps)) {
         if (value instanceof LazyPointer) value.onLoad((v) => {
-            deps[key] = v
+            deps[key] = v;
+            if (!resolved && resolve && !hasUnresolvedLazyDependencies(deps)) {
+                resolved = true;
+                resolve();
+            }
         });
     }
 }
@@ -150,6 +155,13 @@ function assertLazyDependenciesResolved(deps:Record<string,unknown>) {
     }
 }
 
+export function hasUnresolvedLazyDependencies(deps:Record<string,unknown>) {
+    for (const value of Object.values(deps)) {
+        if (value instanceof LazyPointer) return true;
+    }
+    return false;
+}
+
 /**
  * Create a new function from JS source code with injected dependency variables
  * Also resolves LazyPointer dependencies
@@ -157,8 +169,10 @@ function assertLazyDependenciesResolved(deps:Record<string,unknown>) {
  * @param dependencies 
  * @returns 
  */
-export function createFunctionWithDependencyInjectionsResolveLazyPointers(source: string, dependencies: Record<string, unknown>, allowValueMutations = true): ((...args:unknown[]) => unknown) {
+export function createFunctionWithDependencyInjectionsResolveLazyPointers(source: string, dependencies: Record<string, unknown>, allowValueMutations = true): {intermediateFn: ((...args:unknown[]) => unknown), lazyResolved: Promise<void>} {
     let fn: Function|undefined;
+
+    const {promise: lazyResolved, resolve} = Promise.withResolvers<void>()
 
     const intermediateFn = (...args:any[]) => {
         if (!fn) {
@@ -167,8 +181,10 @@ export function createFunctionWithDependencyInjectionsResolveLazyPointers(source
         }
         return fn(...args)
     }
-    resolveLazyDependencies(dependencies)
-    return intermediateFn;
+
+    if (!hasUnresolvedLazyDependencies(dependencies)) resolve()
+    else resolveLazyDependencies(dependencies, resolve);
+    return {intermediateFn, lazyResolved};
 }
 
 /**

@@ -11,8 +11,10 @@ export const UNKNOWN_TYPE: unique symbol = Symbol("Unknown type") // return for 
 
 export const DX_PTR: unique symbol = Symbol("DX_PTR"); // key for pointer objects to access the respective DatexPointer
 export const DX_TYPE: unique symbol = Symbol("DX_TYPE");
+export const DX_ROOT: unique symbol = Symbol("DX_ROOT");
 export const DX_SERIALIZED: unique symbol = Symbol("DX_SERIALIZED");
 export const DX_VALUE: unique symbol = Symbol("DX_VALUE");
+export const DX_REPLACE: unique symbol = Symbol("DX_REPLACE"); // value that is used as a replacement when serializing
 export const DX_SOURCE: unique symbol = Symbol("DX_SOURCE"); // used to override the default loading behaviour for a pointer (fetching by id). Can be an arbitrary DATEX Script that can be resolved with datex.get. Currently only used by the interface generator for JS modules.
 // TODO: remove? replaced with DX_SLOTS
 export const DX_TEMPLATE: unique symbol = Symbol("DX_TEMPLATE");

@@ -27,7 +27,7 @@ import { BinaryCode } from "./binary_codes.ts";
 import { Scope } from "../types/scope.ts";
 import { ProtocolDataType } from "./protocol_types.ts";
 import { Quantity } from "../types/quantity.ts";
-import { EXTENDED_OBJECTS, INHERITED_PROPERTIES, VOID, SLOT_WRITE, SLOT_READ, SLOT_EXEC, NOT_EXISTING, SLOT_GET, SLOT_SET, DX_IGNORE, DX_BOUND_LOCAL_SLOT } from "../runtime/constants.ts";
+import { EXTENDED_OBJECTS, INHERITED_PROPERTIES, VOID, SLOT_WRITE, SLOT_READ, SLOT_EXEC, NOT_EXISTING, SLOT_GET, SLOT_SET, DX_IGNORE, DX_BOUND_LOCAL_SLOT, DX_REPLACE } from "../runtime/constants.ts";
 import { arrayBufferToBase64, base64ToArrayBuffer, buffer2hex, hex2buffer } from "../utils/utils.ts";
 import { RuntimePerformance } from "../runtime/performance_measure.ts";
 import { Conjunction, Disjunction, Logical, Negation } from "../types/logic.ts";
@@ -2278,7 +2278,7 @@ export class Compiler {
                         }
                         // subscribing to own pointers is not allowed
                         // should not happen because pointers are not sent with preemptive loading to own endpoint anyway
-                        if (Runtime.endpoint.equals(endpoint)) continue;
+                        if (Runtime.endpoint.equals(endpoint) || endpoint.equals(LOCAL_ENDPOINT)) continue;
                         logger.debug("auto subscribing " + endpoint + " to " + ptr.idString());
                         ptr.addSubscriber(endpoint);
                     }
@@ -2743,6 +2743,8 @@ export class Compiler {
         // insert any value besides Maybes
 
         insert: (value:any, SCOPE:compiler_scope, is_root=true, parents?:Set<any>, unassigned_children?:[number, any, number][], add_insert_index = true) => {
+
+            if (value?.[DX_REPLACE]) value = value[DX_REPLACE];
 
             // make sure normal pointers are collapsed (ignore error if uninitialized pointer is passed in)
             try {

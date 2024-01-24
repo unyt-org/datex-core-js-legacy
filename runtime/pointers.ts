@@ -118,6 +118,7 @@ export abstract class Ref<T = any> extends EventTarget {
         // deno-lint-ignore no-this-alias
         let pointer:Pointer = this;
 
+
         // double pointer property..TODO: improve, currently tries to collapse current value
         if (pointer instanceof PointerProperty) {
             pointer = <Pointer>Pointer.getByValue(pointer.val);
@@ -554,11 +555,40 @@ export class PointerProperty<T=any> extends Ref<T> {
 
     #leak_js_properties: boolean
 
-    private constructor(public pointer: Pointer, public key: any, leak_js_properties = false) {
+    public pointer?: Pointer;
+    private lazy_pointer?: LazyPointer<unknown>;
+
+    private constructor(pointer?: Pointer|LazyPointer<unknown>, public key: any, leak_js_properties = false) {
         super();
+        
+        if (pointer instanceof Pointer) this.setPointer(pointer);
+        else if (pointer instanceof LazyPointer) {
+            this.lazy_pointer = pointer;
+            this.lazy_pointer.onLoad((_, ptr) => {
+                this.lazy_pointer = undefined;
+                this.setPointer(ptr);
+            })
+        }
+        else throw new Error("Pointer or lazy pointer required")
+        
         this.#leak_js_properties = leak_js_properties;
-        pointer.is_persistent = true; // TODO: make unpersistent when pointer property deleted
-        PointerProperty.synced_pairs.get(pointer)!.set(key, this); // save in map
+    }
+
+    private setPointer(ptr: Pointer) {
+        this.pointer = ptr;
+        this.pointer.is_persistent = true; // TODO: make unpersistent when pointer property deleted
+        if (!PointerProperty.synced_pairs.has(ptr)) PointerProperty.synced_pairs.set(ptr, new Map());
+        PointerProperty.synced_pairs.get(ptr)!.set(this.key, this); // save in map
+    }
+
+    /**
+     * Called when the bound lazy pointer is loaded.
+     * If there is no lazy pointer, the callback is called immediately
+     * @param callback 
+     */
+    public onLoad(callback: (val:PointerProperty<T>, ref: PointerProperty<T>)=>void) {
+        if (this.lazy_pointer) this.lazy_pointer.onLoad(() => callback(this, this));
+        else callback(this, this);
     }
 
     private static synced_pairs = new WeakMap<Pointer, Map<any, PointerProperty>>()
@@ -571,26 +601,27 @@ export class PointerProperty<T=any> extends Ref<T> {
      * @param leak_js_properties 
      * @returns 
      */
-    public static get<const Key, Parent extends PointerPropertyParent<Key,unknown>>(parent: Parent|Pointer<Parent>, key: Key, leak_js_properties = false): PointerProperty<Parent extends Map<unknown, infer MV> ? MV : Parent[Key&keyof Parent]> {
-        console.warn("getpp",parent,key)
+    public static get<const Key, Parent extends PointerPropertyParent<Key,unknown>>(parent: Parent|Pointer<Parent>|LazyPointer<Parent>, key: Key, leak_js_properties = false): PointerProperty<Parent extends Map<unknown, infer MV> ? MV : Parent[Key&keyof Parent]> {
         if (Pointer.isRef(key)) throw new Error("Cannot use a reference as a pointer property key");
         
-        let pointer:Pointer;
-        if (parent instanceof Pointer) pointer = parent;
-        else pointer = Pointer.createOrGet(parent);
+        const pointer = Pointer.createOrGetLazy(parent as any);
 
-        if (!this.synced_pairs.has(pointer)) this.synced_pairs.set(pointer, new Map());
+        if (pointer instanceof Pointer) {
+            if (!this.synced_pairs.has(pointer)) this.synced_pairs.set(pointer, new Map());
+            if (this.synced_pairs.get(pointer)!.has(key)) return this.synced_pairs.get(pointer)!.get(key)!; 
+        }
 
-        if (this.synced_pairs.get(pointer)!.has(key)) return this.synced_pairs.get(pointer)!.get(key)!;
-        else return new PointerProperty(pointer, key, leak_js_properties);
+        return new PointerProperty(pointer, key, leak_js_properties);
     }
 
     // get current pointer property
     public override get val():T {
         // this.handleBeforePrimitiveValueGet();
-        const val = this.pointer.getProperty(this.key, this.#leak_js_properties);
-        if (this.pointer instanceof LazyPointer) return "lazy..."
-        else if (val === NOT_EXISTING) {
+        if (this.lazy_pointer) return undefined
+
+        const val = this.pointer!.getProperty(this.key, this.#leak_js_properties);
+        
+        if (val === NOT_EXISTING) {
             console.log(this)
             throw new Error(`Property ${this.key} does not exist in ${this.pointer}`);
         }
@@ -598,16 +629,25 @@ export class PointerProperty<T=any> extends Ref<T> {
     }
 
     public override get current_val():T {
-        return this.pointer.getProperty(this.key, this.#leak_js_properties);
+        if (this.lazy_pointer) return undefined
+        return this.pointer!.getProperty(this.key, this.#leak_js_properties);
     }
 
     // update pointer property
     public override set val(value: T) {
-        this.pointer.handleSet(this.key, Ref.collapseValue(value, true, true));
+        if (this.lazy_pointer) {
+            console.warn("Cannot set value of lazy pointer property");
+            return;
+        }
+        this.pointer!.handleSet(this.key, Ref.collapseValue(value, true, true));
     }
     // same as val setter, but can be awaited
     public override setVal(value: T) {
-        return this.pointer.handleSet(this.key, Ref.collapseValue(value, true, true));
+        if (this.lazy_pointer) {
+            console.warn("Cannot set value of lazy pointer property");
+            return;
+        }
+        return this.pointer!.handleSet(this.key, Ref.collapseValue(value, true, true));
     }
 
     #observer_internal_handlers = new WeakMap<observe_handler, observe_handler>()
@@ -615,6 +655,10 @@ export class PointerProperty<T=any> extends Ref<T> {
 
     // callback on property value change and when the property value changes internally
     public override observe(handler: observe_handler, bound_object?:Record<string, unknown>, options?:observe_options) {
+        if (this.lazy_pointer) {
+            console.warn("Cannot observe lazy pointer");
+            return;
+        }
         const value_pointer = Pointer.pointerifyValue(this.current_val);
         if (value_pointer instanceof Ref) value_pointer.observe(handler, bound_object, options); // also observe internal value changes
 
@@ -625,7 +669,7 @@ export class PointerProperty<T=any> extends Ref<T> {
             // if arrow function
             else handler(v,undefined,Ref.UPDATE_TYPE.INIT)
         };
-        this.pointer.observe(internal_handler, bound_object, this.key, options)
+        this.pointer!.observe(internal_handler, bound_object, this.key, options)
 
         if (bound_object) {
             if (!this.#observer_internal_bound_handlers.has(bound_object)) this.#observer_internal_bound_handlers.set(bound_object, new WeakMap);
@@ -635,6 +679,10 @@ export class PointerProperty<T=any> extends Ref<T> {
     }
 
     public override unobserve(handler: observe_handler, bound_object?:object) {
+        if (this.lazy_pointer) {
+            console.warn("Cannot unobserve lazy pointer");
+            return;
+        }
         const value_pointer = Pointer.pointerifyValue(this.current_val);
         if (value_pointer instanceof Ref) value_pointer.unobserve(handler, bound_object); // also unobserve internal value changes
 
@@ -649,7 +697,7 @@ export class PointerProperty<T=any> extends Ref<T> {
             this.#observer_internal_handlers.delete(handler);
         }
 
-        if (internal_handler) this.pointer.unobserve(internal_handler, bound_object, this.key); // get associated internal handler and unobserve
+        if (internal_handler) this.pointer!.unobserve(internal_handler, bound_object, this.key); // get associated internal handler and unobserve
     }
 
 }
@@ -959,7 +1007,7 @@ export class UpdateScheduler {
                         // Success
                     })
                     .catch((e) => {
-                        logger.error("forwarding failed", e);
+                        console.error("forwarding failed", e);
                     });
             }            
         }
@@ -1199,16 +1247,28 @@ export class Pointer<T = any> extends Ref<T> {
     }
 
     static #is_local = true;
+    // all pointers with a @@local id, must be mapped to new endpoint ids when endpoint id is available
     static #local_pointers = new IterableWeakSet<Pointer>();
+    // all pointers for which the is_origin property must be updated once the endpoint id is available
+    static #undetermined_pointers = new IterableWeakSet<Pointer>();
+    
+
     public static set is_local(local: boolean) {
         this.#is_local = local;
         // update pointer ids if no longer local
         if (!this.#is_local) {
+            // update local pointers
             for (const pointer of this.#local_pointers) {
                 // still local?
                 if (pointer.origin == LOCAL_ENDPOINT) pointer.id = Pointer.getUniquePointerID(pointer);
             }
             this.#local_pointers.clear();
+
+            // update undetermined pointers
+            for (const pointer of this.#undetermined_pointers) {
+                pointer.#updateIsOrigin()
+            }
+            this.#undetermined_pointers.clear();
         }
     }
     public static get is_local() {return this.#is_local}
@@ -1551,7 +1611,8 @@ export class Pointer<T = any> extends Ref<T> {
     } 
 
     // create a new pointer or return the existing pointer/pointer property for this value
-    static createOrGet<T>(value:RefOrValue<T>, sealed = false, allowed_access?:target_clause, anonymous = false, persistant= false):Pointer<T>{
+    static createOrGet<T>(value:RefOrValue<T>, sealed = false, allowed_access?:target_clause, anonymous = false, persistant = false):Pointer<T>{
+        if (value instanceof LazyPointer) throw new PointerError("Lazy Pointer not supported in this context");
         if (value instanceof Pointer) return <Pointer<T>>value; // return pointer by reference
         //if (value instanceof PointerProperty) return value; // return pointerproperty TODO: handle pointer properties?
         value = Ref.collapseValue(value, true, true);
@@ -1565,6 +1626,12 @@ export class Pointer<T = any> extends Ref<T> {
         }
         // create new pointer
         else return <Pointer<T>>Pointer.create(undefined, value, sealed, undefined, persistant, anonymous, false, allowed_access); 
+    }
+
+    // same as createOrGet, but also return lazy pointer if it exists
+    static createOrGetLazy<T>(value:RefOrValue<T>, sealed = false, allowed_access?:target_clause, anonymous = false, persistant = false):Pointer<T>|LazyPointer<T>{
+        if (value instanceof LazyPointer) return value;
+        return this.createOrGet(value, sealed, allowed_access, anonymous, persistant);
     }
 
     // create a new pointer or return the existing pointer + add a label
@@ -1934,6 +2001,11 @@ export class Pointer<T = any> extends Ref<T> {
     get is_js_primitive(){return this.#is_js_primitive} // true if js primitive (number, boolean, ...) or 'single instance' class (Type, Endpoint) that cannot be directly addressed by reference
     get is_anonymous(){return this.#is_anonymous}
     get origin(){return this.#origin}
+    private set origin(origin:Endpoint){
+        this.#origin = origin
+        this.#updateIsOrigin()
+        if (Runtime.endpoint == LOCAL_ENDPOINT) Pointer.#undetermined_pointers.add(this);
+    }
 
     get is_persistent() { return this.#is_persistent || this.subscribers?.size != 0}
     // change the persistant state of this pointer
@@ -1977,9 +2049,9 @@ export class Pointer<T = any> extends Ref<T> {
         }
     }
 
-    private set origin(origin:Endpoint){
-        this.#origin = origin
-        this.#is_origin = !!Runtime.endpoint?.equals(this.#origin);
+
+    #updateIsOrigin() {
+        this.#is_origin = !!Runtime.endpoint.equals(this.#origin) || !!Runtime.endpoint.main.equals(this.#origin) || this.#origin.equals(LOCAL_ENDPOINT);
     }
 
 
@@ -2120,7 +2192,7 @@ export class Pointer<T = any> extends Ref<T> {
         const endpoint = override_endpoint ?? this.origin;
 
         // early return, trying to subscribe to the own main endpoint, guaranteed to be routed back to self, which is not allowed
-        if (endpoint.equals(Runtime.endpoint.main)) {
+        if (endpoint.equals(Runtime.endpoint.main) || endpoint.equals(Runtime.endpoint) || endpoint.equals(LOCAL_ENDPOINT)) {
             logger.warn("tried to subscribe to own pointer: " + this.idString() + "(pointer origin: " + this.origin + ", own endpoint instance: " + Runtime.endpoint + ")");
             return this;
         }
@@ -3147,7 +3219,7 @@ export class Pointer<T = any> extends Ref<T> {
         // TODO also check pointer permission for 'to'
 
         // request sync endpoint is self, cannot subscribe to own pointers!
-        if (Runtime.endpoint.equals(subscriber)) {
+        if (Runtime.endpoint.equals(subscriber) || subscriber.equals(LOCAL_ENDPOINT)) {
             throw new PointerError("Cannot sync pointer with own origin");
         }
 
@@ -4059,7 +4131,7 @@ export class Pointer<T = any> extends Ref<T> {
                 await Runtime.datexOut([datex, data, {collapse_first_inserted, type:ProtocolDataType.UPDATE, preemptive_pointer_init: true}], receiver, undefined, false, undefined, undefined, false, undefined, this.datex_timeout);
             } catch(e) {
                 //throw e;
-                logger.error("forwarding failed", e, datex, data)
+                console.error("forwarding failed", e, datex, data)
             }
         }
 

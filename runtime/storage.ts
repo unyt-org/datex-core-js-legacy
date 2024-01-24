@@ -1052,7 +1052,7 @@ export class Storage {
 
         // pointers
         string = ESCAPE_SEQUENCES.BOLD+"Pointers\n\n"+ESCAPE_SEQUENCES.RESET
-        string += `${ESCAPE_SEQUENCES.ITALIC}A list of all pointers stored in any storage location. Pointers are only stored as long as they are referenced somwhere else in the storage.\n\n${ESCAPE_SEQUENCES.RESET}`
+        string += `${ESCAPE_SEQUENCES.ITALIC}A list of all pointers stored in any storage location. Pointers are only stored as long as they are referenced somewhere else in the storage.\n\n${ESCAPE_SEQUENCES.RESET}`
 
         for (const [key, storageMap] of pointers.snapshot) {
             // check if stored in all locations, otherwise print in which location it is stored (functional programming)
