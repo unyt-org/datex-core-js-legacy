@@ -20,7 +20,7 @@ import type { Task } from "./task.ts";
 import { Assertion } from "./assertion.ts";
 import type { Iterator } from "./iterator.ts";
 import {StorageMap, StorageWeakMap} from "./storage_map.ts"
-import {StorageSet} from "./storage_set.ts"
+import {StorageSet, StorageWeakSet} from "./storage_set.ts"
 import { ExtensibleFunction } from "./function-utils.ts";
 import type { JSTransferableFunction } from "./js-function.ts";
 
@@ -56,11 +56,17 @@ export class Type<T = any> extends ExtensibleFunction {
     parameters:any[] // special type parameters
 
     #jsTypeDefModule?: string|URL // URL for the JS module that creates the corresponding type definition
+    #potentialJsTypeDefModule?: string|URL // remember jsTypeDefModule if jsTypeDefModuleMapper is added later
 
     get jsTypeDefModule():string|URL|undefined {return this.#jsTypeDefModule}
     set jsTypeDefModule(url: string|URL) {
+        // custom module mapper
         if (Type.#jsTypeDefModuleMapper) this.#jsTypeDefModule = Type.#jsTypeDefModuleMapper(url, this);
-        else this.#jsTypeDefModule = url;
+        // default: only allow http/https modules
+        else if (url.toString().startsWith("http://") || url.toString().startsWith("https://")) {
+            this.#jsTypeDefModule = url;
+        }
+        this.#potentialJsTypeDefModule = url;
     }
 
     root_type: Type; // DatexType without parameters and variation
@@ -84,7 +90,7 @@ export class Type<T = any> extends ExtensibleFunction {
         this.#jsTypeDefModuleMapper = fn;
         // update existing typedef modules
         for (const type of this.types.values()) {
-            if (type.#jsTypeDefModule) type.jsTypeDefModule = type.#jsTypeDefModule;
+            if (type.#potentialJsTypeDefModule) type.jsTypeDefModule = type.#potentialJsTypeDefModule;
         }
     }
 
@@ -1012,6 +1018,7 @@ export class Type<T = any> extends ExtensibleFunction {
         StorageMap: Type.get<StorageMap<unknown, unknown>>("std:StorageMap"),
         StorageWeakMap: Type.get<StorageWeakMap<unknown, unknown>>("std:StorageWeakMap"),
         StorageSet: Type.get<StorageSet<unknown>>("std:StorageSet"),
+        StorageWeakSet: Type.get<StorageWeakSet<unknown>>("std:StorageWeakSet"),
 
         Error: Type.get<Error>("std:Error"),
         SyntaxError: Type.get("std:SyntaxError"),
@@ -1090,6 +1097,13 @@ Type.std.StorageWeakMap.setJSInterface({
 
 Type.std.StorageMap.setJSInterface({
     class: StorageMap,
+    is_normal_object: true,
+    proxify_children: true,
+    visible_children: new Set(),
+})
+
+Type.std.StorageWeakSet.setJSInterface({
+    class: StorageWeakSet,
     is_normal_object: true,
     proxify_children: true,
     visible_children: new Set(),

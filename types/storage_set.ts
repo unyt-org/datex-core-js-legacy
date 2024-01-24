@@ -9,16 +9,18 @@ import { Logger } from "../utils/logger.ts";
 const logger = new Logger("StorageSet");
 
 /**
- * Set that outsources values to storage.
- * all methods are async
+ * WeakSet that outsources values to storage.
+ * The API is similar to the JS WeakSet API, but all methods are async.
+ * In contrast to JS WeakSets, primitive values are also allowed.
+ * The StorageWeakSet holds no strong references to its values in storage.
+ * This means that the pointer of a value can be garbage collected.
  */
-export class StorageSet<V> {
+export class StorageWeakSet<V> {
 
 	#prefix?: string;
 
 	constructor(){
-		// TODO: does not work with eternal pointers!
-		// Pointer.proxifyValue(this)
+		Pointer.proxifyValue(this)
 	}
 
 	static async from<V>(values: readonly V[]) {
@@ -27,18 +29,17 @@ export class StorageSet<V> {
 		return set;
 	}
 
-	get prefix() {
-		// @ts-ignore
-		if (!this.#prefix) this.#prefix = 'dxset::'+this[DX_PTR].idString()+'.';
+	protected get _prefix() {
+		if (!this.#prefix) this.#prefix = 'dxset::'+(this as any)[DX_PTR].idString()+'.';
 		return this.#prefix;
 	}
 
 	async add(value: V) {
 		const storage_key = await this.getStorageKey(value);
 		if (await this._has(storage_key)) return; // already exists
-		return this._add(storage_key, value);
+		return this._add(storage_key, null);
 	}
-	protected _add(storage_key:string, value:V) {
+	protected _add(storage_key:string, value:V|null) {
 		this.activateCacheTimeout(storage_key);
 		return Storage.setItem(storage_key, value);
 	}
@@ -66,43 +67,79 @@ export class StorageSet<V> {
 		}, 60_000);
 	}
 
-	protected getStorageKey(value: V) {
-		const keyHash = Compiler.getUniqueValueIdentifier(value);
+	protected async getStorageKey(value: V) {
+		const keyHash = await Compiler.getUniqueValueIdentifier(value);
 		// @ts-ignore DX_PTR
-		return this.prefix + keyHash;
+		return this._prefix + keyHash;
 	}
 
 	async clear() {
 		const promises = [];
-		for (const key of await Storage.getItemKeysStartingWith(this.prefix)) {
+		for (const key of await Storage.getItemKeysStartingWith(this._prefix)) {
 			promises.push(await Storage.removeItem(key));
 		}
 		await Promise.all(promises);
 	}
 
 
+}
+
+/**
+ * Set that outsources values to storage.
+ * The API is similar to the JS Set API, but all methods are async.
+ */
+export class StorageSet<V> extends StorageWeakSet<V> {
+
+	/**
+	 * Appends a new value to the StorageWeakSet.
+	 */
+	async add(value: V) {
+		const storage_key = await this.getStorageKey(value);
+		if (await this._has(storage_key)) return; // already exists
+		return this._add(storage_key, value);
+	}
+
+	/**
+	 * Async iterator that returns all keys.
+	 */
 	keys() {
 		return this[Symbol.asyncIterator]()
 	}
+
+	/**
+	 * Returns an array containing all keys.
+	 * This can be used to iterate over the keys without using a (for await of) loop.
+	 */
 	async keysArray() {
 		const keys = [];
 		for await (const key of this.keys()) keys.push(key);
 		return keys;
 	}
 
+	/**
+	 * Async iterator that returns all values.
+	 */
 	values() {
 		return this[Symbol.asyncIterator]()
 	}
+
+	/**
+	 * Returns an array containing all values.
+	 * This can be used to iterate over the values without using a (for await of) loop.
+	 */
 	async valuesArray() {
 		const values = [];
 		for await (const value of this.values()) values.push(value);
 		return values;
 	}
 
+	/**
+	 * Async iterator that returns all entries.
+	 */
 	entries() {
 		const self = this;
 		return (async function*(){
-			const keyGenerator = await Storage.getItemKeysStartingWith(self.prefix);
+			const keyGenerator = await Storage.getItemKeysStartingWith(self._prefix);
 			
 			for (const key of keyGenerator) {
 				const value = await Storage.getItem(key);
@@ -110,6 +147,11 @@ export class StorageSet<V> {
 			}
 		})()
 	}
+
+	/**
+	 * Returns an array containing all entries.
+	 * This can be used to iterate over the entries without using a (for await of) loop.
+	 */
 	async entriesArray() {
 		const entries = [];
 		for await (const entry of this.entries()) entries.push(entry);
@@ -117,7 +159,7 @@ export class StorageSet<V> {
 	}
 
 	async *[Symbol.asyncIterator]() {
-		const keyGenerator = await Storage.getItemKeysStartingWith(this.prefix);
+		const keyGenerator = await Storage.getItemKeysStartingWith(this._prefix);
 		
 		for (const key of keyGenerator) {
 			const value = await Storage.getItem(key);

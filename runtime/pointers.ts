@@ -1199,7 +1199,8 @@ export class Pointer<T = any> extends Ref<T> {
         // update pointer ids if no longer local
         if (!this.#is_local) {
             for (const pointer of this.#local_pointers) {
-                pointer.id = Pointer.getUniquePointerID(pointer);
+                // still local?
+                if (pointer.origin == LOCAL_ENDPOINT) pointer.id = Pointer.getUniquePointerID(pointer);
             }
             this.#local_pointers.clear();
         }
@@ -1395,13 +1396,16 @@ export class Pointer<T = any> extends Ref<T> {
             }
 
             if (stored!=NOT_EXISTING) {
-                // if the value is a pointer with a tranform scope, copy the transform, not the value (TODO still just a workaround to preserve transforms in storage, maybe better solution?)
-                if (stored instanceof Pointer && stored.transform_scope) {
-                    await pointer.handleTransformAsync(stored.transform_scope.internal_vars, stored.transform_scope);
+                // set value if pointer still not loaded during source.getPointer
+                if (!pointer.#loaded) {
+                    // if the value is a pointer with a tranform scope, copy the transform, not the value (TODO still just a workaround to preserve transforms in storage, maybe better solution?)
+                    if (stored instanceof Pointer && stored.transform_scope) {
+                        await pointer.handleTransformAsync(stored.transform_scope.internal_vars, stored.transform_scope);
+                    }
+                    // set normal value
+                    else pointer = pointer.setValue(stored);
                 }
-                // set normal value
-                else pointer = pointer.setValue(stored);
-
+               
                 // now sync if source (pointer storage) can sync pointer
                 if (source?.syncPointer) source.syncPointer(pointer);
 
