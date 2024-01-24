@@ -1830,8 +1830,9 @@ export class Runtime {
             }
             // other message, assume sender endpoint is online now
             else {
-                // HELLO message received, regard as new login to network, reset previous subscriptions
-                if (header.type == ProtocolDataType.HELLO && !header.sender.ignoreHello) Pointer.clearEndpointSubscriptions(header.sender)
+                // TODO: HELLO message received, regard as new login to network, reset previous subscriptions? 
+                // does not work correctly because valid subscriptions are reset after HELLO message is received after some time
+                // if (header.type == ProtocolDataType.HELLO && !header.sender.ignoreHello) Pointer.clearEndpointSubscriptions(header.sender)
                 header.sender.setOnline(true)
             }
         }
