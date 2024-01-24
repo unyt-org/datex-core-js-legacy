@@ -1056,7 +1056,10 @@ export class Runtime {
             if (flood) {
                 this.datex_out(dxb, flood_exclude, true, source)
                     .then(finish)
-                    .catch(e=>reject(e));
+                    .catch(e => {
+                        if (wait_for_result) reject(e);
+                        else console.error("Error sending datex block", e);
+                    });
             }           
             // send to receivers
             else if (to) {
@@ -1064,11 +1067,14 @@ export class Runtime {
                 // send and catch errors while sending, like NetworkError
                 for (const to_endpoint of to) {
                     // check offline status (async), immediately reject if offline
-                    this._handleEndpointOffline(to_endpoint, reject)
+                    if (wait_for_result) this._handleEndpointOffline(to_endpoint, reject)
                     // send dxb
                     this.datex_out(dxb, to_endpoint, undefined, source)
                         .then(finish)
-                        .catch(e=>reject(e));
+                        .catch(e => {
+                            if (wait_for_result) reject(e);
+                            else console.error("Error sending datex block", e);
+                        });
                 }
             }
 
@@ -1125,7 +1131,7 @@ export class Runtime {
             
         logger.debug("redirect " + (ProtocolDataType[header.type]) + " " + header.sid + " > " + Runtime.valueToDatexString(header.routing.receivers) + ", ttl="+ (header.routing.ttl-1));
 
-        let res = await this.datexOut(datex, header.routing.receivers, header.sid, wait_for_result, undefined, undefined, undefined, undefined, undefined, source);
+        const res = await this.datexOut(datex, header.routing.receivers, header.sid, wait_for_result, undefined, undefined, undefined, undefined, undefined, source);
         return res;
     }
 

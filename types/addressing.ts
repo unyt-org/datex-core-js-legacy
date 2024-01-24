@@ -453,7 +453,7 @@ export class Endpoint extends Target {
 		try {
 			// ping
 			await Runtime.datexOut(
-				['"ping"', [], {sign:false, encrypt:false}], 
+				['', [], {sign:false, encrypt:false}], 
 				this, 
 				undefined, 
 				true, 
