@@ -11,8 +11,8 @@ export class LazyPointer<T> {
 		Pointer.onPointerForIdAdded(this.id, p => callback(Pointer.collapseValue(p) as MinimalJSRef<T>, p))
 	}
 
-	static withVal(val:any, callback:(val:MinimalJSRef<unknown>)=>void) {
+	static withVal<T>(val:MinimalJSRef<T>, callback:(val:MinimalJSRef<T>)=>void) {
 		if (val instanceof LazyPointer) val.onLoad(callback);
-		else callback(val, val);
+		else callback(val);
 	}
 }

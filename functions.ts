@@ -4,7 +4,7 @@
  */
 
 
-import { AsyncTransformFunction, BooleanRef, CollapsedValue, CollapsedValueAdvanced, Decorators, INSERT_MARK, METADATA, MaybeObjectRef, MinimalJSRef, Pointer, Ref, RefLike, RefOrValue, Runtime, SmartTransformFunction, SmartTransformOptions, TransformFunction, TransformFunctionInputs, handleDecoratorArgs, logger, primitive } from "./datex_all.ts";
+import { AsyncTransformFunction, CollapsedValue, CollapsedValueAdvanced, Decorators, INSERT_MARK, METADATA, MaybeObjectRef, MinimalJSRef, Pointer, Ref, RefLike, RefOrValue, Runtime, SmartTransformFunction, SmartTransformOptions, TransformFunction, TransformFunctionInputs, handleDecoratorArgs, logger, primitive } from "./datex_all.ts";
 import { Datex } from "./mod.ts";
 import { PointerError } from "./types/errors.ts";
 import { IterableHandler } from "./utils/iterable-handler.ts";
@@ -333,7 +333,7 @@ export function selectProperty<K extends string|number, V>(property:RefLike<K>, 
  * @param value 
  * @returns 
  */
-export function not(value:RefOrValue<boolean>): BooleanRef {
+export function not(value:RefOrValue<boolean>): Pointer<boolean> {
     return transform([value], v=>!v);
 }
 
@@ -342,7 +342,7 @@ export function not(value:RefOrValue<boolean>): BooleanRef {
  * @param values 
  * @returns 
  */
-export function and(...values:RefOrValue<boolean>[]): BooleanRef {
+export function and(...values:RefOrValue<boolean>[]): Pointer<boolean> {
     return transform(values, (...values)=>{
         for (const v of values) {
             if (!v) return false;
@@ -356,7 +356,7 @@ export function and(...values:RefOrValue<boolean>[]): BooleanRef {
  * @param values 
  * @returns 
  */
-export function or(...values:RefOrValue<boolean>[]): BooleanRef {
+export function or(...values:RefOrValue<boolean>[]): Pointer<boolean> {
     return transform(values, (...values)=>{
         for (const v of values) {
             if (v) return true;

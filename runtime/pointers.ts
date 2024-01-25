@@ -55,6 +55,9 @@ export abstract class Ref<T = any> extends EventTarget {
 
     #val?: T;
 
+    // guarantees that x instanceof Ref works correctly, inferring RefLike
+    static [Symbol.hasInstance]: (val: unknown) => val is RefLike
+
     constructor(value?:RefOrValue<T>) {
         super();
         value = Ref.collapseValue(value);
@@ -82,7 +85,7 @@ export abstract class Ref<T = any> extends EventTarget {
     }
 
     // same as val setter, but can be awaited
-    public setVal(value:T, trigger_observers = true, is_transform?:boolean):Promise<any>|void {
+    public setVal(value:T, trigger_observers = true, is_transform?:boolean) {
         const previous = this.#val;
         this.#val = <T> Ref.collapseValue(value, true, true);
         if (trigger_observers && previous !== this.#val) return this.triggerValueInitEvent(is_transform, previous)
@@ -116,14 +119,15 @@ export abstract class Ref<T = any> extends EventTarget {
         const handler:ProxyHandler<any> = {};
 
         // deno-lint-ignore no-this-alias
-        let pointer:Pointer = this;
-
+        let pointer:Pointer = this as any;
 
         // double pointer property..TODO: improve, currently tries to collapse current value
         if (pointer instanceof PointerProperty) {
             pointer = <Pointer>Pointer.getByValue(pointer.val);
             if (!pointer) throw new Error("Nested pointer properties are currently not supported");
         }
+
+        if (!(this instanceof Pointer)) throw new Error("Cannot use $, not a pointer");
 
         handler.ownKeys = () => {
             return Reflect.ownKeys(pointer.val);
@@ -558,7 +562,7 @@ export class PointerProperty<T=any> extends Ref<T> {
     public pointer?: Pointer;
     private lazy_pointer?: LazyPointer<unknown>;
 
-    private constructor(pointer?: Pointer|LazyPointer<unknown>, public key: any, leak_js_properties = false) {
+    private constructor(pointer: Pointer|LazyPointer<unknown>|undefined, public key: any, leak_js_properties = false) {
         super();
         
         if (pointer instanceof Pointer) this.setPointer(pointer);
@@ -617,7 +621,7 @@ export class PointerProperty<T=any> extends Ref<T> {
     // get current pointer property
     public override get val():T {
         // this.handleBeforePrimitiveValueGet();
-        if (this.lazy_pointer) return undefined
+        if (this.lazy_pointer) return undefined as T
 
         const val = this.pointer!.getProperty(this.key, this.#leak_js_properties);
         
@@ -628,11 +632,6 @@ export class PointerProperty<T=any> extends Ref<T> {
         else return val;
     }
 
-    public override get current_val():T {
-        if (this.lazy_pointer) return undefined
-        return this.pointer!.getProperty(this.key, this.#leak_js_properties);
-    }
-
     // update pointer property
     public override set val(value: T) {
         if (this.lazy_pointer) {
@@ -641,6 +640,13 @@ export class PointerProperty<T=any> extends Ref<T> {
         }
         this.pointer!.handleSet(this.key, Ref.collapseValue(value, true, true));
     }
+
+    public override get current_val():T {
+        if (this.lazy_pointer) return undefined as T
+        return this.pointer!.getProperty(this.key, this.#leak_js_properties);
+    }
+
+  
     // same as val setter, but can be awaited
     public override setVal(value: T) {
         if (this.lazy_pointer) {
@@ -702,23 +708,9 @@ export class PointerProperty<T=any> extends Ref<T> {
 
 }
 
-export type JSPrimitiveToDatexRef<T> = (
-    T extends bigint ? IntegerRef :
-    T extends string ? TextRef :
-    T extends number ? DecimalRef :
-    T extends boolean ? BooleanRef :
-    T extends Type ? TypeRef :
-    T extends Endpoint ? EndpointRef :
-    T extends URL ? URLRef :
-    never
-)
 
 // similar to Datex.Ref, but works better for all descending generic classes in typescript strict mode
-export type GenericValue<T> = 
-    // specific type class
-    JSPrimitiveToDatexRef<T> |
-    // generic classes
-    RefLike<T>;
+export type GenericValue<T> = RefLike<T>;
 
 export type ReadonlyRef<T> = Readonly<RefLike<T>>;
 /**
@@ -739,14 +731,6 @@ export type PartialRefOrValueObject<T> = { [P in keyof T]?: RefOrValue<T[P]> }
 // collapsed value
 export type CollapsedValue<T extends RefOrValue<unknown>> =
     // (reverse order of inheritance)
-    // DATEX Primitives: ---------------------
-    T extends IntegerRef ? bigint : 
-    T extends TextRef ? string : 
-    T extends DecimalRef ? number : 
-    T extends BooleanRef ? boolean : 
-    T extends TypeRef ? Type : 
-    T extends EndpointRef ? Endpoint : 
-    T extends URLRef ? URL : 
     // generic value classes 
     T extends PointerProperty<infer TT> ? TT : 
     T extends Pointer<infer TT> ? TT : 
@@ -755,11 +739,7 @@ export type CollapsedValue<T extends RefOrValue<unknown>> =
 
 // collapsed value that still has a reference in JS
 export type CollapsedValueJSCompatible<T extends RefOrValue<unknown>> = 
-    // (reverse order of inheritance)
-    // DATEX primitive that keep reference in JS: ---------------------
-    T extends TypeRef ? Type : 
-    T extends EndpointRef ? Endpoint : 
-    T extends URLRef ? URL : 
+    // (reverse order of inheritance) 
     // generic value classes
     T extends PointerProperty<infer TT> ? (TT extends primitive ? T : TT) :
     T extends Pointer<infer TT> ? (TT extends primitive ? T : TT) : 
@@ -842,14 +822,11 @@ export type JSValueWith$<T> = ObjectRef<T>;
 // converts Object to Record<string|symbol, unknown>
 
 // convert from any JS/DATEX value to minimal representation with reference
-export type MinimalJSRefGeneralTypes<T, _C = CollapsedValue<T>> = 
-    _C extends symbol ? symbol : (
-        JSPrimitiveToDatexRef<_C> extends never ? ObjectRef<_C> : JSPrimitiveToDatexRef<_C>
-    )
-// same as MinimalJSRefGeneralTypes, but returns Pointer<2|5> instead of IntegerRef
 export type MinimalJSRef<T, _C = CollapsedValue<T>> =
-    _C extends symbol ? symbol : ( 
-        JSPrimitiveToDatexRef<_C> extends never ? ObjectRef<_C> : (Pointer<_C> & (_C extends boolean ? unknown : _C))
+    _C extends symbol ? symbol : (
+        _C extends number|string|boolean|bigint ?
+            T: // keep pointer reference
+            ObjectRef<_C> // collapsed object
     )
 
 // return Pointer<T>&T for primitives (excluding boolean) and Pointer<T> otherwise
@@ -1386,7 +1363,7 @@ export class Pointer<T = any> extends Ref<T> {
     private static loading_pointers:Map<string, {promise: Promise<Pointer>, scopeList: WeakSet<datex_scope>}> = new Map();
 
     // load from storage or request from remote endpoint if pointer not yet loaded
-    static load(id:string|Uint8Array, SCOPE?:datex_scope, only_load_local = false, sender_knows_pointer = true, allow_failure = true): Promise<Pointer>|Pointer{
+    static load(id:string|Uint8Array, SCOPE?:datex_scope, only_load_local = false, sender_knows_pointer = true, allow_failure = true): Promise<Pointer>|Pointer|LazyPointer<unknown> {
 
         const id_string = Pointer.normalizePointerId(id);
 
@@ -1595,19 +1572,19 @@ export class Pointer<T = any> extends Ref<T> {
     }
 
     // create/get DatexPointer for value if possible (not primitive) and return value
-    static proxifyValue<T,C extends RefOrValue<T> = RefOrValue<T>>(value:C, sealed = false, allowed_access?:target_clause, anonymous = false, persistant= false, check_proxify_as_child = false): C|T {
-        if ((value instanceof Pointer && value.is_js_primitive) || value instanceof PointerProperty) return <any>value; // return by reference
+    static proxifyValue(value:unknown, sealed = false, allowed_access?:target_clause, anonymous = false, persistant= false, check_proxify_as_child = false) {
+        if ((value instanceof Pointer && value.is_js_primitive) || value instanceof PointerProperty) return value; // return by reference
         else if (value instanceof Ref) return value.val; // return by value
         const type = Type.ofValue(value)
-        const collapsed_value = <T> Ref.collapseValue(value,true,true)
+        const collapsed_value = Ref.collapseValue(value,true,true)
     // if proxify_as_child=false: don't create pointer for this value, return original value
         // e.g.: primitive values
         if ((check_proxify_as_child && !type.proxify_as_child) || type.is_primitive) {
-            return <any>collapsed_value;
+            return collapsed_value;
         }
 
         // create or get pointer
-        else return <any>Pointer.createOrGet(collapsed_value, sealed, allowed_access, anonymous, persistant).val;
+        else return Pointer.createOrGet(collapsed_value, sealed, allowed_access, anonymous, persistant).val;
     } 
 
     // create a new pointer or return the existing pointer/pointer property for this value
@@ -1634,17 +1611,6 @@ export class Pointer<T = any> extends Ref<T> {
         return this.createOrGet(value, sealed, allowed_access, anonymous, persistant);
     }
 
-    // create a new pointer or return the existing pointer + add a label
-    static createLabel<T>(value:RefOrValue<T>, label:string|number):Pointer<T>{
-        let ptr = Pointer.getByValue(value); // try proxify
-        // create new pointer
-        if (!ptr) {
-           ptr = Pointer.create(undefined, value); 
-        }
-        ptr.addLabel(label);
-        return ptr;
-    }
-    
 
     // create a new pointer with a transform value
     static createTransform<const T, const V extends TransformFunctionInputs>(observe_values:V, transform:TransformFunction<V,T>, persistent_datex_transform?:string, force_transform = false) {
@@ -1672,7 +1638,7 @@ export class Pointer<T = any> extends Ref<T> {
 
     // only creates the same pointer once => unique pointers
     // throws error if pointer is already allocated or pointer value is primitive
-    static create<T>(id?:string|Uint8Array, value:RefOrValue<T>|typeof NOT_EXISTING=NOT_EXISTING, sealed = false, origin?:Endpoint, persistant=false, anonymous = false, is_placeholder = false, allowed_access?:target_clause, timeout?:number):Pointer<T extends symbol ? unknown : T> {
+    static create<T>(id?:string|Uint8Array, value:RefOrValue<T>|typeof NOT_EXISTING=NOT_EXISTING, sealed = false, origin?:Endpoint, persistant=false, anonymous = false, is_placeholder = false, allowed_access?:target_clause, timeout?:number): Pointer<T> {
         let p:Pointer<T>;
 
         // DatexValue: DatexPointer or DatexPointerProperty not valid as object, get the actual value instead
@@ -1688,31 +1654,21 @@ export class Pointer<T = any> extends Ref<T> {
                 if (p.is_js_primitive) {
                     if (value!=NOT_EXISTING) p.val = value; // update value of this pointer
                     if (origin) p.origin = origin; // override origin
+                    return p;
                 }
                 else {
                     throw new PointerError("Cannot assign a native primitive value to a initialized non-primitive pointer");
                 }
             }
             else {
-                let pp:any;
-
-                switch (typeof value) {
-                    case "string": pp = TextRef; break;
-                    case "number": pp = DecimalRef; break;
-                    case "bigint": pp = IntegerRef; break;
-                    case "boolean": pp = BooleanRef; break;
-                }
-                
-                if (!pp) throw new PointerError("Cannot create a pointer for this value type");
-               
                 // create new
-                return new (<typeof Pointer>pp)(id, <any>value, sealed, origin, persistant, anonymous, is_placeholder, allowed_access, timeout)
+                return new Pointer(id, <any>value, sealed, origin, persistant, anonymous, is_placeholder, allowed_access, timeout)
             }
         }
         
         // value already allocated to a pointer
         else if (this.pointer_value_map.has(value)) {
-            let existing_pointer = <Pointer<T>> Pointer.pointer_value_map.get(value);
+            const existing_pointer = <Pointer<T>> Pointer.pointer_value_map.get(value);
             // is placeholder, add id
             if (existing_pointer.is_placeholder) {
                 existing_pointer.unPlaceholder(id)
@@ -1733,13 +1689,7 @@ export class Pointer<T = any> extends Ref<T> {
 
         // create a completely new pointer
         else {
-            let pp:any = Pointer;
-
-            if (value instanceof Type) pp = TypeRef;
-            else if (value instanceof URL) pp = URLRef;
-            else if (value instanceof Endpoint) pp = EndpointRef;
-
-            return new (<typeof Pointer>pp)<T>(id, <any>value, sealed, origin, persistant, anonymous, is_placeholder, allowed_access, timeout)
+            return new Pointer<T>(id, value as T, sealed, origin, persistant, anonymous, is_placeholder, allowed_access, timeout)
         }
     }
 
@@ -1773,7 +1723,7 @@ export class Pointer<T = any> extends Ref<T> {
     });
 
     // clean up after garbage collection:
-    private static handleGarbageCollected(mockPtr: MockPointer){
+    private static handleGarbageCollected(mockPtr: MockPointer|Pointer){
         logger.debug("$" + mockPtr.id + " was garbage collected");
 
         // cleanup for complex pointer that still has an instance
@@ -1789,7 +1739,7 @@ export class Pointer<T = any> extends Ref<T> {
     }
     
     // cleanup for primitive and complex pointer
-    private static cleanup(mockPtr: MockPointer) {
+    private static cleanup(mockPtr: MockPointer|Pointer) {
         // unsubscribe
         const doUnsubscribe = !!(!mockPtr.is_origin && mockPtr.origin)
         if (doUnsubscribe && mockPtr.subscribed) this.unsubscribeFromPointerUpdates(mockPtr.subscribed, mockPtr.id);
@@ -1800,7 +1750,7 @@ export class Pointer<T = any> extends Ref<T> {
 
 
     // custom datex pointer array splice function
-    private arraySplice(start?: number, deleteCount?: number, ...items: any[]):any[] {
+    private arraySplice(start?: number, deleteCount?: number, ...items: unknown[]): unknown[] {
         // is clear?
         if (start == 0 && deleteCount == (<Array<unknown>><unknown>this.shadow_object).length && items.length == 0) {
             this.handleClear();
@@ -1808,7 +1758,7 @@ export class Pointer<T = any> extends Ref<T> {
         }
         if (deleteCount == undefined) deleteCount = (<Array<unknown>><unknown>this.shadow_object).length; // default deleteCount: all
         if (deleteCount && deleteCount < 0) deleteCount = 0;
-        return this.handleSplice(start??0, deleteCount, items);
+        return this.handleSplice(start??0, deleteCount, items) ?? [];
     }
     
 
@@ -1852,7 +1802,7 @@ export class Pointer<T = any> extends Ref<T> {
         this.initOrigin()
 
         // set value
-        if (<any>value != NOT_EXISTING) this.val = value;
+        if (value != NOT_EXISTING) this.val = value;
 
         // set update_endpoint and trigger suscribers getter (get from cache)
         this.#update_endpoints = this.subscribers
@@ -1878,7 +1828,7 @@ export class Pointer<T = any> extends Ref<T> {
     static getOriginFromPointerId(id_buffer: Uint8Array|string) {
         if (typeof id_buffer == "string") {
             try {id_buffer = hex2buffer(id_buffer, Pointer.MAX_POINTER_ID_SIZE, true);}
-            catch (e) {throw new SyntaxError('Invalid pointer id: $' + id_buffer.slice(0, 48));}
+            catch {throw new SyntaxError('Invalid pointer id: $' + id_buffer.slice(0, 48));}
         }
         const pointer_type = id_buffer[0];
         return <Endpoint>Target.get(id_buffer.slice(1,19), id_buffer.slice(19,21), pointer_type);
@@ -1954,9 +1904,9 @@ export class Pointer<T = any> extends Ref<T> {
         this.delete()
     }
     
-    #original_value: T extends {[key:string]:unknown} ? WeakRef<T> : void //  weak ref to original value (not proxyfied)
-    #shadow_object: WeakRef<{[key:string]:unknown}>|T // object to make changes and get values from without triggering DATEX updates
-    #type:Type // type of the value
+    #original_value!: T extends {[key:string]:unknown} ? WeakRef<T> : void //  weak ref to original value (not proxyfied)
+    #shadow_object?: WeakRef<{[key:string]:unknown}>|T // object to make changes and get values from without triggering DATEX updates
+    #type:Type = Type.std.Any // type of the value
 
     #unwrapped_transform_type?: Type
 
@@ -1970,19 +1920,19 @@ export class Pointer<T = any> extends Ref<T> {
     #is_persistent: boolean // indicates if this pointer can get garbage collected
     #is_anonymous: boolean // pointer should never be sent via datex as reference, always serialize the value
     
-    #pointer_type:pointer_type // pointer type (full id, static, ...)
+    #pointer_type!:pointer_type // pointer type (full id, static, ...)
 
-    // id as hex string and ArrayBuffer
-    #id:string
-    #id_buffer:Uint8Array
-    #origin: Endpoint
+    // set in id setter triggered in constructor
+    #id!:string // id as hex string
+    #id_buffer!:Uint8Array // id buffer
+    #origin!: Endpoint
     #is_origin = true;
-    #subscribed: boolean|Endpoints = false
+    #subscribed: false|Endpoint = false
 
     get subscribed() {return this.#subscribed}
 
     //readonly:boolean = false; // can the value ever be changed?
-    sealed:boolean = false; // can the value be changed from the client side? (otherwise, it can only be changed via DATEX calls)
+    sealed = false; // can the value be changed from the client side? (otherwise, it can only be changed via DATEX calls)
     #scheduler: UpdateScheduler|null = null  // has fixed update_interval
 
     #allowed_access?: target_clause // who has access to this pointer?, undefined = all
@@ -2389,7 +2339,7 @@ export class Pointer<T = any> extends Ref<T> {
             return val;
         }
         // return the value directly
-        else return super.val;
+        else return super.val!;
     }
 
     override set val(v: T) {
@@ -2422,11 +2372,11 @@ export class Pointer<T = any> extends Ref<T> {
 
 
     // same as val setter, but can be awaited - don't confuse with Pointer.setValue (TODO: rename?)
-    override setVal(v: T, trigger_observers = true, is_transform?:boolean) {
+    override setVal(v: T, trigger_observers = true, is_transform?:boolean):Promise<any>|undefined {
         // TODO: fixme, check this.#loaded && this.original_value!==undefined?
         const valueExists = this.#loaded && (this.original_value!==undefined || this.is_js_primitive);
         if (valueExists) return this.updateValue(v, trigger_observers, is_transform);
-        else return this.initializeValue(v, is_transform); // observers not relevant for init
+        else return this.initializeValue(v, is_transform) as undefined; // observers not relevant for init
     }
 
     // also trigger event for all property specific observers
@@ -2638,7 +2588,7 @@ export class Pointer<T = any> extends Ref<T> {
             }
         }
 
-        let updatePromise: Promise<any>|void;
+        let updatePromise: Promise<any>|undefined;
 
         // set primitive value, reference not required
         if (this.is_js_primitive) {
@@ -2975,8 +2925,8 @@ export class Pointer<T = any> extends Ref<T> {
 
         // remove return value if captured by getters
         // TODO: this this work as intended?
-        capturedGetters?.delete(val instanceof Pointer ? val : Pointer.getByValue(val));
-        capturedGettersWithKeys?.delete(val instanceof Pointer ? val : Pointer.getByValue(val));
+        capturedGetters?.delete(val instanceof Pointer ? val : Pointer.getByValue(val)!);
+        capturedGettersWithKeys?.delete(val instanceof Pointer ? val : Pointer.getByValue(val)!);
 
         const hasGetters = capturedGetters||capturedGettersWithKeys;
         const gettersCount = (capturedGetters?.size??0) + (capturedGettersWithKeys?.size??0);
@@ -3043,7 +2993,13 @@ export class Pointer<T = any> extends Ref<T> {
     async setDatexTransform(datex_transform:string) {
         // TODO: fix and reenable
         try {
-            this.#transform_scope = (await Runtime.executeDatexLocally(datex_transform)).transform_scope;
+            const ptr = await Runtime.executeDatexLocally(datex_transform);
+            if (ptr instanceof Pointer && ptr.transform_scope) {
+                this.#transform_scope = ptr.transform_scope;
+            }
+            else {
+                throw new Error("invalid transform pointer")
+            }
         }
         catch (e) {
             console.log("transform error", e);
@@ -3124,7 +3080,7 @@ export class Pointer<T = any> extends Ref<T> {
         return (<WeakRef<any>>this.#shadow_object)?.deref()
     }
 
-    get type():Type{
+    get type():Type {
         return this.#unwrapped_transform_type ?? this.#type;
     }
 
@@ -3191,7 +3147,7 @@ export class Pointer<T = any> extends Ref<T> {
 
     // returns if a property of a @sync class can be read, returns true if not a @sync class
     public canReadProperty(property_name:string):boolean {
-        return (!this.visible_children&& !DEFAULT_HIDDEN_OBJECT_PROPERTIES.has(property_name)) || this.visible_children.has(property_name)
+        return (!this.visible_children && !DEFAULT_HIDDEN_OBJECT_PROPERTIES.has(property_name)) || !!(this.visible_children?.has(property_name))
     }
     
     // returns if a property of a @sync class can be updated, returns true if not a @sync class
@@ -3366,12 +3322,13 @@ export class Pointer<T = any> extends Ref<T> {
     }
 
     // proxify a (child) value, use the pointer context
-    private proxifyChild(name:any, value:any) {
-        let child = value === NOT_EXISTING ? this.shadow_object[name] : value;
+    private proxifyChild(name:string, value:unknown) {
+        if (NOT_EXISTING && !this.shadow_object) throw new Error("Cannot proxify child of non-object value");
+        let child = value === NOT_EXISTING ? this.shadow_object![name] : value;
         
         // special native function -> <Function> conversion;
         if (typeof child == "function" && !(child instanceof DatexFunction) && !(child instanceof JSTransferableFunction)) {
-            child = DatexFunction.createFromJSFunction(child, this, name);
+            child = DatexFunction.createFromJSFunction(child as (...args: unknown[]) => unknown, this, name);
         }
 
         // create/get pointer, same permission filter
@@ -3956,7 +3913,7 @@ export class Pointer<T = any> extends Ref<T> {
     }
 
     /** all values are removed */
-    handleSplice(start_index:number, deleteCount:number, replace:Array<bigint>) {
+    handleSplice(start_index:number, deleteCount:number, replace:Array<unknown>) {
         if(!this.current_val) return;
 
         if (deleteCount == 0 && !replace.length) return; // nothing changes
@@ -4150,17 +4107,17 @@ export class Pointer<T = any> extends Ref<T> {
 
     }
 
-    #active_property_observers = new Map<string, [Ref, observe_handler<unknown, RefLike<any>>]>();
+    #active_property_observers = new Map<string, [RefLike, observe_handler<unknown, RefLike<any>>]>();
     #unique = {}
 
     // set observer for internal changes in property value reference
-    protected initShadowObjectPropertyObserver(key:string, value:Ref){
+    protected initShadowObjectPropertyObserver(key:string, value:RefLike){
         // console.log("set reference observer" + this.idString(),key,value)
 
         // remove previous observer for property
         if (this.#active_property_observers.has(key)) {
             const [value, handler] = this.#active_property_observers.get(key)!;
-            Ref.unobserve(value, handler, this.#unique);
+            Ref.unobserve(value, handler, this.#unique); // xxxxxx
         }
 
         // new observer 
@@ -4317,18 +4274,6 @@ export namespace Ref {
     }
 }
 
-// js primitives
-export class TextRef<T extends string = string> extends Pointer<T> {}
-export class IntegerRef extends Pointer<bigint> {}
-export class DecimalRef extends Pointer<number> {}
-export class BooleanRef extends Pointer<boolean> {}
-
-// pseudo primitives
-export class TypeRef extends Pointer<Type> {}
-export class EndpointRef extends Pointer<Endpoint> {}
-export class URLRef extends Pointer<URL> {}
-
-
 
 
 /** proxy function (for remote calls) */
@@ -4348,9 +4293,9 @@ export function getProxyFunction(method_name:string, params:{filter:target_claus
 
 export function getProxyStaticValue(name:string, params:{filter?:target_clause, dynamic_filter?: target_clause, sign?:boolean, scope_name?:string, timeout?:number}):(...args:any[])=>Promise<any> {
     return function() {
-        let filter = params.dynamic_filter ? new Conjunction(params.filter, params.dynamic_filter) : params.filter;
+        const filter = params.dynamic_filter ? new Conjunction(params.filter, params.dynamic_filter) : params.filter;
 
-        let params_proto = Object.getPrototypeOf(params);
+        const params_proto = Object.getPrototypeOf(params);
         if (params_proto!==Object.prototype) params_proto.dynamic_filter = undefined; // reset, no longer needed for call
 
         const compile_info:compile_info = [`#public.${params.scope_name}.${name}`, [], {to:filter, sign:params.sign}];
