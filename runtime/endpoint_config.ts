@@ -11,7 +11,6 @@ import { DatexObject } from "../types/object.ts";
 import { Ref } from "./pointers.ts";
 import { normalizePath } from "../utils/normalize-path.ts";
 
-
 type channel_type = 'websocket'|'http'
 type node_config = {
 	channels: Record<channel_type, unknown>,
@@ -22,9 +21,10 @@ export interface EndpointConfigData {
 	endpoint?:Endpoint
 	keys?: Crypto.ExportedKeySet
 	connect?:boolean // default true
-	ws_relay?: boolean // create ws relay on backend server, default true
+	ws_relay?: boolean // create ws relay on backend server (default: true)
 	temporary?:boolean // default false
 	nodes?: Map<Endpoint, node_config>,
+	blockchain_relay?: Endpoint // custom blockchain relay endpoint (default: @+unyt2)
 }
 
 
@@ -39,6 +39,7 @@ class EndpointConfig implements EndpointConfigData {
 	public temporary?:boolean
 	public ws_relay?:boolean
 	public nodes?: Map<Endpoint, node_config>
+	public blockchain_relay?: Endpoint
 	/*****************/
 
 	// not saved in endpoint config, loaded from https://unyt.cc/nodes.dx
@@ -128,8 +129,8 @@ class EndpointConfig implements EndpointConfigData {
 			this.connect = DatexObject.get(<any>config, 'connect')
 			this.temporary = DatexObject.get(<any>config, 'temporary')
 			this.ws_relay = DatexObject.get(<any>config, 'ws_relay')
-			// TODO: enable nodes from cached .dx file, currently disabled for backends to avoid problems during development
-			this.nodes = client_type == "browser" ? DatexObject.get(<any>config, 'nodes') : undefined // DatexObject.get(<any>config, 'nodes');
+			this.blockchain_relay = DatexObject.get(<any>config, 'blockchain_relay')
+			this.nodes = DatexObject.get(<any>config, 'nodes')
 		}
 
 		if (this.storage) {
@@ -137,6 +138,13 @@ class EndpointConfig implements EndpointConfigData {
 				sessionStorage.removeItem(this.storageId);
 			else
 				localStorage.removeItem(this.storageId);
+		}
+
+		// set custom blockchain relay
+		if (this.blockchain_relay) {
+			if (!Runtime.Blockchain) throw new Error("Runtime.Blockchain not initialized");
+			if (this.blockchain_relay instanceof Endpoint) Runtime.Blockchain.setRelayNode(this.blockchain_relay);
+			else throw new Error("blockchain_relay must be an Endpoint")
 		}
 
 		// load public nodes from unyt.org
@@ -152,7 +160,7 @@ class EndpointConfig implements EndpointConfigData {
 	}
 
 	save() {
-		const serialized = Runtime.valueToDatexString(new Tuple({endpoint:this.#endpoint, connect:this.connect, ws_relay:this.ws_relay, temporary:this.temporary, keys:this.keys, nodes:this.nodes}));
+		const serialized = Runtime.valueToDatexString(new Tuple({endpoint:this.#endpoint, connect:this.connect, ws_relay:this.ws_relay, temporary:this.temporary, keys:this.keys, nodes:this.nodes, blockchain_relay:this.blockchain_relay}));
 
 		if (client_type=="deno") {
 			try {
@@ -206,6 +214,7 @@ class EndpointConfig implements EndpointConfigData {
 		this.ws_relay = undefined;
 		this.keys = undefined;
 		this.nodes = undefined;
+		this.blockchain_relay = undefined;
 
 		if (client_type=="deno") {
 			const config_file = new URL('./' + this.DX_FILE_NAME, cache_path);
