@@ -1058,7 +1058,7 @@ export class Runtime {
                     .then(finish)
                     .catch(e => {
                         if (wait_for_result) reject(e);
-                        else console.error("Error sending datex block", e);
+                        else logger.debug("Error sending datex block (flood)");
                     });
             }           
             // send to receivers
@@ -1073,7 +1073,7 @@ export class Runtime {
                         .then(finish)
                         .catch(e => {
                             if (wait_for_result) reject(e);
-                            else console.error("Error sending datex block", e);
+                            else logger.debug("Error sending datex block to " + to_endpoint);
                         });
                 }
             }
