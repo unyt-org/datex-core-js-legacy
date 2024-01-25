@@ -15,6 +15,7 @@ import { LOCAL_ENDPOINT } from "../types/addressing.ts";
 import { ESCAPE_SEQUENCES } from "../utils/logger.ts";
 import { StorageMap } from "../types/storage_map.ts";
 import { StorageSet } from "../types/storage_set.ts";
+import { IterableWeakSet } from "../utils/iterable-weak-set.ts";
 
 
 // displayInit();
@@ -377,6 +378,9 @@ export class Storage {
         return this.trusted_location;
     }
 
+    static #unresolvedLocalItems = new Map<string, unknown>()
+    static #unresolvedLocalPointers = new IterableWeakSet<Pointer>()
+
 
     static setItem(key:string, value:any, listen_for_pointer_changes = true, location:StorageLocation|null|undefined = this.#primary_location):Promise<boolean>|boolean {
         Storage.cache.set(key, value); // save in cache
@@ -391,22 +395,60 @@ export class Storage {
         else return false;
     }
 
-	static async setItemAsync(location:AsyncStorageLocation, key: string,value: unknown,listen_for_pointer_changes: boolean) {
+	static async setItemAsync(location:AsyncStorageLocation, key: string, value: unknown,listen_for_pointer_changes: boolean) {
         this.setDirty(location, true)
         // store value (might be pointer reference)
         const dependencies = await location.setItem(key, value);
+        if (Pointer.is_local) this.checkUnresolvedLocalDependenciesForItem(key, value, dependencies);
         this.updateItemDependencies(key, [...dependencies].map(p=>p.id));
         await this.saveDependencyPointersAsync(dependencies, listen_for_pointer_changes, location);
         this.setDirty(location, false)
         return true;
 	}
 
-	static setItemSync(location:SyncStorageLocation, key: string,value: unknown,listen_for_pointer_changes: boolean) {
+	static setItemSync(location:SyncStorageLocation, key: string, value: unknown,listen_for_pointer_changes: boolean) {
         const dependencies = location.setItem(key, value);
+        if (Pointer.is_local) this.checkUnresolvedLocalDependenciesForItem(key, value, dependencies);
         this.updateItemDependencies(key, [...dependencies].map(p=>p.id));
         this.saveDependencyPointersSync(dependencies, listen_for_pointer_changes, location);
         return true;
 	}
+
+    /**
+     * Collects all pointer dependencies of an itemr entry with a @@local origin.
+     * Once the endpoint is initialized, the entry is updated with the correct pointer ids.
+     */
+    private static checkUnresolvedLocalDependenciesForItem(key: string, value:unknown, dependencies: Set<Pointer>) {
+        const hasUnresolvedLocalDependency = [...dependencies].some(p=>p.origin == LOCAL_ENDPOINT);
+        if (hasUnresolvedLocalDependency) this.#unresolvedLocalItems.set(key, value);
+    }
+
+    /**
+     * Collects all pointer dependencies of a pointer entry with a @@local origin.
+     * Once the endpoint is initialized, the entry is updated with the correct pointer ids.
+     */
+    private static checkUnresolvedLocalDependenciesForPointer(pointer: Pointer, dependencies: Set<Pointer>) {
+        const hasUnresolvedLocalDependency = [...dependencies].some(p=>p.origin == LOCAL_ENDPOINT);
+        if (hasUnresolvedLocalDependency) this.#unresolvedLocalPointers.add(pointer);
+    }
+
+    /**
+     * Updates all item/pointer entries in storage that still are stored with unresolved @@local pointers
+     */
+    static updateEntriesWithUnresolvedLocalDependencies() {
+        for (const [key, value] of this.#unresolvedLocalItems) {
+            logger.debug("update item containing pointers with @@local origin: " +  key)
+            this.setItem(key, value)
+        }
+        this.#unresolvedLocalItems.clear()
+
+        for (const ptr of this.#unresolvedLocalPointers) {
+            logger.debug("update pointer containing pointers with @@local origin: " + ptr.idString())
+            this.setPointer(ptr as Pointer)
+        }
+        this.#unresolvedLocalPointers.clear()
+    }
+
 
     public static setPointer(pointer:Pointer, listen_for_changes = true, location:StorageLocation|undefined = this.#primary_location, partialUpdateKey: unknown = NOT_EXISTING): Promise<boolean>|boolean {
         if (!pointer.value_initialized) {
@@ -428,6 +470,7 @@ export class Storage {
 
         const dependencies = this.updatePointerSync(location, pointer, partialUpdateKey);
         dependencies.delete(pointer);
+        if (Pointer.is_local) this.checkUnresolvedLocalDependenciesForPointer(pointer, dependencies);
         this.updatePointerDependencies(pointer.id, [...dependencies].map(p=>p.id));
         this.saveDependencyPointersSync(dependencies, listen_for_changes, location);
 
@@ -448,6 +491,7 @@ export class Storage {
 
         const dependencies = await this.updatePointerAsync(location, pointer, partialUpdateKey);
         dependencies.delete(pointer);
+        if (Pointer.is_local) this.checkUnresolvedLocalDependenciesForPointer(pointer, dependencies);
         this.updatePointerDependencies(pointer.id, [...dependencies].map(p=>p.id));
         await this.saveDependencyPointersAsync(dependencies, listen_for_changes, location);
 

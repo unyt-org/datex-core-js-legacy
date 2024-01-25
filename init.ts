@@ -80,6 +80,8 @@ export async function init() {
 		// has only local endpoint id (%0000) or global id?
 		if (endpoint != LOCAL_ENDPOINT) {
 			Pointer.is_local = false;
+			// update storage entries that contain pointers with unresolved @@local origin
+			Storage.updateEntriesWithUnresolvedLocalDependencies();
 			// init subscriber cache as soon as endpoint is available
 			initSubscriberCache();
 		}
