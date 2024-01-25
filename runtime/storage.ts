@@ -377,6 +377,8 @@ export class Storage {
         return this.trusted_location;
     }
 
+    static #unresolvedLocalItems = new Map<string, unknown>()
+
 
     static setItem(key:string, value:any, listen_for_pointer_changes = true, location:StorageLocation|null|undefined = this.#primary_location):Promise<boolean>|boolean {
         Storage.cache.set(key, value); // save in cache
@@ -391,22 +393,50 @@ export class Storage {
         else return false;
     }
 
-	static async setItemAsync(location:AsyncStorageLocation, key: string,value: unknown,listen_for_pointer_changes: boolean) {
+	static async setItemAsync(location:AsyncStorageLocation, key: string, value: unknown,listen_for_pointer_changes: boolean) {
         this.setDirty(location, true)
         // store value (might be pointer reference)
         const dependencies = await location.setItem(key, value);
+        if (Pointer.is_local) this.checkUnresolvedLocalDependencies(key, value, dependencies);
         this.updateItemDependencies(key, [...dependencies].map(p=>p.id));
         await this.saveDependencyPointersAsync(dependencies, listen_for_pointer_changes, location);
         this.setDirty(location, false)
         return true;
 	}
 
-	static setItemSync(location:SyncStorageLocation, key: string,value: unknown,listen_for_pointer_changes: boolean) {
+	static setItemSync(location:SyncStorageLocation, key: string, value: unknown,listen_for_pointer_changes: boolean) {
         const dependencies = location.setItem(key, value);
+        if (Pointer.is_local) this.checkUnresolvedLocalDependencies(key, value, dependencies);
         this.updateItemDependencies(key, [...dependencies].map(p=>p.id));
         this.saveDependencyPointersSync(dependencies, listen_for_pointer_changes, location);
         return true;
 	}
+
+    /**
+     * Collects all pointer dependencies of an item with a @@local origin.
+     * Once the endpoint is initialized, the item is updated with the correct pointer ids.
+     * @param itemKey 
+     * @param value 
+     * @param dependencies 
+     */
+    private static checkUnresolvedLocalDependencies(itemKey: string, value:unknown, dependencies: Set<Pointer>) {
+        const hasUnresolvedLocalDependency = [...dependencies].some(p=>p.origin == LOCAL_ENDPOINT);
+        if (hasUnresolvedLocalDependency) {
+            this.#unresolvedLocalItems.set(itemKey, value)  
+        }
+    }
+
+    /**
+     * Updates all items in storage that still are stored with unresolved @@local pointers
+     */
+    static updateItemsWithUnresolvedLocalDependencies() {
+        for (const [key, value] of this.#unresolvedLocalItems) {
+            logger.debug("update item containing pointers with @@local origin: " +  key)
+            this.setItem(key, value)
+        }
+        this.#unresolvedLocalItems.clear()
+    }
+
 
     public static setPointer(pointer:Pointer, listen_for_changes = true, location:StorageLocation|undefined = this.#primary_location, partialUpdateKey: unknown = NOT_EXISTING): Promise<boolean>|boolean {
         if (!pointer.value_initialized) {
