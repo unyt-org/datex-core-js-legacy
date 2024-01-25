@@ -2431,7 +2431,7 @@ export class Pointer<T = any> extends Ref<T> {
         if (is_transform) val = this.getInitialTransformValue(val)
 
         // Save reference to original
-        this.#type = Type.ofValue(val);
+        if (val!==undefined && val !== null) this.#type = Type.ofValue(val);
 
         // console.log("loaded : "+ this.id + " - " + this.#type, val)
 
