@@ -437,7 +437,7 @@ export class Storage {
      */
     static updateEntriesWithUnresolvedLocalDependencies() {
         for (const [key, value] of this.#unresolvedLocalItems) {
-            logger.debug("update item containing pointers with @@local origin!: " +  key)
+            logger.debug("update item containing pointers with @@local origin: " +  key)
             this.setItem(key, value)
         }
         this.#unresolvedLocalItems.clear()
