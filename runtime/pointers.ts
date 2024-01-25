@@ -819,16 +819,22 @@ export type JSValueWith$<T> = ObjectRef<T>;
 
 // converts Object to Record<string|symbol, unknown>
 
+export type WrappedPointerValue = number|string|boolean|bigint|URL|Endpoint
+
 // convert from any JS/DATEX value to minimal representation with reference
 export type MinimalJSRef<T, _C = CollapsedValue<T>> =
     _C extends symbol ? symbol : (
-        _C extends number|string|boolean|bigint ?
-            Pointer<_C>: // keep pointer reference
+        _C extends WrappedPointerValue ?
+            PointerWithPrimitive<_C>: // keep pointer reference
             ObjectRef<_C> // collapsed object
     )
 
 // return Pointer<T>&T for primitives (excluding boolean) and Pointer<T> otherwise
-export type PointerWithPrimitive<T> = T extends number|string|boolean|bigint ? Pointer<T>&T : Pointer<T>
+export type PointerWithPrimitive<T> = T extends WrappedPointerValue ? 
+    T extends primitive ? 
+            Pointer<T>&T : // e.g. Pointer<number>&number
+            Pointer<T> : // e.g. Pointer<URL>
+    Pointer<T> // e.g. Pointer<Record<string, unknown>>
 
 export type CollapsedValueAdvanced<T extends RefOrValue<unknown>, COLLAPSE_POINTER_PROPERTY extends boolean|undefined = true, COLLAPSE_PRIMITIVE_POINTER extends boolean|undefined = true, _C = CollapsedValue<T>> = 
     // if
