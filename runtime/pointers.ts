@@ -709,8 +709,6 @@ export class PointerProperty<T=any> extends Ref<T> {
 }
 
 
-// similar to Datex.Ref, but works better for all descending generic classes in typescript strict mode
-export type GenericValue<T> = RefLike<T>;
 
 export type ReadonlyRef<T> = Readonly<RefLike<T>>;
 /**
