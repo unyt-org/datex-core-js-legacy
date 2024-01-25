@@ -825,7 +825,7 @@ export type JSValueWith$<T> = ObjectRef<T>;
 export type MinimalJSRef<T, _C = CollapsedValue<T>> =
     _C extends symbol ? symbol : (
         _C extends number|string|boolean|bigint ?
-            T: // keep pointer reference
+            Pointer<_C>: // keep pointer reference
             ObjectRef<_C> // collapsed object
     )
 
