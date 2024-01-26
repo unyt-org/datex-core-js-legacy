@@ -13,7 +13,7 @@ export class MessageLogger {
 
 	static logger:Logger
 
-    static decompile(dxb:ArrayBuffer, has_header = true, colorized = true){
+    static decompile(dxb:ArrayBuffer, has_header = true, colorized = true, resolve_slots = true){
         try {
             // extract body (TODO: just temporary, rust impl does not yet support header decompilation)
             if (has_header) {
@@ -22,7 +22,7 @@ export class MessageLogger {
                 dxb = res[1];
             }
          
-            return wasm_decompile(new Uint8Array(dxb), true, colorized, true).replace(/\r\n$/, '');
+            return wasm_decompile(new Uint8Array(dxb), true, colorized, resolve_slots).replace(/\r\n$/, '');
         } catch (e) {
             return "Decompiler Error: "+ e.message;
         }
