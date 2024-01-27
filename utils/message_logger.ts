@@ -38,7 +38,7 @@ export class MessageLogger {
             if (header.sender == Runtime.endpoint && (receivers instanceof Logical && receivers?.size == 1 && receivers.has(Runtime.endpoint)) && header.type != ProtocolDataType.RESPONSE && header.type != ProtocolDataType.DEBUGGER) return;
 
             // ignore hello messages
-            if (header.type == ProtocolDataType.HELLO) {
+            if (header.type == ProtocolDataType.HELLO || header.type == ProtocolDataType.GOODBYE) {
                 this.logger.plain(`\n#color(blue)⭠  ${header.sender||'@*'} ${header.type ? `(${ProtocolDataType[header.type]}) ` : ''}`);
                 return;
             };
@@ -57,12 +57,11 @@ export class MessageLogger {
             if (header.sender == Runtime.endpoint && (receivers instanceof Logical && receivers?.size == 1 && receivers.has(Runtime.endpoint)) && header.type != ProtocolDataType.RESPONSE && header.type != ProtocolDataType.DEBUGGER) return;
 
             // ignore hello messages
-            if (header.type == ProtocolDataType.HELLO) {
-                this.logger.plain(`\n#color(green)⭢  ${receivers||'@*'} ${header.type ? `(${ProtocolDataType[header.type]}) ` : ''}`);
+            if (header.type == ProtocolDataType.HELLO || header.type == ProtocolDataType.GOODBYE) {
+                this.logger.plain(`\n#color(green)${header.sender||'@*'} ⭢  ${receivers||'@*'} ${header.type ? `(${ProtocolDataType[header.type]}) ` : ''}`);
                 return;
             };
             
-
             const content = MessageLogger.decompile(dxb);
             if (content.trim() == "\x1b[38;2;219;45;129mvoid\x1b[39m;") return; // dont log void; messages
  
