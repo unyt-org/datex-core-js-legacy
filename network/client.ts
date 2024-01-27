@@ -848,14 +848,14 @@ export class InterfaceManager {
         // iterate over all active endpoints
         for (const interf of CommonInterface.proxy_interface ? [CommonInterface.proxy_interface]: this.active_interfaces) {
             if (interf.endpoint && !exclude_endpoints.has(interf.endpoint) && !interf.endpoint.equals(Runtime.endpoint)) {
-            exclude_endpoints.add(interf.endpoint);
-            //console.log("FLOOD > " + interf.endpoint)
-            interf.send(datex, interf.endpoint);
+                exclude_endpoints.add(interf.endpoint);
+                // console.log("FLOOD > " + interf.endpoint)
+                interf.send(datex, interf.endpoint);
             }
             for (const endpoint of interf.endpoints??[]){
                 if (!exclude_endpoints.has(endpoint) && !interf.endpoint?.equals(Runtime.endpoint)) {
                     exclude_endpoints.add(endpoint);
-                    //console.log("FLOOD > " + endpoint)
+                    // console.log("FLOOD > " + endpoint)
                     interf.send(datex, endpoint);
                 }
             }
