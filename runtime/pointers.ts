@@ -3176,6 +3176,9 @@ export class Pointer<T = any> extends Ref<T> {
 
     public addSubscriber(subscriber: Endpoint) {
 
+        // already subscribed
+        if (this.subscribers.has(subscriber)) return;
+
         // TODO also check pointer permission for 'to'
 
         // request sync endpoint is self, cannot subscribe to own pointers!
