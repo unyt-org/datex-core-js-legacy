@@ -528,6 +528,7 @@ export function printTrace(endpoint: string|Endpoint) {
 type printTraceT = typeof printTrace;
 declare global {
     const printTrace: printTraceT;
+    const printSnapshot: typeof Storage.printSnapshot
 }
 
 
@@ -654,5 +655,7 @@ globalThis.static_pointer = static_pointer;
 globalThis.f = f;
 // @ts-ignore
 globalThis.printTrace = printTrace;
+// @ts-ignore
+globalThis.printSnapshot = Storage.printSnapshot.bind(Storage);
 // @ts-ignore
 globalThis.props = props;
