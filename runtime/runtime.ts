@@ -1823,6 +1823,7 @@ export class Runtime {
                     logger.debug("GOODBYE from " + header.sender)
                     header.sender.setOnline(false)
                     Pointer.clearEndpointSubscriptions(header.sender)
+                    Pointer.clearEndpointPermissions(header.sender)
                 }
                 else {
                     logger.error("ignoring unsigned GOODBYE message")

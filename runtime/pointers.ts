@@ -1956,6 +1956,9 @@ export class Pointer<T = any> extends Ref<T> {
 
     #allowed_access?: target_clause // who has access to this pointer?, undefined = all
 
+    // reverse mapping for allowed_access
+    static #allowed_access_by_endpoint = new Map<Endpoint, IterableWeakSet<Pointer>>().setAutoDefault(IterableWeakSet);
+
     #garbage_collectable = false;
     #garbage_collected = false;
 
@@ -2031,7 +2034,10 @@ export class Pointer<T = any> extends Ref<T> {
     public grantAccessTo(endpoint: Endpoint, _force = false) {
         if (!_force && !Runtime.OPTIONS.PROTECT_POINTERS) throw new Error("Read permissions are not enabled per default (set Datex.Runtime.OPTIONS.PROTECT_POINTERS to true)")
         if (!this.#allowed_access || this.#allowed_access == BROADCAST) this.#allowed_access = new Disjunction()
-        if (this.#allowed_access instanceof Disjunction) this.#allowed_access.add(endpoint)
+        if (this.#allowed_access instanceof Disjunction) {
+            this.#allowed_access.add(endpoint)
+            Pointer.#allowed_access_by_endpoint.getAuto(endpoint).add(this);
+        }
         else throw new Error("Invalid access filter, cannot add endpoint (TODO)")
     }
 
@@ -2052,7 +2058,14 @@ export class Pointer<T = any> extends Ref<T> {
      */
     public revokeAccessFor(endpoint: Endpoint, _force = false) {
         if (!_force && !Runtime.OPTIONS.PROTECT_POINTERS) throw new Error("Read permissions are not enabled per default (set Datex.Runtime.OPTIONS.PROTECT_POINTERS to true)")
-        if (this.#allowed_access instanceof Disjunction) this.#allowed_access.delete(endpoint)
+        if (this.#allowed_access instanceof Disjunction) {
+            this.#allowed_access.delete(endpoint);
+            const allowed_access_list = Pointer.#allowed_access_by_endpoint.get(endpoint);
+            if (allowed_access_list) {
+                allowed_access_list.delete(this);
+                if (allowed_access_list.size == 0) Pointer.#allowed_access_by_endpoint.delete(endpoint);
+            }
+        }
         else throw new Error("Invalid access filter, cannot add endpoint (TODO)")
     }
 
@@ -3270,7 +3283,7 @@ export class Pointer<T = any> extends Ref<T> {
     public static enablePeriodicSubscriberCleanup(interval = 15 * 60) {
         logger.debug(`periodic pointer subscriber cleanup enabled (interval: ${interval} seconds)`);
         if (Pointer.#periodicSubscriberCleanup) clearInterval(Pointer.#periodicSubscriberCleanup);
-        Pointer.#periodicSubscriberCleanup = setInterval(() => this.cleanupSubscribers(), interval * 1000); 
+        Pointer.#periodicSubscriberCleanup = setInterval(() => this.cleanupEndpoints(), interval * 1000); 
     }
 
     /**
@@ -3285,14 +3298,23 @@ export class Pointer<T = any> extends Ref<T> {
     }
 
     /**
-     * Removes all subscribers that are no longer online
+     * Iterates over all subscribers and access endpoints
      */
-    public static async cleanupSubscribers() {
-        logger.debug("cleaning up subscribers");
+    static *#subscribersAndAccessEndpoints() {
+        for (const endpoint of Pointer.#endpoint_subscriptions.keys()) yield endpoint;
+        for (const endpoint of Pointer.#allowed_access_by_endpoint.keys()) yield endpoint;
+    }
 
-        for (const endpoint of Pointer.#endpoint_subscriptions.keys()) {
+    /**
+     * Removes all referenced endpoints that are no longer online
+     */
+    public static async cleanupEndpoints() {
+        logger.debug("cleaning up endpoints with subscriptions or access permissions");
+
+        for (const endpoint of this.#subscribersAndAccessEndpoints()) {
             if (!(await endpoint.isOnline())) {
                 this.clearEndpointSubscriptions(endpoint);
+                this.clearEndpointPermissions(endpoint)
             }
         }
     }
@@ -3309,6 +3331,20 @@ export class Pointer<T = any> extends Ref<T> {
         }
 
         if (removeCount) logger.debug("removed " + removeCount + " subscriptions for " + endpoint);
+    }
+
+    /**
+     * Removes all permissions for an endpoint given with grantAccessTo
+     */
+    public static clearEndpointPermissions(endpoint: Endpoint) {
+        if (!Runtime.OPTIONS.PROTECT_POINTERS) return; // ignore if pointer protection is disabled
+
+        let removeCount = 0;
+        for (const pointer of Pointer.#allowed_access_by_endpoint.get(endpoint) ?? []) {
+            pointer.revokeAccessFor(endpoint);
+            removeCount++;
+        }
+        if (removeCount) logger.debug("removed " + removeCount + " pointer access permissions for " + endpoint);
     }
 
 
