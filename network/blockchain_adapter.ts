@@ -1,5 +1,5 @@
-import { Datex, instance } from "../mod.ts";
-import { Endpoint } from "../datex_all.ts";
+import { Datex, f, instance } from "../mod.ts";
+import { Disjunction, Endpoint } from "../datex_all.ts";
 import {endpoint, property} from "../datex_all.ts";
 import { Logger } from "../utils/logger.ts";
 
@@ -98,8 +98,18 @@ export type BCData<T extends BCEntryType> =
 /**
  * Blockchain interface (using @+unyt2 relay node)
  */
+const relayNode = new Disjunction(f('@+unyt2'));
 
-@endpoint('@+unyt2') export class Blockchain {
+@endpoint(relayNode) export class Blockchain {
+
+	static setRelayNode(node: Endpoint) {
+		logger.debug("using blockchain relay node: " + node);
+		relayNode.clear();
+		relayNode.add(node);
+	}
+	static getRelayNode() {
+		return [...relayNode][0];
+	}
 
 	/**
 	 * Methods that must be implemented on an endpoint that has access to the blockchain:#

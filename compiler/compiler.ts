@@ -248,6 +248,8 @@ export type compiler_options = {
     plugins?: string[] // list of enabled plugins
     required_plugins?: string[] // list of enabled plugins that must be used
 
+    stream_abort_signal?: AbortSignal // abort signal for stream
+
     // for routing header
     __routing_ttl?:number,
     __routing_prio?:number,
@@ -5149,7 +5151,15 @@ export class Compiler {
                         let next:ReadableStreamReadResult<any>,
                             value: any;
                         while (true) {
+                            if (SCOPE.options.stream_abort_signal?.aborted) {
+                                console.log(`Stream ${SCOPE.options.sid} was aborted`)
+                                break;
+                            }
                             next = await reader.read()
+                            if (SCOPE.options.stream_abort_signal?.aborted) {
+                                console.log(`Stream ${SCOPE.options.sid} was aborted`)
+                                break;
+                            }
                             if (next.done) break;
                             value = next.value;
                                                 
@@ -5355,16 +5365,16 @@ export class Compiler {
         return this.export(blob, output_name_or_path, file_type, script_or_url instanceof URL ? script_or_url : undefined)
     }
 
-    static async exportValue(value: any, output_name_or_path?:string|URL, file_type: DATEX_FILE_TYPE = FILE_TYPE.DATEX_BINARY, collapse_pointers = true, collapse_first_inserted = true, keep_external_pointers = true) {
+    static async exportValue(value: any, output_name_or_path?:string|URL, file_type: DATEX_FILE_TYPE = FILE_TYPE.DATEX_BINARY, collapse_pointers = true, collapse_first_inserted = true, keep_external_pointers = true, resolve_slots = true) {
         // compile value
-        const buffer = await this.compile("?", [value], {collapse_pointers, collapse_first_inserted, keep_external_pointers, no_create_pointers: false}) as ArrayBuffer;
+        const buffer = await this.compile("?", [value], {collapse_pointers, collapse_first_inserted, keep_external_pointers, no_create_pointers: false, flood: true, to: undefined}) as ArrayBuffer;
 
         if (file_type[0] == "application/datex") {
             // export
             return this.export(buffer, output_name_or_path, file_type)
         }
         else {
-            return this.export(MessageLogger.decompile(buffer, true, false), output_name_or_path, file_type)
+            return this.export(MessageLogger.decompile(buffer, true, false, resolve_slots), output_name_or_path, file_type)
         }
 
     }

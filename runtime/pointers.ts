@@ -2607,12 +2607,12 @@ export class Pointer<T = any> extends Ref<T> {
 
         // propagate updates via datex
         if (this.send_updates_to_origin) {
-            this.handleDatexUpdate(null, '#0=?;? = #0', [this.current_val, this], this.origin, true)
+            this.handleDatexUpdate(null, '#0 = ?; ? = #0', [this.current_val, this], this.origin, true)
         }
         if (this.update_endpoints.size) {
             logger.debug("forwarding update to subscribers", this.update_endpoints);
             // console.log(this.#update_endpoints);
-            this.handleDatexUpdate(null, '#0=?;? = #0', [this.current_val, this], this.update_endpoints, true)
+            this.handleDatexUpdate(null, '#0 = ?; ? = #0', [this.current_val, this], this.update_endpoints, true)
         }
 
         // pointer value change listeners
