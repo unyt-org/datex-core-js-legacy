@@ -36,8 +36,9 @@ export class StorageWeakSet<V> {
 
 	async add(value: V) {
 		const storage_key = await this.getStorageKey(value);
-		if (await this._has(storage_key)) return; // already exists
-		return this._add(storage_key, null);
+		if (await this._has(storage_key)) return this; // already exists
+		await this._add(storage_key, null);
+		return this;
 	}
 	protected _add(storage_key:string, value:V|null) {
 		this.activateCacheTimeout(storage_key);
@@ -90,13 +91,75 @@ export class StorageWeakSet<V> {
  */
 export class StorageSet<V> extends StorageWeakSet<V> {
 
+	#size_key?: string
+	protected get _size_key() {
+		if (!this.#size_key) this.#size_key = 'dxset.size::'+(this as any)[DX_PTR].idString()+'.';
+		return this.#size_key;
+	}
+
+	#size?: number;
+
+	get size() {
+		if (this.#size == undefined) throw new Error("size not yet available. use getSize() instead");
+		return this.#size;
+	}
+
+	async getSize() {
+		if (this.#size != undefined) return this.#size;
+		else {
+			await this.#determineSizeFromStorage(); 
+			return this.#size!
+		}
+	}
+
+	/**
+	 * Sets this.#size to the correct value determined from storage.
+	 */
+	async #determineSizeFromStorage() {
+		const cachedSize = await Storage.getItem(this._size_key);
+		const calculatedSize = await Storage.getItemCountStartingWith(this._prefix);
+		if (cachedSize !== calculatedSize) {
+			if (cachedSize != undefined)
+				logger.warn(`Size mismatch for StorageSet (${(this as any)[DX_PTR].idString()}) detected. Setting size to ${calculatedSize}`)
+			await this.#updateSize(calculatedSize);
+		}
+		else this.#size = calculatedSize;
+	}
+
+	async #updateSize(newSize: number) {
+		this.#size = newSize;
+		await Storage.setItem(this._size_key, newSize);
+	}
+
+	async #incrementSize() {
+		await this.#updateSize(await this.getSize() + 1);
+	}
+	
+	async #decrementSize() {
+		await this.#updateSize(await this.getSize() - 1);
+	}
+
+
 	/**
 	 * Appends a new value to the StorageWeakSet.
 	 */
 	async add(value: V) {
 		const storage_key = await this.getStorageKey(value);
-		if (await this._has(storage_key)) return; // already exists
-		return this._add(storage_key, value);
+		if (await this._has(storage_key)) return this; // already exists
+		await this._add(storage_key, value);
+		await this.#incrementSize();
+		return this;
+	}
+
+	async delete(value: V) {
+		const wasDeleted = await super.delete(value);
+		if (wasDeleted) await this.#decrementSize();
+		return wasDeleted;
+	}
+
+	async clear(): Promise<void> {
+		await super.clear();
+		await this.#updateSize(0);
 	}
 
 	/**
