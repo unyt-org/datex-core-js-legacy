@@ -298,8 +298,13 @@ export class Function<T extends (...args: any) => any = (...args: any) => any> e
     // call the function either from JS directly (meta data is automatically generated, sender is always the current endpoint) or from a DATEX scope
     handleApply(value:any, SCOPE?: datex_scope):Promise<ReturnType<T>>|ReturnType<T>{
 
-        // call function remotely
-        if (!Runtime.endpoint.equals(this.location) && this.location != LOCAL_ENDPOINT) this.setRemoteEndpoint(this.location);
+        // call function remotely if not
+        if (!(
+            Runtime.endpoint.equals(this.location) || // location is own endpoint instance
+            Runtime.endpoint.main.equals(this.location) || // location is own endpoint
+            this.location == LOCAL_ENDPOINT || // location is local
+            this.fn // already has a local function
+        )) this.setRemoteEndpoint(this.location);
 
         let meta:any; // meta (scope variables)
 
@@ -315,7 +320,10 @@ export class Function<T extends (...args: any) => any = (...args: any) => any> e
             // is proxy function: call remote, only if has impersonation permission!
             if (this.proxy_fn) {
                 if (SCOPE.impersonation_permission) return this.proxy_fn(value);
-                else throw new PermissionError("No permission to execute functions on external endpoints ("+this.name+","+this.proxy_fn.name+")", SCOPE)
+                else {
+                    console.error(this.proxy_fn)
+                    throw new PermissionError("No permission to execute functions on external endpoints ("+this.name+","+this.proxy_fn.name+")", SCOPE)
+                }
             }
             // else local call ...
             meta = SCOPE.meta;

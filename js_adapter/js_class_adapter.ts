@@ -1261,7 +1261,6 @@ export function proxyClass<T extends { new(...args: any[]): any;}>(original_clas
             else {
                 const instance:any = Reflect.construct(target, args, newTarget);
                 if (args[0]?.[INIT_PROPS]) {
-                    console.log("auto init props");
                     args[0][INIT_PROPS](instance);
                 }
                 return instance;

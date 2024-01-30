@@ -5144,8 +5144,7 @@ export class Compiler {
 
                         // first part of scope until the stream starts
                         controller.enqueue(await Compiler.createBlockFromScope(SCOPE));
-                       
-                        
+                                                
                         // read stream and insert
                         const reader = SCOPE.streaming!;
                         let next:ReadableStreamReadResult<any>,

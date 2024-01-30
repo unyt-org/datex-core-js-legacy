@@ -497,8 +497,8 @@ export class Runtime {
 
     private static STD_TYPES_ABOUT:Map<Type,Markdown>;
 
-    static #datex_out_handler_initialized_resolve:(value: void | PromiseLike<void>) => void
-    static #datex_out_init_promise = new Promise<void>(resolve=>this.#datex_out_handler_initialized_resolve=resolve);
+    static #datex_out_handler_initialized_resolve?:(value: void | PromiseLike<void>) => void
+    static #datex_out_init_promise:Promise<void>|undefined = new Promise<void>(resolve=>this.#datex_out_handler_initialized_resolve=resolve);
 
     private static local_input_handler = Runtime.getDatexInputHandler();
 

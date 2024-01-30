@@ -53,7 +53,7 @@ export class DenoKVStorageLocation extends AsyncStorageLocation {
 		const entries = itemDB!.list({prefix: []});
 		const keys = [];
 		for await (const entry of entries) {
-			keys.push(entry.value);
+			keys.push(entry.key[0]);
 		}
 		return keys.values() as Generator<string>
 	}
@@ -62,7 +62,7 @@ export class DenoKVStorageLocation extends AsyncStorageLocation {
 		const entries = pointerDB!.list({prefix: []});
 		const keys = [];
 		for await (const entry of entries) {
-			keys.push(entry.value);
+			keys.push(entry.key[0]);
 		}
 		return keys.values() as Generator<string>
 	}

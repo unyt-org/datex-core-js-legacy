@@ -13,7 +13,7 @@ export class MessageLogger {
 
 	static logger:Logger
 
-    static decompile(dxb:ArrayBuffer, has_header = true, colorized = true){
+    static decompile(dxb:ArrayBuffer, has_header = true, colorized = true, resolve_slots = true){
         try {
             // extract body (TODO: just temporary, rust impl does not yet support header decompilation)
             if (has_header) {
@@ -22,7 +22,7 @@ export class MessageLogger {
                 dxb = res[1];
             }
          
-            return wasm_decompile(new Uint8Array(dxb), true, colorized, true).replace(/\r\n$/, '');
+            return wasm_decompile(new Uint8Array(dxb), true, colorized, resolve_slots).replace(/\r\n$/, '');
         } catch (e) {
             return "Decompiler Error: "+ e.message;
         }
@@ -36,11 +36,17 @@ export class MessageLogger {
             // ignore incoming requests from own endpoint to own endpoint
             const receivers = header.routing?.receivers;
             if (header.sender == Runtime.endpoint && (receivers instanceof Logical && receivers?.size == 1 && receivers.has(Runtime.endpoint)) && header.type != ProtocolDataType.RESPONSE && header.type != ProtocolDataType.DEBUGGER) return;
-        
+
+            // ignore hello messages
+            if (header.type == ProtocolDataType.HELLO || header.type == ProtocolDataType.GOODBYE) {
+                this.logger.plain(`\n#color(blue)⭠  ${header.sender||'@*'} ${header.type!=undefined? `(${ProtocolDataType[header.type]}) ` : ''}`);
+                return;
+            };
+            
             const content = MessageLogger.decompile(dxb);
             if (content.trim() == "\x1b[38;2;219;45;129mvoid\x1b[39m;") return; // dont log void; messages
             
-            this.logger.plain(`\n#color(blue)⭠  ${header.sender||'@*'} `.padEnd(70, '─'));
+            this.logger.plain(`\n#color(blue)⭠  ${header.sender||'@*'} ${header.type!=undefined ? `(${ProtocolDataType[header.type]}) ` : ''}`.padEnd(70, '─'));
             console.log(content);
             this.logger.plain(`#color(blue)─────────────────────────────────────────────────────────\n`);
         });
@@ -50,10 +56,16 @@ export class MessageLogger {
             const receivers = header.routing?.receivers;
             if (header.sender == Runtime.endpoint && (receivers instanceof Logical && receivers?.size == 1 && receivers.has(Runtime.endpoint)) && header.type != ProtocolDataType.RESPONSE && header.type != ProtocolDataType.DEBUGGER) return;
 
+            // ignore hello messages
+            if (header.type == ProtocolDataType.HELLO || header.type == ProtocolDataType.GOODBYE) {
+                this.logger.plain(`\n#color(green)${header.sender||'@*'} ⭢  ${receivers||'@*'} ${header.type!=undefined ? `(${ProtocolDataType[header.type]}) ` : ''}`);
+                return;
+            };
+            
             const content = MessageLogger.decompile(dxb);
             if (content.trim() == "\x1b[38;2;219;45;129mvoid\x1b[39m;") return; // dont log void; messages
  
-            this.logger.plain(`\n#color(green)⭢  ${receivers||'@*'} `.padEnd(70, '─'));
+            this.logger.plain(`\n#color(green)⭢  ${receivers||'@*'} ${header.type!=undefined ? `(${ProtocolDataType[header.type]}) ` : ''}`.padEnd(70, '─'));
             console.log(content);
             this.logger.plain(`#color(green)─────────────────────────────────────────────────────────\n`);
         });
