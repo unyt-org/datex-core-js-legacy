@@ -169,7 +169,8 @@ export class Supranet {
         // find node for available channel
         const [node, channel_type] = await this.getNode(via_node)
 
-        await InterfaceManager.disconnect() // first disconnect completely
+        // TODO: clean disconnect with GOODBYE? Never disconnect interfaces?
+        // await InterfaceManager.disconnect() // first disconnect completely
         const connected = await InterfaceManager.connect(channel_type, node)
 
         Runtime.setMainNode(node);
