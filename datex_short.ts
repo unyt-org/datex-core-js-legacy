@@ -1,7 +1,7 @@
 
 // shortcut functions
 // import { Datex } from "./datex.ts";
-import { baseURL, Runtime, PrecompiledDXB, Type, Pointer, Ref, PointerProperty, primitive, any_class, Target, IdEndpoint, TransformFunctionInputs, AsyncTransformFunction, TransformFunction, TextRef, Markdown, DecimalRef, BooleanRef, IntegerRef, MinimalJSRef, RefOrValue, PartialRefOrValueObject, datex_meta, ObjectWithDatexValues, Compiler, endpoint_by_endpoint_name, endpoint_name, Storage, compiler_scope, datex_scope, DatexResponse, target_clause, ValueError, logger, Class, getUnknownMeta, Endpoint, INSERT_MARK, CollapsedValueAdvanced, CollapsedValue, SmartTransformFunction, compiler_options, activePlugins, METADATA, handleDecoratorArgs, RefOrValueObject, PointerPropertyParent, InferredPointerProperty, RefLike } from "./datex_all.ts";
+import { baseURL, Runtime, PrecompiledDXB, Type, Pointer, Ref, PointerProperty, primitive, any_class, Target, IdEndpoint, TransformFunctionInputs, AsyncTransformFunction, TransformFunction, Markdown, MinimalJSRef, RefOrValue, PartialRefOrValueObject, datex_meta, ObjectWithDatexValues, Compiler, endpoint_by_endpoint_name, endpoint_name, Storage, compiler_scope, datex_scope, DatexResponse, target_clause, ValueError, logger, Class, getUnknownMeta, Endpoint, INSERT_MARK, CollapsedValueAdvanced, CollapsedValue, SmartTransformFunction, compiler_options, activePlugins, METADATA, handleDecoratorArgs, RefOrValueObject, PointerPropertyParent, InferredPointerProperty, RefLike } from "./datex_all.ts";
 
 /** make decorators global */
 import { assert as _assert, property as _property, sync as _sync, endpoint as _endpoint, template as _template, jsdoc as _jsdoc} from "./datex_all.ts";
@@ -357,25 +357,25 @@ export function val<T>(val: RefOrValue<T>):T  { // TODO: return inferred type in
 
 
 // generate primitive pointers
-export function decimal(value:RefOrValue<number|bigint|string> = 0): DecimalRef {
+export function decimal(value:RefOrValue<number|bigint|string> = 0): Pointer<number> {
     if (value instanceof Ref) value = value.val; // collapse
     return Pointer.create(undefined, Number(value)) // adds pointer or returns existing pointer
 }
-export function integer(value:RefOrValue<bigint|number|string> = 0n): IntegerRef {
+export function integer(value:RefOrValue<bigint|number|string> = 0n): Pointer<bigint> {
     if (value instanceof Ref) value = value.val; // collapse
     return Pointer.create(undefined, BigInt(Math.floor(Number(value)))) // adds pointer or returns existing pointer
 }
-export function text(string:TemplateStringsArray, ...vars:any[]):Promise<TextRef>
-export function text(value?:RefOrValue<any>): TextRef
-export function text(value:RefOrValue<string>|TemplateStringsArray = "", ...vars:any[]): TextRef|Promise<TextRef> {
+export function text(string:TemplateStringsArray, ...vars:any[]):Promise<Pointer<string>>
+export function text(value?:RefOrValue<any>): Pointer<string>
+export function text(value:RefOrValue<string>|TemplateStringsArray = "", ...vars:any[]): Pointer<string>|Promise<Pointer<string>> {
     if (value instanceof Ref) value = value.val; // collapse
     // template transform
     if (value instanceof Array) {
-        return <Promise<TextRef<string>>>_datex(`always '${value.raw.map(s=>s.replace(/\(/g, '\\(').replace(/\'/g, "\\'")).join(INSERT_MARK)}'`, vars)
+        return <Promise<Pointer<string>>>_datex(`always '${value.raw.map(s=>s.replace(/\(/g, '\\(').replace(/\'/g, "\\'")).join(INSERT_MARK)}'`, vars)
     }
     else return Pointer.create(undefined, String(value)) // adds pointer or returns existing pointer
 }
-export function boolean(value:RefOrValue<boolean> = false): BooleanRef {
+export function boolean(value:RefOrValue<boolean> = false): Pointer<boolean> {
     if (value instanceof Ref) value = value.val; // collapse
     return Pointer.create(undefined, Boolean(value)) // adds pointer or returns existing pointer
 }

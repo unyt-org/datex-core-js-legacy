@@ -27,7 +27,7 @@ Symbol.prototype.toJSON = function(){return globalThis.String(this)}
 
 /***** imports */
 import { Compiler, compiler_options, PrecompiledDXB, ProtocolDataTypesMap, DatexResponse} from "../compiler/compiler.ts"; // Compiler functions
-import { DecimalRef, IntegerRef, Pointer, PointerProperty, RefOrValue, Ref, TextRef, BooleanRef, ObjectWithDatexValues, JSValueWith$, MinimalJSRef, ObjectRef, RefLike, UpdateScheduler} from "./pointers.ts";
+import { Pointer, PointerProperty, RefOrValue, Ref, ObjectWithDatexValues, JSValueWith$, MinimalJSRef, ObjectRef, RefLike, UpdateScheduler} from "./pointers.ts";
 import { Endpoint, endpoints, IdEndpoint, LOCAL_ENDPOINT, Target, target_clause, WildcardTarget } from "../types/addressing.ts";
 import { RuntimePerformance } from "./performance_measure.ts";
 import { NetworkError, PermissionError, PointerError, RuntimeError, SecurityError, ValueError, Error as DatexError, CompilerError, TypeError, SyntaxError, AssertionError } from "../types/errors.ts";
@@ -851,7 +851,7 @@ export class Runtime {
      * @param forceLocalExecution execute block even if receiver is external (default false)
      * @returns evaluated DATEX result
      */
-    public static async executeDXBLocally(dxb:ArrayBuffer, context_location?:URL, overrideMeta?: Partial<datex_meta>, forceLocalExecution = false):Promise<any> {
+    public static async executeDXBLocally(dxb:ArrayBuffer, context_location?:URL, overrideMeta?: Partial<datex_meta>, forceLocalExecution = false):Promise<unknown> {
         // generate new header using executor scope header
         let header:dxb_header;
         let dxb_body:ArrayBuffer;
@@ -1058,7 +1058,7 @@ export class Runtime {
                     .then(finish)
                     .catch(e => {
                         if (wait_for_result) reject(e);
-                        else console.error("Error sending datex block", e);
+                        else logger.debug("Error sending datex block (flood)");
                     });
             }           
             // send to receivers
@@ -1073,7 +1073,7 @@ export class Runtime {
                         .then(finish)
                         .catch(e => {
                             if (wait_for_result) reject(e);
-                            else console.error("Error sending datex block", e);
+                            else logger.debug("Error sending datex block to " + to_endpoint);
                         });
                 }
             }
@@ -3865,16 +3865,19 @@ export class Runtime {
                 const value_prim = Ref.collapseValue(value,true,true); // DatexPrimitivePointers also collapsed
                 try {
 
+                    const currentValIsIntegerRef = current_val instanceof Ref && typeof current_val.val == "bigint";
+                    const currentValIsDecimalRef = current_val instanceof Ref && typeof current_val.val == "number";
+
                     // x.current_val ?= value
                     switch (action_type) {
 
                         case BinaryCode.ADD:
                             if (current_val instanceof Array && !(current_val instanceof Tuple)) current_val.push(value); // Array push (TODO array extend?)
-                            else if (current_val instanceof TextRef && typeof value_prim == "string") await current_val.setVal(current_val.val + value); // primitive pointer operations
-                            else if (current_val instanceof DecimalRef && typeof value_prim == "number") await current_val.setVal(current_val.val + value_prim);
-                            else if (current_val instanceof IntegerRef && typeof value_prim == "bigint") await current_val.setVal(current_val.val + value_prim);
-                            else if (current_val instanceof DecimalRef && typeof value_prim == "bigint") await current_val.setVal(current_val.val + Number(value_prim));
-                            else if (current_val instanceof IntegerRef && typeof value_prim == "number") throw new ValueError("Cannot apply a <decimal> value to an <integer> pointer", SCOPE);
+                            else if (current_val instanceof Ref && typeof current_val.val == "string" && typeof value_prim == "string") await current_val.setVal(current_val.val + value_prim); // primitive pointer operations
+                            else if (currentValIsDecimalRef && typeof value_prim == "number") await current_val.setVal(current_val.val + value_prim);
+                            else if (currentValIsIntegerRef && typeof value_prim == "bigint") await current_val.setVal(current_val.val + value_prim);
+                            else if (currentValIsDecimalRef && typeof value_prim == "bigint") await current_val.setVal(current_val.val + Number(value_prim));
+                            else if (currentValIsIntegerRef && typeof value_prim == "number") throw new ValueError("Cannot apply a <decimal> value to an <integer> pointer", SCOPE);
                             else if (typeof current_val_prim == "number" && typeof value_prim == "number") Runtime.runtime_actions.setProperty(SCOPE, parent, key, current_val_prim+value_prim) // add
                             else if ((typeof current_val_prim == "number" && typeof value_prim == "bigint") || (typeof current_val_prim == "bigint" && typeof value_prim == "number")) Runtime.runtime_actions.setProperty(SCOPE, parent, key, Number(current_val_prim)+Number(value_prim)) // add
                             else if (typeof current_val_prim == "bigint" && typeof value_prim == "bigint") Runtime.runtime_actions.setProperty(SCOPE, parent, key, current_val_prim+value_prim) // add
@@ -3891,10 +3894,10 @@ export class Runtime {
 
                         case BinaryCode.SUBTRACT:
                             if (current_val instanceof Array) Runtime.runtime_actions._removeItemFromArray(current_val, value); // Array splice
-                            else if (current_val instanceof DecimalRef && typeof value_prim == "number") await current_val.setVal(current_val.val - value_prim); // primitive pointer operations
-                            else if (current_val instanceof IntegerRef && typeof value_prim == "bigint") await current_val.setVal(current_val.val - value_prim);
-                            else if (current_val instanceof DecimalRef && typeof value_prim == "bigint") await current_val.setVal(current_val.val - Number(value_prim));
-                            else if (current_val instanceof IntegerRef && typeof value_prim == "number") throw new ValueError("Cannot apply a <decimal> value to an <integer> pointer", SCOPE);
+                            else if (currentValIsDecimalRef && typeof value_prim == "number") await current_val.setVal(current_val.val - value_prim); // primitive pointer operations
+                            else if (currentValIsIntegerRef && typeof value_prim == "bigint") await current_val.setVal(current_val.val - value_prim);
+                            else if (currentValIsDecimalRef && typeof value_prim == "bigint") await current_val.setVal(current_val.val - Number(value_prim));
+                            else if (currentValIsIntegerRef && typeof value_prim == "number") throw new ValueError("Cannot apply a <decimal> value to an <integer> pointer", SCOPE);
                             else if (typeof current_val_prim == "number" && typeof value_prim == "number") Runtime.runtime_actions.setProperty(SCOPE, parent, key, current_val_prim-value_prim) // subtract
                             else if ((typeof current_val_prim == "number" && typeof value_prim == "bigint") || (typeof current_val_prim == "bigint" && typeof value_prim == "number")) Runtime.runtime_actions.setProperty(SCOPE, parent, key, Number(current_val_prim)-Number(value_prim)) // subtract
                             else if (typeof current_val_prim == "bigint" && typeof value_prim == "bigint") Runtime.runtime_actions.setProperty(SCOPE, parent, key, current_val_prim-value_prim) // subtract
@@ -3909,10 +3912,10 @@ export class Runtime {
                             break;
 
                         case BinaryCode.MULTIPLY:
-                            if (current_val instanceof DecimalRef && typeof value_prim == "number") await current_val.setVal(current_val.val * value_prim); // primitive pointer operations
-                            else if (current_val instanceof IntegerRef && typeof value_prim == "bigint") await current_val.setVal(current_val.val * value_prim);
-                            else if (current_val instanceof DecimalRef && typeof value_prim == "bigint") await current_val.setVal(current_val.val * Number(value_prim));
-                            else if (current_val instanceof IntegerRef && typeof value_prim == "number") throw new ValueError("Cannot apply a <decimal> value to an <integer> pointer", SCOPE);
+                            if (currentValIsDecimalRef && typeof value_prim == "number") await current_val.setVal(current_val.val * value_prim); // primitive pointer operations
+                            else if (currentValIsIntegerRef && typeof value_prim == "bigint") await current_val.setVal(current_val.val * value_prim);
+                            else if (currentValIsDecimalRef && typeof value_prim == "bigint") await current_val.setVal(current_val.val * Number(value_prim));
+                            else if (currentValIsIntegerRef && typeof value_prim == "number") throw new ValueError("Cannot apply a <decimal> value to an <integer> pointer", SCOPE);
                             else if (typeof current_val_prim == "number" && typeof value_prim == "number") Runtime.runtime_actions.setProperty(SCOPE, parent, key, current_val_prim*value_prim) // subtract
                             else if ((typeof current_val_prim == "number" && typeof value_prim == "bigint") || (typeof current_val_prim == "bigint" && typeof value_prim == "number")) Runtime.runtime_actions.setProperty(SCOPE, parent, key, Number(current_val_prim)*Number(value_prim)) // subtract
                             else if (typeof current_val_prim == "bigint" && typeof value_prim == "bigint") Runtime.runtime_actions.setProperty(SCOPE, parent, key, current_val_prim*value_prim) // subtract
@@ -3927,10 +3930,10 @@ export class Runtime {
                             break;
 
                         case BinaryCode.DIVIDE:
-                            if (current_val instanceof DecimalRef && typeof value_prim == "number") await current_val.setVal(current_val.val / value_prim); // primitive pointer operations
-                            else if (current_val instanceof IntegerRef && typeof value_prim == "bigint") await current_val.setVal(current_val.val / value_prim);
-                            else if (current_val instanceof DecimalRef && typeof value_prim == "bigint") await current_val.setVal(current_val.val / Number(value_prim));
-                            else if (current_val instanceof IntegerRef && typeof value_prim == "number") throw new ValueError("Cannot apply a <decimal> value to an <integer> pointer", SCOPE);
+                            if (currentValIsDecimalRef && typeof value_prim == "number") await current_val.setVal(current_val.val / value_prim); // primitive pointer operations
+                            else if (currentValIsIntegerRef && typeof value_prim == "bigint") await current_val.setVal(current_val.val / value_prim);
+                            else if (currentValIsDecimalRef && typeof value_prim == "bigint") await current_val.setVal(current_val.val / Number(value_prim));
+                            else if (currentValIsIntegerRef && typeof value_prim == "number") throw new ValueError("Cannot apply a <decimal> value to an <integer> pointer", SCOPE);
                             else if (typeof current_val_prim == "number" && typeof value_prim == "number") Runtime.runtime_actions.setProperty(SCOPE, parent, key, current_val_prim/value_prim) // subtract
                             else if ((typeof current_val_prim == "number" && typeof value_prim == "bigint") || (typeof current_val_prim == "bigint" && typeof value_prim == "number")) Runtime.runtime_actions.setProperty(SCOPE, parent, key, Number(current_val_prim)/Number(value_prim)) // subtract
                             else if (typeof current_val_prim == "bigint" && typeof value_prim == "bigint") Runtime.runtime_actions.setProperty(SCOPE, parent, key, current_val_prim/value_prim) // subtract
@@ -3945,13 +3948,13 @@ export class Runtime {
                             break;
 
                         case BinaryCode.POWER:
-                            if (current_val instanceof DecimalRef && typeof value_prim == "number") await current_val.setVal(current_val.val ** value_prim); // primitive pointer operations
-                            else if (current_val instanceof IntegerRef && typeof value_prim == "bigint") {
+                            if (currentValIsDecimalRef && typeof value_prim == "number") await current_val.setVal(current_val.val ** value_prim); // primitive pointer operations
+                            else if (currentValIsIntegerRef && typeof value_prim == "bigint") {
                                 if (value_prim < 0) throw new ValueError("Cannot use a negative exponent with an integer")
                                 else current_val.val = current_val.val ** value_prim;
                             }
-                            else if (current_val instanceof DecimalRef && typeof value_prim == "bigint") await current_val.setVal(current_val.val ** Number(value_prim));
-                            else if (current_val instanceof IntegerRef && typeof value_prim == "number") throw new ValueError("Cannot apply a <decimal> value to an <integer> pointer", SCOPE);
+                            else if (currentValIsDecimalRef && typeof value_prim == "bigint") await current_val.setVal(current_val.val ** Number(value_prim));
+                            else if (currentValIsIntegerRef && typeof value_prim == "number") throw new ValueError("Cannot apply a <decimal> value to an <integer> pointer", SCOPE);
                             else if (typeof current_val_prim == "number" && typeof value_prim == "number") Runtime.runtime_actions.setProperty(SCOPE, parent, key, current_val_prim**value_prim) // power
                             else if ((typeof current_val_prim == "number" && typeof value_prim == "bigint") || (typeof current_val_prim == "bigint" && typeof value_prim == "number")) Runtime.runtime_actions.setProperty(SCOPE, parent, key, Number(current_val_prim)**Number(value_prim)) // power
                             else if (typeof current_val_prim == "bigint" && typeof value_prim == "bigint") Runtime.runtime_actions.setProperty(SCOPE, parent, key, current_val_prim**value_prim) // power
@@ -3966,10 +3969,10 @@ export class Runtime {
                             break;
 
                         case BinaryCode.MODULO:
-                            if (current_val instanceof DecimalRef && typeof value_prim == "number") await current_val.setVal(current_val.val % value_prim); // primitive pointer operations
-                            else if (current_val instanceof IntegerRef && typeof value_prim == "bigint") await current_val.setVal(current_val.val % value_prim);
-                            else if (current_val instanceof DecimalRef && typeof value_prim == "bigint") await current_val.setVal(current_val.val % Number(value_prim));
-                            else if (current_val instanceof IntegerRef && typeof value_prim == "number") throw new ValueError("Cannot apply a <decimal> value to an <integer> pointer", SCOPE);
+                            if (currentValIsDecimalRef && typeof value_prim == "number") await current_val.setVal(current_val.val % value_prim); // primitive pointer operations
+                            else if (currentValIsIntegerRef && typeof value_prim == "bigint") await current_val.setVal(current_val.val % value_prim);
+                            else if (currentValIsDecimalRef && typeof value_prim == "bigint") await current_val.setVal(current_val.val % Number(value_prim));
+                            else if (currentValIsIntegerRef && typeof value_prim == "number") throw new ValueError("Cannot apply a <decimal> value to an <integer> pointer", SCOPE);
                             else if (typeof current_val_prim == "number" && typeof value_prim == "number") Runtime.runtime_actions.setProperty(SCOPE, parent, key, current_val_prim%value_prim) // subtract
                             else if ((typeof current_val_prim == "number" && typeof value_prim == "bigint") || (typeof current_val_prim == "bigint" && typeof value_prim == "number")) Runtime.runtime_actions.setProperty(SCOPE, parent, key, Number(current_val_prim)%Number(value_prim)) // subtract
                             else if (typeof current_val_prim == "bigint" && typeof value_prim == "bigint") Runtime.runtime_actions.setProperty(SCOPE, parent, key, current_val_prim%value_prim) // subtract
