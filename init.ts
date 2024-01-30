@@ -12,7 +12,6 @@ import { DX_BOUND_LOCAL_SLOT } from "./runtime/constants.ts";
 import { verboseArg } from "./utils/logger.ts";
 import { MessageLogger } from "./utils/message_logger.ts";
 import { Path } from "./utils/path.ts";
-import { clear } from "./utils/args.ts";
 
 
 /**
@@ -149,7 +148,10 @@ export async function init() {
 	// enables message logger when running with -v
 	if (verboseArg) MessageLogger.enable();
 
-	if (clear) {
-		await Storage.clearAndReload();
+	if (client_type == "deno") {
+		const { clear } = await import("./utils/args.ts");
+		if (clear) {
+			await Storage.clearAndReload();
+		}
 	}
 }
