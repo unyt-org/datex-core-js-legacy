@@ -29,6 +29,8 @@ import { IterableWeakMap } from "../utils/iterable-weak-map.ts";
 import { LazyPointer } from "./lazy-pointer.ts";
 import { ReactiveArrayMethods } from "../types/reactive-methods/array.ts";
 import { Assertion } from "../types/assertion.ts";
+import { StorageSet } from "../types/storage_set.ts";
+import { Storage } from "./storage.ts";
 
 export type observe_handler<K=any, V extends RefLike = any> = (value:V extends RefLike<infer T> ? T : V, key?:K, type?:Ref.UPDATE_TYPE, transform?:boolean, is_child_update?:boolean, previous?: any, atomic_id?:symbol)=>void|boolean
 export type observe_options = {types?:Ref.UPDATE_TYPE[], ignore_transforms?:boolean, recursive?:boolean}
@@ -1747,9 +1749,6 @@ export class Pointer<T = any> extends Ref<T> {
         // unsubscribe
         const doUnsubscribe = !!(!mockPtr.is_origin && mockPtr.origin)
         if (doUnsubscribe && mockPtr.subscribed) this.unsubscribeFromPointerUpdates(mockPtr.subscribed, mockPtr.id);
-
-        // remove subscriber cache
-        Runtime.subscriber_cache?.delete(mockPtr.id);
     }
 
 
@@ -1808,7 +1807,7 @@ export class Pointer<T = any> extends Ref<T> {
         // set value
         if (value != NOT_EXISTING) this.val = value;
 
-        // set update_endpoint and trigger suscribers getter (get from cache)
+        // set update_endpoint
         this.#update_endpoints = this.subscribers
     }
 
@@ -1917,6 +1916,16 @@ export class Pointer<T = any> extends Ref<T> {
     #loaded = false
 
     get value_initialized() {return this.#loaded}
+
+    #isStored = false
+    /**
+     * indicates if the pointer value is stored in storage
+     */
+    get isStored() {return this.#isStored}
+    set isStored(isStored:boolean) {
+        this.#isStored = isStored;
+    }
+
 
     #is_placeholder = false
     #is_js_primitive = false;
@@ -2219,16 +2228,14 @@ export class Pointer<T = any> extends Ref<T> {
             let foundFallback = false;
             for (const [trustedEndpoint, permissions] of Runtime.trustedEndpoints) {
                 if (permissions.includes("fallback-pointer-source")) {
-                    logger.debug(origin  + " is offline, subscribing to trusted endpoint " + trustedEndpoint)
+                    logger.debug(origin  + " is offline, trying to subscribe to trusted endpoint " + trustedEndpoint)
                     ptr.#subscribed = false;
                     try {
                         await ptr.subscribeForPointerUpdates(trustedEndpoint);
                         foundFallback = true;
                         break;
                     }
-                    catch (e) {
-                        console.log(e)
-                    }
+                    catch {}
                 }
             }
             if (!foundFallback) {
@@ -2621,7 +2628,21 @@ export class Pointer<T = any> extends Ref<T> {
         return updatePromise;
     }
 
-    protected afterFirstValueSet(){
+    protected afterFirstValueSet() {
+        // potential storage pointer initialized
+        Storage.providePointer(this);
+
+        if (this.isStored) {
+            // get subsriber caches
+            Storage.getPointerSubscriberCache(this.id).then(cache => {
+                if (cache) {
+                    this.#subscriberCache = cache;
+                    for (const subscriber of cache) this.addSubscriber(subscriber)
+                    logger.debug("restored subscriber cache for " + this.idString() + ":",cache)
+                }
+            })
+        }
+        
         // custom timeout from type?
         if (this.type.timeout!=undefined && this.datex_timeout==undefined) this.datex_timeout = this.type.timeout
         setTimeout(()=>{for (const l of Pointer.pointer_add_listeners) l(this)},0);
@@ -3161,23 +3182,32 @@ export class Pointer<T = any> extends Ref<T> {
 
     static #endpoint_subscriptions = new Map<Endpoint, Set<Pointer>>().setAutoDefault(Set);
 
-    #subscribers?: Disjunction<Endpoint>
+    #subscriberCache?: Set<Endpoint> // subscriber cache in storage
+    #subscribers = new Disjunction<Endpoint>()
 
     public get subscribers() {
-        if (!this.#subscribers) {
-            if (Runtime.subscriber_cache?.has(this.id)) {
-                this.#subscribers = new Disjunction(...Runtime.subscriber_cache.get(this.id)!)
-                logger.debug("restored subscriber cache for " + this.idString() + ":",this.#subscribers)
-            }
-            else this.#subscribers = new Disjunction();
-        }
-        return this.#subscribers!;
+        return this.#subscribers;
     }
 
     public addSubscriber(subscriber: Endpoint) {
 
         // already subscribed
         if (this.subscribers.has(subscriber)) return;
+
+        // also store in subscriber cache
+        if (this.isStored) {
+            if (this.#subscriberCache) this.#subscriberCache.add(subscriber)
+            else {
+                Storage.requestSubscriberCache(this.id).then(cache => {
+                    // add current subscriber to subscriber cache
+                    this.#subscriberCache = cache;
+                    this.#subscriberCache.add(subscriber)
+
+                    // add subscribers from cache
+                    for (const subscriber of cache) this.addSubscriber(subscriber)
+                })
+            }
+        }
 
         // TODO also check pointer permission for 'to'
 
@@ -3199,9 +3229,6 @@ export class Pointer<T = any> extends Ref<T> {
         // force enable live mode also if primitive (subscriber is not handled a new observer)
         if (this.is_js_primitive) this.setForcedLiveTransform(true)
 
-        // update subscriber_cache
-        Runtime.subscriber_cache?.getAuto(this.id).add(subscriber)
-
         // add to endpoint subscriptions map
         Pointer.#endpoint_subscriptions.getAuto(subscriber).add(this)
     }
@@ -3210,19 +3237,15 @@ export class Pointer<T = any> extends Ref<T> {
         logger.debug("removed subscriber " + subscriber + " for " + this.idString());
 
         this.subscribers.delete(subscriber);
+
+        // also remove from subscriber cache
+        if (this.#subscriberCache) this.#subscriberCache.delete(subscriber)
+
         // no subscribers left
         if (this.subscribers.size == 0) {
             // disable force live mode for primitives (subscriber is not handled a new observer)
             if (this.is_js_primitive) this.setForcedLiveTransform(false)
             this.updateGarbageCollection() 
-        }
-
-        // update subscriber_cache
-        if (this.subscribers.size == 0) {
-            Runtime.subscriber_cache?.delete(this.id);
-        }
-        else {
-            Runtime.subscriber_cache?.getAuto(this.id).delete(subscriber)
         }
 
         // remove from endpoint subscriptions map

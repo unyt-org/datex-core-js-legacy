@@ -14,29 +14,6 @@ import { MessageLogger } from "./utils/message_logger.ts";
 
 
 /**
- * Load the subscriber cache from storage and
- * reset if a remote pointer is required
- */
-async function initSubscriberCache() {
-	try {
-		Runtime.subscriber_cache = (await Storage.loadOrCreate(
-			"Datex.Runtime.SUBSCRIBER_CACHE", 
-			() => new Map(), 
-			{onlyLocalPointers: true}
-		)).setAutoDefault(Set);
-	}
-	catch (e) {
-		logger.debug("resetting subscriber cache (" + e?.message + ")")
-		Runtime.subscriber_cache = (await Storage.loadOrCreate(
-			"Datex.Runtime.SUBSCRIBER_CACHE", 
-			() => new Map(), 
-			undefined, 
-			true
-		)).setAutoDefault(Set);
-	}
-}
-
-/**
  * Runtime init (sets ENV, storage, endpoint, ...)
  */
 export async function init() {
@@ -66,10 +43,12 @@ export async function init() {
 					primary: true
 				})
 			}
-			await Storage.addLocation(new LocalStorageLocation(), {
-				modes: [Storage.Mode.SAVE_ON_EXIT, Storage.Mode.SAVE_PERIODICALLY],
-				primary: denoKV.isSupported() ? false : true
-			})
+			else {
+				await Storage.addLocation(new LocalStorageLocation(), {
+					modes: [Storage.Mode.SAVE_ON_EXIT, Storage.Mode.SAVE_ON_CHANGE],
+					primary: denoKV.isSupported() ? false : true
+				})
+			}
 		}
 		
 	}
@@ -82,8 +61,6 @@ export async function init() {
 			Pointer.is_local = false;
 			// update storage entries that contain pointers with unresolved @@local origin
 			Storage.updateEntriesWithUnresolvedLocalDependencies();
-			// init subscriber cache as soon as endpoint is available
-			initSubscriberCache();
 		}
 		else Pointer.is_local = true;
 	})

@@ -2216,9 +2216,6 @@ export class Runtime {
     // Persistant Scope Memory
     static persistent_memory:AutoMap<string,{[key:number|string]:any}>;
 
-    // Persistent Pointer subscriber cache (ptr id -> subscribers)
-    static subscriber_cache:AutoMap<string, Set<Endpoint>>;
-
     static saveScopeMemoryValue(scope_identifier:string, key:string|number, value: any) {
         logger.debug("saving persistent memory location ? for ?: ?", key, scope_identifier, value)
         if (this.persistent_memory) this.persistent_memory.getAuto(scope_identifier)[key] = value;

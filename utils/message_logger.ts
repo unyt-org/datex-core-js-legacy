@@ -35,37 +35,39 @@ export class MessageLogger {
         IOHandler.onDatexReceived((header, dxb)=>{
             // ignore incoming requests from own endpoint to own endpoint
             const receivers = header.routing?.receivers;
-            if (header.sender == Runtime.endpoint && (receivers instanceof Logical && receivers?.size == 1 && receivers.has(Runtime.endpoint)) && header.type != ProtocolDataType.RESPONSE && header.type != ProtocolDataType.DEBUGGER) return;
+            const receiverIsOwnEndpoint = receivers instanceof Logical && receivers?.size == 1 && (receivers.has(Runtime.endpoint) || receivers.has(Runtime.endpoint.main));
+            if (header.sender == Runtime.endpoint && receiverIsOwnEndpoint && header.type != ProtocolDataType.RESPONSE && header.type != ProtocolDataType.DEBUGGER) return;
 
             // ignore hello messages
             if (header.type == ProtocolDataType.HELLO || header.type == ProtocolDataType.GOODBYE) {
-                this.logger.plain(`\n#color(blue)⭠  ${header.sender||'@*'} ${header.type!=undefined? `(${ProtocolDataType[header.type]}) ` : ''}`);
+                this.logger.plain(`\n#color(blue)⭠ ${header.sender||'@*'} ${header.type!=undefined? `(${ProtocolDataType[header.type]}) ` : ''}`);
                 return;
             };
             
             const content = MessageLogger.decompile(dxb);
             if (content.trim() == "\x1b[38;2;219;45;129mvoid\x1b[39m;") return; // dont log void; messages
             
-            this.logger.plain(`\n#color(blue)⭠  ${header.sender||'@*'} ${header.type!=undefined ? `(${ProtocolDataType[header.type]}) ` : ''}`.padEnd(70, '─'));
+            this.logger.plain(`\n#color(blue)${receiverIsOwnEndpoint?'':Runtime.valueToDatexStringExperimental(receivers, false, false)+ ' '}⭠ ${header.sender||'@*'} ${header.type!=undefined ? `(${ProtocolDataType[header.type]}) ` : ''}`.padEnd(70, '─'));
             console.log(content);
             this.logger.plain(`#color(blue)─────────────────────────────────────────────────────────\n`);
         });
 
-        IOHandler.onDatexSent((header, dxb)=>{
+        IOHandler.onDatexSent((header, dxb) => {
             // ignore outgoing responses from own endpoint to own endpoint
             const receivers = header.routing?.receivers;
             if (header.sender == Runtime.endpoint && (receivers instanceof Logical && receivers?.size == 1 && receivers.has(Runtime.endpoint)) && header.type != ProtocolDataType.RESPONSE && header.type != ProtocolDataType.DEBUGGER) return;
-
+            const senderIsOwnEndpoint = header.sender == Runtime.endpoint || header.sender == Runtime.endpoint.main;
+            
             // ignore hello messages
             if (header.type == ProtocolDataType.HELLO || header.type == ProtocolDataType.GOODBYE) {
-                this.logger.plain(`\n#color(green)${header.sender||'@*'} ⭢  ${receivers||'@*'} ${header.type!=undefined ? `(${ProtocolDataType[header.type]}) ` : ''}`);
+                this.logger.plain(`\n#color(green)${header.sender||'@*'} ⭢ ${receivers||'@*'} ${header.type!=undefined ? `(${ProtocolDataType[header.type]}) ` : ''}`);
                 return;
             };
             
             const content = MessageLogger.decompile(dxb);
             if (content.trim() == "\x1b[38;2;219;45;129mvoid\x1b[39m;") return; // dont log void; messages
  
-            this.logger.plain(`\n#color(green)⭢  ${receivers||'@*'} ${header.type!=undefined ? `(${ProtocolDataType[header.type]}) ` : ''}`.padEnd(70, '─'));
+            this.logger.plain(`\n#color(green)${senderIsOwnEndpoint?'':Runtime.valueToDatexStringExperimental(header.sender, false, false)+' '}⭢ ${receivers||'@*'} ${header.type!=undefined ? `(${ProtocolDataType[header.type]}) ` : ''}`.padEnd(70, '─'));
             console.log(content);
             this.logger.plain(`#color(green)─────────────────────────────────────────────────────────\n`);
         });

@@ -11,7 +11,7 @@ import { MessageLogger } from "../utils/message_logger.ts";
 import { displayFatalError } from "./display.ts"
 import { Type } from "../types/type.ts";
 import { addPersistentListener } from "../utils/persistent-listeners.ts";
-import { LOCAL_ENDPOINT } from "../types/addressing.ts";
+import { Endpoint, LOCAL_ENDPOINT } from "../types/addressing.ts";
 import { ESCAPE_SEQUENCES } from "../utils/logger.ts";
 import { StorageMap } from "../types/storage_map.ts";
 import { StorageSet } from "../types/storage_set.ts";
@@ -146,9 +146,25 @@ export class Storage {
     static rc_prefix = "rc::"
     static pointer_deps_prefix = "deps::dxptr::"
     static item_deps_prefix = "deps::dxitem::"
+    static subscriber_cache_prefix = "subscribers::"
 
     static #storage_active_pointers = new Set<Pointer>();
     static #storage_active_pointer_ids = new Set<string>();
+
+    /**
+     * Try to cache the actual pointer if it is stored in storage.
+     * Called from pointer once the value is initialized.
+     * @returns true if the pointer is stored in storage
+     */
+    static providePointer(ptr: Pointer) {
+        if (this.#storage_active_pointer_ids.has(ptr.id)) {
+            this.#storage_active_pointers.add(ptr);
+            this.#storage_active_pointer_ids.delete(ptr.id);
+            ptr.isStored = true;
+            return true;
+        }
+        return false;
+    }
 
     static DEFAULT_INTERVAL = 60; // 60s
 
@@ -454,7 +470,7 @@ export class Storage {
         if (!pointer.value_initialized) {
             // logger.warn("pointer value " + pointer.idString() + " not available, cannot save in storage");
             this.#storage_active_pointers.delete(pointer);
-            this.#storage_active_pointer_ids.delete(pointer.id)
+            this.#storage_active_pointer_ids.delete(pointer.id);
             return false
         }
         
@@ -478,7 +494,9 @@ export class Storage {
         if (listen_for_changes) this.syncPointer(pointer, location);
 
         this.#storage_active_pointers.add(pointer);
-    
+        // remember that this pointer is stored in storage
+        pointer.isStored = true;
+
         return true;
     }
 
@@ -499,6 +517,8 @@ export class Storage {
         if (listen_for_changes) this.syncPointer(pointer, location);
 
         this.#storage_active_pointers.add(pointer);
+        // remember that this pointer is stored in storage
+        pointer.isStored = true;
 
         return true;
     }
@@ -640,6 +660,11 @@ export class Storage {
     }
 
     /**
+     * Maps pointer ids to existing subscriber caches that were preloaded from storage
+     */
+    public static subscriberCaches = new Map<string, Set<Endpoint>>()
+
+    /**
      * gets the value of a pointer from storage
      * @param pointer_id id string
      * @param pointerify creates DATEX Pointer if true, otherwise just returns the value
@@ -711,6 +736,7 @@ export class Storage {
 
             this.syncPointer(pointer);
             this.#storage_active_pointers.add(pointer);
+            pointer.isStored = true;
             if (pointer.is_js_primitive) return pointer;
             else return pointer.val;
         }
@@ -737,12 +763,24 @@ export class Storage {
             this.updatePointerDependencies(pointer_id, [])
 
             const ptr = Pointer.get(pointer_id)
-            if (ptr) this.#storage_active_pointers.delete(ptr);
+            if (ptr) {
+                this.#storage_active_pointers.delete(ptr);
+                // remember that this pointer is not stored in storage             
+                ptr.isStored = false;
+            }
             this.#storage_active_pointer_ids.delete(pointer_id);
 
+            const promises = []
+
+            // remove pointer from all locations
 			for (const location of this.#locations.keys()) {
-				await location.removePointer(pointer_id);
+				promises.push(location.removePointer(pointer_id));
 			}
+
+            // remove subscriber cache
+            promises.push(this.removePointerSubscriberCache(pointer_id));
+
+            await Promise.all(promises);
 		}
     }
 
@@ -761,6 +799,46 @@ export class Storage {
 		const buffer = await location.getPointerValueDXB(pointer_id);
 		if (buffer != null) return MessageLogger.decompile(buffer, false, colorized);
         return NOT_EXISTING;
+    }
+
+    /**
+     * Gets a subscriber cache for a pointer if it exists
+     */
+    public static async getPointerSubscriberCache(pointer_id:string) {
+        // return existing cache from memory
+        if (this.subscriberCaches.has(pointer_id)) return this.subscriberCaches.get(pointer_id);
+        // load from storage
+        const id = this.subscriber_cache_prefix + pointer_id;
+        const subscribers = await this.getItem(id) as Set<Endpoint>|undefined;
+        if (subscribers) this.subscriberCaches.set(pointer_id, subscribers);
+        return subscribers;
+    }
+
+    /**
+     * Removes the subscriber cache from memory and storage
+     * @returns 
+     */
+    private static removePointerSubscriberCache(pointer_id:string) {
+        const id = this.subscriber_cache_prefix + pointer_id;
+        this.subscriberCaches.delete(pointer_id);
+        return this.removeItem(id);
+    }
+
+    /**
+     * Gets or creates a new subscriber cache for a pointer and
+     * puts it into the subscriberCaches map
+     * @returns 
+     */
+    public static async requestSubscriberCache(pointer_id:string) {
+        // return existing cache
+        const existingCache = await this.getPointerSubscriberCache(pointer_id);
+        if (existingCache) return existingCache;
+        // create new cache
+        const id = this.subscriber_cache_prefix + pointer_id;
+        const subscribers = Pointer.createOrGet(new Set<Endpoint>()).val;
+        this.subscriberCaches.set(pointer_id, subscribers);
+        await this.setItem(id, subscribers);
+        return subscribers;
     }
 
     public static async getItemDecompiled(key:string, colorized = false, location?:StorageLocation) {
