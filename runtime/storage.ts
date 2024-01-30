@@ -190,6 +190,10 @@ export class Storage {
     static #locations = new Map<StorageLocation, storage_location_options<StorageLocation>>()
     static #auto_sync_enabled = false;
 
+    public static get locations() {
+        return this.#locations;
+    }
+
     // set options for storage location and enable
     public static addLocation<L extends StorageLocation>(location:L, options:storage_location_options<L>) {
         this.#locations.set(location, options);
@@ -892,6 +896,16 @@ export class Storage {
         })()
     }
 
+    public static async getItemCountStartingWith(prefix:string, location?:StorageLocation) {
+        const keyIterator = await Storage.getItemKeys(location);
+        let count = 0;
+        for (const key of keyIterator) {
+            if (key.startsWith(prefix)) count++;
+        }
+        return count
+    }
+
+
     public static async getPointerKeys(location?:StorageLocation){
 
 		// for specific location
@@ -994,12 +1008,17 @@ export class Storage {
 		else return false;
     }
 
-    public static async removeItem(key:string, location?:StorageLocation):Promise<void> {
+    public static async removeItem(key:string, location?:StorageLocation):Promise<boolean> {
 
         logger.debug("Removing item '" + key + "' from storage" + (location ? " (" + location.name + ")" : ""))
 
 		// remove from specific location
-		if (location) return location.removeItem(key);
+		if (location) {
+            // TODO: handle hasItem() internally in storage locations
+            const itemExists = await location.hasItem(key);
+            await location.removeItem(key);
+            return itemExists;
+        }
 		// remove from all
 		else {
             Storage.cache.delete(key); // delete from cache
@@ -1007,9 +1026,13 @@ export class Storage {
             // clear dependencies
             this.updateItemDependencies(key, [])
 
+            let itemExists = false;
 			for (const location of this.#locations.keys()) {
+                // TODO: handle hasItem() internally in storage locations
+                if (!itemExists) itemExists = await location.hasItem(key);
 				await location.removeItem(key);
 			}
+            return itemExists;
 		}
     }
 
