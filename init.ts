@@ -3,7 +3,7 @@ import { Pointer } from "./runtime/pointers.ts";
 import { LOCAL_ENDPOINT } from "./types/addressing.ts";
 import { client_type } from "./utils/constants.ts";
 import { Storage, registerStorageAsPointerSource } from "./runtime/storage.ts";
-import { logger } from "./utils/global_values.ts";
+import { cwdURL, logger } from "./utils/global_values.ts";
 import { IndexedDBStorageLocation } from "./runtime/storage-locations/indexed-db.ts";
 import { LocalStorageLocation } from "./runtime/storage-locations/local-storage.ts";
 import { DenoKVStorageLocation } from "./runtime/storage-locations/deno-kv.ts";
@@ -11,6 +11,8 @@ import { loadEternalValues } from "./utils/eternals.ts";
 import { DX_BOUND_LOCAL_SLOT } from "./runtime/constants.ts";
 import { verboseArg } from "./utils/logger.ts";
 import { MessageLogger } from "./utils/message_logger.ts";
+import { Path } from "./utils/path.ts";
+import { clear } from "./utils/args.ts";
 
 
 /**
@@ -24,7 +26,24 @@ export async function init() {
 
 	// @ts-ignore NO_INIT
 	if (!globalThis.NO_INIT) {
+
+		// custom storage module (storage.ts next to .dx config)
+		let storageInitModule: Path|undefined
 		if (client_type == "browser") {
+			// TODO: handle storage.ts URL in browser
+			// storageInitModule = new URL('/storage.ts', globalThis.location.href)
+		}
+		else if (client_type == "deno") {
+			// TODO: dynamic storage.ts location - use uix path backend/storage.ts as workaround
+			storageInitModule = new Path('./backend/storage.ts', cwdURL)
+		}
+
+		if (await storageInitModule?.fsExists()) {
+			logger.info("Initializing custom storage configuration (" + storageInitModule!.normal_pathname + ")")
+			await import(storageInitModule!.normal_pathname);
+		}
+
+		else if (client_type == "browser") {
 			await Storage.addLocation(new IndexedDBStorageLocation(), {
 				modes: [Storage.Mode.SAVE_ON_CHANGE, Storage.Mode.SAVE_PERIODICALLY],
 				primary: true
@@ -50,9 +69,11 @@ export async function init() {
 				})
 			}
 		}
-		
+		if (Storage.locations.size === 0 && client_type !== "worker")
+			logger.warn(`No storage was created in storage.ts - Please check the configuration because eternal pointers can not be stored persistently otherwise.`)
 	}
 
+	
 	// listen for endpoint changes
 	Runtime.onEndpointChanged((endpoint) => {
 		Pointer.pointer_prefix = endpoint.getPointerPrefix();
@@ -126,5 +147,9 @@ export async function init() {
 	if (!globalThis.NO_INIT) await loadEternalValues();
 
 	// enables message logger when running with -v
-	if (verboseArg) MessageLogger.enable()
+	if (verboseArg) MessageLogger.enable();
+
+	if (clear) {
+		await Storage.clearAndReload();
+	}
 }
