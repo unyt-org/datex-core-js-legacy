@@ -559,6 +559,9 @@ export type InferredPointerProperty<Parent, Key> = PointerProperty<Parent extend
 // interface to access (read/write) pointer value properties
 export class PointerProperty<T=any> extends Ref<T> {
 
+    // override hasInstance from Ref
+    static [Symbol.hasInstance]: (val: unknown) => val is PointerProperty
+
     #leak_js_properties: boolean
 
     public pointer?: Pointer;
@@ -1089,6 +1092,9 @@ const observableArrayMethods = new Set<string>([
 /** Wrapper class for all pointer values ($xxxxxxxx) */
 export class Pointer<T = any> extends Ref<T> {
 
+    // override hasInstance from Ref
+    static [Symbol.hasInstance]: (val: unknown) => val is Pointer
+        
     /** STATIC */
 
     /** Pointer observers */
