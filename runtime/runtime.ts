@@ -3196,10 +3196,11 @@ export class Runtime {
             // ptrs
             if (INNER_SCOPE.waiting_ptrs?.size) {
                 for (const p of INNER_SCOPE.waiting_ptrs) {
+                    const isSet = p[1] == undefined;
+                    const isInit = typeof p[1] == "object";
+
                     try {
                         if (SCOPE.header.type==ProtocolDataType.UPDATE) p[0].excludeEndpointFromUpdates(SCOPE.sender); 
-                        const isSet = p[1] == undefined;
-                        const isInit = typeof p[1] == "object";
                         if (isSet || isInit) {
                             const ptr = p[0].setValue(el);
 
@@ -3225,6 +3226,10 @@ export class Runtime {
                         else await Runtime.runtime_actions.handleAssignAction(SCOPE, p[1], null, null, el, p[0]); // other action on pointer
                     }
                     catch (e) {
+                        if (p[1]?.reject) {
+                            p[1].reject(e);
+                            Pointer.loading_pointers.delete(ptr.id); 
+                        }
                         p[0].enableUpdatesForAll();
                         throw e;
                     };
@@ -6972,14 +6977,25 @@ export class Runtime {
                         // pointer.is_persistent = true;
                         SCOPE.current_index += init_block_size; // jump to end of init block
                     }
-                    // does not exist - init
+                    // does not exist: init, or no permission
                     catch (e) {
-                        if (!SCOPE.inner_scope.waiting_ptrs) SCOPE.inner_scope.waiting_ptrs = new Set();
-                        const tmp_ptr = Pointer.create(id);
-                        // add pointer init promise for recursive init
-                        const {promise, resolve, reject} = Promise.withResolvers<Pointer>()
-                        Pointer.addLoadingPointerPromise(id, promise, SCOPE);
-                        SCOPE.inner_scope.waiting_ptrs.add([tmp_ptr, {resolve, reject}]); // assign next value to pointer;
+
+                        // pointer does exist but no permission
+                        if (e instanceof PermissionError) {
+                            throw e;
+                        }
+
+                        // pointer does not exist
+                        else {
+                            if (!SCOPE.inner_scope.waiting_ptrs) SCOPE.inner_scope.waiting_ptrs = new Set();
+                            const tmp_ptr = Pointer.create(id);
+                            // add pointer init promise for recursive init
+                            const {promise, resolve, reject} = Promise.withResolvers<Pointer>();
+                            Pointer.addLoadingPointerPromise(id, promise, SCOPE);
+                            // TODO: make sure resolve or reject is called at some point or the promise is removed
+                            SCOPE.inner_scope.waiting_ptrs.add([tmp_ptr, {resolve, reject}]); // assign next value to pointer;
+                        }
+
                     }
 
                     break;

@@ -1377,8 +1377,15 @@ export class Pointer<T = any> extends Ref<T> {
     // load from storage or request from remote endpoint if pointer not yet loaded
     static load(id:string|Uint8Array, SCOPE?:datex_scope, only_load_local = false, sender_knows_pointer = true, allow_failure = true): Promise<Pointer>|Pointer|LazyPointer<unknown> {
 
-        const id_string = Pointer.normalizePointerId(id);
+        // pointer already exists
+        const existing_pointer = Pointer.get(id);
+        if (existing_pointer?.value_initialized) {
+            // check read permissions
+            existing_pointer.assertEndpointCanRead(SCOPE?.sender)
+            return existing_pointer;
+        }
 
+        const id_string = Pointer.normalizePointerId(id);
         // only load if local pointer id
         if (SCOPE?.exec_conditions?.onlyLocalPointers) {
             const origin = Pointer.getOriginFromPointerId(id_string);
@@ -1388,9 +1395,7 @@ export class Pointer<T = any> extends Ref<T> {
         }
 
         if (SCOPE) {
-            // recursive pointer loading! TODO
             if (this.loading_pointers.get(id_string)?.scopeList.has(SCOPE)) {
-                // logger.debug("recursive pointer loading: $"+ id_string);
                 return new LazyPointer(id_string)
             }
         }
@@ -1403,7 +1408,6 @@ export class Pointer<T = any> extends Ref<T> {
 
         this.loading_pointers.set(id_string, null as any);
         const loadPromise = this.handleLoad(id_string, id, SCOPE, only_load_local, sender_knows_pointer, allow_failure);
-
         // only add load data if load not already finished
         if (this.loading_pointers.has(id_string)) {
             this.addLoadingPointerPromise(id_string, loadPromise, SCOPE);
@@ -2013,11 +2017,14 @@ export class Pointer<T = any> extends Ref<T> {
         if (
             Runtime.OPTIONS.PROTECT_POINTERS 
             && !(endpoint == Runtime.endpoint)
-            && this.is_origin 
-            && (!endpoint || !Logical.matches(endpoint, this.allowed_access, Target))
+            && this.is_origin
+            && (
+                !endpoint || 
+                (this.allowed_access instanceof Disjunction && this.allowed_access.size==0) || // TODO: this case is just added because Logical.matches currently always returns true for an empty Disjunction, which is not intended here
+                !Logical.matches(endpoint, this.allowed_access, Target))
             && (endpoint && !Runtime.trustedEndpoints.get(endpoint.main)?.includes("protected-pointer-access"))
         ) {
-            throw new PermissionError("Endpoint has no read permissions for this pointer ("+this.idString()+")");
+            throw new PermissionError("Endpoint "+endpoint+" has no read permissions for pointer "+this.idString()+" (origin: "+this.origin+")");
         }
     }
 
