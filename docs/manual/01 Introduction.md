@@ -2,7 +2,7 @@
 
 >  [!WARNING]
 >  The current implementation of the DATEX JavaScript Library is still a beta version.
->  We are activly working on a new stable [Rust implementation](https://github.com/unyt-org/datex-core) that will be much more performant.
+>  We are actively working on a new stable [Rust implementation](https://github.com/unyt-org/datex-core) that will be much more performant.
 
 The DATEX JavaScript Library (*DATEX JS*) enables fine-grained reactivity with cross-device processing including data synchronisation.
 
