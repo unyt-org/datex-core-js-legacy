@@ -21,6 +21,16 @@ use wasm_bindgen::prelude::*;
 
 use web_sys::console;
 
+use std::panic;
+
+use console_error_panic_hook::set_once as set_panic_hook;
+
+
+#[wasm_bindgen]
+pub fn init_panic_hook() {
+    set_panic_hook();
+}
+
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
 // allocator.
@@ -58,6 +68,7 @@ extern "C" {
 pub fn init_runtime() {
     // let logger = Logger::new_for_development(&LOGGER, "DATEX");
     // logger.success("initialized");
+    init_panic_hook();
     return 
 }
 

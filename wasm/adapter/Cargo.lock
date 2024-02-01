@@ -199,6 +199,7 @@ dependencies = [
 name = "datex-wasm"
 version = "0.1.0"
 dependencies = [
+ "console_error_panic_hook",
  "datex-core",
  "datex_cli_core",
  "lazy_static",
