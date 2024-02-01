@@ -2,9 +2,6 @@
 /* eslint-disable */
 /**
 */
-export function init_panic_hook(): void;
-/**
-*/
 export function init_runtime(): void;
 /**
 * @param {string} datex_script
@@ -26,7 +23,6 @@ export interface InitOutput {
   readonly memory: WebAssembly.Memory;
   readonly compile: (a: number, b: number, c: number) => void;
   readonly decompile: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
-  readonly init_panic_hook: () => void;
   readonly init_runtime: () => void;
   readonly __wbindgen_add_to_stack_pointer: (a: number) => number;
   readonly __wbindgen_malloc: (a: number) => number;
