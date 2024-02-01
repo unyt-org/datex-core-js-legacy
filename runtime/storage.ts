@@ -16,6 +16,7 @@ import { ESCAPE_SEQUENCES } from "../utils/logger.ts";
 import { StorageMap } from "../types/storage_map.ts";
 import { StorageSet } from "../types/storage_set.ts";
 import { IterableWeakSet } from "../utils/iterable-weak-set.ts";
+import { LazyPointer } from "./lazy-pointer.ts";
 
 
 // displayInit();
@@ -1172,10 +1173,6 @@ export class Storage {
         else throw new Error("Cannot find or create the state '" + id + "'")
     }
 
-    static #replaceLastOccurenceOf(search: string, replace: string, str: string) {
-        const n = str.lastIndexOf(search);
-        return str.substring(0, n) + replace + str.substring(n + search.length);
-    }
 
     public static async printSnapshot(options: StorageSnapshotOptions = {internalItems: false, expandStorageMapsAndSets: true}) {
         const {items, pointers} = await this.getSnapshot(options);
@@ -1205,7 +1202,7 @@ export class Storage {
             const storedInAll = [...this.#locations.keys()].every(l => locations.includes(l));
             
             const value = [...storageMap.values()][0];
-            string += `  • ${COLOR_PTR}$${key}${ESCAPE_SEQUENCES.GREY}${storedInAll ? "" : (` (only in ${locations.map(l=>l.name).join(",")})`)} = ${this.#replaceLastOccurenceOf("\n  ", "", value.replaceAll("\n", "\n  "))}\n`
+            string += `  • ${COLOR_PTR}$${key}${ESCAPE_SEQUENCES.GREY}${storedInAll ? "" : (` (only in ${locations.map(l=>l.name).join(",")})`)} = ${value.replaceAll("\n", "\n    ")}\n`
         }
         console.log(string+"\n");
 
@@ -1219,7 +1216,7 @@ export class Storage {
             const storedInAll = [...this.#locations.keys()].every(l => locations.includes(l));
             
             const value = [...storageMap.values()][0];
-            string += `  • ${key}${ESCAPE_SEQUENCES.GREY}${storedInAll ? "" : (` (only in ${locations.map(l=>l.name).join(",")})`)} = ${value}`
+            string += `  • ${key}${ESCAPE_SEQUENCES.GREY}${storedInAll ? "" : (` (only in ${locations.map(l=>l.name).join(",")})`)} = ${value}\n`
         }
         console.log(string+"\n");
 
@@ -1275,7 +1272,7 @@ export class Storage {
             string += `${ESCAPE_SEQUENCES.ITALIC}Inconsistencies between storage locations don't necessarily indicate that something is wrong. They can occur when a storage location is not updated immediately (e.g. when only using SAVE_ON_EXIT).\n\n${ESCAPE_SEQUENCES.RESET}`
             for (const [key, storageMap] of pointers.inconsistencies) {
                 for (const [location, value] of storageMap) {
-                    string += `  • ${COLOR_PTR}$${key}${ESCAPE_SEQUENCES.GREY} (${(location.name+")").padEnd(15, " ")} = ${this.#replaceLastOccurenceOf("\n  ", "", value.replaceAll("\n", "\n  "))}\n`
+                    string += `  • ${COLOR_PTR}$${key}${ESCAPE_SEQUENCES.GREY} (${(location.name+")").padEnd(15, " ")} = ${value.replaceAll("\n", "\n    ")}\n`
                 }
                 string += `\n`
             }
@@ -1309,13 +1306,18 @@ export class Storage {
 
                 if (value.startsWith("\x1b[38;2;50;153;220m<StorageMap>") || value.startsWith("\x1b[38;2;50;153;220m<StorageSet>")) {
                     const ptr = await Pointer.load(ptrId, undefined, true);
+                    if (ptr instanceof LazyPointer) {
+                        console.error("LazyPointer in StorageMap/StorageSet");
+                        continue;
+                    }
                     if (ptr.val instanceof StorageMap) {
                         const map = ptr.val;
                         let inner = "";
                         for await (const [key, val] of map) {
                             inner += `   ${Runtime.valueToDatexStringExperimental(key, true, true)}\x1b[0m => ${Runtime.valueToDatexStringExperimental(val, true, true)}\n`
                         }
-                        if (inner) storageMap.set(location, "\x1b[38;2;50;153;220m<StorageMap> \x1b[0m{\n"+inner+"\x1b[0m\n}")
+                        // substring: remove last \n
+                        if (inner) storageMap.set(location, "\x1b[38;2;50;153;220m<StorageMap> \x1b[0m{\n"+inner.substring(0, inner.length-1)+"\x1b[0m\n}")
                     }
                     else if (ptr.val instanceof StorageSet) {
                         const set = ptr.val;
@@ -1323,7 +1325,8 @@ export class Storage {
                         for await (const val of set) {
                             inner += `   ${Runtime.valueToDatexStringExperimental(val, true, true)},\n`
                         }
-                        if (inner) storageMap.set(location, "\x1b[38;2;50;153;220m<StorageSet> \x1b[0m{\n"+inner+"\x1b[0m\n}")
+                        // substring: remove last \n
+                        if (inner) storageMap.set(location, "\x1b[38;2;50;153;220m<StorageSet> \x1b[0m{\n"+inner.substring(0, inner.length-1)+"\x1b[0m\n}")
                     }
                 }
             }
