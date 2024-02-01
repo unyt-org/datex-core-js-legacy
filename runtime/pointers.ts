@@ -622,9 +622,10 @@ export class PointerProperty<T=any> extends Ref<T> {
 
     // get current pointer property
     public override get val():T {
-        // this.handleBeforePrimitiveValueGet();
         if (this.lazy_pointer) return undefined as T
-
+        
+        // capture property access in parent pointer
+        this.pointer!.handleBeforeNonReferencableGet(this.key);
         const val = this.pointer!.getProperty(this.key, this.#leak_js_properties);
         
         if (val === NOT_EXISTING) {
