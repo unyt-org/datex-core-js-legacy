@@ -39,7 +39,15 @@ export async function init() {
 
 		if (await storageInitModule?.fsExists()) {
 			logger.info("Initializing custom storage configuration (" + storageInitModule!.normal_pathname + ")")
-			await import(storageInitModule!.normal_pathname);
+			try {
+				await import(storageInitModule!.normal_pathname);
+			}
+			catch (e) {
+				console.error(e)
+			}
+
+			if (Storage.locations.size === 0)
+				logger.warn(`No storage location was added in storage.ts - cannot store persistent data!`)
 		}
 
 		else if (client_type == "browser") {
@@ -68,8 +76,7 @@ export async function init() {
 				})
 			}
 		}
-		if (Storage.locations.size === 0 && client_type !== "worker")
-			logger.warn(`No storage was created in storage.ts - Please check the configuration because eternal pointers can not be stored persistently otherwise.`)
+		
 	}
 
 	
