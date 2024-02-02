@@ -19,8 +19,8 @@ import { Time } from "./time.ts";
 import type { Task } from "./task.ts";
 import { Assertion } from "./assertion.ts";
 import type { Iterator } from "./iterator.ts";
-import {StorageMap, StorageWeakMap} from "./storage_map.ts"
-import {StorageSet, StorageWeakSet} from "./storage_set.ts"
+import {StorageMap, StorageWeakMap} from "./storage-map.ts"
+import {StorageSet, StorageWeakSet} from "./storage-set.ts"
 import { ExtensibleFunction } from "./function-utils.ts";
 import type { JSTransferableFunction } from "./js-function.ts";
 

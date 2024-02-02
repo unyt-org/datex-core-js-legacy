@@ -13,8 +13,8 @@ import { Type } from "../types/type.ts";
 import { addPersistentListener } from "../utils/persistent-listeners.ts";
 import { Endpoint, LOCAL_ENDPOINT } from "../types/addressing.ts";
 import { ESCAPE_SEQUENCES } from "../utils/logger.ts";
-import { StorageMap } from "../types/storage_map.ts";
-import { StorageSet } from "../types/storage_set.ts";
+import { StorageMap } from "../types/storage-map.ts";
+import { StorageSet } from "../types/storage-set.ts";
 import { IterableWeakSet } from "../utils/iterable-weak-set.ts";
 import { LazyPointer } from "./lazy-pointer.ts";
 

@@ -76,6 +76,8 @@ export class Supranet {
             return true;
         }
 
+        const alreadyConnected = this.#connected;
+
         // load runtime, own endpoint, nodes
         this.#connected = false;
         endpoint = await this.init(endpoint, local_cache, sign_keys, enc_keys)
@@ -93,10 +95,18 @@ export class Supranet {
             return true;
         }
 
-        const connected = await this._connect(via_node, !shouldSwitchInstance);
-        if (shouldSwitchInstance) await this.handleSwitchToInstance()
+        if (alreadyConnected) {
+            this.#connected = true;
+            this.sayHelloToAllInterfaces();
+            if (shouldSwitchInstance) await this.handleSwitchToInstance();
+            return true;
+        }
+        else {
+            const connected = await this._connect(via_node, !shouldSwitchInstance);
+            if (shouldSwitchInstance) await this.handleSwitchToInstance()
+            return connected;
+        }
 
-        return connected;
     }
 
     private static sayHelloToAllInterfaces() {
@@ -107,7 +117,7 @@ export class Supranet {
 
     private static shouldSwitchInstance(endpoint: Endpoint) {
         // return false;
-        return (endpoint.main === endpoint || Runtime.getActiveLocalStorageEndpoints().includes(endpoint)) && Runtime.Blockchain
+        return (endpoint.main === endpoint || Runtime.getActiveLocalStorageEndpoints().includes(endpoint)) && (!!Runtime.Blockchain)
     }
 
     /**

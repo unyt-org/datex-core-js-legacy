@@ -12,6 +12,7 @@ import { DX_BOUND_LOCAL_SLOT } from "./runtime/constants.ts";
 import { verboseArg } from "./utils/logger.ts";
 import { MessageLogger } from "./utils/message_logger.ts";
 import { Path } from "./utils/path.ts";
+import { communicationHub } from "./network/communication-hub.ts";
 
 
 /**
@@ -22,6 +23,9 @@ export async function init() {
 	// register DatexStorage as pointer source
 	registerStorageAsPointerSource();
 	// default storage config:
+
+
+	communicationHub.handler.setDatexInHandler(Runtime.datexIn.bind(Runtime))
 
 	// @ts-ignore NO_INIT
 	if (!globalThis.NO_INIT) {

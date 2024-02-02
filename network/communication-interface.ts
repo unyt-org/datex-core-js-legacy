@@ -1,27 +1,124 @@
+import { ProtocolDataType } from "../compiler/protocol_types.ts";
 import { Endpoint } from "../types/addressing.ts";
+import { Logger } from "../utils/logger.ts";
+import { COM_HUB_SECRET, communicationHub } from "./communication-hub.ts";
 
-/**
- * Base class for all DATEX communication interfaces
- */
-export abstract class CommunicationInterface {
 
-	abstract name: string
-	abstract description?: string
+export type InterfaceProperties =  {
+	name: string,
+	description?: string,
+
+	canSend: boolean,
+	canReceive: boolean,
+	/**
+	 * Time in milliseconds to wait before reconnecting after a connection error
+	 */
+	reconnectInterval?: number,
+	/**
+	 * higher priority interfaces normally provide more bandwidth and are preferred over lower priority interfaces
+	 */
+	priority: number
+}
+
+export abstract class CommunicationInterfaceSocket extends EventTarget {
+	/**
+	 * Endpoint is only set once. If the endpoint changes, a new socket is created
+	 */
+	#endpoint?: Endpoint
+	#connected = false
+	#destroyed = false;
+	#opened = false;
+
+	interfaceProperties?: InterfaceProperties
+
+	get isRegistered() {
+		return communicationHub.handler.hasSocket(this)
+	}
+
+	get connected() {
+		return this.#connected
+	}
+	set connected(connected) {
+		if (this.#destroyed) throw new Error("Cannot change connected state of destroyed socket.")
+		this.#connected = connected
+		this.#updateRegistration();
+	}
+
+	get endpoint(): Endpoint|undefined {	
+		return this.#endpoint
+	}
+
+	set endpoint(endpoint: Endpoint) {
+		if (this.#endpoint) throw new Error("Cannot change endpoint of socket. Create a new socket instead.")
+		this.#endpoint = endpoint
+		this.#updateRegistration();
+	}
 
 	/**
-	 * Can send data
+	 * Adds or removes the socket from the communication hub based
+	 * on the connection state and endpoint availability
 	 */
-	abstract canSend: boolean
+	#updateRegistration() {
+		// handle open/close
+		if (this.#opened && !this.#connected) {
+			this.#opened = false;
+			this.close()
+		}
+		else if (!this.#opened && this.#connected) {
+			this.open()
+			this.#opened = true;
+		}
 
-	/**
-	 * Can receive data
-	 */
-	abstract canReceive: boolean
 
-	/**
-	 * Has a connection to the supranet, use as a default interface if possible
-	 */
-	abstract isGlobal: boolean // 
+		if (!this.#endpoint || this.#destroyed) return;
+
+		if (this.#connected) {
+			if (!this.isRegistered) {
+				communicationHub.handler.addSocket(this)
+			}
+		}
+		else {
+			if (this.isRegistered) {
+				communicationHub.handler.removeSocket(this)
+			}
+		}
+	}
+
+	public async sendBlock(dxb: ArrayBuffer) {
+		if (this.#destroyed) throw new Error("Cannot send from destroyed socket.")
+		if (!this.connected) throw new Error("Cannot send from disconnected socket");
+
+		const successful = await this.send(dxb)
+		if (!successful) {
+			console.error("Failed to send block")
+			this.connected = false
+		}
+		return successful;
+	}
+
+	protected async receive(dxb: ArrayBuffer) {
+		console.log("receive",dxb)
+		if (this.#destroyed) throw new Error("Cannot receive on destroyed socket");
+		if (!this.connected) throw new Error("Cannot receive on disconnected socket");
+
+		const header = await communicationHub.handler.datexIn({
+			dxb,
+			socket: this
+		})
+
+		// listen for GOODBYE messages
+		if (this.endpoint) {
+			if (header.type == ProtocolDataType.GOODBYE && header.sender === this.endpoint) {
+				this.connected = false
+				this.#destroyed = true
+				this.dispatchEvent(new CustomEvent('endpoint-disconnect'))
+			}
+		}
+		// detect new endpoint
+		else if (header.sender) {
+			this.endpoint = header.sender
+		}
+	}
 
 
 	/**
@@ -29,8 +126,100 @@ export abstract class CommunicationInterface {
 	 * @param datex
 	 * @param to 
 	 */
-	public send(datex:ArrayBuffer, to?: Endpoint) {
+	protected abstract send(datex:ArrayBuffer): Promise<boolean>|boolean
 
+	protected abstract open(): void
+	protected abstract close(): void
+}
+
+
+/**
+ * Base class for all DATEX communication interfaces
+ */
+export abstract class CommunicationInterface<Socket extends CommunicationInterfaceSocket = CommunicationInterfaceSocket> {
+
+	protected logger = new Logger(this.constructor.name)
+
+	public sockets = new Set<Socket>()
+
+	abstract properties: InterfaceProperties
+
+	abstract connect(): boolean|Promise<boolean>
+	abstract disconnect(): void|Promise<void>
+
+	#connecting = false;
+
+	/**
+	 * @private
+	 */
+	async init(secret: symbol) {
+		if (secret !== COM_HUB_SECRET) throw new Error("Directly calling CommunicationInterface.init() is not allowed")
+		await this.#reconnect()
+	}
+
+	/**
+	 * @private
+	 */
+	async deinit(secret: symbol) {
+		if (secret !== COM_HUB_SECRET) throw new Error("Directly calling CommunicationInterface.deinit() is not allowed")
+		this.clearSockets()
+		await this.disconnect()
+	}
+
+	async #reconnect() {
+		if (this.#connecting) return;
+		this.#connecting = true;
+		while (!await this.connect()) {
+			await sleep(this.properties.reconnectInterval || 3000)
+		}
+		this.logger.success("Connected to " + this.properties.description + " ("+this.properties.name+")");
+		this.#connecting = false;
+	}
+
+	protected async onConnectionError() {
+		this.logger.error("Connection error (" + this.properties.description + ")");
+		this.clearSockets();
+		await this.#reconnect()
+	}
+	
+	/**
+	 * Create a new socket for this interface
+	 */
+	protected addSocket(socket: Socket) {
+		this.sockets.add(socket)
+		socket.connected = true; // adds sockets to communication hub
+		socket.interfaceProperties = this.properties
+		socket.addEventListener('endpoint-disconnect', () => {
+			// remove old socket
+			this.removeSocket(socket)
+			// clone and add new socket
+			const newSocket = this.cloneSocket(socket);
+			this.addSocket(newSocket);
+		})
+	}
+
+	/**
+	 * Create a new socket from an existing socket
+	 * which is no longer connected to an endpoint
+	 * @param socket 
+	 */
+	protected abstract cloneSocket(socket: Socket): Socket
+
+	/**
+	 * Remove a socket from this interface
+	 */
+	protected removeSocket(socket: Socket) {
+		this.sockets.delete(socket)
+		socket.connected = false; // removes socket from communication hub
+	}
+
+	/**
+	 * Remove all sockets from this interface
+	 */
+	protected clearSockets() {
+		for (const socket of this.sockets) {
+			this.removeSocket(socket)
+		}
 	}
 
 }

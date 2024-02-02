@@ -62,6 +62,7 @@ import { Conjunction, Disjunction, Logical, Negation } from "../types/logic.ts";
 import { Logger } from "../utils/logger.ts";
 import { Debugger } from "./debugger.ts";
 import {decompile as wasm_decompile} from "../wasm/adapter/pkg/datex_wasm.js";
+import { CommunicationInterfaceSocket } from "../network/communication-interface.ts";
 
 import "../types/native_types.ts"; // load prototype overrides
 import { Time } from "../types/time.ts";
@@ -75,6 +76,7 @@ import { sendDatexViaHTTPChannel } from "../network/datex-http-channel.ts";
 import { deleteCookie, getCookie, setCookie } from "../utils/cookies.ts";
 import { addPersistentListener, removePersistentListener } from "../utils/persistent-listeners.ts";
 import { endpoint_config } from "./endpoint_config.ts";
+import { DatexInData } from "../network/communication-hub.ts";
 
 const mime = client_type === "deno" ? (await import("https://deno.land/x/mimetypes@v1.0.0/mod.ts")).mime : null;
 
@@ -1676,6 +1678,13 @@ export class Runtime {
         return handler;
     }
 
+    public static datexIn(data: DatexInData) {
+        if (data.dxb instanceof ArrayBuffer) return this.handleDatexIn(data.dxb, data.socket.endpoint, undefined, undefined, undefined, data.socket); 
+        else if (data.dxb instanceof ReadableStreamDefaultReader) return this.handleContinuousBlockStream(data.dxb, undefined, undefined, undefined, data.socket.endpoint, data.socket)
+        else throw new Error("Invalid data for datexIn")
+    }
+
+
     // extract dxb blocks from a continuos stream
     private static async handleContinuousBlockStream(dxb_stream_reader: ReadableStreamDefaultReader<Uint8Array>, full_scope_callback, variables?:any, header_callback?:(header:dxb_header)=>void, last_endpoint?:Endpoint, source?:Source) {
         
@@ -1847,7 +1856,7 @@ export class Runtime {
      * @param header_callback callback method returning information for the evaluated header before executing the dxb
      * @returns header information (after executing the dxb)
      */
-    private static async handleDatexIn(dxb:ArrayBuffer, last_endpoint:Endpoint, full_scope_callback?:(sid:number, scope:any, error?:boolean)=>void, _?:any, header_callback?:(header:dxb_header)=>void, source?: Source): Promise<dxb_header> {
+    private static async handleDatexIn(dxb:ArrayBuffer, last_endpoint?:Endpoint, full_scope_callback?:(sid:number, scope:any, error?:boolean)=>void, _?:any, header_callback?:(header:dxb_header)=>void, source?: CommunicationInterfaceSocket): Promise<dxb_header> {
 
         let header:dxb_header, data_uint8:Uint8Array;
 

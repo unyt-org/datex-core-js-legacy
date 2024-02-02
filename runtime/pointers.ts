@@ -29,7 +29,7 @@ import { IterableWeakMap } from "../utils/iterable-weak-map.ts";
 import { LazyPointer } from "./lazy-pointer.ts";
 import { ReactiveArrayMethods } from "../types/reactive-methods/array.ts";
 import { Assertion } from "../types/assertion.ts";
-import { StorageSet } from "../types/storage_set.ts";
+import { StorageSet } from "../types/storage-set.ts";
 import { Storage } from "./storage.ts";
 
 export type observe_handler<K=any, V extends RefLike = any> = (value:V extends RefLike<infer T> ? T : V, key?:K, type?:Ref.UPDATE_TYPE, transform?:boolean, is_child_update?:boolean, previous?: any, atomic_id?:symbol)=>void|boolean

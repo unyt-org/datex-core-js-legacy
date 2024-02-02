@@ -816,6 +816,7 @@ export class InterfaceManager {
         }
         // send via indirect connection
         else if (CommonInterface.isEndpointReachableViaInterface(to)) {
+            logger.debug("sending to " + to + " via indirect connection");
             comInterface = [...CommonInterface.getIndirectInterfacesForEndpoint(to)][0]; // send to first available interface (todo)
         }
 
@@ -824,7 +825,7 @@ export class InterfaceManager {
             return InterfaceManager.handleNoRedirectFound(to);
         }
 
-        // prefere proxy_interface
+        // prefer proxy_interface
         if (CommonInterface.proxy_interface) comInterface = CommonInterface.proxy_interface;
 
         // error: loopback
