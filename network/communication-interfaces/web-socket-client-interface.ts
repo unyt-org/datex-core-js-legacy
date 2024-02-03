@@ -1,4 +1,5 @@
 import { client_type } from "../../utils/constants.ts";
+import { InterfaceDirection } from "../communication-interface.ts";
 import { CommunicationInterface, InterfaceProperties, CommunicationInterfaceSocket } from "../communication-interface.ts";
 
 
@@ -40,10 +41,9 @@ export class WebSocketClientInterface extends CommunicationInterface<WebSocketCl
     private webSocket?: WebSocket;
 
 	public properties: InterfaceProperties = {
-		name: "web-socket-client",
-		canSend: true,
-		canReceive: true,
-		priority: 10
+		type: "web-socket-client",
+		direction: InterfaceDirection.IN_OUT,
+		priority: 5
 	}
 	
 	constructor(origin: string|URL) {
@@ -60,7 +60,7 @@ export class WebSocketClientInterface extends CommunicationInterface<WebSocketCl
 		}
 
 		this.origin = origin;
-		this.properties.description = origin.toString();
+		this.properties.name = origin.toString();
 	}
 
 	#errorEventListener?: () =>void

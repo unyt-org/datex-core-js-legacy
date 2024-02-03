@@ -1,15 +1,21 @@
 import { ProtocolDataType } from "../compiler/protocol_types.ts";
+import { LOCAL_ENDPOINT, Runtime } from "../datex_all.ts";
 import { Endpoint } from "../types/addressing.ts";
 import { Logger } from "../utils/logger.ts";
 import { COM_HUB_SECRET, communicationHub } from "./communication-hub.ts";
 
 
-export type InterfaceProperties =  {
-	name: string,
-	description?: string,
+export enum InterfaceDirection {
+	IN,
+	OUT,
+	IN_OUT
+}
 
-	canSend: boolean,
-	canReceive: boolean,
+export type InterfaceProperties =  {
+	type: string,
+	name?: string,
+
+	direction: InterfaceDirection,
 	/**
 	 * Time in milliseconds to wait before reconnecting after a connection error
 	 */
@@ -20,6 +26,11 @@ export type InterfaceProperties =  {
 	priority: number
 }
 
+function getIdentifier(properties?: InterfaceProperties) {
+	if (!properties) return "unknown";
+	return `${properties.type}${properties.name? ` (${properties.name})` : ''}`
+}
+
 export abstract class CommunicationInterfaceSocket extends EventTarget {
 	/**
 	 * Endpoint is only set once. If the endpoint changes, a new socket is created
@@ -28,6 +39,12 @@ export abstract class CommunicationInterfaceSocket extends EventTarget {
 	#connected = false
 	#destroyed = false;
 	#opened = false;
+
+	#connectTimestamp = Date.now()
+
+	get connectTimestamp() {
+		return this.#connectTimestamp
+	}
 
 	interfaceProperties?: InterfaceProperties
 
@@ -74,17 +91,19 @@ export abstract class CommunicationInterfaceSocket extends EventTarget {
 
 		if (this.#connected) {
 			if (!this.isRegistered) {
-				communicationHub.handler.addSocket(this)
+				this.#connectTimestamp = Date.now()
+				communicationHub.handler.registerSocket(this as ConnectedCommunicationInterfaceSocket)
 			}
 		}
 		else {
 			if (this.isRegistered) {
-				communicationHub.handler.removeSocket(this)
+				communicationHub.handler.unregisterSocket(this)
 			}
 		}
 	}
 
 	public async sendBlock(dxb: ArrayBuffer) {
+		if (this.interfaceProperties?.direction === InterfaceDirection.IN) throw new Error("Cannot send from an IN interface socket");
 		if (this.#destroyed) throw new Error("Cannot send from destroyed socket.")
 		if (!this.connected) throw new Error("Cannot send from disconnected socket");
 
@@ -98,6 +117,7 @@ export abstract class CommunicationInterfaceSocket extends EventTarget {
 
 	protected async receive(dxb: ArrayBuffer) {
 		console.log("receive",dxb)
+		if (this.interfaceProperties?.direction === InterfaceDirection.OUT) throw new Error("Cannot receive on an OUT interface socket");
 		if (this.#destroyed) throw new Error("Cannot receive on destroyed socket");
 		if (!this.connected) throw new Error("Cannot receive on disconnected socket");
 
@@ -112,6 +132,10 @@ export abstract class CommunicationInterfaceSocket extends EventTarget {
 				this.connected = false
 				this.#destroyed = true
 				this.dispatchEvent(new CustomEvent('endpoint-disconnect'))
+			}
+			// message from another endpoint, record as indirect socket connection
+			else if (header.sender !== this.endpoint) {
+				communicationHub.handler.registerSocket(this as ConnectedCommunicationInterfaceSocket, header.sender)
 			}
 		}
 		// detect new endpoint
@@ -130,7 +154,24 @@ export abstract class CommunicationInterfaceSocket extends EventTarget {
 
 	protected abstract open(): void
 	protected abstract close(): void
+
+	toString() {
+		return getIdentifier(this.interfaceProperties)
+	}
 }
+
+/**
+ * A connected communication interface socket that is registered in the communication hub
+ * and can be used to send and receive messages
+ */
+export type ConnectedCommunicationInterfaceSocket = CommunicationInterfaceSocket & {
+	connected: true,
+	endpoint: Endpoint,
+	interfaceProperties: InterfaceProperties
+}
+
+
+type ReadonlySet<T> = Set<T> & {add: never, delete: never, clear: never}
 
 
 /**
@@ -140,7 +181,7 @@ export abstract class CommunicationInterface<Socket extends CommunicationInterfa
 
 	protected logger = new Logger(this.constructor.name)
 
-	public sockets = new Set<Socket>()
+	#sockets = new Set<Socket>()
 
 	abstract properties: InterfaceProperties
 
@@ -154,6 +195,7 @@ export abstract class CommunicationInterface<Socket extends CommunicationInterfa
 	 */
 	async init(secret: symbol) {
 		if (secret !== COM_HUB_SECRET) throw new Error("Directly calling CommunicationInterface.init() is not allowed")
+		if (Runtime.endpoint == LOCAL_ENDPOINT) throw new Error("Cannot use communication interface with local endpoint")
 		await this.#reconnect()
 	}
 
@@ -166,18 +208,22 @@ export abstract class CommunicationInterface<Socket extends CommunicationInterfa
 		await this.disconnect()
 	}
 
+	getSockets(): ReadonlySet<Socket> {
+		return this.#sockets as ReadonlySet<Socket>
+	}
+
 	async #reconnect() {
 		if (this.#connecting) return;
 		this.#connecting = true;
 		while (!await this.connect()) {
 			await sleep(this.properties.reconnectInterval || 3000)
 		}
-		this.logger.success("Connected to " + this.properties.description + " ("+this.properties.name+")");
+		this.logger.success("Connected to " + this);
 		this.#connecting = false;
 	}
 
 	protected async onConnectionError() {
-		this.logger.error("Connection error (" + this.properties.description + ")");
+		this.logger.error("Connection error (" + this + ")");
 		this.clearSockets();
 		await this.#reconnect()
 	}
@@ -186,9 +232,8 @@ export abstract class CommunicationInterface<Socket extends CommunicationInterfa
 	 * Create a new socket for this interface
 	 */
 	protected addSocket(socket: Socket) {
-		this.sockets.add(socket)
-		socket.connected = true; // adds sockets to communication hub
 		socket.interfaceProperties = this.properties
+		socket.connected = true; // adds sockets to communication hub
 		socket.addEventListener('endpoint-disconnect', () => {
 			// remove old socket
 			this.removeSocket(socket)
@@ -196,6 +241,7 @@ export abstract class CommunicationInterface<Socket extends CommunicationInterfa
 			const newSocket = this.cloneSocket(socket);
 			this.addSocket(newSocket);
 		})
+		this.#sockets.add(socket)
 	}
 
 	/**
@@ -209,7 +255,7 @@ export abstract class CommunicationInterface<Socket extends CommunicationInterfa
 	 * Remove a socket from this interface
 	 */
 	protected removeSocket(socket: Socket) {
-		this.sockets.delete(socket)
+		this.#sockets.delete(socket)
 		socket.connected = false; // removes socket from communication hub
 	}
 
@@ -217,9 +263,12 @@ export abstract class CommunicationInterface<Socket extends CommunicationInterfa
 	 * Remove all sockets from this interface
 	 */
 	protected clearSockets() {
-		for (const socket of this.sockets) {
+		for (const socket of this.#sockets) {
 			this.removeSocket(socket)
 		}
 	}
 
+	toString() {
+		return getIdentifier(this.properties)
+	}
 }

@@ -28,7 +28,7 @@ Symbol.prototype.toJSON = function(){return globalThis.String(this)}
 /***** imports */
 import { Compiler, compiler_options, PrecompiledDXB, ProtocolDataTypesMap, DatexResponse} from "../compiler/compiler.ts"; // Compiler functions
 import { Pointer, PointerProperty, RefOrValue, Ref, ObjectWithDatexValues, JSValueWith$, MinimalJSRef, ObjectRef, RefLike, UpdateScheduler} from "./pointers.ts";
-import { Endpoint, endpoints, IdEndpoint, LOCAL_ENDPOINT, Target, target_clause, WildcardTarget } from "../types/addressing.ts";
+import { BROADCAST, Endpoint, endpoints, IdEndpoint, LOCAL_ENDPOINT, Target, target_clause, WildcardTarget } from "../types/addressing.ts";
 import { RuntimePerformance } from "./performance_measure.ts";
 import { NetworkError, PermissionError, PointerError, RuntimeError, SecurityError, ValueError, Error as DatexError, CompilerError, TypeError, SyntaxError, AssertionError } from "../types/errors.ts";
 import { Function as DatexFunction } from "../types/function.ts";
@@ -76,7 +76,7 @@ import { sendDatexViaHTTPChannel } from "../network/datex-http-channel.ts";
 import { deleteCookie, getCookie, setCookie } from "../utils/cookies.ts";
 import { addPersistentListener, removePersistentListener } from "../utils/persistent-listeners.ts";
 import { endpoint_config } from "./endpoint_config.ts";
-import { DatexInData } from "../network/communication-hub.ts";
+import type { DatexInData, DatexOutData } from "../network/communication-hub.ts";
 
 const mime = client_type === "deno" ? (await import("https://deno.land/x/mimetypes@v1.0.0/mod.ts")).mime : null;
 
@@ -505,29 +505,31 @@ export class Runtime {
     private static local_input_handler = Runtime.getDatexInputHandler();
 
     // default datex out: send to self (if no routing available)
-    private static datex_out:(dxb:ArrayBuffer, to?:Endpoint, flood?:boolean, source?:Source)=>Promise<void> = async (dxb, to, flood, source)=>{
-        // external datex out request, but this is the default interface (only access to local endpoint)
-        if (!(to instanceof Endpoint && Runtime.endpoint.equals(to))) {
+    private static datex_out:(data: DatexOutData)=>Promise<void> = async (data)=>{
+        // directly redirect to local input
+        const receiver = data.receivers instanceof Endpoint ? data.receivers : (data.receivers.size == 1 ? [...data.receivers][0] : undefined);
+        if (!(receiver instanceof Endpoint && Runtime.endpoint.equals(receiver))) {
+            this.local_input_handler(data.dxb);
             throw new NetworkError(DATEX_ERROR.NO_EXTERNAL_CONNECTION)
         }
-        // directly redirect to local input
-        else this.local_input_handler(dxb);
+        // external datex out request, but this is the default interface (only access to local endpoint)
+        else this.local_input_handler(data.dxb);
     } 
 
-    public static setDatexOut(handler:(dxb:ArrayBuffer, to?:Endpoint, flood?:boolean, source?:any)=>Promise<void>){
+    public static setDatexOutHandler(handler:(data: DatexOutData)=>Promise<void>){
+        this.datex_out = handler
+        //  TODO:
         // datex out callback wrapper, handles crypto proxy
-        this.datex_out = (dxb:ArrayBuffer, to?:Endpoint, flood?:boolean, source?:any) => {
+        // (data: DatexOutData) => {
+        //     // redirect as crypto proxy: decrypt
+        //     // if (to && this.#cryptoProxies.has(to)) {
+        //     //     // TODO#CryptoProxy: decrypt + check channel
+        //     //     const decKey = this.#cryptoProxies.get(to)![1]
+        //     //     console.log("TODO: handle proxy decrypt for " + to)
+        //     // }
 
-            // redirect as crypto proxy: decrypt
-            if (to && this.#cryptoProxies.has(to)) {
-                // TODO#CryptoProxy: decrypt + check channel
-                const decKey = this.#cryptoProxies.get(to)![1]
-                console.log("TODO: handle proxy decrypt for " + to)
-            }
-
-            return handler(dxb, to, flood, source);
-        }
-
+        //     return handler(data);
+        // }
 
         if (this.#datex_out_handler_initialized_resolve) {
             this.#datex_out_handler_initialized_resolve();
@@ -964,7 +966,7 @@ export class Runtime {
      * @param timeout response timeout
      * @returns evaluated response value
      */
-    public static async datexOut(data:ArrayBuffer|compile_info, to:target_clause=Runtime.endpoint, sid?:number, wait_for_result=true, encrypt=false, detailed_result_callback?:(scope:datex_scope, header:dxb_header, error:Error)=>void, flood = false, flood_exclude?:Endpoint, timeout?:number, source?:Source):Promise<any>{
+    public static async datexOut(data:ArrayBuffer|compile_info, to:target_clause=Runtime.endpoint, sid?:number, wait_for_result=true, encrypt=false, detailed_result_callback?:(scope:datex_scope, header:dxb_header, error:Error)=>void, flood = false, flood_exclude?:Endpoint, timeout?:number, socket?:CommunicationInterfaceSocket):Promise<any>{
 
         const finish = this.createPrepocessingTask();
 
@@ -1003,7 +1005,7 @@ export class Runtime {
 
             // single block
             if (dxb instanceof ArrayBuffer) {
-                return this.datexOutSingleBlock(dxb, evaluated_receivers, sid, unique_sid, <compile_info>data, wait_for_result, encrypt, detailed_result_callback, flood, flood_exclude, timeout, source);
+                return this.datexOutSingleBlock(dxb, evaluated_receivers, sid, unique_sid, <compile_info>data, wait_for_result, encrypt, detailed_result_callback, flood, flood_exclude, timeout, socket);
             }
 
             // multiple blocks
@@ -1019,9 +1021,9 @@ export class Runtime {
                     // empty arraybuffer indicates that next block is end_of_scope
                     if (next.value.byteLength == 0) end_of_scope = true;
                     // end_of_scope, now return result for last block (wait_for_result)
-                    else if (end_of_scope) return this.datexOutSingleBlock(next.value, evaluated_receivers, sid, unique_sid, <compile_info>data, wait_for_result, encrypt, detailed_result_callback, flood, flood_exclude, timeout, source);
+                    else if (end_of_scope) return this.datexOutSingleBlock(next.value, evaluated_receivers, sid, unique_sid, <compile_info>data, wait_for_result, encrypt, detailed_result_callback, flood, flood_exclude, timeout, socket);
                     // not last block,  wait_for_result = false, no detailed_result_callback
-                    else this.datexOutSingleBlock(next.value, evaluated_receivers, sid, unique_sid, <compile_info>data, false, encrypt, null, flood, flood_exclude, timeout, source);
+                    else this.datexOutSingleBlock(next.value, evaluated_receivers, sid, unique_sid, <compile_info>data, false, encrypt, null, flood, flood_exclude, timeout, socket);
                 }
                 
             }
@@ -1040,7 +1042,7 @@ export class Runtime {
     }
 
     // handle sending a single dxb block out
-    private static datexOutSingleBlock(dxb:ArrayBuffer, to:Disjunction<Endpoint>, sid:number, unique_sid:string, data:compile_info, wait_for_result=true, encrypt=false, detailed_result_callback?:(scope:datex_scope, header:dxb_header, error:Error)=>void, flood = false, flood_exclude?:Endpoint, timeout?:number, source?:Source) {
+    private static datexOutSingleBlock(dxb:ArrayBuffer, to:Disjunction<Endpoint>, sid:number, unique_sid:string, data:compile_info, wait_for_result=true, encrypt=false, detailed_result_callback?:(scope:datex_scope, header:dxb_header, error:Error)=>void, flood = false, flood_exclude?:Endpoint, timeout?:number, socket?:CommunicationInterfaceSocket) {
               
         // empty filter?
         if (to?.size == 0) {
@@ -1056,28 +1058,37 @@ export class Runtime {
 
             // flood exclude flood_exclude receiver
             if (flood) {
-                this.datex_out(dxb, flood_exclude, true, source)
+                this.datex_out({
+                    dxb,
+                    receivers: BROADCAST,
+                    socket: socket
+                })
                     .then(finish)
                     .catch(e => {
                         if (wait_for_result) reject(e);
                         else logger.debug("Error sending datex block (flood)");
                     });
-            }           
+            }
             // send to receivers
             else if (to) {
                 //this.datex_out(dxb, to)?.catch(e=>reject(e));
                 // send and catch errors while sending, like NetworkError
-                for (const to_endpoint of to) {
-                    // check offline status (async), immediately reject if offline
-                    if (wait_for_result) this._handleEndpointOffline(to_endpoint, reject)
-                    // send dxb
-                    this.datex_out(dxb, to_endpoint, undefined, source)
-                        .then(finish)
-                        .catch(e => {
-                            if (wait_for_result) reject(e);
-                            else logger.debug("Error sending datex block to " + to_endpoint);
-                        });
-                }
+                const isSingleReceiver = to.size == 1;
+                // check offline status (async), immediately reject if offline
+                if (isSingleReceiver && wait_for_result) this._handleEndpointOffline([...to][0], reject)
+                // send dxb
+
+                this.datex_out({
+                    dxb,
+                    receivers: to,
+                    socket
+                })
+                    .then(finish)
+                    .catch(e => {
+                        if (wait_for_result) reject(e);
+                        else logger.debug("Error sending datex block to " + [...to].map(t=>t.toString()).join(", "));
+                    });
+
             }
 
             // callback for detailed results?
@@ -1124,7 +1135,7 @@ export class Runtime {
      * @param wait_for_result returns the result if set to true
      * @returns result of the redirected DATEX 
      */
-    static async redirectDatex(datex:ArrayBuffer, header:dxb_header, wait_for_result=true, source?:Source):Promise<any> {
+    static async redirectDatex(datex:ArrayBuffer, header:dxb_header, wait_for_result=true, socket?:CommunicationInterfaceSocket):Promise<any> {
 
         // too many redirects (ttl is 0)
         if (header.routing.ttl == 0) throw new NetworkError(DATEX_ERROR.TOO_MANY_REDIRECTS);
@@ -1133,7 +1144,7 @@ export class Runtime {
             
         logger.debug("redirect " + (ProtocolDataType[header.type]) + " " + header.sid + " > " + Runtime.valueToDatexString(header.routing.receivers) + ", ttl="+ (header.routing.ttl-1));
 
-        const res = await this.datexOut(datex, header.routing.receivers, header.sid, wait_for_result, undefined, undefined, undefined, undefined, undefined, source);
+        const res = await this.datexOut(datex, header.routing.receivers, header.sid, wait_for_result, undefined, undefined, undefined, undefined, undefined, socket);
         return res;
     }
 
@@ -1176,7 +1187,8 @@ export class Runtime {
      * Handles beforeunload (sending GOODBYE)
      * @param endpoint 
      */
-    static setActiveEndpoint(endpoint:Endpoint) {
+    static setActiveEndpoint(endpoint:Endpoint) {       
+
         let endpoints:string[] = [];
         if (client_type == "browser") {
             try {
@@ -1680,7 +1692,10 @@ export class Runtime {
 
     public static datexIn(data: DatexInData) {
         if (data.dxb instanceof ArrayBuffer) return this.handleDatexIn(data.dxb, data.socket.endpoint, undefined, undefined, undefined, data.socket); 
-        else if (data.dxb instanceof ReadableStreamDefaultReader) return this.handleContinuousBlockStream(data.dxb, undefined, undefined, undefined, data.socket.endpoint, data.socket)
+        else if (data.dxb instanceof ReadableStreamDefaultReader) {
+            throw new Error("Continuos DATEX block input streams are not supported yet")
+            // return this.handleContinuousBlockStream(data.dxb, undefined, undefined, undefined, data.socket.endpoint, data.socket)
+        }
         else throw new Error("Invalid data for datexIn")
     }
 

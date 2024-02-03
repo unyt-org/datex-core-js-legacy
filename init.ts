@@ -13,7 +13,7 @@ import { verboseArg } from "./utils/logger.ts";
 import { MessageLogger } from "./utils/message_logger.ts";
 import { Path } from "./utils/path.ts";
 import { communicationHub } from "./network/communication-hub.ts";
-
+import { LocalLoopbackInterface } from "./network/communication-interfaces/local-loopback-interface.ts";
 
 /**
  * Runtime init (sets ENV, storage, endpoint, ...)
@@ -22,10 +22,11 @@ export async function init() {
 
 	// register DatexStorage as pointer source
 	registerStorageAsPointerSource();
-	// default storage config:
 
-
+	// bind communication hub handlers to runtime
 	communicationHub.handler.setDatexInHandler(Runtime.datexIn.bind(Runtime))
+	Runtime.setDatexOutHandler(communicationHub.handler.datexOut.bind(communicationHub.handler))
+	await communicationHub.addInterface(new LocalLoopbackInterface())
 
 	// @ts-ignore NO_INIT
 	if (!globalThis.NO_INIT) {
@@ -107,8 +108,8 @@ export async function init() {
 	await Runtime.precompile();
 
 	// set Runtime ENV (not persistent if globalThis.NO_INIT)
-	Runtime.ENV = globalThis.NO_INIT ? getDefaultEnv() : await Storage.loadOrCreate("Datex.Runtime.ENV", getDefaultEnv);
-	Runtime.ENV[DX_BOUND_LOCAL_SLOT] = "env"
+	Runtime.ENV = (globalThis as any).NO_INIT ? getDefaultEnv() : await Storage.loadOrCreate("Datex.Runtime.ENV", getDefaultEnv);
+	(Runtime.ENV as any)[DX_BOUND_LOCAL_SLOT] = "env"
 
 	// workaround, should never happen
 	if (!Runtime.ENV) {
@@ -132,8 +133,8 @@ export async function init() {
 
 	function getDefaultEnv() {
 		return {
-			LANG: globalThis.localStorage?.lang ?? globalThis?.navigator?.language?.split("-")[0]?.split("_")[0] ?? 'en',
-			DATEX_VERSION: null
+			LANG: globalThis.localStorage?.lang as string ?? globalThis?.navigator?.language?.split("-")[0]?.split("_")[0] ?? 'en',
+			DATEX_VERSION: ""
 		}
 	}
 
@@ -142,7 +143,7 @@ export async function init() {
 	Runtime.persistent_memory = (await Storage.loadOrCreate("Datex.Runtime.MEMORY", ()=>new Map())).setAutoDefault(Object);
 
 
-	if (!globalThis.NO_INIT) {
+	if (!(globalThis as any).NO_INIT) {
 		Runtime.init();
 
 		// @ts-ignore

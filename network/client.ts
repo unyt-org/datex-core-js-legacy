@@ -690,7 +690,7 @@ export class InterfaceManager {
     // datex out is now redirected to this interface
     public static enable(){
         if (this.enabled) return;
-        Runtime.setDatexOut(InterfaceManager.send);
+        // Runtime.setDatexOut(InterfaceManager.send);
         this.enabled = true;
     }
 

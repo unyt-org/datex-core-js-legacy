@@ -339,7 +339,7 @@ export class Endpoint extends Target {
 		title += `${format(Runtime.endpoint)}${ESCAPE_SEQUENCES.RESET} -> ${format(resolvedEndpoint)}${ESCAPE_SEQUENCES.RESET}\n\n`
 		let pre = ''
 		let logs = ''
-		const rtt = trace.at(-1).timestamp.getTime() - trace.at(0).timestamp.getTime();
+		const rtt = trace.at(-1)!.timestamp.getTime() - trace.at(0)!.timestamp.getTime();
 
 		pre += `-----------------------------\n`
 		pre += `${ESCAPE_SEQUENCES.BOLD}Round-Trip Time:       ${ESCAPE_SEQUENCES.RESET}${rtt}ms\n`
