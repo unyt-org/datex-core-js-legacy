@@ -135,6 +135,11 @@ const isArrowFunction = (fnSrc:string) => {
 	return !!fnSrc.match(/^(async\s+)?\([^)]*\)\s*=>/)
 }
 
+const isNativeFunction = (fnSrc:string) => {
+    return !!fnSrc.match(/\{\s*\[native code\]\s*\}$/)
+}
+
+
 function resolveLazyDependencies(deps:Record<string,unknown>, resolve?: ()=>void) {
     let resolved = false;
     for (const [key, value] of Object.entries(deps)) {
@@ -199,6 +204,10 @@ export function createFunctionWithDependencyInjections(source: string, dependenc
     const renamedVars = Object.keys(dependencies).filter(d => d!=='this').map(k=>'_'+k);
     const varMapping = renamedVars.map(k=>`const ${k.slice(1)} = ${allowValueMutations ? 'createStaticObject' : ''}(${k});`).join("\n");
     const isArrow = isArrowFunction(source);
+
+    if (isNativeFunction(source)) {
+        throw new Error("Cannot create transferable function from native function: " + source);
+    }
 
     const createStaticFn = `function createStaticObject(val) {
         if (val && typeof val == "object" && !globalThis.Datex?.Ref.isRef(val)) {
