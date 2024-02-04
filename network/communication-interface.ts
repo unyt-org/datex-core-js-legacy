@@ -33,6 +33,37 @@ function getIdentifier(properties?: InterfaceProperties) {
 	return `${properties.type}${properties.name? ` (${properties.name})` : ''}`
 }
 
+class EndpointConnectEvent extends Event {
+	constructor(public endpoint: Endpoint) {
+		super('connect');
+	}
+}
+class EndpointDisconnectEvent extends Event {
+	constructor(public endpoint: Endpoint) {
+		super('disconnect')
+	}
+}
+
+interface CustomEventMap {
+    "connect": EndpointConnectEvent
+    "disconnect": EndpointDisconnectEvent
+}
+
+/**
+ * A connected communication interface socket that is registered in the communication hub
+ * and can be used to send and receive messages
+ */
+export type ConnectedCommunicationInterfaceSocket = CommunicationInterfaceSocket & {
+	connected: true,
+	endpoint: Endpoint,
+	interfaceProperties: InterfaceProperties
+}
+
+
+type ReadonlySet<T> = Set<T> & {add: never, delete: never, clear: never}
+
+
+
 export abstract class CommunicationInterfaceSocket extends EventTarget {
 	/**
 	 * Endpoint is only set once. If the endpoint changes, a new socket is created
@@ -42,6 +73,7 @@ export abstract class CommunicationInterfaceSocket extends EventTarget {
 	#destroyed = false;
 	#opened = false;
 
+	clone?: CommunicationInterfaceSocket
 
 	static defaultLogger = new Logger("CommunicationInterfaceSocket")
 	public logger = CommunicationInterfaceSocket.defaultLogger;
@@ -62,6 +94,7 @@ export abstract class CommunicationInterfaceSocket extends EventTarget {
 		return this.#connected
 	}
 	set connected(connected) {
+		if (connected === this.#connected) return; // no change
 		if (this.#destroyed) throw new Error("Cannot change connected state of destroyed socket.")
 		this.#connected = connected
 		this.#updateRegistration();
@@ -92,12 +125,12 @@ export abstract class CommunicationInterfaceSocket extends EventTarget {
 			this.#opened = true;
 		}
 
-
 		if (!this.#endpoint || this.#destroyed) return;
 
 		if (this.#connected) {
 			if (!this.isRegistered) {
 				this.#connectTimestamp = Date.now()
+				this.dispatchEvent(new EndpointConnectEvent(this.#endpoint))
 				communicationHub.handler.registerSocket(this as ConnectedCommunicationInterfaceSocket)
 			}
 		}
@@ -108,8 +141,25 @@ export abstract class CommunicationInterfaceSocket extends EventTarget {
 		}
 	}
 
+	public get canSend() {
+		return this.interfaceProperties?.direction !== InterfaceDirection.IN
+	}
+	public get canReceive() {
+		return this.interfaceProperties?.direction !== InterfaceDirection.OUT
+	}
+
+	public sendHello(dxb: ArrayBuffer) {
+		if (!Runtime.endpoint || Runtime.endpoint == LOCAL_ENDPOINT) return;
+		this.sendBlock(dxb).catch(console.error)
+	}
+
+	public sendGoodbye(dxb: ArrayBuffer) {
+		if (!Runtime.endpoint || Runtime.endpoint == LOCAL_ENDPOINT) return;
+		this.sendBlock(dxb).catch(console.error)
+	}
+
 	public async sendBlock(dxb: ArrayBuffer) {
-		if (this.interfaceProperties?.direction === InterfaceDirection.IN) throw new Error("Cannot send from an IN interface socket");
+		if (!this.canSend) throw new Error("Cannot send from an IN interface socket");
 		if (this.#destroyed) throw new Error("Cannot send from destroyed socket.")
 		if (!this.connected) throw new Error("Cannot send from disconnected socket");
 
@@ -122,10 +172,10 @@ export abstract class CommunicationInterfaceSocket extends EventTarget {
 	}
 
 	protected async receive(dxb: ArrayBuffer) {
-		console.log("receive",dxb)
-		if (this.interfaceProperties?.direction === InterfaceDirection.OUT) throw new Error("Cannot receive on an OUT interface socket");
+		if (!this.canReceive) throw new Error("Cannot receive on an OUT interface socket");
 		if (this.#destroyed) throw new Error("Cannot receive on destroyed socket");
 		if (!this.connected) throw new Error("Cannot receive on disconnected socket");
+		console.log("RECEIVE on socket " + this.endpoint)
 
 		let header: dxb_header;
 		try {
@@ -138,13 +188,28 @@ export abstract class CommunicationInterfaceSocket extends EventTarget {
 			console.error(e);
 			return;
 		}
+		console.log("RECEIVED from " + header.sender)
+
+		// a cloned socket was already created in the meantime, handle header in clone
+		if (this.clone) {
+			console.log("using clone for ", header);
+			this.clone.handleReceiveHeader(header)
+		}
+		// handle header in this socket
+		else this.handleReceiveHeader(header)
+	}
+
+	protected handleReceiveHeader(header: dxb_header) {
+		if (this.#destroyed) throw new Error("Cannot receive on destroyed socket");
+		if (!this.connected) throw new Error("Cannot receive on disconnected socket");
 
 		// listen for GOODBYE messages
 		if (this.endpoint) {
 			if (header.type == ProtocolDataType.GOODBYE && header.sender === this.endpoint) {
+				console.log("RECEIVE goodbye from " + this.endpoint)
 				this.connected = false
 				this.#destroyed = true
-				this.dispatchEvent(new CustomEvent('endpoint-disconnect'))
+				this.dispatchEvent(new EndpointDisconnectEvent(this.endpoint))
 			}
 			// message from another endpoint, record as indirect socket connection
 			else if (header.sender !== this.endpoint && !communicationHub.handler.hasSocket(this as ConnectedCommunicationInterfaceSocket, header.sender)) {
@@ -156,6 +221,7 @@ export abstract class CommunicationInterfaceSocket extends EventTarget {
 		}
 		// detect new endpoint
 		else if (header.sender) {
+			console.log("new endpoint detected " + header.sender)
 			this.endpoint = header.sender
 		}
 	}
@@ -174,26 +240,18 @@ export abstract class CommunicationInterfaceSocket extends EventTarget {
 	toString() {
 		return getIdentifier(this.interfaceProperties)
 	}
+
+
+	declare addEventListener: <K extends keyof CustomEventMap>(type: K, listener: (ev: CustomEventMap[K]) => void) => void;
+    declare removeEventListener: <K extends keyof CustomEventMap>(type: K, listener: (ev: CustomEventMap[K]) => void) => void;
+	declare dispatchEvent: <K extends keyof CustomEventMap>(ev: CustomEventMap[K]) => boolean;
 }
-
-/**
- * A connected communication interface socket that is registered in the communication hub
- * and can be used to send and receive messages
- */
-export type ConnectedCommunicationInterfaceSocket = CommunicationInterfaceSocket & {
-	connected: true,
-	endpoint: Endpoint,
-	interfaceProperties: InterfaceProperties
-}
-
-
-type ReadonlySet<T> = Set<T> & {add: never, delete: never, clear: never}
 
 
 /**
  * Base class for all DATEX communication interfaces
  */
-export abstract class CommunicationInterface<Socket extends CommunicationInterfaceSocket = CommunicationInterfaceSocket> {
+export abstract class CommunicationInterface<Socket extends CommunicationInterfaceSocket = CommunicationInterfaceSocket> extends EventTarget {
 
 	protected logger = new Logger(this.constructor.name)
 
@@ -210,6 +268,7 @@ export abstract class CommunicationInterface<Socket extends CommunicationInterfa
 	 * @private
 	 */
 	async init(secret: symbol) {
+
 		if (secret !== COM_HUB_SECRET) throw new Error("Directly calling CommunicationInterface.init() is not allowed")
 		if (Runtime.endpoint == LOCAL_ENDPOINT) throw new Error("Cannot use communication interface with local endpoint")
 		await this.#reconnect()
@@ -226,6 +285,23 @@ export abstract class CommunicationInterface<Socket extends CommunicationInterfa
 
 	getSockets(): ReadonlySet<Socket> {
 		return this.#sockets as ReadonlySet<Socket>
+	}
+
+
+	#connectHandler: ((endpoint: EndpointConnectEvent) => void)|null|undefined
+
+	/**
+	 * Event handler that is called when a new endpoint is connected to a socket on this interface
+	 */
+	set onConnect(handler: ((endpoint: EndpointConnectEvent) => void)|null|undefined) {
+		if (handler) {
+			this.#connectHandler = handler
+			this.addEventListener("connect", handler)
+		}
+		else {
+			if (this.#connectHandler) this.removeEventListener("connect", this.#connectHandler)
+			this.#connectHandler = handler
+		}
 	}
 
 	async #reconnect() {
@@ -247,29 +323,31 @@ export abstract class CommunicationInterface<Socket extends CommunicationInterfa
 	/**
 	 * Create a new socket for this interface
 	 */
-	protected addSocket(socket: Socket) {
-		socket.interfaceProperties = this.properties
-		socket.logger = this.logger;
-		socket.connected = true; // adds sockets to communication hub
-		socket.addEventListener('endpoint-disconnect', () => {
+	protected async addSocket(socket: Socket) {
+		if (this.#sockets.has(socket)) throw new Error("Socket already part of interface sockets.")
+
+		socket.addEventListener('disconnect', e => {
+			this.dispatchEvent(new EndpointDisconnectEvent(e.endpoint))
 			// remove old socket
 			this.removeSocket(socket)
 			// clone and add new socket
 			const newSocket = this.cloneSocket(socket);
+			socket.clone = newSocket;
 			this.addSocket(newSocket);
 		})
+		socket.addEventListener('connect', e => {
+			this.dispatchEvent(new EndpointConnectEvent(e.endpoint))
+		})
+
+		socket.interfaceProperties = this.properties
+		socket.logger = this.logger;
+		socket.connected = true; // adds sockets to communication hub
 		this.#sockets.add(socket);
 		// send HELLO message
-		if (this.properties.direction !== InterfaceDirection.OUT)
-			this.sendHelloViaSocket(socket);
-	}
-
-	protected async sendHelloViaSocket(socket: Socket) {
-		// TODO: sending keys is only workaround
-		const keys = Crypto.getOwnPublicKeysExported();
-		const message = await Compiler.compile('?', [keys], {type:ProtocolDataType.HELLO, sign:false, flood:true, __routing_ttl:10}) as ArrayBuffer;
-        this.logger.debug("saying hello via " + socket)
-		await socket.sendBlock(message);
+		if (socket.canSend) {
+			const helloMessage = await communicationHub.handler.compileHelloMessage()
+			if (helloMessage) socket.sendHello(helloMessage)
+		}
 	}
 
 	/**
@@ -283,6 +361,7 @@ export abstract class CommunicationInterface<Socket extends CommunicationInterfa
 	 * Remove a socket from this interface
 	 */
 	protected removeSocket(socket: Socket) {
+		if (!this.#sockets.has(socket)) throw new Error("Cannot remove socket, not part of interface sockets.")
 		this.#sockets.delete(socket)
 		socket.connected = false; // removes socket from communication hub
 	}
@@ -299,4 +378,8 @@ export abstract class CommunicationInterface<Socket extends CommunicationInterfa
 	toString() {
 		return getIdentifier(this.properties)
 	}
+
+	declare addEventListener: <K extends keyof CustomEventMap>(type: K, listener: (ev: CustomEventMap[K]) => void) => void;
+    declare removeEventListener: <K extends keyof CustomEventMap>(type: K, listener: (ev: CustomEventMap[K]) => void) => void;
+	declare dispatchEvent: <K extends keyof CustomEventMap>(ev: CustomEventMap[K]) => boolean;
 }

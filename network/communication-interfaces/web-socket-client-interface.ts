@@ -48,6 +48,9 @@ export class WebSocketClientInterface extends CommunicationInterface<WebSocketCl
 
 		// normalize origin
 		if (typeof origin === "string") {
+			if (!origin.match(/^\w+?:\/\//)) {
+				origin = 'wss://' + origin
+			}
 			origin = new URL(origin)
 		}
 		if (origin.protocol === "https:") origin.protocol = "wss:"

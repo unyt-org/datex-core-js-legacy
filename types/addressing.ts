@@ -14,6 +14,7 @@ import { ESCAPE_SEQUENCES } from "../utils/logger.ts";
 import { deleteCookie, getCookie } from "../utils/cookies.ts";
 import { Crypto } from "../runtime/crypto.ts";
 import { CommunicationInterfaceSocket } from "../network/communication-interface.ts";
+import { communicationHub } from "../network/communication-hub.ts";
 
 type target_prefix_person = "@";
 type target_prefix_id = "@@";
@@ -391,8 +392,12 @@ export class Endpoint extends Target {
 		this.interface_channel_info = info
 	}
 
-	public getInterfaceChannelInfo(channel:string):any {
-		return this.interface_channel_info[channel]
+	public getInterfaceChannelInfo(channel?:string):any {
+		return channel ?
+			this.interface_channel_info[channel] :
+			this.interface_channel_info ? 
+				Object.values(this.interface_channel_info)[0] 
+				: undefined;
 	}
 
 
@@ -434,6 +439,10 @@ export class Endpoint extends Target {
 	public setOnline(online = true) {
 		if (this.#current_online === online) return; // no change
 
+		if (!online) {
+			communicationHub.handler.handleOfflineEndpoint(this);
+		}
+
 		this.#online = new Promise(resolve => resolve(online));
 		this.#current_online = online;
 		if (this.#onlinePointer) this.#onlinePointer.val = online;
@@ -444,7 +453,17 @@ export class Endpoint extends Target {
 
 	// returns (cached) online status
 	public async isOnline(): Promise<boolean> {
-		if (Runtime.endpoint.equals(this) || Runtime.main_node?.equals(this) || this as Endpoint === LOCAL_ENDPOINT) return true; // is own endpoint or main node
+		if (
+			// is own endpoint or main node
+			Runtime.endpoint.equals(this) || 
+			Runtime.main_node?.equals(this) || 
+			this as Endpoint === LOCAL_ENDPOINT ||
+			// has direct socket connection
+			communicationHub.handler.hasDirectSocket(this)
+		) {
+			this.#current_online = true;
+			return true;
+		}
 		
 		if (this.#online != undefined) return this.#online;
 		
@@ -473,6 +492,7 @@ export class Endpoint extends Target {
 		}
 		// could not reach endpoint
 		catch (e) {
+			communicationHub.handler.handleOfflineEndpoint(this);
 			resolve_online!(this.#current_online = false)
 		}
 

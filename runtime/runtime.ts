@@ -386,11 +386,12 @@ export class Runtime {
     }
 
     static set endpoint(endpoint: Endpoint){
+        const _isInitialSetWorkaround = this.#endpoint==undefined;
         if (this.#endpoint === endpoint) return; // already set
         if (endpoint != LOCAL_ENDPOINT) logger.debug("using endpoint: " + endpoint);
         this.#endpoint = endpoint;
 
-        Observers.call(this,"endpoint",this.#endpoint);
+        if (!_isInitialSetWorkaround) Observers.call(this,"endpoint",this.#endpoint);
     }
 
     static _setEndpoint(endpoint: Endpoint) {
@@ -1156,14 +1157,14 @@ export class Runtime {
      * @param exclude endpoint that should be excluded from the broadcast
      * @param ttl override TTL
      */
-    static floodDatex(datex:ArrayBuffer, exclude:Endpoint, ttl:number) {
+    static floodDatex(datex:ArrayBuffer, exclude:Endpoint, ttl:number, socket?:CommunicationInterfaceSocket) {
         datex = Compiler.setHeaderTTL(datex, ttl);
 
-        let [dxb_header] = <dxb_header[]> this.parseHeaderSynchronousPart(datex);
+        const [dxb_header] = <dxb_header[]> this.parseHeaderSynchronousPart(datex);
         
         logger.debug("flood " + (ProtocolDataType[dxb_header.type]) + " " + dxb_header.sid + ", ttl="+ (dxb_header.routing?.ttl));
 
-        this.datexOut(datex, null, dxb_header.sid, false, false, null, true, exclude);
+        this.datexOut(datex, null, dxb_header.sid, false, false, null, true, exclude, undefined, socket);
     }
 
     public static async precompile() {
@@ -1907,7 +1908,7 @@ export class Runtime {
 
             // + flood, exclude last_endpoint - don't send back in flooding tree
             if (header.routing && header.routing.flood) {
-                this.floodDatex(dxb, last_endpoint??header.sender, header.routing.ttl-1); // exclude the node this was sent from, assume it is header.sender if no last_endpoint was provided
+                this.floodDatex(dxb, last_endpoint??header.sender, header.routing.ttl-1, socket); // exclude the node this was sent from, assume it is header.sender if no last_endpoint was provided
             }
 
             // callback for header info

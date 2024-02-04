@@ -11,17 +11,19 @@
 
 
 import { Logger, console_theme, ESCAPE_SEQUENCES } from "../utils/logger.ts";
-import { ComInterface, CommonInterface } from "./client.ts";
 import { Runtime } from "../runtime/runtime.ts";
 import { Supranet } from "./supranet.ts";
 import { Endpoint } from "../types/addressing.ts";
+import { CommunicationInterfaceSocket } from "./communication-interface.ts";
+import { communicationHub } from "./communication-hub.ts";
 
 const logger = new Logger("unyt");
 
 Supranet.onConnect = ()=>{
+    console.log("connec")
     Unyt.endpoint_info.endpoint = Runtime.endpoint,
-    Unyt.endpoint_info.node = Runtime.main_node,
-    Unyt.endpoint_info.interface = CommonInterface.default_interface;
+    Unyt.endpoint_info.node = communicationHub.defaultSocket?.endpoint,
+    Unyt.endpoint_info.interface = communicationHub.defaultSocket;
     Unyt.endpoint_info.datex_version = Runtime.VERSION;
 
     Unyt.logEndpointInfo(); 
@@ -43,7 +45,7 @@ export interface EndpointInfo {
     app?: AppInfo
     endpoint?: Endpoint
     node?: Endpoint
-    interface?: ComInterface
+    interface?: CommunicationInterfaceSocket
     uix_version?: string
     datex_version?: string
 }
@@ -126,7 +128,7 @@ export class Unyt {
         content += `${ESCAPE_SEQUENCES.UNYT_GREY}© ${new Date().getFullYear().toString()} unyt.org`
 
         logger.plain `#image(70,'unyt')${console_theme == "dark" ? this.logo_dark : this.logo_light}
-Connected to the Supranet via ${info.node} ${info.interface ? `(${info.interface.type}${info.interface.host?` to ${ESCAPE_SEQUENCES.UNYT_GREY}${info.interface.host}`:''}${ESCAPE_SEQUENCES.WHITE})` : ''} 
+Connected to the Supranet via ${info.node} ${info.interface ? `(${info.interface.interfaceProperties?.type}${info.interface.interfaceProperties?.name?` to ${ESCAPE_SEQUENCES.UNYT_GREY}${info.interface.interfaceProperties?.name}`:''}${ESCAPE_SEQUENCES.WHITE})` : ''} 
 
 ${content}
 `
@@ -142,7 +144,9 @@ ${content}
                 return `${alias} (${Runtime.valueToDatexStringExperimental(endpoint,false,true)}${ESCAPE_SEQUENCES.COLOR_DEFAULT})`
             }
         }
-        catch {}
+        catch {
+            // ignore
+        }
         // @@2134565, @endpoint
         return Runtime.valueToDatexStringExperimental(endpoint,false,true);
     }

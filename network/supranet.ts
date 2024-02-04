@@ -1,34 +1,30 @@
 
 /**
  ╔══════════════════════════════════════════════════════════════════════════════════════╗
- ║  Datex Cloud - Entrypoint                                                            ║
+ ║  unyt.org Supranet connection handler                                                ║
  ╠══════════════════════════════════════════════════════════════════════════════════════╣
- ║  Visit https://docs.unyt.org/datex for more information                              ║
+ ║  Visit https://docs.unyt.org/manual/datex/supranet-networking for more information   ║
  ╠═════════════════════════════════════════╦════════════════════════════════════════════╣
- ║  © 2021 unyt.org                        ║                                            ║
+ ║  © 2024 unyt.org                        ║                                            ║
  ╚═════════════════════════════════════════╩════════════════════════════════════════════╝
  */
 
-import InterfaceManager, { CommonInterface } from "./client.ts"
-import { Compiler } from "../compiler/compiler.ts";
+import { CommonInterface } from "./client.ts"
 import { Runtime } from "../runtime/runtime.ts";
 import { Crypto } from "../runtime/crypto.ts";
 
 import {client_type} from "../utils/constants.ts";
-import { Endpoint, filter_target_name_id, Target } from "../types/addressing.ts";
-
-
+import { Endpoint } from "../types/addressing.ts";
 import { Logger } from "../utils/logger.ts";
-import { ProtocolDataType } from "../compiler/protocol_types.ts";
-import { buffer2hex } from "../utils/utils.ts";
 import { endpoint_config } from "../runtime/endpoint_config.ts";
 import { endpoint_name, UnresolvedEndpointProperty } from "../datex_all.ts";
 import { Datex } from "../mod.ts";
 import { Storage } from "../runtime/storage.ts";
-import { sendDatexViaHTTPChannel } from "./datex-http-channel.ts";
+import { WebSocketClientInterface } from "./communication-interfaces/web-socket-client-interface.ts";
+import { communicationHub } from "./communication-hub.ts";
+
 const logger = new Logger("DATEX Supranet");
 
-// entry point to connect to the datex network
 export class Supranet {
 
     static available_channel_types:string[] = []; // all available interface channel types, sorted by preference
@@ -39,22 +35,6 @@ export class Supranet {
     static #initialized = false;
     static get initialized(){return this.#initialized}
 
-    // add listeners for interface changes
-    private static listeners_set = false;
-    private static setListeners(){
-        if (this.listeners_set) return;
-        this.listeners_set = true;
-        // say hello when (re)connected
-        InterfaceManager.onInterfaceConnected((i)=>{
-            logger.debug("interface connected: "+ i.endpoint + " - " + i.type);
-            if (i.type != "local") this.sayHello(i.endpoint)
-        })
-        InterfaceManager.onInterfaceDisconnected((i)=>{
-            logger.debug("interface disconnected: "+ i.endpoint + " - " + i.type);
-            // TODO: validate this
-            if (!InterfaceManager.active_interfaces.size) this.#connected = false;
-        })
-    }
 
     // connect without cache and random endpoint id
     public static connectAnonymous(){
@@ -66,7 +46,7 @@ export class Supranet {
         return this.connect(endpoint, false);
     }
 
-    // connect to cloud, say hello with public key
+    // connect to Supranet
     // if local_cache=false, a new endpoint is created and not saved in the cache, even if an endpoint is stored in the cache
     // TODO problem: using same keys as stored endpoint!
     public static async connect(endpoint?:Endpoint|UnresolvedEndpointProperty, local_cache?: boolean, sign_keys?:[ArrayBuffer|CryptoKey,ArrayBuffer|CryptoKey], enc_keys?:[ArrayBuffer|CryptoKey,ArrayBuffer|CryptoKey], via_node?:Endpoint) {
@@ -91,13 +71,11 @@ export class Supranet {
         if (this.#connected && endpoint === Runtime.endpoint) {
             const switched = shouldSwitchInstance ? await this.handleSwitchToInstance() : false;
             logger.success("Connected to the supranet as " + endpoint)
-            if (!switched) this.sayHelloToAllInterfaces();
             return true;
         }
 
         if (alreadyConnected) {
             this.#connected = true;
-            this.sayHelloToAllInterfaces();
             if (shouldSwitchInstance) await this.handleSwitchToInstance();
             return true;
         }
@@ -109,11 +87,6 @@ export class Supranet {
 
     }
 
-    private static sayHelloToAllInterfaces() {
-        for (const i of InterfaceManager.active_interfaces) {
-            if (i.type != "local") this.sayHello(i.endpoint)
-        }
-    }
 
     private static shouldSwitchInstance(endpoint: Endpoint) {
         // return false;
@@ -160,14 +133,12 @@ export class Supranet {
                 Runtime.init(instance);
                 endpoint_config.endpoint = instance;
                 endpoint_config.save();
-                this.sayHelloToAllInterfaces();
                 logger.success("Switched to endpoint instance " + instance)
                 this.handleConnect();
                 return true;
             }
             catch {
                 logger.error("Could not determine endpoint instance (request error)");
-                this.sayHelloToAllInterfaces();
                 this.handleConnect();
             }
         }
@@ -177,13 +148,8 @@ export class Supranet {
 
     private static async _connect(via_node?:Endpoint, handleOnConnect = true) {
         // find node for available channel
-        const [node, channel_type] = await this.getNode(via_node)
-
-        // TODO: clean disconnect with GOODBYE? Never disconnect interfaces?
-        // await InterfaceManager.disconnect() // first disconnect completely
-        const connected = await InterfaceManager.connect(channel_type, node)
-
-        Runtime.setMainNode(node);
+        const [node, channel_type] = this.getNode(via_node)
+        const connected = await this.connectToEndpoint(node, channel_type)
 
         if (!connected) logger.error("connection failed")
         else if (handleOnConnect) await this.handleConnect();
@@ -200,16 +166,54 @@ export class Supranet {
 
     static getNode(use_node?:Endpoint) {
         // channel types?
-        // @ts-ignore
         if (globalThis.WebSocketStream || client_type!="browser") this.available_channel_types.push("websocketstream")
         this.available_channel_types.push("websocket");
 
         // find node for available channel
-        const [node, channel_type] = endpoint_config.getNodeWithChannelType(this.available_channel_types, use_node);
+        const [node, channel_type] = endpoint_config.getNodeWithInterfaceType(this.available_channel_types, use_node);
         if (!node) throw ("Cannot find a node that support any channel type of: " + this.available_channel_types + (use_node ? " via " + use_node : ''));
         if (!channel_type) throw("No channel type for node: " + node);
-        return <[Endpoint,string]> [node, channel_type]
+        return [node, channel_type] as const;
     }
+
+
+
+	/**
+	 * Connects to a endpoint via an available interface if a known
+	 * interface exists for the endpoint
+	 * @param endpoint endpoint to connect to
+	 * @param interfaceType optional interface type to connect with 
+	 * @returns true if a connection could be established
+	 */
+	public static async connectToEndpoint(endpoint: Endpoint, interfaceType?: string, setAsDefault = true): Promise<boolean> {
+		
+        // check if interface is available
+        const info = endpoint.getInterfaceChannelInfo(interfaceType);
+        if (info) {
+            console.log("info",info)
+            // websocket
+            if (interfaceType == "websocket") {
+                if (!(info instanceof URL || typeof info === "string")) {
+                    logger.error("Invalid data for websocket interface, expected string or URL");
+                    return false;
+                }
+                const webSocketInterface = new WebSocketClientInterface(info instanceof URL ? info.origin : info)
+                await communicationHub.addInterface(webSocketInterface, setAsDefault);
+                return true;
+            }
+            // TODO: more interfaces
+            else {
+                logger.error("Interface type not supported: " + interfaceType);
+                return false;
+            }
+        }
+        else {
+            return false;
+        }
+
+	}
+
+
 
     private static handleConnect() {
         for (const listener of this.#connectListeners) listener();
@@ -218,7 +222,7 @@ export class Supranet {
 
     // @override
     public static onConnect = ()=>{
-        logger.success("Connected as **"+Runtime.endpoint+"** to the Supranet via **" +  CommonInterface.default_interface.endpoint + "** (" + CommonInterface.default_interface.type + ")" )
+        logger.success("Connected as **"+Runtime.endpoint+"** to the Supranet via **" + communicationHub.handler.defaultSocket?.endpoint + "** (" + communicationHub.handler.defaultSocket?.toString() + ")" )
     }
 
     static #connectListeners = new Set<()=>void>()
@@ -274,8 +278,6 @@ export class Supranet {
         return this._init(endpoint, local_cache, sign_keys, enc_keys, keys);
     }
 
-    static #interfaces_initialized = false
-
     private static async _init(endpoint:Endpoint, local_cache = !endpoint_config.temporary, sign_keys?:[ArrayBuffer|CryptoKey,ArrayBuffer|CryptoKey], enc_keys?:[ArrayBuffer|CryptoKey,ArrayBuffer|CryptoKey], keys?:Crypto.ExportedKeySet) {
        
         // load/create keys, even if endpoint was provided?
@@ -311,13 +313,6 @@ export class Supranet {
 
         // bind keys to initialized endpoint (already done for @@local in Crypto.loadOwnKeys)
         Crypto.saveOwnPublicKeysInEndpointKeyMap()
-
-        // setup interface manager
-        if (!this.#interfaces_initialized) {
-            this.#interfaces_initialized = true;
-            await InterfaceManager.init()
-            this.setListeners();    
-        }
 
         this.#initialized = true;
 
@@ -375,41 +370,6 @@ export class Supranet {
         }
 
         return keys;
-    }
-
-    // important network methods
-
-    public static sayHello(node:Endpoint = Runtime.main_node){
-        // TODO REPLACE, only temporary as placeholder to inform router about own public keys
-        const keys = Crypto.getOwnPublicKeysExported();
-        logger.debug("saying hello as " + Runtime.endpoint)
-        Runtime.datexOut(['?', [keys], {type:ProtocolDataType.HELLO, sign:false, flood:true, __routing_ttl:10}], undefined, undefined, false, false)
-        // send with plain endpoint id as sender
-        // if (Runtime.endpoint.id_endpoint !== Runtime.endpoint) Runtime.datexOut(['?', [keys], {type:ProtocolDataType.HELLO, sign:false, flood:true, force_id:true, __routing_ttl:1}], undefined, undefined, false, false)
-    }
-
-    // ping all endpoints with same base (@endpoint/*) 
-    public static async findOnlineEndpoints(endpoint:Endpoint){
-        // TODO
-        //await this.pingEndpoint(Target.get(<Endpoint_name>endpoint.toString()))
-    }
-
-
-    // get DATEX roundtime/ping for endpoint
-    public static async pingEndpoint(endpoint_or_string:string|Endpoint, sign=false, encrypt=false) {
-        let endpoint = endpoint_or_string instanceof Endpoint ? endpoint_or_string : Endpoint.get(endpoint_or_string);
-        const start_time = new Date().getTime();
-        const half_time = (await Runtime.datexOut(['<time>()', undefined, {sign, encrypt}], endpoint)).getTime()
-        const roundtrip_time = new Date().getTime();
-        logger.success(`
-
-    Endpoint:       ${endpoint}
-    Roundtrip time: ${roundtrip_time-start_time } ms
-        `);
-        /*
-            ---> ${half_time-start_time} ms
-            <--- ${roundtrip_time-half_time} ms
-        */
     }
     
 }

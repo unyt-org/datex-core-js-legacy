@@ -1,5 +1,5 @@
 import { dxb_header } from "../utils/global_types.ts";
-import { Endpoint } from "../types/addressing.ts";
+import { Endpoint, LOCAL_ENDPOINT } from "../types/addressing.ts";
 import { CommunicationInterface, CommunicationInterfaceSocket, ConnectedCommunicationInterfaceSocket } from "./communication-interface.ts";
 import { Disjunction } from "../types/logic.ts";
 import "../utils/auto_map.ts";
@@ -8,6 +8,9 @@ import { ESCAPE_SEQUENCES, Logger } from "../utils/logger.ts";
 import { Datex } from "../mod.ts";
 import { NetworkError } from "../types/errors.ts";
 import { Compiler } from "../compiler/compiler.ts";
+import { Runtime } from "../runtime/runtime.ts";
+import { ProtocolDataType } from "../compiler/protocol_types.ts";
+import { Crypto } from "../runtime/crypto.ts";
 
 export type DatexInData = {
 	dxb: ArrayBuffer|ReadableStreamDefaultReader<Uint8Array>,
@@ -37,6 +40,10 @@ export class CommunicationHub {
 	static get() {
 		if (!this.#instance) this.#instance = new CommunicationHub()
 		return this.#instance;
+	}
+
+	get defaultSocket() {
+		return this.handler.defaultSocket;
 	}
 
 	public addInterface(comInterface: CommunicationInterface, setAsDefault = false) {
@@ -77,6 +84,12 @@ export const COM_HUB_SECRET = Symbol("COM_HUB_SECRET")
  */
 export class CommunicationHubHandler {
 
+	/**
+	 * Interval for checking online status for indirect/direct socket endpoints
+	 */
+	readonly CLEANUP_INTERVAL = 10 * 60 * 1000; // 10min
+
+
 	#logger = new Logger("CommunicationHub")
 	
 	#interfaces = new Set<CommunicationInterface>()
@@ -87,7 +100,16 @@ export class CommunicationHubHandler {
 	// maps main endpoints to a list of instance endpoints that are currently connected via sockets
 	#activeEndpointInstances = new Map<Endpoint, Set<Endpoint>>().setAutoDefault(Set).enableAutoRemove()
 
+	#defaultInterface?: CommunicationInterface
 	#defaultSocket?: ConnectedCommunicationInterfaceSocket
+
+	set defaultSocket(socket: ConnectedCommunicationInterfaceSocket|undefined) {
+		this.#defaultSocket = socket;
+		if (this.#defaultSocket) Runtime.setMainNode(this.#defaultSocket.endpoint);
+	}
+	get defaultSocket() {
+		return this.#defaultSocket;
+	}
 
 	#datexInHandler?: DatexInHandler
 
@@ -97,12 +119,16 @@ export class CommunicationHubHandler {
 		[InterfaceDirection.IN_OUT]: "◀─▶"
 	}
 
+	constructor() {
+		this.startCleanupInterval()
+	}
 
 	/** Public facing methods: **/
+
 	public async addInterface(comInterface: CommunicationInterface, setAsDefault = false) {
 		this.#interfaces.add(comInterface)
 		await comInterface.init(COM_HUB_SECRET);
-		if (setAsDefault) this.#defaultSocket = comInterface.getSockets().values().next().value
+		if (setAsDefault) this.setDefaultInterface(comInterface)
 	}
 
 	public async removeInterface(comInterface: CommunicationInterface) {
@@ -150,7 +176,7 @@ export class CommunicationHubHandler {
 			}
 		}
  
-	    string += "Default socket: " + (this.#defaultSocket ? this.#defaultSocket.toString() : "none") + "\n";
+	    string += "Default socket: " + (this.defaultSocket ? this.defaultSocket.toString() : "none") + "\n";
 
 
 		// print
@@ -167,7 +193,7 @@ export class CommunicationHubHandler {
 					) : 
 					ESCAPE_SEQUENCES.UNYT_RED
 				const connectedState = `${color}⬤${ESCAPE_SEQUENCES.RESET}`
-				string += `  ${connectedState} ${directionSymbol}${isDirect?'':' (indirect)'} ${endpoint??'unknown endpoint'}\n`
+				string += `  ${connectedState} ${directionSymbol}${isDirect?'':' (indirect)'}${isDirect&&this.defaultSocket==socket?' (default)':''} ${endpoint??'unknown endpoint'}\n`
 			}
 		}
 
@@ -180,7 +206,7 @@ export class CommunicationHubHandler {
 		let string = "";
 		string += `Available sockets for ${endpoint}:\n`
 
-		for (const socket of this.#endpointSockets.get(endpoint) ?? []) {
+		for (const socket of this.iterateEndpointSockets(endpoint, false, false)) {
 			string += "  - " + socket.toString() + "\n";
 		}
 
@@ -191,15 +217,25 @@ export class CommunicationHubHandler {
 	/** Internal methods: */
 
 	public registerSocket(socket: ConnectedCommunicationInterfaceSocket, endpoint: Endpoint|undefined = socket.endpoint) {
-		if (this.#endpointSockets.get(endpoint)?.has(socket)) return
+		if (this.#endpointSockets.get(endpoint)?.has(socket)) return;
 
 		if (!endpoint) throw new Error("Cannot register socket to communication hub without endpoint.")
 		if (!socket.connected || !socket.endpoint || !socket.interfaceProperties) throw new Error("Cannot register disconnected or uninitialized socket.")
 
-		this.#logger.debug("Added new" + (socket.endpoint==endpoint?'':' indirect') + " socket " + socket.toString() + " for endpoint " + endpoint.toString())
+		const isDirect = socket.endpoint==endpoint;
+
+		// set default socket
+		if (isDirect && socket.toString()==this.#defaultInterface?.toString() && socket.canSend) {
+			this.#logger.debug("Setting default socket " + socket.toString() + " (endpoint " + endpoint.toString()+")")
+			this.defaultSocket = socket;		
+		}
+
+
+		this.#logger.debug("Added new" + (isDirect?'':' indirect') + " socket " + socket.toString() + " for endpoint " + endpoint.toString())
 		this.#registeredSockets.getAuto(socket).add(endpoint);
 		this.#endpointSockets.getAuto(endpoint).add(socket);
-		this.#activeEndpointInstances.getAuto(endpoint.main).add(endpoint);
+		// add to instances map if not main endpoint
+		if (endpoint.main !== endpoint)	this.#activeEndpointInstances.getAuto(endpoint.main).add(endpoint);
 		this.sortSockets(endpoint)
 	}
 
@@ -209,10 +245,12 @@ export class CommunicationHubHandler {
 		if (!this.#endpointSockets.has(endpoint)) throw new Error("Cannot unregister socket, not registered for endpoint.")
 		if (!this.#registeredSockets.has(connectedSocket)) throw new Error("Cannot unregister socket, not registered.")
 
-		// remove default socket
-		if (connectedSocket === this.#defaultSocket) this.#defaultSocket = undefined;
-
 		const isDirect = connectedSocket.endpoint==endpoint;
+
+		// remove default socket
+		if (isDirect && connectedSocket === this.defaultSocket) {
+			this.defaultSocket = undefined
+		}
 
 		this.#logger.debug("Removed" + (isDirect?'':' indirect') + " socket " + connectedSocket.toString() + " for endpoint " + endpoint.toString())
 
@@ -240,6 +278,66 @@ export class CommunicationHubHandler {
 		this.#datexInHandler = handler
 	}
 
+
+	private startCleanupInterval() {
+		setInterval(() => {
+			for (const endpoint of this.#endpointSockets.keys()) {
+				endpoint.isOnline();
+			}
+		}, this.CLEANUP_INTERVAL)
+	}
+
+	/**
+	 * @private
+	 */
+	async init() {
+		let lastEndpointGooodbyeMessage = await this.compileGoodbyeMessage();
+		Runtime.onEndpointChanged(async (endpoint) => {
+			this.#logger.debug("Endpoint changed to " + endpoint.toString())
+
+			// send GOODBYE for previous endpoint
+			if (lastEndpointGooodbyeMessage) {
+				this.#logger.debug("Broadcasting GOODBYE for previous endpoint over all sockets");
+
+				// iterate direct outgoing sockets
+				for (const socket of this.iterateSockets()) {
+					console.log("send", socket, lastEndpointGooodbyeMessage)
+					socket.sendGoodbye(lastEndpointGooodbyeMessage)
+				}
+			}
+
+			await sleep(1000);
+
+			// iterate direct outgoing sockets
+			const helloMessage = await this.compileHelloMessage(1);
+			if (helloMessage) {
+				for (const socket of this.iterateSockets()) {
+					socket.sendHello(helloMessage)
+				}
+			}
+			
+			
+			lastEndpointGooodbyeMessage = await this.compileGoodbyeMessage();
+		})
+	}
+
+	public compileGoodbyeMessage() {
+		if (!Runtime.endpoint || Runtime.endpoint == LOCAL_ENDPOINT) return;
+		return Compiler.compile("", [], {type:ProtocolDataType.GOODBYE, sign:true, flood:true, __routing_ttl:1}) as Promise<ArrayBuffer>
+	}
+
+	public compileHelloMessage(ttl = 6) {
+		if (!Runtime.endpoint || Runtime.endpoint == LOCAL_ENDPOINT) return;
+		const keys = Crypto.getOwnPublicKeysExported();
+		return Compiler.compile('?', [keys], {type:ProtocolDataType.HELLO, sign:false, flood:true, __routing_ttl:ttl}) as Promise<ArrayBuffer>;
+	}
+	
+
+	private setDefaultInterface(defaultInterface: CommunicationInterface) {
+		this.#defaultInterface = defaultInterface
+		this.defaultSocket = defaultInterface.getSockets().values().next().value
+	}
+
 	/**
 	 * Returns true when the socket is registered.
 	 * Returns true when the endpoint is registered for the socket (if an endpoint is provided).
@@ -247,6 +345,45 @@ export class CommunicationHubHandler {
 	public hasSocket(socket: CommunicationInterfaceSocket, endpoint?: Endpoint) {
 		if (endpoint) return this.#registeredSockets.get(socket as ConnectedCommunicationInterfaceSocket)?.has(endpoint)
 		else return this.#registeredSockets.has(socket as ConnectedCommunicationInterfaceSocket)
+	}
+
+	public handleOfflineEndpoint(endpoint: Endpoint) {
+		for (const socket of this.iterateEndpointSockets(endpoint, false, false)) {
+			// direct connection endpoint offline, should not happen
+			if (socket.endpoint == endpoint) {
+				// this.#logger.error("Direct socket endpoint "+endpoint.toString()+" is not reachable, but socket is still connected.");
+				// (socket as CommunicationInterfaceSocket).connected = false;
+			}
+			// indirect endpoint offline, remove socket registration
+			else {
+				this.#logger.debug("Indirect socket endpoint "+endpoint.toString()+" is offline, removing socket registration.");
+				this.unregisterSocket(socket, endpoint);
+			}
+		}
+	}
+
+	/**
+	 * Returns true when the endpoint or a matching instance endpoint is directly registered for the socket.
+	 */
+	public hasDirectSocket(endpoint: Endpoint) {
+		// check if exact endpoint instance is registered
+		if (this._hasDirectSocket(endpoint)) return true;
+
+		// find socket that matches instance if main endpoint
+		if (endpoint.main === endpoint) {
+			const instances = [...this.#activeEndpointInstances.get(endpoint)??[]];
+			for (const instance of instances) {
+				if (this._hasDirectSocket(instance)) return true;
+			}
+		}
+
+		return false
+	}
+
+ 	private _hasDirectSocket(endpoint: Endpoint) {
+		// check if exact endpoint instance is registered as direct socket
+		return this.iterateEndpointSockets(endpoint, true, false)
+			.next().done === false;
 	}
 
 	/**
@@ -311,17 +448,32 @@ export class CommunicationHubHandler {
 			}
 		}
 
-		if (this.#defaultSocket !== excludeSocket)
-			return this.#defaultSocket;
+		if (this.defaultSocket !== excludeSocket)
+			return this.defaultSocket;
 	}
 
 	private findMatchingEndpointSocket(endpoint: Endpoint, excludeSocket?: CommunicationInterfaceSocket) {
-		for (const socket of this.#endpointSockets.get(endpoint) ?? []) {
+		for (const socket of this.iterateEndpointSockets(endpoint, false, true)) {
 			if (socket === excludeSocket) continue;
 			return socket;
 		}
 	}
 	
+
+	private *iterateEndpointSockets(endpoint: Endpoint, onlyDirect = true, onlyOutgoing = true) {
+		for (const socket of this.#endpointSockets.get(endpoint) ?? []) {
+			if (onlyDirect && socket.endpoint !== endpoint) continue;
+			if (onlyOutgoing && !socket.canSend) continue;
+			yield socket;
+		}
+	}
+
+	private *iterateSockets(onlyOutgoing = true) {
+		for (const socket of this.#registeredSockets.keys()) {
+			if (onlyOutgoing && !socket.canSend) continue;
+			yield socket;
+		}
+	}
 
 	/**
 	 * Method called to send a datex block to a receiver (or as a broadcast) 
@@ -333,13 +485,19 @@ export class CommunicationHubHandler {
 		if (data.receivers == Datex.BROADCAST) return this.datexBroadcastOut(data);
 
 		const receivers = data.receivers instanceof Endpoint ? [data.receivers] : [...data.receivers];
-		const outGroups = new Map(
-				// group receivers by socket
-				[...Map.groupBy(
+		const outGroups = receivers.length == 1 ? 
+		
+		// single endpoint shortcut
+		new Map([[this.getPreferredSocketForEndpoint(receivers[0]), new Disjunction(...receivers)]]) :
+		
+		// group for multiple endpoints
+		new Map(
+			// group receivers by socket
+			[...Map.groupBy(
 					// map receivers to sockets
 					receivers.map(r => ({endpoint: r, socket: this.getPreferredSocketForEndpoint(r)}),
-				), ({socket}) => socket)
-				.entries()
+				), ({socket}) => socket
+				).entries()
 			]
 			// map endpoint object arrays to Set<Endpoint>
 			.map(([k, v]) => [k, new Disjunction(...v.map(({endpoint}) => endpoint))] as const)
@@ -358,7 +516,7 @@ export class CommunicationHubHandler {
 		// throw error if message could not be sent to some receivers
 		if (outGroups.has(undefined)) {
 			const endpointsString = [...outGroups.get(undefined)!].map(e => e.toString()).join(", ")
-			throw new NetworkError("No socket for endpoints " + endpointsString);
+			throw new NetworkError("No socket for " + endpointsString);
 		} 
 
 		await Promise.all(promises);
@@ -372,7 +530,7 @@ export class CommunicationHubHandler {
 			if (reachedEndpoints.has(socket.endpoint)) continue;
 			reachedEndpoints.add(socket.endpoint);
 
-			socket.sendBlock(data.dxb);
+			socket.sendBlock(data.dxb).catch(console.error);
 		}
 	}
 

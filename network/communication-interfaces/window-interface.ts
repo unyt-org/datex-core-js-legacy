@@ -161,9 +161,9 @@ export class WindowInterface extends CommunicationInterface {
 	 * Opens a new window and registers a attached WindowInterface.
 	 * The WindowInterface is automatically removed when the window is closed.
 	 */
-	static createWindow(url: string | URL, target?: string, features?: string) {
+	static createWindow(url: string | URL, target?: string, features?: string, connectionTimeout?: number) {
 		const newWindow = window.open(url, target, features);
-		if (!newWindow) return null;
+		if (!newWindow) return Promise.resolve({window: null, endpoint: null});
 		const windowInterface = this.createChildInterface(newWindow, url)
 		
 		communicationHub.addInterface(windowInterface)
@@ -171,7 +171,20 @@ export class WindowInterface extends CommunicationInterface {
 			communicationHub.removeInterface(windowInterface)
 		}
 
-		return newWindow
+		return new Promise<{window:Window|null, endpoint: Endpoint|null}>((resolve) => {
+			windowInterface.addEventListener("connect", e => {
+				resolve({
+					window: newWindow,
+					endpoint: e.endpoint
+				})
+			})
+			if (connectionTimeout!=null && isFinite(connectionTimeout)) { 
+				setTimeout(() => {
+					newWindow.close();
+					resolve({window: newWindow, endpoint: null})
+				}, connectionTimeout);
+			}
+		})
 	}
 
 }

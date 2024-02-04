@@ -8,12 +8,18 @@ export class LocalLoopbackInterfaceSocket extends CommunicationInterfaceSocket {
 	close() {}
 
 	send(dxb: ArrayBuffer) {
-		console.log("local",dxb)
 		Runtime.datexIn({
 			dxb,
 			socket: this
 		})
 		return true;
+	}
+
+	override async sendHello(_dxb:ArrayBuffer) {
+		// ignore
+	}
+	override async sendGoodbye(_dxb:ArrayBuffer) {
+		// ignore
 	}
 }
 
@@ -36,6 +42,7 @@ export class LocalLoopbackInterface extends CommunicationInterface<LocalLoopback
 		this.createSocket(LOCAL_ENDPOINT);
 
 		Runtime.onEndpointChanged((endpoint) => {
+			if (endpoint === LOCAL_ENDPOINT) return;
 			// remove socket for previous endpoint
 			if (this.#currentSocket) this.removeSocket(this.#currentSocket)
 			// add new socket for endpoint

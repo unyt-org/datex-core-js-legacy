@@ -24,10 +24,12 @@ export async function init() {
 	registerStorageAsPointerSource();
 
 	// bind communication hub handlers to runtime
+	communicationHub.handler.init()
 	communicationHub.handler.setDatexInHandler(Runtime.datexIn.bind(Runtime))
 	Runtime.setDatexOutHandler(communicationHub.handler.datexOut.bind(communicationHub.handler))
 	await communicationHub.addInterface(new LocalLoopbackInterface())
 
+	
 	// @ts-ignore NO_INIT
 	if (!globalThis.NO_INIT) {
 
