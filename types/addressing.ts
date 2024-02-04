@@ -358,7 +358,7 @@ export class Endpoint extends Target {
 
 			if (i == hopsToDest) pre += `\n${ESCAPE_SEQUENCES.BOLD}Return Trip:${ESCAPE_SEQUENCES.RESET}\n\n`;
 
-			pre += `${ESCAPE_SEQUENCES.BOLD} #${(i%hopsToDest)+1} ${ESCAPE_SEQUENCES.RESET}(${next.socket.type}${next.socket.name ? ' ' + next.socket.name : ''})${ESCAPE_SEQUENCES.RESET}:\n  ${format(current.endpoint)}${ESCAPE_SEQUENCES.RESET} -> ${format(next.endpoint)}${ESCAPE_SEQUENCES.RESET}\n\n`
+			pre += `${ESCAPE_SEQUENCES.BOLD} #${(i%hopsToDest)+1} ${ESCAPE_SEQUENCES.RESET}(${next.socket ? next.socket.type : '[update endpoint to show interface type]'}${next.socket?.name ? ' ' + next.socket.name : ''})${ESCAPE_SEQUENCES.RESET}:\n  ${format(current.endpoint)}${ESCAPE_SEQUENCES.RESET} -> ${format(next.endpoint)}${ESCAPE_SEQUENCES.RESET}\n\n`
 		}
 
 

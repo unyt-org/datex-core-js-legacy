@@ -35,15 +35,16 @@ export class WindowInterfaceSocket extends CommunicationInterfaceSocket {
 
 export class WindowInterface extends CommunicationInterface {
 	
-	#window: Window
-	#windowOrigin: string
-	#isChild: boolean
-	
 	public properties: InterfaceProperties = {
 		type: "window",
 		direction: InterfaceDirection.IN_OUT,
-		priority: 10
+		latency: 15,
+		bandwidth: 1_000_000
 	}
+
+	#window: Window
+	#windowOrigin: string
+	#isChild: boolean
 
 	constructor(window: Window, windowOrigin?: string|URL) {
 		super()
@@ -117,10 +118,10 @@ export class WindowInterface extends CommunicationInterface {
 	onClose?: ()=>void
 
 	private handleClose() {
+		// check window.closed every second
 		const interval = setInterval(() => {
 			if (this.#window.closed) {
 				clearInterval(interval);
-				console.log("closed")
 				this.clearSockets()
 				this.onClose?.()
 			}

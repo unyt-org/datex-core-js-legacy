@@ -25,13 +25,14 @@ export class LocalLoopbackInterfaceSocket extends CommunicationInterfaceSocket {
 
 export class LocalLoopbackInterface extends CommunicationInterface<LocalLoopbackInterfaceSocket> {
 	
-	#currentSocket?: LocalLoopbackInterfaceSocket
-
 	public properties: InterfaceProperties = {
 		type: "local",
 		direction: InterfaceDirection.OUT,
-		priority: 100
+		latency: 0,
+		bandwidth: 1_000_000
 	}
+
+	#currentSocket?: LocalLoopbackInterfaceSocket
 
 	constructor() {
 		super();

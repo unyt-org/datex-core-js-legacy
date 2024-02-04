@@ -1,8 +1,6 @@
 import { ProtocolDataType } from "../compiler/protocol_types.ts";
 import { LOCAL_ENDPOINT, Runtime, dxb_header } from "../datex_all.ts";
-import { Crypto } from "../runtime/crypto.ts";
 import { Endpoint } from "../types/addressing.ts";
-import { Compiler } from "../compiler/compiler.ts";
 import { Logger } from "../utils/logger.ts";
 import { COM_HUB_SECRET, communicationHub } from "./communication-hub.ts";
 
@@ -23,9 +21,14 @@ export type InterfaceProperties =  {
 	 */
 	reconnectInterval?: number,
 	/**
-	 * higher priority interfaces normally provide more bandwidth and are preferred over lower priority interfaces
+	 * Estimated mean latency for this interface type in milliseconds (round trip time).
+	 * Lower latency interfaces are preferred over higher latency channels
 	 */
-	priority: number
+	latency: number,
+	/**
+	 * Bandwidth in bytes per second
+	 */
+	bandwidth: number
 }
 
 function getIdentifier(properties?: InterfaceProperties) {
@@ -56,6 +59,7 @@ interface CustomEventMap {
 export type ConnectedCommunicationInterfaceSocket = CommunicationInterfaceSocket & {
 	connected: true,
 	endpoint: Endpoint,
+	channelFactor: number,
 	interfaceProperties: InterfaceProperties
 }
 
@@ -82,6 +86,16 @@ export abstract class CommunicationInterfaceSocket extends EventTarget {
 
 	get connectTimestamp() {
 		return this.#connectTimestamp
+	}
+
+	/**
+	 * Calculated value describing the properties of the interface channel,
+	 * based on bandwidth and latency.
+	 * Interfaces with higher channel factor are preferred.
+	 */
+	get channelFactor() {
+		if (!this.interfaceProperties) return undefined;
+		return this.interfaceProperties.bandwidth / this.interfaceProperties.latency
 	}
 
 	interfaceProperties?: InterfaceProperties
@@ -175,7 +189,6 @@ export abstract class CommunicationInterfaceSocket extends EventTarget {
 		if (!this.canReceive) throw new Error("Cannot receive on an OUT interface socket");
 		if (this.#destroyed) throw new Error("Cannot receive on destroyed socket");
 		if (!this.connected) throw new Error("Cannot receive on disconnected socket");
-		console.log("RECEIVE on socket " + this.endpoint)
 
 		let header: dxb_header;
 		try {
@@ -188,11 +201,8 @@ export abstract class CommunicationInterfaceSocket extends EventTarget {
 			console.error(e);
 			return;
 		}
-		console.log("RECEIVED from " + header.sender)
-
 		// a cloned socket was already created in the meantime, handle header in clone
 		if (this.clone) {
-			console.log("using clone for ", header);
 			this.clone.handleReceiveHeader(header)
 		}
 		// handle header in this socket
@@ -206,7 +216,6 @@ export abstract class CommunicationInterfaceSocket extends EventTarget {
 		// listen for GOODBYE messages
 		if (this.endpoint) {
 			if (header.type == ProtocolDataType.GOODBYE && header.sender === this.endpoint) {
-				console.log("RECEIVE goodbye from " + this.endpoint)
 				this.connected = false
 				this.#destroyed = true
 				this.dispatchEvent(new EndpointDisconnectEvent(this.endpoint))
@@ -221,7 +230,6 @@ export abstract class CommunicationInterfaceSocket extends EventTarget {
 		}
 		// detect new endpoint
 		else if (header.sender) {
-			console.log("new endpoint detected " + header.sender)
 			this.endpoint = header.sender
 		}
 	}

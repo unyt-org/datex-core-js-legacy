@@ -138,10 +138,10 @@ export class CommunicationHubHandler {
 
 	public printStatus() {
 		let string = "";
-		string += "DATEX Communication Hub\n"
-		string += `  Local Endpoint: ${Datex.Runtime.endpoint}\n`
-		string += `  ${this.#interfaces.size} interfaces registered\n`
-		string += `  ${this.#registeredSockets.size} sockets connected\n\n`
+		string += ESCAPE_SEQUENCES.BOLD + "DATEX Communication Hub\n\n" + ESCAPE_SEQUENCES.RESET;
+		string += `Local Endpoint: ${Datex.Runtime.endpoint}\n`
+		string += `Registered Interfaces: ${this.#interfaces.size}\n`
+		string += `Connected Sockets: ${this.#registeredSockets.size}\n\n`
 
 		const mapping = new Map<string, Set<[Endpoint, CommunicationInterfaceSocket]>>()
 
@@ -176,24 +176,32 @@ export class CommunicationHubHandler {
 			}
 		}
  
-	    string += "Default socket: " + (this.defaultSocket ? this.defaultSocket.toString() : "none") + "\n";
+	    string += "Default interface: " + (this.#defaultInterface ? this.#defaultInterface.toString() : "none") + "\n";
 
+		const COLORS = {
+			DARK_GREEN: [41, 120, 83],
+			DARK_RED: [120, 41, 53],
+			DARK_GREY: [110, 110, 110],
+		}
+		const DARK_GREEN = `\x1b[38;2;${COLORS.DARK_GREEN.join(';')}m`
+		const DARK_GREY = `\x1b[38;2;${COLORS.DARK_GREY.join(';')}m`
+		const DARK_RED = `\x1b[38;2;${COLORS.DARK_RED.join(';')}m`
 
 		// print
 		for (const [identifier, sockets] of mapping) {
-			string += `\n${identifier}\n`
+			string += `\n${ESCAPE_SEQUENCES.BOLD}${identifier}${ESCAPE_SEQUENCES.RESET}\n`
 			for (const [endpoint, socket] of sockets) {
 				const directionSymbol = this.directionSymbols[socket.interfaceProperties?.direction as InterfaceDirection] ?? "?"
 				const isDirect = socket.endpoint === endpoint;
 				const color = socket.connected ? 
 					(
 						socket.endpoint ? 
-						ESCAPE_SEQUENCES.UNYT_GREEN :
-						ESCAPE_SEQUENCES.UNYT_GREY
+						(isDirect ? ESCAPE_SEQUENCES.UNYT_GREEN : DARK_GREEN) :
+						(isDirect ? ESCAPE_SEQUENCES.UNYT_GREY : DARK_GREY)
 					) : 
-					ESCAPE_SEQUENCES.UNYT_RED
+					(isDirect ? ESCAPE_SEQUENCES.UNYT_RED : DARK_RED)
 				const connectedState = `${color}⬤${ESCAPE_SEQUENCES.RESET}`
-				string += `  ${connectedState} ${directionSymbol}${isDirect?'':' (indirect)'}${isDirect&&this.defaultSocket==socket?' (default)':''} ${endpoint??'unknown endpoint'}\n`
+				string += `  ${connectedState} ${directionSymbol}${isDirect?'':' (indirect)'}${isDirect&&this.defaultSocket==socket?' (default)':''} ${endpoint??'unknown endpoint'}${ESCAPE_SEQUENCES.RESET}\n`
 			}
 		}
 
@@ -399,8 +407,8 @@ export class CommunicationHubHandler {
 	/**
 	 * Sort available sockets for endpoint:
 	 * - direct sockets first
-	 * - then sort by priority
-	 * - then sort by connectTimestamp
+	 * - then sort by channel channelFactor (latency,bandwidth)
+	 * - then sort by socket connectTimestamp
 	 */
 	private sortSockets(endpoint: Endpoint) {
 		const sockets = this.#endpointSockets.get(endpoint)
@@ -412,20 +420,20 @@ export class CommunicationHubHandler {
 				// sort by direct/indirect
 				.toSorted()
 
-				// sort by priority and timestamp, flatten
-				.flatMap(([_, sockets]) => this.sortSocketsByPriorityAndTimestamp(sockets!))
+				// sort by channelFactor and recency, flatten
+				.flatMap(([_, sockets]) => this.sortSocketsByChannelFactorAndRecency(sockets!))
 		)
 		this.#endpointSockets.set(endpoint, sortedSockets)
 	}
 
-	private sortSocketsByPriorityAndTimestamp(sockets: Iterable<ConnectedCommunicationInterfaceSocket>) {
+	private sortSocketsByChannelFactorAndRecency(sockets: Iterable<ConnectedCommunicationInterfaceSocket>) {
 		return Object
-			// group by priority
-			.entries(Object.groupBy(sockets, socket => socket.interfaceProperties.priority))
-			// sort by priority
+			// group by channelFactor
+			.entries(Object.groupBy(sockets, socket => socket.channelFactor))
+			// sort by channelFactor
 			.toSorted(([a], [b]) => Number(b) - Number(a))
-			// sort by connectTimestamp in each priority group
-			.map(([priority, sockets]) => [priority, sockets!.toSorted(
+			// sort by connectTimestamp in each channelFactor group
+			.map(([channelFactor, sockets]) => [channelFactor, sockets!.toSorted(
 				(a, b) => b.connectTimestamp - a.connectTimestamp
 			)] as const)
 			// flatten

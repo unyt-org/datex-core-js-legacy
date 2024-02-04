@@ -9,7 +9,6 @@
  ╚═════════════════════════════════════════╩════════════════════════════════════════════╝
  */
 
-import { CommonInterface } from "./client.ts"
 import { Runtime } from "../runtime/runtime.ts";
 import { Crypto } from "../runtime/crypto.ts";
 
@@ -20,7 +19,7 @@ import { endpoint_config } from "../runtime/endpoint_config.ts";
 import { endpoint_name, UnresolvedEndpointProperty } from "../datex_all.ts";
 import { Datex } from "../mod.ts";
 import { Storage } from "../runtime/storage.ts";
-import { WebSocketClientInterface } from "./communication-interfaces/web-socket-client-interface.ts";
+import { WebSocketClientInterface } from "./communication-interfaces/websocket-client-interface.ts";
 import { communicationHub } from "./communication-hub.ts";
 
 const logger = new Logger("DATEX Supranet");
