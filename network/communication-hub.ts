@@ -47,9 +47,18 @@ export class CommunicationHub {
 		return this.handler.removeInterface(comInterface);
 	}
 
-
+	/**
+	 * Prints the status of all connected interfaces and attached sockets
+	 */
 	public printStatus() {
 		return this.handler.printStatus();
+	}
+
+	/**
+	 * Lists all available sockets for an endpoint, ordered by relevance
+	 */
+	public printEndpointSockets(endpoint: Endpoint) {
+		return this.handler.printEndpointSockets(endpoint);
 	}
 
 
@@ -72,8 +81,12 @@ export class CommunicationHubHandler {
 	
 	#interfaces = new Set<CommunicationInterface>()
 	// CommunicationInterfaceSockets are ordered, most recent last
-	#endpointSockets = new Map<Endpoint, Set<ConnectedCommunicationInterfaceSocket>>().setAutoDefault(Set)
-	#registeredSockets = new Map<ConnectedCommunicationInterfaceSocket, Set<Endpoint>>().setAutoDefault(Set)
+	#endpointSockets = new Map<Endpoint, Set<ConnectedCommunicationInterfaceSocket>>().setAutoDefault(Set).enableAutoRemove()
+	#registeredSockets = new Map<ConnectedCommunicationInterfaceSocket, Set<Endpoint>>().setAutoDefault(Set).enableAutoRemove()
+
+	// maps main endpoints to a list of instance endpoints that are currently connected via sockets
+	#activeEndpointInstances = new Map<Endpoint, Set<Endpoint>>().setAutoDefault(Set).enableAutoRemove()
+
 	#defaultSocket?: ConnectedCommunicationInterfaceSocket
 
 	#datexInHandler?: DatexInHandler
@@ -159,19 +172,34 @@ export class CommunicationHubHandler {
 		}
 
 		console.log(string)
-
 	}
+
+	public printEndpointSockets(endpoint: Endpoint|string) {
+		endpoint = endpoint instanceof Endpoint ? endpoint : Endpoint.get(endpoint) as Endpoint;
+
+		let string = "";
+		string += `Available sockets for ${endpoint}:\n`
+
+		for (const socket of this.#endpointSockets.get(endpoint) ?? []) {
+			string += "  - " + socket.toString() + "\n";
+		}
+
+		console.log(string)
+	}
+
 
 	/** Internal methods: */
 
 	public registerSocket(socket: ConnectedCommunicationInterfaceSocket, endpoint: Endpoint|undefined = socket.endpoint) {
+		if (this.#endpointSockets.get(endpoint)?.has(socket)) return
+
 		if (!endpoint) throw new Error("Cannot register socket to communication hub without endpoint.")
-		if (this.#endpointSockets.get(endpoint)?.has(socket)) throw new Error("Cannot register socket to communication hub without endpoint.")
 		if (!socket.connected || !socket.endpoint || !socket.interfaceProperties) throw new Error("Cannot register disconnected or uninitialized socket.")
 
 		this.#logger.debug("Added new" + (socket.endpoint==endpoint?'':' indirect') + " socket " + socket.toString() + " for endpoint " + endpoint.toString())
 		this.#registeredSockets.getAuto(socket).add(endpoint);
 		this.#endpointSockets.getAuto(endpoint).add(socket);
+		this.#activeEndpointInstances.getAuto(endpoint.main).add(endpoint);
 		this.sortSockets(endpoint)
 	}
 
@@ -190,29 +218,35 @@ export class CommunicationHubHandler {
 
 		const endpointSockets = this.#endpointSockets.get(endpoint)!;
 		const socketEndpoints = this.#registeredSockets.get(connectedSocket)!;
+		const endpointInstances = this.#activeEndpointInstances.getAuto(endpoint.main)
 
 		// remove own socket endpoint
 		endpointSockets.delete(connectedSocket)
 		socketEndpoints.delete(endpoint)
+		endpointInstances.delete(endpoint)
 		
 		// direct socket removed, also remove all indirect sockets
 		if (isDirect) {
 			for (const indirectEndpoint of socketEndpoints) {
 				this.#endpointSockets.get(indirectEndpoint)?.delete(connectedSocket)
+				this.#activeEndpointInstances.get(indirectEndpoint.main)?.delete(indirectEndpoint)
 			}
 			this.#registeredSockets.delete(connectedSocket)
 		}
-
-		if (endpointSockets.size == 0) this.#endpointSockets.delete(endpoint)
-		if (socketEndpoints.size == 0) this.#registeredSockets.delete(connectedSocket)
 	}
+
 
 	public setDatexInHandler(handler: DatexInHandler) {
 		this.#datexInHandler = handler
 	}
 
-	public hasSocket(socket: CommunicationInterfaceSocket) {
-		return this.#registeredSockets.has(socket as ConnectedCommunicationInterfaceSocket)
+	/**
+	 * Returns true when the socket is registered.
+	 * Returns true when the endpoint is registered for the socket (if an endpoint is provided).
+	 */
+	public hasSocket(socket: CommunicationInterfaceSocket, endpoint?: Endpoint) {
+		if (endpoint) return this.#registeredSockets.get(socket as ConnectedCommunicationInterfaceSocket)?.has(endpoint)
+		else return this.#registeredSockets.has(socket as ConnectedCommunicationInterfaceSocket)
 	}
 
 	/**
@@ -226,39 +260,67 @@ export class CommunicationHubHandler {
 	}
 
 	/**
-	 * Sort available sockets for endpoint by priority and connectTimestamp
-	 * @param endpoint 
+	 * Sort available sockets for endpoint:
+	 * - direct sockets first
+	 * - then sort by priority
+	 * - then sort by connectTimestamp
 	 */
 	private sortSockets(endpoint: Endpoint) {
 		const sockets = this.#endpointSockets.get(endpoint)
 		if (!sockets) throw new Error("No sockets for endpoint " + endpoint);
 		const sortedSockets = new Set(
-			Object
-				// group by priority
-				.entries(Object.groupBy(sockets, socket => socket.interfaceProperties.priority))
-				// sort by priority
-				.sort(([a], [b]) => Number(b) - Number(a))
-				// sort by connectTimestamp in each priority group
-				.map(([priority, sockets]) => [priority, sockets!.toSorted(
-					(a, b) => b.connectTimestamp - a.connectTimestamp
-				)] as const)
-				// flatten
-				.flatMap(([_, sockets]) => sockets)
+				Object
+				// group by direct/indirect
+				.entries(Object.groupBy(sockets, socket => (socket.endpoint!==endpoint).toString()))
+				// sort by direct/indirect
+				.toSorted()
+
+				// sort by priority and timestamp, flatten
+				.flatMap(([_, sockets]) => this.sortSocketsByPriorityAndTimestamp(sockets!))
 		)
 		this.#endpointSockets.set(endpoint, sortedSockets)
 	}
 
+	private sortSocketsByPriorityAndTimestamp(sockets: Iterable<ConnectedCommunicationInterfaceSocket>) {
+		return Object
+			// group by priority
+			.entries(Object.groupBy(sockets, socket => socket.interfaceProperties.priority))
+			// sort by priority
+			.toSorted(([a], [b]) => Number(b) - Number(a))
+			// sort by connectTimestamp in each priority group
+			.map(([priority, sockets]) => [priority, sockets!.toSorted(
+				(a, b) => b.connectTimestamp - a.connectTimestamp
+			)] as const)
+			// flatten
+			.flatMap(([_, sockets]) => sockets)
+	}
+
+
 	private getPreferredSocketForEndpoint(endpoint: Endpoint, excludeSocket?: CommunicationInterfaceSocket) {
 		
-		for (const socket of this.#endpointSockets.get(endpoint) ?? []) {
-			if (socket === excludeSocket) continue;
-			return socket;
+		// find socket that matches endpoint instance exactly
+		const socket = this.findMatchingEndpointSocket(endpoint, excludeSocket);
+		if (socket) return socket;
+
+		// find socket that matches instance if main endpoint
+		if (endpoint.main === endpoint) {
+			const instances = [...this.#activeEndpointInstances.get(endpoint)??[]];
+			for (let i=instances.length-1; i>=0; i--) {
+				const socket = this.findMatchingEndpointSocket(instances[i], excludeSocket);
+				if (socket) return socket;
+			}
 		}
 
 		if (this.#defaultSocket !== excludeSocket)
 			return this.#defaultSocket;
 	}
 
+	private findMatchingEndpointSocket(endpoint: Endpoint, excludeSocket?: CommunicationInterfaceSocket) {
+		for (const socket of this.#endpointSockets.get(endpoint) ?? []) {
+			if (socket === excludeSocket) continue;
+			return socket;
+		}
+	}
 	
 
 	/**

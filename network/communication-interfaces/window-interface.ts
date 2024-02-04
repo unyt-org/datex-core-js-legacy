@@ -1,7 +1,7 @@
 import { Runtime } from "../../runtime/runtime.ts";
 import { Endpoint, Target } from "../../types/addressing.ts";
 import { CommunicationInterface, CommunicationInterfaceSocket, InterfaceDirection, InterfaceProperties } from "../communication-interface.ts";
-
+import { communicationHub } from "../communication-hub.ts";
 
 export class WindowInterfaceSocket extends CommunicationInterfaceSocket {
 	constructor(public readonly window: Window, public readonly windowOrigin: string) {
@@ -9,19 +9,16 @@ export class WindowInterfaceSocket extends CommunicationInterfaceSocket {
 	}
 
 	handleReceive = (event: MessageEvent) => {
-		console.log("receive window client")
 		if (event.origin == this.windowOrigin && event.data instanceof ArrayBuffer) {
 			this.receive(event.data)
 		}
 	}
 
 	open() {
-		console.log("open window client")
 		globalThis.addEventListener('message', this.handleReceive);
 	}
 
 	close() {
-		console.log("close window client")
 		globalThis.removeEventListener('message', this.handleReceive);
 	}
 
@@ -97,6 +94,7 @@ export class WindowInterface extends CommunicationInterface {
 			// if in sub window: send INIT to parent immediately
 			this.sendInit();
 		}
+		this.handleClose();
 	}
 
 	connect() {
@@ -116,17 +114,30 @@ export class WindowInterface extends CommunicationInterface {
         }, this.#windowOrigin);
     }
 
+	onClose?: ()=>void
+
+	private handleClose() {
+		const interval = setInterval(() => {
+			if (this.#window.closed) {
+				clearInterval(interval);
+				console.log("closed")
+				this.clearSockets()
+				this.onClose?.()
+			}
+		}, 1000);
+	}
+
 	private onReceive = (event: MessageEvent) => {
         if (event.origin == this.#windowOrigin) {
             const data = event.data;
 
-			// receive as parent
            	if (data?.type == "INIT") {
 				globalThis.removeEventListener("message", this.onReceive);
 
 				const socket = new WindowInterfaceSocket(this.#window, this.#windowOrigin)
 				socket.endpoint = Target.get(data.endpoint) as Endpoint;
 				this.addSocket(socket)
+
                 // if in parent: send INIT to window after initialized
                 if (!this.#isChild) this.sendInit();
             }
@@ -147,20 +158,20 @@ export class WindowInterface extends CommunicationInterface {
 	}
 
 	/**
-	 * Open a new window and attaches a WindowInterface
-	 * The interface must still be added to the communication hub with `communicationHub.addInterface(window.interface)`
+	 * Opens a new window and registers a attached WindowInterface.
+	 * The WindowInterface is automatically removed when the window is closed.
 	 */
-	static openWindow(url: string | URL, target?: string, features?: string) {
+	static createWindow(url: string | URL, target?: string, features?: string) {
 		const newWindow = window.open(url, target, features);
-		if (!newWindow) return {
-			window: null,
-			windowInterface: null
-		};
+		if (!newWindow) return null;
 		const windowInterface = this.createChildInterface(newWindow, url)
-		return {
-			window: newWindow,
-			windowInterface
-		};
+		
+		communicationHub.addInterface(windowInterface)
+		windowInterface.onClose = () => {
+			communicationHub.removeInterface(windowInterface)
+		}
+
+		return newWindow
 	}
 
 }

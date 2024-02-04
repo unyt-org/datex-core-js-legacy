@@ -9,17 +9,14 @@ export class WebSocketClientInterfaceSocket extends CommunicationInterfaceSocket
 	}
 
 	handleReceive = (event: MessageEvent) => {
-		console.log("receive ws client")
 		this.receive(event.data)
 	}
 
 	open() {
-		console.log("open ws client")
 		this.webSocket.addEventListener('message', this.handleReceive);
 	}
 
 	close() {
-		console.log("close ws client")
 		this.webSocket.removeEventListener('message', this.handleReceive);
 	}
 

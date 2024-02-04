@@ -35,7 +35,7 @@ import { Function as DatexFunction } from "../types/function.ts";
 import { Storage } from "../runtime/storage.ts";
 import { Observers } from "../utils/observers.ts";
 import { BinaryCode } from "../compiler/binary_codes.ts";
-import type { ExecConditions, compile_info, datex_meta, datex_scope, dxb_header, routing_info } from "../utils/global_types.ts";
+import type { ExecConditions, trace, compile_info, datex_meta, datex_scope, dxb_header, routing_info } from "../utils/global_types.ts";
 import { Markdown } from "../types/markdown.ts";
 import { Type } from "../types/type.ts";
 import { Tuple } from "../types/tuple.ts";
@@ -893,7 +893,9 @@ export class Runtime {
      * @returns compiled DATEX Binary
      */
     protected static async compileAdvanced(data:compile_info):Promise<ArrayBuffer|ReadableStream> {
-        let header_options = data[2];
+        const header_options = data[2];
+
+        if (!header_options) throw new Error("header_options not defined")
 
         // get sid or generate new
         if (header_options.sid == null) header_options.sid = Compiler.generateSID();
@@ -1216,7 +1218,6 @@ export class Runtime {
         else {
             endpoints.push(endpoint.toString())
             this.ownLastEndpoint = endpoint;
-
             this.lastEndpointUnloadHandler = () => {
                 // send goodbye
                 if (this.goodbyeMessage) sendDatexViaHTTPChannel(this.goodbyeMessage);
@@ -1630,41 +1631,42 @@ export class Runtime {
         if ((!res[0].redirect && !force_only_header_info) || force_no_redirect) {
             [header, data_buffer, header_buffer, signature_start, iv, encrypted_key] = res;
 
-            // save encrypted key?
-            if (encrypted_key) {
-                const sym_enc_key = await Crypto.extractEncryptedKey(encrypted_key);
-                await this.setScopeSymmetricKeyForSender(header.sid, header.sender, sym_enc_key)
-            }
-
-            // get signature
-            if (header.signed) {
-                if (!header.sender) throw [header, new SecurityError("Signed DATEX without a sender")];
-                let j = signature_start;
-                const signature = header_buffer.subarray(j, j + Compiler.signature_size);
-                const content = new Uint8Array(dxb).subarray(j + Compiler.signature_size);
-                j += Compiler.signature_size;
-                const valid = await Crypto.verify(content, signature, header.sender);
-
-                if (!valid) {
-                    logger.error("Invalid signature from " + header.sender);
-                    throw [header, new SecurityError("Invalid signature from " + header.sender)];
+            try {
+                // save encrypted key?
+                if (encrypted_key) {
+                    const sym_enc_key = await Crypto.extractEncryptedKey(encrypted_key);
+                    await this.setScopeSymmetricKeyForSender(header.sid, header.sender, sym_enc_key)
                 }
-            }
 
-            // decrypt
+                // get signature
+                if (header.signed) {
+                    if (!header.sender) throw new SecurityError("Signed DATEX without a sender");
+                    let j = signature_start;
+                    const signature = header_buffer.subarray(j, j + Compiler.signature_size);
+                    const content = new Uint8Array(dxb).subarray(j + Compiler.signature_size);
+                    j += Compiler.signature_size;
+                    const valid = await Crypto.verify(content, signature, header.sender);
 
-            if (header.encrypted) {
-                if (!iv) throw [header, new SecurityError("DATEX not correctly encrypted")];
-                // try to decrypt body
-                try {
+                    if (!valid) {
+                        logger.error("Invalid signature from " + header.sender);
+                        throw new SecurityError("Invalid signature from " + header.sender);
+                    }
+                }
+
+                // decrypt
+
+                if (header.encrypted) {
+                    if (!iv) throw new SecurityError("DATEX not correctly encrypted");
+                    // try to decrypt body
                     data_buffer = new Uint8Array(await Crypto.decryptSymmetric(data_buffer.buffer, force_sym_enc_key ?? await this.getScopeSymmetricKeyForSender(header.sid, header.sender), iv));
-                } catch(e)  {
-                    throw [header, e];
                 }
+                    
+                // header data , body buffer, header buffer, original (encrypted) body buffer
+                return [header, data_buffer, header_buffer, res[1]];
             }
-                  
-            // header data , body buffer, header buffer, original (encrypted) body buffer
-            return [header, data_buffer, header_buffer, res[1]];
+            catch (e) {
+                throw [header, e];
+            }
 
         }
 
@@ -1701,7 +1703,7 @@ export class Runtime {
 
 
     // extract dxb blocks from a continuos stream
-    private static async handleContinuousBlockStream(dxb_stream_reader: ReadableStreamDefaultReader<Uint8Array>, full_scope_callback, variables?:any, header_callback?:(header:dxb_header)=>void, last_endpoint?:Endpoint, source?:Source) {
+    private static async handleContinuousBlockStream(dxb_stream_reader: ReadableStreamDefaultReader<Uint8Array>, full_scope_callback, variables?:any, header_callback?:(header:dxb_header)=>void, last_endpoint?:Endpoint, socket?:CommunicationInterfaceSocket) {
         
         let current_block: Uint8Array;
         let current_block_size: number
@@ -1769,7 +1771,8 @@ export class Runtime {
             // block end
             if (current_block && index >= current_block_size) {
                 console.log("received new block from stream")
-                this.handleDatexIn(current_block.buffer, last_endpoint, full_scope_callback, variables, header_callback, source); 
+                this.handleDatexIn(current_block.buffer, last_endpoint, full_scope_callback, variables, header_callback, socket)
+                    .catch(e=>console.error("Error handling block stream: ", e)) 
                 // reset for next block
                 current_block = null; 
                 index = 0; // force to 0
@@ -1871,7 +1874,7 @@ export class Runtime {
      * @param header_callback callback method returning information for the evaluated header before executing the dxb
      * @returns header information (after executing the dxb)
      */
-    private static async handleDatexIn(dxb:ArrayBuffer, last_endpoint?:Endpoint, full_scope_callback?:(sid:number, scope:any, error?:boolean)=>void, _?:any, header_callback?:(header:dxb_header)=>void, source?: CommunicationInterfaceSocket): Promise<dxb_header> {
+    private static async handleDatexIn(dxb:ArrayBuffer, last_endpoint?:Endpoint, full_scope_callback?:(sid:number, scope:any, error?:boolean)=>void, _?:any, header_callback?:(header:dxb_header)=>void, socket?: CommunicationInterfaceSocket): Promise<dxb_header> {
 
         let header:dxb_header, data_uint8:Uint8Array;
 
@@ -1882,13 +1885,15 @@ export class Runtime {
         catch (e) {
             // e is [dxb_header, Error]
             //throw e
-            console.error(e[1]??e)
             const header = e[0];
             if (header) {
                 this.handleScopeError(header, e[1]);
                 this.updateEndpointOnlineState(header);
+                console.error(e[1]??e)
+
+                return header;
             }
-            return;
+            throw e;
         }
         
 
@@ -1945,7 +1950,7 @@ export class Runtime {
                             }
                         }
                         try {
-                            await to.trace({header: res, source, trace})
+                            await to.trace({header: res, socket, trace})
                         }
                         catch {}
                         return {};
@@ -1955,7 +1960,7 @@ export class Runtime {
                     }
                 }
 
-                await this.redirectDatex(dxb, res, false, source);
+                await this.redirectDatex(dxb, res, false, socket);
             }
             catch (e) {
                 console.log("redirect failed", e)
@@ -1963,10 +1968,10 @@ export class Runtime {
 
             // callback for header info
             if (header_callback instanceof globalThis.Function) header_callback(res);
-            return;
+            return res;
         }
 
-        let data = data_uint8.buffer; // get array buffer
+        const data = data_uint8.buffer; // get array buffer
 
         // create map for this sender
         if (!this.active_datex_scopes.has(header.sender)) {
@@ -1989,7 +1994,7 @@ export class Runtime {
 
             // get existing scope or create new
             let scope = scope_map?.scope ?? this.createNewInitialScope(header);
-            scope.source = source;
+            scope.socket = socket;
 
             // those values can change later in the while loop
             let _header = header;
@@ -2166,7 +2171,8 @@ export class Runtime {
         {
 
             if (header.type == ProtocolDataType.TRACE_BACK) {
-                return_value.push({endpoint:Runtime.endpoint, interface: {type: scope.source?.type, description: scope.source?.description}, timestamp: new Date()});
+                const traceStack = return_value as trace[]
+                traceStack.push({endpoint:Runtime.endpoint, socket: {type: scope.socket?.interfaceProperties?.type??"unknown", name: scope.socket?.interfaceProperties?.name}, timestamp: new Date()});
             }
 
             // handle result
@@ -2215,11 +2221,11 @@ export class Runtime {
 
         else if (header.type == ProtocolDataType.TRACE) {
             const sender = return_value[0].endpoint;
-
-            return_value.push({endpoint:Runtime.endpoint, destReached:true, interface: {type: scope.source?.type, description: scope.source?.description}, timestamp: new Date()});
+            const traceStack  = return_value as trace[];
+            traceStack.push({endpoint:Runtime.endpoint, destReached:true, socket: {type: scope.socket?.interfaceProperties?.type??"unknown", name: scope.socket?.interfaceProperties?.name}, timestamp: new Date()});
             console.log("TRACE request from " + sender);
 
-            this.datexOut(["?", [return_value], {type:ProtocolDataType.TRACE_BACK, to:sender, return_index:header.return_index, encrypt:header.encrypted, sign:header.signed}], sender, header.sid, false);
+            this.datexOut(["?", [traceStack], {type:ProtocolDataType.TRACE_BACK, to:sender, return_index:header.return_index, encrypt:header.encrypted, sign:header.signed}], sender, header.sid, false);
         }
         
         else if (header.type == ProtocolDataType.DEBUGGER) {

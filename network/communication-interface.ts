@@ -1,6 +1,8 @@
 import { ProtocolDataType } from "../compiler/protocol_types.ts";
-import { LOCAL_ENDPOINT, Runtime } from "../datex_all.ts";
+import { LOCAL_ENDPOINT, Runtime, dxb_header } from "../datex_all.ts";
+import { Crypto } from "../runtime/crypto.ts";
 import { Endpoint } from "../types/addressing.ts";
+import { Compiler } from "../compiler/compiler.ts";
 import { Logger } from "../utils/logger.ts";
 import { COM_HUB_SECRET, communicationHub } from "./communication-hub.ts";
 
@@ -39,6 +41,10 @@ export abstract class CommunicationInterfaceSocket extends EventTarget {
 	#connected = false
 	#destroyed = false;
 	#opened = false;
+
+
+	static defaultLogger = new Logger("CommunicationInterfaceSocket")
+	public logger = CommunicationInterfaceSocket.defaultLogger;
 
 	#connectTimestamp = Date.now()
 
@@ -121,10 +127,17 @@ export abstract class CommunicationInterfaceSocket extends EventTarget {
 		if (this.#destroyed) throw new Error("Cannot receive on destroyed socket");
 		if (!this.connected) throw new Error("Cannot receive on disconnected socket");
 
-		const header = await communicationHub.handler.datexIn({
-			dxb,
-			socket: this
-		})
+		let header: dxb_header;
+		try {
+			header = await communicationHub.handler.datexIn({
+				dxb,
+				socket: this
+			})
+		}
+		catch (e) {
+			console.error(e);
+			return;
+		}
 
 		// listen for GOODBYE messages
 		if (this.endpoint) {
@@ -134,8 +147,11 @@ export abstract class CommunicationInterfaceSocket extends EventTarget {
 				this.dispatchEvent(new CustomEvent('endpoint-disconnect'))
 			}
 			// message from another endpoint, record as indirect socket connection
-			else if (header.sender !== this.endpoint) {
-				communicationHub.handler.registerSocket(this as ConnectedCommunicationInterfaceSocket, header.sender)
+			else if (header.sender !== this.endpoint && !communicationHub.handler.hasSocket(this as ConnectedCommunicationInterfaceSocket, header.sender)) {
+				if (header.sender === Runtime.endpoint) {
+					this.logger.error("Indirect connection to own endpoint detected at "+this)
+				}
+				else communicationHub.handler.registerSocket(this as ConnectedCommunicationInterfaceSocket, header.sender)
 			}
 		}
 		// detect new endpoint
@@ -233,6 +249,7 @@ export abstract class CommunicationInterface<Socket extends CommunicationInterfa
 	 */
 	protected addSocket(socket: Socket) {
 		socket.interfaceProperties = this.properties
+		socket.logger = this.logger;
 		socket.connected = true; // adds sockets to communication hub
 		socket.addEventListener('endpoint-disconnect', () => {
 			// remove old socket
@@ -241,7 +258,18 @@ export abstract class CommunicationInterface<Socket extends CommunicationInterfa
 			const newSocket = this.cloneSocket(socket);
 			this.addSocket(newSocket);
 		})
-		this.#sockets.add(socket)
+		this.#sockets.add(socket);
+		// send HELLO message
+		if (this.properties.direction !== InterfaceDirection.OUT)
+			this.sendHelloViaSocket(socket);
+	}
+
+	protected async sendHelloViaSocket(socket: Socket) {
+		// TODO: sending keys is only workaround
+		const keys = Crypto.getOwnPublicKeysExported();
+		const message = await Compiler.compile('?', [keys], {type:ProtocolDataType.HELLO, sign:false, flood:true, __routing_ttl:10}) as ArrayBuffer;
+        this.logger.debug("saying hello via " + socket)
+		await socket.sendBlock(message);
 	}
 
 	/**
