@@ -1,13 +1,25 @@
 import { ProtocolDataType } from "../compiler/protocol_types.ts";
-import { LOCAL_ENDPOINT, Runtime, dxb_header } from "../datex_all.ts";
+import { BROADCAST } from "../types/addressing.ts";
 import { Endpoint } from "../types/addressing.ts";
 import { Logger } from "../utils/logger.ts";
 import { COM_HUB_SECRET, communicationHub } from "./communication-hub.ts";
-
+import { IOHandler } from "../runtime/io_handler.ts";
+import { LOCAL_ENDPOINT } from "../types/addressing.ts";
+import { Runtime } from "../runtime/runtime.ts";
+import { dxb_header } from "../utils/global_types.ts";
 
 export enum InterfaceDirection {
+	/**
+	 * Supported communication direction: only receive
+	 */
 	IN,
+	/**
+	 * Supported communication direction: only send
+	 */
 	OUT,
+	/**
+	 * Supported communication directions: send and receive
+	 */
 	IN_OUT
 }
 
@@ -15,6 +27,9 @@ export type InterfaceProperties =  {
 	type: string,
 	name?: string,
 
+	/**
+	 * Supported communication directions
+	 */
 	direction: InterfaceDirection,
 	/**
 	 * Time in milliseconds to wait before reconnecting after a connection error
@@ -28,7 +43,13 @@ export type InterfaceProperties =  {
 	/**
 	 * Bandwidth in bytes per second
 	 */
-	bandwidth: number
+	bandwidth: number,
+
+	/**
+	 * If true, the interface does not support continuous connections.
+	 * All sockets are indirectly connected
+	 */
+	noContinuosConnection?: boolean
 }
 
 function getIdentifier(properties?: InterfaceProperties) {
@@ -196,6 +217,7 @@ export abstract class CommunicationInterfaceSocket extends EventTarget {
 				dxb,
 				socket: this
 			})
+			IOHandler.handleDatexReceived(header, dxb, this)
 		}
 		catch (e) {
 			console.error(e);
@@ -346,6 +368,13 @@ export abstract class CommunicationInterface<Socket extends CommunicationInterfa
 		socket.addEventListener('connect', e => {
 			this.dispatchEvent(new EndpointConnectEvent(e.endpoint))
 		})
+
+
+		// no direct endpoint connections supported, set socket endpoint to @@any to force only
+		// indirect connection registrations
+		if (this.properties.noContinuosConnection) {
+			socket.endpoint = BROADCAST
+		}
 
 		socket.interfaceProperties = this.properties
 		socket.logger = this.logger;

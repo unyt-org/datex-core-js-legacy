@@ -1,16 +1,16 @@
 import { dxb_header } from "../utils/global_types.ts";
-import { Endpoint, LOCAL_ENDPOINT } from "../types/addressing.ts";
+import { Endpoint, BROADCAST, LOCAL_ENDPOINT } from "../types/addressing.ts";
 import { CommunicationInterface, CommunicationInterfaceSocket, ConnectedCommunicationInterfaceSocket } from "./communication-interface.ts";
 import { Disjunction } from "../types/logic.ts";
 import "../utils/auto_map.ts";
 import { InterfaceDirection } from "./communication-interface.ts";
 import { ESCAPE_SEQUENCES, Logger } from "../utils/logger.ts";
-import { Datex } from "../mod.ts";
 import { NetworkError } from "../types/errors.ts";
 import { Compiler } from "../compiler/compiler.ts";
 import { Runtime } from "../runtime/runtime.ts";
 import { ProtocolDataType } from "../compiler/protocol_types.ts";
 import { Crypto } from "../runtime/crypto.ts";
+import { IOHandler } from "../runtime/io_handler.ts";
 
 export type DatexInData = {
 	dxb: ArrayBuffer|ReadableStreamDefaultReader<Uint8Array>,
@@ -139,7 +139,7 @@ export class CommunicationHubHandler {
 	public printStatus() {
 		let string = "";
 		string += ESCAPE_SEQUENCES.BOLD + "DATEX Communication Hub\n\n" + ESCAPE_SEQUENCES.RESET;
-		string += `Local Endpoint: ${Datex.Runtime.endpoint}\n`
+		string += `Local Endpoint: ${Runtime.endpoint}\n`
 		string += `Registered Interfaces: ${this.#interfaces.size}\n`
 		string += `Connected Sockets: ${this.#registeredSockets.size}\n\n`
 
@@ -191,6 +191,9 @@ export class CommunicationHubHandler {
 		for (const [identifier, sockets] of mapping) {
 			string += `\n${ESCAPE_SEQUENCES.BOLD}${identifier}${ESCAPE_SEQUENCES.RESET}\n`
 			for (const [endpoint, socket] of sockets) {
+				// skip placeholder @@any for noContinuosConnection interfaces
+				if (socket.interfaceProperties?.noContinuosConnection && endpoint == BROADCAST) continue;
+
 				const directionSymbol = this.directionSymbols[socket.interfaceProperties?.direction as InterfaceDirection] ?? "?"
 				const isDirect = socket.endpoint === endpoint;
 				const color = socket.connected ? 
@@ -490,7 +493,7 @@ export class CommunicationHubHandler {
 	public async datexOut(data: DatexOutData):Promise<void> {
 		
 		// broadcast
-		if (data.receivers == Datex.BROADCAST) return this.datexBroadcastOut(data);
+		if (data.receivers == BROADCAST) return this.datexBroadcastOut(data);
 
 		const receivers = data.receivers instanceof Endpoint ? [data.receivers] : [...data.receivers];
 		const outGroups = receivers.length == 1 ? 
@@ -515,9 +518,7 @@ export class CommunicationHubHandler {
 		const promises = []
 
 		for (const [socket, endpoints] of outGroups) {
-			const endpointsString = [...endpoints].map(e => e.toString()).join(", ")
 			if (!socket) continue;
-			this.#logger.debug("sending to " + endpointsString + " ("+socket.toString()+")");
 			promises.push(this.sendAddressedBlockToReceivers(data.dxb, endpoints, socket));
 		}
 
@@ -533,7 +534,7 @@ export class CommunicationHubHandler {
 	public datexBroadcastOut(data: DatexOutData) {
 		const reachedEndpoints = new Set<Endpoint>()
 
-		for (const [socket] of this.#registeredSockets) {
+		for (const socket of this.iterateSockets()) {
 			if (data.socket === socket) continue;
 			if (reachedEndpoints.has(socket.endpoint)) continue;
 			reachedEndpoints.add(socket.endpoint);
@@ -545,6 +546,9 @@ export class CommunicationHubHandler {
 	public async sendAddressedBlockToReceivers(dxb: ArrayBuffer, receivers: Disjunction<Endpoint>, destSocket: CommunicationInterfaceSocket) {
 		const addressdDXB = Compiler.updateHeaderReceiver(dxb, receivers);
 		if (!addressdDXB) throw new Error("Failed to update header receivers");
+
+		IOHandler.handleDatexSent(addressdDXB, receivers, destSocket)
+
 		const success = await destSocket.sendBlock(addressdDXB);
 		if (!success) {
 			return this.datexOut({

@@ -4,7 +4,7 @@ import { InterfaceProperties } from "../communication-interface.ts";
 import { WebSocketInterface } from "./websocket-interface.ts";
 
 export class WebSocketClientInterface extends WebSocketInterface {
-	
+
 	public properties: InterfaceProperties = {
 		type: "websocket-client",
 		direction: InterfaceDirection.IN_OUT,
@@ -45,9 +45,14 @@ export class WebSocketClientInterface extends WebSocketInterface {
 		return this.initWebSocket(webSocket)
 	}
 
-	onWebSocketOpen(_webSocket: WebSocket): void {
+	onWebSocketOpened(_webSocket: WebSocket) {
 		if (this.origin.protocol == 'ws' && !this.origin.host.match(/localhost(:\d+)?/)) 
 			this.logger.warn(`unsecure websocket connection to ${this.origin.host}`)
+	}
+
+	onWebSocketClosed(_webSocket: WebSocket) {
+		// only one websocket exists, so we handle a interface connection error here and try to reconnect
+		this.onConnectionError();
 	}
 
 }

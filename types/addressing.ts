@@ -324,7 +324,7 @@ export class Endpoint extends Target {
 		}
 		catch {
 			let title = `${ESCAPE_SEQUENCES.BOLD}DATEX Network Trace\n${ESCAPE_SEQUENCES.RESET}`;
-			title += `${format(Runtime.endpoint)}${ESCAPE_SEQUENCES.RESET} -> ${format(this)}${ESCAPE_SEQUENCES.RESET}\n\n`
+			title += `${format(Runtime.endpoint)}${ESCAPE_SEQUENCES.RESET} ──▶ ${format(this)}${ESCAPE_SEQUENCES.RESET}\n\n`
 			title += `${ESCAPE_SEQUENCES.RED}Error: Endpoint not reachable`
 			console.log(title);
 			return;
@@ -339,7 +339,7 @@ export class Endpoint extends Target {
 		const hopsFromDest = traceStack.length - resolveEndpointIndex - 1;
 
 		let title = `${ESCAPE_SEQUENCES.BOLD}DATEX Network Trace\n${ESCAPE_SEQUENCES.RESET}`;
-		title += `${format(Runtime.endpoint)}${ESCAPE_SEQUENCES.RESET} -> ${format(resolvedEndpoint)}${ESCAPE_SEQUENCES.RESET}\n\n`
+		title += `${format(Runtime.endpoint)}${ESCAPE_SEQUENCES.RESET} ──▶ ${format(resolvedEndpoint)}${ESCAPE_SEQUENCES.RESET}\n\n`
 		let pre = ''
 		const rtt = traceStack.at(-1)!.timestamp.getTime() - traceStack.at(0)!.timestamp.getTime();
 
@@ -358,7 +358,7 @@ export class Endpoint extends Target {
 
 			if (i == hopsToDest) pre += `\n${ESCAPE_SEQUENCES.BOLD}Return Trip:${ESCAPE_SEQUENCES.RESET}\n\n`;
 
-			pre += `${ESCAPE_SEQUENCES.BOLD} #${(i%hopsToDest)+1} ${ESCAPE_SEQUENCES.RESET}(${next.socket ? next.socket.type : '[update endpoint to show interface type]'}${next.socket?.name ? ' ' + next.socket.name : ''})${ESCAPE_SEQUENCES.RESET}:\n  ${format(current.endpoint)}${ESCAPE_SEQUENCES.RESET} -> ${format(next.endpoint)}${ESCAPE_SEQUENCES.RESET}\n\n`
+			pre += `${ESCAPE_SEQUENCES.BOLD} #${(i%hopsToDest)+1} ${ESCAPE_SEQUENCES.RESET}(${next.socket ? next.socket.type : '[update endpoint to show interface type]'}${next.socket?.name ? ' ' + next.socket.name : ''})${ESCAPE_SEQUENCES.RESET}:\n  ${format(current.endpoint)}${ESCAPE_SEQUENCES.RESET} ──▶ ${format(next.endpoint)}${ESCAPE_SEQUENCES.RESET}\n\n`
 		}
 
 

@@ -1056,9 +1056,6 @@ export class Runtime {
 
         return new Promise<any>((resolve, reject) => {
 
-            // listener
-            IOHandler.handleDatexSent(dxb, to)
-
             // flood exclude flood_exclude receiver
             if (flood) {
                 this.datex_out({
@@ -2016,7 +2013,6 @@ export class Runtime {
                 try {
                     // update scope buffers
                     this.updateScope(scope, _data, _header) // set new _data (datex body) and _header (header information)
-                    IOHandler.handleDatexReceived(scope, _dxb) // send scope, current dxb and sym enc key (might get removed otherwise) to datex receive handler
                     // run scope, result is saved in 'scope' object
                     await this.run(scope);
                 }

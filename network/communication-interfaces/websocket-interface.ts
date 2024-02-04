@@ -51,15 +51,19 @@ export abstract class WebSocketInterface extends CommunicationInterface<WebSocke
 				let connectionOpen = false;
 				const errorHandler = () => {
 					this.#webSockets.delete(webSocket);
+					if (webSocket.readyState !== WebSocket.CLOSED) {
+						// make sure the socket is closed
+						try {webSocket.close()} catch {/*ignore*/} 
+					}
 					if (!connectionOpen) resolve(false);
 					else {
-						this.onConnectionError();
+						this.onWebSocketClosed(webSocket);
 					}
 				};
 				const openHandler = () => {
 					this.addSocket(socket);		
 					connectionOpen = true;
-					this.onWebSocketOpen(webSocket);
+					this.onWebSocketOpened(webSocket);
 					resolve(true);
 				};
 
@@ -81,7 +85,12 @@ export abstract class WebSocketInterface extends CommunicationInterface<WebSocke
 	/**
 	 * Called when a new WebSocket connection is opened
 	 */
-	abstract onWebSocketOpen(webSocket: WebSocket): void
+	abstract onWebSocketOpened(webSocket: WebSocket): void
+
+	/**
+	 * Called when a WebSocket connection is closed
+	 */
+	abstract onWebSocketClosed(webSocket: WebSocket): void
 
 	disconnect() {
 		for (const [webSocket, {errorHandler, openHandler}] of this.#webSockets.entries()) {

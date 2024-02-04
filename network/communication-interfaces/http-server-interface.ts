@@ -18,7 +18,7 @@ export class HTTPServerInterfaceSocket extends CommunicationInterfaceSocket {
 	}
 
 	open() {
-		this.server.addRequestHandler(this.handleRequest.bind(this));
+		this.server.addRequestHandler(this.handleRequest.bind(this), true);
 	}
 	close() {
 		// ignore (TODO: remove request handler)
@@ -52,6 +52,7 @@ export class HTTPServerInterface extends CommunicationInterface {
 	public properties: InterfaceProperties = {
 		type: "http-server",
 		direction: InterfaceDirection.IN,
+		noContinuosConnection: true,
 		latency: 0,
 		bandwidth: 1
 	}

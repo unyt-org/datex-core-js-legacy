@@ -21,7 +21,7 @@ export class WebSocketServerInterface extends WebSocketInterface {
 	}
 
 	connect() {
-		this.#server.addRequestHandler(this.handleRequest.bind(this));
+		this.#server.addRequestHandler(this.handleRequest.bind(this), true);
 		return true;
 	}
 
@@ -54,7 +54,11 @@ export class WebSocketServerInterface extends WebSocketInterface {
 		return socket;
 	}
 
-	onWebSocketOpen(_webSocket: WebSocket): void {
+	onWebSocketOpened(_webSocket: WebSocket) {
 		// ignore
 	}	  
+
+	onWebSocketClosed(_webSocket: WebSocket) {
+		// ignore
+	}
 }
