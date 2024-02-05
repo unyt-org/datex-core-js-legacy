@@ -189,14 +189,13 @@ export class Supranet {
         // check if interface is available
         const info = endpoint.getInterfaceChannelInfo(interfaceType);
         if (info) {
-            console.log("info",info)
             // websocket
             if (interfaceType == "websocket") {
                 if (!(info instanceof URL || typeof info === "string")) {
                     logger.error("Invalid data for websocket interface, expected string or URL");
                     return false;
                 }
-                const webSocketInterface = new WebSocketClientInterface(info instanceof URL ? info.origin : info)
+                const webSocketInterface = new WebSocketClientInterface(info instanceof URL ? info.origin : info, endpoint)
                 await communicationHub.addInterface(webSocketInterface, setAsDefault);
                 return true;
             }

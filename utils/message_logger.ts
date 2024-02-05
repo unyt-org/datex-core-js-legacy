@@ -11,7 +11,6 @@ import { ESCAPE_SEQUENCES } from "./logger.ts";
 
 export class MessageLogger {
 	
-
 	static logger:Logger
 
     static decompile(dxb:ArrayBuffer, has_header = true, colorized = true, resolve_slots = true){
@@ -29,15 +28,17 @@ export class MessageLogger {
         }
     }
 
-	static enable(){
-
+	static enable(showRedirectedMessages = true){
+        IOHandler.resetDatexHandlers();
 		if (!this.logger) this.logger = new Logger("DATEX Message");
 
         IOHandler.onDatexReceived((header, dxb, socket)=>{
             // ignore incoming requests from own endpoint to own endpoint
             const receivers = header.routing?.receivers;
             const receiverIsOwnEndpoint = receivers instanceof Logical && receivers?.size == 1 && (receivers.has(Runtime.endpoint) || receivers.has(Runtime.endpoint.main));
+            if (!showRedirectedMessages && !receiverIsOwnEndpoint) return;
             if (header.sender == Runtime.endpoint && receiverIsOwnEndpoint && header.type != ProtocolDataType.RESPONSE && header.type != ProtocolDataType.DEBUGGER) return;
+
 
             // ignore hello messages
             if (header.type == ProtocolDataType.HELLO || header.type == ProtocolDataType.GOODBYE) {
@@ -60,7 +61,8 @@ export class MessageLogger {
             const receivers = header.routing?.receivers;
             if (header.sender == Runtime.endpoint && (receivers instanceof Logical && receivers?.size == 1 && receivers.has(Runtime.endpoint)) && header.type != ProtocolDataType.RESPONSE && header.type != ProtocolDataType.DEBUGGER) return;
             const senderIsOwnEndpoint = header.sender == Runtime.endpoint || header.sender == Runtime.endpoint.main;
-            
+            if (!showRedirectedMessages && !senderIsOwnEndpoint) return;
+
             // ignore hello messages
             if (header.type == ProtocolDataType.HELLO || header.type == ProtocolDataType.GOODBYE) {
                 this.logger.plain(`\n#color(green)${header.sender||'@*'} ──▶ ${receivers||'@*'} ${header.type!=undefined ? `(${ProtocolDataType[header.type]}) ` : ''}${socket ? `via ${socket.toString()}` : ''}`);
@@ -79,5 +81,9 @@ export class MessageLogger {
         });
 
 	}
+
+    static disable() {
+        IOHandler.resetDatexHandlers()
+    }
 
 }

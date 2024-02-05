@@ -20,7 +20,6 @@ import { communicationHub } from "./communication-hub.ts";
 const logger = new Logger("unyt");
 
 Supranet.onConnect = ()=>{
-    console.log("connec")
     Unyt.endpoint_info.endpoint = Runtime.endpoint,
     Unyt.endpoint_info.node = communicationHub.defaultSocket?.endpoint,
     Unyt.endpoint_info.interface = communicationHub.defaultSocket;

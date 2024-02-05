@@ -62,15 +62,22 @@ class EndpointConnectEvent extends Event {
 		super('connect');
 	}
 }
-class EndpointDisconnectEvent extends Event {
+class EndpointBeforeChangeEvent extends Event {
 	constructor(public endpoint: Endpoint) {
-		super('disconnect')
+		super('beforechange')
+	}
+}
+class BrokenChannelEvent extends Event {
+	constructor() {
+		super('brokenchannel')
 	}
 }
 
+
 interface CustomEventMap {
     "connect": EndpointConnectEvent
-    "disconnect": EndpointDisconnectEvent
+    "beforechange": EndpointBeforeChangeEvent,
+	"brokenchannel": BrokenChannelEvent
 }
 
 /**
@@ -200,7 +207,9 @@ export abstract class CommunicationInterfaceSocket extends EventTarget {
 
 		const successful = await this.send(dxb)
 		if (!successful) {
-			console.error("Failed to send block")
+			console.error("Failed to send block via " + this + (this.endpoint ? ` - ${this.endpoint}`: "") + " (channel broken). Disconnecting socket.")
+			// send was not succesful, meaning the channel is broken. Disconnect socket
+			this.dispatchEvent(new BrokenChannelEvent())
 			this.connected = false
 		}
 		return successful;
@@ -235,12 +244,13 @@ export abstract class CommunicationInterfaceSocket extends EventTarget {
 		if (this.#destroyed) throw new Error("Cannot receive on destroyed socket");
 		if (!this.connected) throw new Error("Cannot receive on disconnected socket");
 
-		// listen for GOODBYE messages
 		if (this.endpoint) {
+			// received GOODBYE message, assume endpoint switch. If endpoint just disconnects
+			// this will be recognized when the socket is disconnected
 			if (header.type == ProtocolDataType.GOODBYE && header.sender === this.endpoint) {
 				this.connected = false
 				this.#destroyed = true
-				this.dispatchEvent(new EndpointDisconnectEvent(this.endpoint))
+				this.dispatchEvent(new EndpointBeforeChangeEvent(this.endpoint))
 			}
 			// message from another endpoint, record as indirect socket connection
 			else if (header.sender !== this.endpoint && !communicationHub.handler.hasSocket(this as ConnectedCommunicationInterfaceSocket, header.sender)) {
@@ -356,8 +366,9 @@ export abstract class CommunicationInterface<Socket extends CommunicationInterfa
 	protected async addSocket(socket: Socket) {
 		if (this.#sockets.has(socket)) throw new Error("Socket already part of interface sockets.")
 
-		socket.addEventListener('disconnect', e => {
-			this.dispatchEvent(new EndpointDisconnectEvent(e.endpoint))
+		// endpoint will change (or socket is disconnected completely), propagate event and clone socket
+		socket.addEventListener('beforechange', e => {
+			this.dispatchEvent(new EndpointBeforeChangeEvent(e.endpoint))
 			// remove old socket
 			this.removeSocket(socket)
 			// clone and add new socket
@@ -365,10 +376,16 @@ export abstract class CommunicationInterface<Socket extends CommunicationInterfa
 			socket.clone = newSocket;
 			this.addSocket(newSocket);
 		})
+
+		// endpoint connected, propagate event
 		socket.addEventListener('connect', e => {
 			this.dispatchEvent(new EndpointConnectEvent(e.endpoint))
 		})
 
+		// channel broken, remove socket
+		socket.addEventListener('brokenchannel', () => {
+			this.removeSocket(socket)
+		});
 
 		// no direct endpoint connections supported, set socket endpoint to @@any to force only
 		// indirect connection registrations

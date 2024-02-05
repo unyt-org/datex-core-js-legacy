@@ -36,13 +36,13 @@ export class IOHandler {
     private static e_std_ins = new Map<Target, globalThis.Function>();
 
     // listeners for all incoming DATEX requests
-    private static datex_in_handler: ioEventHandler/* = (header, dxb)=>{
+    private static datex_in_handler?: ioEventHandler/* = (header, dxb)=>{
         console.debug('from ' + header.sender, DatexRuntime.decompile(dxb));
     }*/
     private static datex_in_handlers_per_endpoint = new Map<Target, ioEventHandler>();
 
     // listeners for all outgoing DATEX requests
-    private static datex_out_handler: ioEventHandler
+    private static datex_out_handler?: ioEventHandler
     private static datex_out_handlers_per_endpoint = new Map<Endpoint, ioEventHandler>();
     
     // listen for finished scopes with return value: sid -> callback
@@ -71,6 +71,11 @@ export class IOHandler {
         if (endpoint) this.datex_out_handlers_per_endpoint.set(endpoint, handler);  
         else this.datex_out_handler = handler;
     } 
+
+    static resetDatexHandlers() {
+        this.datex_in_handler = undefined;
+        this.datex_out_handler = undefined;
+    }
 
     // add scope result listener
     static addScopeResultListener(sid:number, output_callback:(data:datex_scope)=>void){

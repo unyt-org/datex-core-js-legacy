@@ -1,7 +1,8 @@
+import { Endpoint } from "../../types/addressing.ts";
 import { client_type } from "../../utils/constants.ts";
 import { InterfaceDirection } from "../communication-interface.ts";
 import { InterfaceProperties } from "../communication-interface.ts";
-import { WebSocketInterface } from "./websocket-interface.ts";
+import { WebSocketInterface, WebSocketInterfaceSocket } from "./websocket-interface.ts";
 
 export class WebSocketClientInterface extends WebSocketInterface {
 
@@ -13,8 +14,9 @@ export class WebSocketClientInterface extends WebSocketInterface {
 	}
 
 	public origin:URL
+	#initialEndpoint?: Endpoint
 	
-	constructor(origin: string|URL) {
+	constructor(origin: string|URL, initialEndpoint?: Endpoint) {
 		super()
 
 		// normalize origin
@@ -31,6 +33,7 @@ export class WebSocketClientInterface extends WebSocketInterface {
 		}
 
 		this.origin = origin;
+		this.#initialEndpoint = initialEndpoint;
 		this.properties.name = origin.toString();
 	}
 
@@ -41,8 +44,14 @@ export class WebSocketClientInterface extends WebSocketInterface {
             return false;
         }
 
-		const webSocket = new WebSocket(this.origin);    
+		const webSocket = new WebSocket(this.origin);
 		return this.initWebSocket(webSocket)
+	}
+
+	protected addSocket(socket: WebSocketInterfaceSocket) {
+		// set initial endpoint if already known
+		if (this.#initialEndpoint) socket.endpoint = this.#initialEndpoint;
+		return super.addSocket(socket);
 	}
 
 	onWebSocketOpened(_webSocket: WebSocket) {
