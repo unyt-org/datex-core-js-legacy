@@ -1,7 +1,7 @@
 import { InterfaceDirection } from "../communication-interface.ts";
 import { InterfaceProperties } from "../communication-interface.ts";
 import type { WebServer } from "./http-server-interface.ts";
-import { WebSocketInterface } from "./websocket-interface.ts";
+import { WebSocketInterface, WebSocketInterfaceSocket } from "./websocket-interface.ts";
 
 
 export class WebSocketServerInterface extends WebSocketInterface {
@@ -58,7 +58,7 @@ export class WebSocketServerInterface extends WebSocketInterface {
 		// ignore
 	}	  
 
-	onWebSocketClosed(_webSocket: WebSocket) {
-		// ignore
+	onWebSocketClosed(socket: WebSocketInterfaceSocket) {
+		this.removeSocket(socket);
 	}
 }

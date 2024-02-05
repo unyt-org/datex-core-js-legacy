@@ -59,7 +59,7 @@ export class WebSocketClientInterface extends WebSocketInterface {
 			this.logger.warn(`unsecure websocket connection to ${this.origin.host}`)
 	}
 
-	onWebSocketClosed(_webSocket: WebSocket) {
+	onWebSocketClosed(_socket: WebSocketInterfaceSocket) {
 		// only one websocket exists, so we handle a interface connection error here and try to reconnect
 		this.onConnectionError();
 	}
