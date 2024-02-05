@@ -49,7 +49,7 @@ export type InterfaceProperties =  {
 	 * If true, the interface does not support continuous connections.
 	 * All sockets are indirectly connected
 	 */
-	noContinuosConnection?: boolean
+	noContinuousConnection?: boolean
 }
 
 function getIdentifier(properties?: InterfaceProperties) {
@@ -241,8 +241,8 @@ export abstract class CommunicationInterfaceSocket extends EventTarget {
 	}
 
 	protected handleReceiveHeader(header: dxb_header) {
-		if (this.#destroyed) throw new Error("Cannot receive on destroyed socket");
-		if (!this.connected) throw new Error("Cannot receive on disconnected socket");
+		if (this.#destroyed) return;
+		if (!this.connected) return;
 
 		if (this.endpoint) {
 			// received GOODBYE message, assume endpoint switch. If endpoint just disconnects
@@ -310,7 +310,7 @@ export abstract class CommunicationInterface<Socket extends CommunicationInterfa
 	async init(secret: symbol) {
 
 		if (secret !== COM_HUB_SECRET) throw new Error("Directly calling CommunicationInterface.init() is not allowed")
-		if (Runtime.endpoint == LOCAL_ENDPOINT) throw new Error("Cannot use communication interface with local endpoint")
+		// if (Runtime.endpoint == LOCAL_ENDPOINT) throw new Error("Cannot use communication interface with local endpoint")
 		await this.#reconnect()
 	}
 
@@ -389,7 +389,7 @@ export abstract class CommunicationInterface<Socket extends CommunicationInterfa
 
 		// no direct endpoint connections supported, set socket endpoint to @@any to force only
 		// indirect connection registrations
-		if (this.properties.noContinuosConnection) {
+		if (this.properties.noContinuousConnection) {
 			socket.endpoint = BROADCAST
 		}
 
@@ -415,10 +415,13 @@ export abstract class CommunicationInterface<Socket extends CommunicationInterfa
 	 * Remove a socket from this interface
 	 */
 	protected removeSocket(socket: Socket) {
-		if (!this.#sockets.has(socket)) throw new Error("Cannot remove socket, not part of interface sockets.")
+		if (!this.#sockets.has(socket)) {
+			return;
+			// throw new Error("Cannot remove socket, not part of interface sockets.")
+		}
 		this.#sockets.delete(socket)
 		socket.connected = false; // removes socket from communication hub
-	}
+	} 
 
 	/**
 	 * Remove all sockets from this interface

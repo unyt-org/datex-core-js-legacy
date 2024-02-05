@@ -50,6 +50,10 @@ export abstract class WebSocketInterface extends CommunicationInterface<WebSocke
 		
 				let connectionOpen = false;
 				const errorHandler = () => {
+					// don't trigger any further errorHandlers
+					webSocket.removeEventListener('close', errorHandler);
+					webSocket.removeEventListener('error', errorHandler);
+
 					this.#webSockets.delete(webSocket);
 					if (webSocket.readyState !== WebSocket.CLOSED) {
 						// make sure the socket is closed
@@ -57,7 +61,7 @@ export abstract class WebSocketInterface extends CommunicationInterface<WebSocke
 					}
 					if (!connectionOpen) resolve(false);
 					else {
-						this.onWebSocketClosed(socket);
+						this.removeSocket(socket);
 					}
 				};
 				const openHandler = () => {

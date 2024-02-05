@@ -52,7 +52,7 @@ export class HTTPServerInterface extends CommunicationInterface {
 	public properties: InterfaceProperties = {
 		type: "http-server",
 		direction: InterfaceDirection.IN,
-		noContinuosConnection: true,
+		noContinuousConnection: true,
 		latency: 0,
 		bandwidth: 1
 	}

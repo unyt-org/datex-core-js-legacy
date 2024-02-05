@@ -192,7 +192,7 @@ export class CommunicationHubHandler {
 			string += `\n${ESCAPE_SEQUENCES.BOLD}${identifier}${ESCAPE_SEQUENCES.RESET}\n`
 			for (const [endpoint, socket] of sockets) {
 				// skip placeholder @@any for noContinuosConnection interfaces
-				if (socket.interfaceProperties?.noContinuosConnection && endpoint == BROADCAST) continue;
+				if (socket.interfaceProperties?.noContinuousConnection && endpoint == BROADCAST) continue;
 
 				const directionSymbol = this.directionSymbols[socket.interfaceProperties?.direction as InterfaceDirection] ?? "?"
 				const isDirect = socket.endpoint === endpoint;

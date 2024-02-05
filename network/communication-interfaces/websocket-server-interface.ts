@@ -58,7 +58,7 @@ export class WebSocketServerInterface extends WebSocketInterface {
 		// ignore
 	}	  
 
-	onWebSocketClosed(socket: WebSocketInterfaceSocket) {
-		this.removeSocket(socket);
+	onWebSocketClosed(_socket: WebSocketInterfaceSocket) {
+		// ignore;
 	}
 }
