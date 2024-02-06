@@ -316,7 +316,7 @@ export abstract class CommunicationInterface<Socket extends CommunicationInterfa
 		// return false if not connected after timeout
 		if (timeout) {
 			return Promise.race([
-				this.#reconnect().then(() => true),
+				this.#connectLoop().then(() => true),
 				new Promise<boolean>(resolve => {
 					setTimeout(() => {
 						resolve(false)
@@ -326,7 +326,7 @@ export abstract class CommunicationInterface<Socket extends CommunicationInterfa
 		}
 		// no timeout
 		else {
-			await this.#reconnect();
+			await this.#connectLoop();
 			return true;
 		}
 	}
@@ -361,10 +361,9 @@ export abstract class CommunicationInterface<Socket extends CommunicationInterfa
 		}
 	}
 
-	async #reconnect() {
+	async #connectLoop(reconnecting = false) {
 		if (this.#connecting) return;
 		this.#connecting = true;
-		let reconnecting = false;
 		while (!await this.connect()) {
 			const interval = this.properties.reconnectInterval || 3000;
 			reconnecting = true;
@@ -379,7 +378,7 @@ export abstract class CommunicationInterface<Socket extends CommunicationInterfa
 	protected async onConnectionError() {
 		this.logger.error("Connection error (" + this + ")");
 		this.clearSockets();
-		await this.#reconnect()
+		await this.#connectLoop(true)
 	}
 	
 	/**
