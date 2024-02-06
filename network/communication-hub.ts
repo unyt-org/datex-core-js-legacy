@@ -46,8 +46,15 @@ export class CommunicationHub {
 		return this.handler.defaultSocket;
 	}
 
-	public addInterface(comInterface: CommunicationInterface, setAsDefault = false) {
-		return this.handler.addInterface(comInterface, setAsDefault);
+	/**
+	 * Registers a new CommunicationInterface and initializes it
+	 * @param comInterface - CommunicationInterface to add
+	 * @param setAsDefault - set as default interface for sending DATEX messages
+	 * @param timeout - timeout in ms for interface initialization (default: no timeout)
+	 * @returns true if the interface was successfully initialized, false if connection could not be established after timeout if specified
+	 */
+	public addInterface(comInterface: CommunicationInterface, setAsDefault = false, timeout?: number) {
+		return this.handler.addInterface(comInterface, setAsDefault, timeout);
 	}
 
 	public removeInterface(comInterface: CommunicationInterface) {
@@ -135,10 +142,12 @@ export class CommunicationHubHandler {
 
 	/** Public facing methods: **/
 
-	public async addInterface(comInterface: CommunicationInterface, setAsDefault = false) {
+	public async addInterface(comInterface: CommunicationInterface, setAsDefault = false, timeout?: number) {
 		this.#interfaces.add(comInterface)
-		await comInterface.init(COM_HUB_SECRET);
-		if (setAsDefault) this.setDefaultInterface(comInterface)
+		const connected = await comInterface.init(COM_HUB_SECRET, timeout);
+		if (connected && setAsDefault) this.setDefaultInterface(comInterface)
+		if (!connected) this.#interfaces.delete(comInterface);
+		return connected
 	}
 
 	public async removeInterface(comInterface: CommunicationInterface) {

@@ -4,6 +4,9 @@ import { InterfaceDirection } from "../communication-interface.ts";
 import { InterfaceProperties } from "../communication-interface.ts";
 import { WebSocketInterface, WebSocketInterfaceSocket } from "./websocket-interface.ts";
 
+/**
+ * WebSocket client interface for connecting to a WebSocket server
+ */
 export class WebSocketClientInterface extends WebSocketInterface {
 
 	public properties: InterfaceProperties = {

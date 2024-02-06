@@ -23,6 +23,9 @@ export class LocalLoopbackInterfaceSocket extends CommunicationInterfaceSocket {
 	}
 }
 
+/**
+ * Loopback interface for sending and DATEX messages to the local endpoint
+ */
 export class LocalLoopbackInterface extends CommunicationInterface<LocalLoopbackInterfaceSocket> {
 	
 	public properties: InterfaceProperties = {

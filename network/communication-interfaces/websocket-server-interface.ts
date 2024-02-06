@@ -3,7 +3,9 @@ import { InterfaceProperties } from "../communication-interface.ts";
 import type { WebServer } from "./http-server-interface.ts";
 import { WebSocketInterface, WebSocketInterfaceSocket } from "./websocket-interface.ts";
 
-
+/**
+ * WebSocket server interface for receiving WebSocket connections from clients
+ */
 export class WebSocketServerInterface extends WebSocketInterface {
 
 	public properties: InterfaceProperties = {

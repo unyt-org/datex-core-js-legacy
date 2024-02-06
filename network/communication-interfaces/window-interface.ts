@@ -33,6 +33,9 @@ export class WindowInterfaceSocket extends CommunicationInterfaceSocket {
 	}
 }
 
+/**
+ * Creates a direct DATEX communication channel between a parent and child window
+ */
 export class WindowInterface extends CommunicationInterface {
 	
 	public properties: InterfaceProperties = {

@@ -31,9 +31,14 @@ async function initTsInterfaceGenerator(url: string) {
 	({generateTSModuleForRemoteAccess} = await import(url));
 }
 
-async function initWorkerComInterface(url: string) {
-	await import(url) as typeof import("./worker-com-interface.ts");
+async function getWorkerComInterface(url: string) {
+	return await import(url) as typeof import("../network/communication-interfaces/worker-interface.ts");
 }
+
+async function getCommunicationHub(url: string) {
+	return await import(url) as typeof import("../network/communication-hub.ts");
+}
+
 
 async function loadModule(url: string) {
 	const module = await import(url)
@@ -62,13 +67,18 @@ addEventListener("message", async function (event) {
 			(globalThis as any)._override_console_theme = data.theme;
 
 			await initDatex(data.datexURL);
-			await initWorkerComInterface(data.comInterfaceURL);
+			const {WorkerInterface} = await getWorkerComInterface(data.workerInterfaceURL);
+			const {communicationHub} = await getCommunicationHub(data.communicationHubURL);
+
 			await initTsInterfaceGenerator(data.tsInterfaceGeneratorURL);
 			const remoteModule = data.moduleURL ? await loadModule(data.moduleURL) : null;
 			
 			// connect via worker com interface
 			const endpoint = Datex.Target.get(data.endpoint as any) as DatexType.Endpoint;
-			await Datex.InterfaceManager.connect("worker", endpoint, [self])
+
+			// TODO: Worker type?
+			await communicationHub.addInterface(new WorkerInterface(self as unknown as Worker, endpoint), true);
+
 			messageTarget.postMessage({type: "INITIALIZED", remoteModule, endpoint: Datex.Runtime.endpoint.toString()});
 			// trust parent endpoint
 			Datex.Runtime.addTrustedEndpoint(endpoint, ["remote-js-execution"]);

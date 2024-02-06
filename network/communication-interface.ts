@@ -308,11 +308,27 @@ export abstract class CommunicationInterface<Socket extends CommunicationInterfa
 	/**
 	 * @private
 	 */
-	async init(secret: symbol) {
+	async init(secret: symbol, timeout?: number) {
 
 		if (secret !== COM_HUB_SECRET) throw new Error("Directly calling CommunicationInterface.init() is not allowed")
 		// if (Runtime.endpoint == LOCAL_ENDPOINT) throw new Error("Cannot use communication interface with local endpoint")
-		await this.#reconnect()
+		
+		// return false if not connected after timeout
+		if (timeout) {
+			return Promise.race([
+				this.#reconnect().then(() => true),
+				new Promise<boolean>(resolve => {
+					setTimeout(() => {
+						resolve(false)
+					}, 5000)
+				})
+			])
+		}
+		// no timeout
+		else {
+			await this.#reconnect();
+			return true;
+		}
 	}
 
 	/**

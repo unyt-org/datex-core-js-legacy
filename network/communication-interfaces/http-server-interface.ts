@@ -11,6 +11,7 @@ export interface WebServer {
 type requestHandler = (req: Deno.RequestEvent, path:string, con:Deno.Conn)=>void|boolean|string|Promise<void|boolean|string>;
 
 
+
 export class HTTPServerInterfaceSocket extends CommunicationInterfaceSocket {
 
 	constructor(public server: WebServer) {
@@ -47,6 +48,9 @@ export class HTTPServerInterfaceSocket extends CommunicationInterfaceSocket {
 	}
 }
 
+/**
+ * Creates a DATEX HTTP interface that can be used to receive DATEX messages sent via a HTTP POST request to /datex-http
+ */
 export class HTTPServerInterface extends CommunicationInterface {
 
 	public properties: InterfaceProperties = {
