@@ -45,19 +45,33 @@ export class WindowInterface extends CommunicationInterface {
 		bandwidth: 1_000_000
 	}
 
-	#window: Window
+	#windowOrIFrame: Window|HTMLIFrameElement
 	#windowOrigin: string
 	#isChild: boolean
 
-	constructor(window: Window, windowOrigin?: string|URL) {
+	get window() {
+		return this.#windowOrIFrame instanceof HTMLIFrameElement ? this.#windowOrIFrame.contentWindow! : this.#windowOrIFrame;
+	}
+
+	constructor(window: Window, windowOrigin?: string|URL)
+	constructor(iframe: HTMLIFrameElement, iframeOrigin?: string|URL)
+	constructor(window: Window|HTMLIFrameElement, windowOrigin?: string|URL) {
 		super()
 
-		const windowOriginURL = windowOrigin ? new URL(windowOrigin) : null;
+		let windowOriginURL = windowOrigin ? new URL(windowOrigin) : null;
 
-		this.#window = window;
+		this.#windowOrIFrame = window;
 
-		// is the child
-		if (window === self.window.opener) {
+		// is parent document, has iframe
+		if (window instanceof HTMLIFrameElement) {
+			this.#isChild = false;
+			window.setAttribute("sandbox", "allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox")
+            this.#windowOrigin = new URL(window.src).origin;
+			windowOriginURL = new URL(window.src);
+			this.logger.info("initializing as parent window, child iframe origin: " + this.#windowOrigin)
+		} 
+		// is opened child window or inside iframe
+		else if (window === self.window.opener || globalThis.self !== globalThis.top) {
 			this.#isChild = true;
 
 			// explicitly set window origin
@@ -71,6 +85,7 @@ export class WindowInterface extends CommunicationInterface {
 				}
 				// try document.referrer
 				catch {
+					console.log("doc",document,document.referrer)
 					if (!document.referrer) throw new Error("The origin of the parent window cannot be determined automatically. Please provide windowOrigin as second argument.");
 					this.#windowOrigin = new URL(document.referrer).origin;
 				}
@@ -88,7 +103,7 @@ export class WindowInterface extends CommunicationInterface {
 			else {
 				throw new Error("The origin of the child window cannot be determined automatically. Please provide windowOrigin as second argument.");				
 			}
-            this.logger.info("initializing as parent window, window origin: " + this.#windowOrigin)
+            this.logger.info("initializing as parent window, child window origin: " + this.#windowOrigin)
         }
 
 		this.properties.name = windowOriginURL?.toString() || this.#windowOrigin;
@@ -112,7 +127,7 @@ export class WindowInterface extends CommunicationInterface {
 	
 
 	private sendInit() {
-        this.#window.postMessage({
+        this.window.postMessage({
             type: "INIT",
             endpoint: Runtime.endpoint.toString()
         }, this.#windowOrigin);
@@ -123,7 +138,7 @@ export class WindowInterface extends CommunicationInterface {
 	private handleClose() {
 		// check window.closed every second
 		const interval = setInterval(() => {
-			if (this.#window.closed) {
+			if (this.window?.closed) {
 				clearInterval(interval);
 				this.clearSockets()
 				this.onClose?.()
@@ -138,7 +153,7 @@ export class WindowInterface extends CommunicationInterface {
            	if (data?.type == "INIT") {
 				globalThis.removeEventListener("message", this.onReceive);
 
-				const socket = new WindowInterfaceSocket(this.#window, this.#windowOrigin)
+				const socket = new WindowInterfaceSocket(this.window, this.#windowOrigin)
 				socket.endpoint = Target.get(data.endpoint) as Endpoint;
 				this.addSocket(socket)
 
@@ -153,13 +168,18 @@ export class WindowInterface extends CommunicationInterface {
 	}
 
 	
-	static createChildInterface(childWindow: Window, windowOrigin: string|URL) {
+	static createChildWindowInterface(childWindow: Window, windowOrigin: string|URL) {
 		return new WindowInterface(childWindow, windowOrigin)
+	}
+
+	static createChildIFrameInterface(iframe: HTMLIFrameElement) {
+		return new WindowInterface(iframe)
 	}
 
 	static createParentInterface(parentWindow: Window, windowOrigin?: string|URL) {
 		return new WindowInterface(parentWindow, windowOrigin)
 	}
+
 
 	/**
 	 * Opens a new window and registers a attached WindowInterface.
@@ -168,7 +188,7 @@ export class WindowInterface extends CommunicationInterface {
 	static createWindow(url: string | URL, target?: string, features?: string, connectionTimeout?: number) {
 		const newWindow = window.open(url, target, features);
 		if (!newWindow) return Promise.resolve({window: null, endpoint: null});
-		const windowInterface = this.createChildInterface(newWindow, url)
+		const windowInterface = this.createChildWindowInterface(newWindow, url)
 		
 		communicationHub.addInterface(windowInterface)
 		windowInterface.onClose = () => {
@@ -186,6 +206,31 @@ export class WindowInterface extends CommunicationInterface {
 				setTimeout(() => {
 					newWindow.close();
 					resolve({window: newWindow, endpoint: null})
+				}, connectionTimeout);
+			}
+		})
+	}
+
+	/**
+	 * Binds a Iframe and registers a attached WindowInterface.
+	 * The WindowInterface is automatically removed when the iframe is closed.
+	 */
+	static bindIFrame(iframe: HTMLIFrameElement, connectionTimeout?: number) {
+		const windowInterface = this.createChildIFrameInterface(iframe)
+		
+		communicationHub.addInterface(windowInterface)
+		windowInterface.onClose = () => {
+			communicationHub.removeInterface(windowInterface)
+		}
+		console.log("iframe", iframe)
+
+		return new Promise<Endpoint|null>((resolve) => {
+			windowInterface.addEventListener("connect", e => {
+				resolve(e.endpoint)
+			})
+			if (connectionTimeout!=null && isFinite(connectionTimeout)) { 
+				setTimeout(() => {
+					resolve(null)
 				}, connectionTimeout);
 			}
 		})

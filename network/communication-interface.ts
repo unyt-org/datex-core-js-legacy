@@ -320,7 +320,7 @@ export abstract class CommunicationInterface<Socket extends CommunicationInterfa
 				new Promise<boolean>(resolve => {
 					setTimeout(() => {
 						resolve(false)
-					}, 5000)
+					}, timeout)
 				})
 			])
 		}
