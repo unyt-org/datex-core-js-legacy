@@ -62,6 +62,7 @@ export abstract class WebSocketInterface extends CommunicationInterface<WebSocke
 					if (!connectionOpen) resolve(false);
 					else {
 						this.removeSocket(socket);
+						this.onWebSocketClosed(socket)
 					}
 				};
 				const openHandler = () => {
