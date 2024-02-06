@@ -65,8 +65,8 @@ export abstract class WebSocketInterface extends CommunicationInterface<WebSocke
 						this.onWebSocketClosed(socket)
 					}
 				};
-				const openHandler = () => {
-					this.addSocket(socket);		
+				const openHandler = async () => {
+					await this.addSocket(socket);
 					connectionOpen = true;
 					this.onWebSocketOpened(webSocket);
 					resolve(true);
@@ -99,10 +99,13 @@ export abstract class WebSocketInterface extends CommunicationInterface<WebSocke
 
 	disconnect() {
 		for (const [webSocket, {errorHandler, openHandler}] of this.#webSockets.entries()) {
-			webSocket.removeEventListener('open', openHandler);
-			webSocket.removeEventListener('error', errorHandler);
-			webSocket.removeEventListener('close', errorHandler);
-			webSocket.close();
+			try {
+				webSocket.removeEventListener('open', openHandler);
+				webSocket.removeEventListener('error', errorHandler);
+				webSocket.removeEventListener('close', errorHandler);
+				webSocket.close();
+			}
+			catch {}
 		}
 		this.#webSockets.clear();
 	}

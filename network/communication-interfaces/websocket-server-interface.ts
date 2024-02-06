@@ -27,21 +27,26 @@ export class WebSocketServerInterface extends WebSocketInterface {
 		return true;
 	}
 
-	protected handleRequest(requestEvent: Deno.RequestEvent){
+	protected async handleRequest(requestEvent: Deno.RequestEvent){
 		// is websocket upgrade?
 		if (requestEvent.request.headers.get("upgrade") === "websocket") {
-			const socket = this.upgradeWebSocket(requestEvent);
-			this.initWebSocket(socket);
-			return true;
+			try {
+				const socket = await this.upgradeWebSocket(requestEvent);
+				await this.initWebSocket(socket);
+				return true;
+			}
+			catch {
+				return false;
+			}
 		}
         else return false;
     }
 
-	protected upgradeWebSocket(requestEvent: Deno.RequestEvent) {
+	protected async upgradeWebSocket(requestEvent: Deno.RequestEvent) {
 		// upgrade to websocket
 		const req = requestEvent.request; 
 		const { socket, response } = Deno.upgradeWebSocket(req);
-		requestEvent.respondWith(response);
+		await requestEvent.respondWith(response);
 
 		// infer interface ws url from request url
 		if (!this.properties.name) {
