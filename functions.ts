@@ -80,14 +80,16 @@ export async function asyncAlways<T>(transform:SmartTransformFunction<T>, option
 }
 
 /**
- * Decorator to create a reactive function.
- * Functions decorated with reactiveFn always return a pointer that is automatically updated when input references are updated.
+ * Decorator for creating a reactive function.
+ * Functions decorated with `reactiveFn` always return a pointer that is automatically updated when input references are updated.
  * This has the same effect as wrapping the function body with `always`.
+ * A reactive functions accepts references or values as arguments, but is always called with collapsed values. 
+ * This means that you don't have to specifiy `Ref` values as arguments, but can use regular types.
  * 
  * Example:
  * ```ts
  * // create reactive function 'getSquared'
- * const getSquared = reactiveFn((x: Ref<number>) => x * x);
+ * const getSquared = reactiveFn((x: number) => x * x);
  * 
  * const x = $$(2);
  * const y = getSquared(x); // Ref<4>
