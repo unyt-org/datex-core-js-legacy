@@ -3731,7 +3731,7 @@ export class Pointer<T = any> extends Ref<T> {
                     }
                     catch (e) {
                         console.log(obj, name);
-                        console.log(e)
+                        console.error(e)
                     }
                 }
             }

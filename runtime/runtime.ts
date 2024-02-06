@@ -425,7 +425,6 @@ export class Runtime {
         
         return new Promise<void>((resolve) => {
             Runtime.datexOutAllSent().then(() => {
-                console.log("senttt all finisehed");
                 resolve()
             });
         });

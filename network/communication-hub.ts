@@ -97,6 +97,16 @@ export class CommunicationHubHandler {
 	#endpointSockets = new Map<Endpoint, Set<ConnectedCommunicationInterfaceSocket>>().setAutoDefault(Set).enableAutoRemove()
 	#registeredSockets = new Map<ConnectedCommunicationInterfaceSocket, Set<Endpoint>>().setAutoDefault(Set).enableAutoRemove()
 
+	get registeredSockets() {
+		return this.#registeredSockets;
+	}
+	get endpointSockets() {
+		return this.#endpointSockets;
+	}
+	get interfaces() {
+		return this.#interfaces;
+	}
+
 	// maps main endpoints to a list of instance endpoints that are currently connected via sockets
 	#activeEndpointInstances = new Map<Endpoint, Set<Endpoint>>().setAutoDefault(Set).enableAutoRemove()
 
@@ -137,6 +147,10 @@ export class CommunicationHubHandler {
 	}
 
 	public printStatus() {
+		console.log(this.getStatus())
+	}
+
+	public getStatus() {
 		let string = "";
 		string += ESCAPE_SEQUENCES.BOLD + "DATEX Communication Hub\n\n" + ESCAPE_SEQUENCES.RESET;
 		string += `Local Endpoint: ${Runtime.endpoint}\n`
@@ -208,7 +222,7 @@ export class CommunicationHubHandler {
 			}
 		}
 
-		console.log(string)
+		return string;
 	}
 
 	public printEndpointSockets(endpoint: Endpoint|string) {
@@ -312,7 +326,6 @@ export class CommunicationHubHandler {
 
 				// iterate direct outgoing sockets
 				for (const socket of this.iterateSockets()) {
-					console.log("send", socket, lastEndpointGooodbyeMessage)
 					socket.sendGoodbye(lastEndpointGooodbyeMessage)
 				}
 			}

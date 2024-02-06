@@ -588,7 +588,7 @@ function normalizeType(type:Type|string, allowTypeParams = true, defaultNamespac
         return type
     }
     else {
-        console.log(type)
+        console.error("invalid type",type)
         throw new Error("Invalid type")
     }
 }

@@ -227,7 +227,7 @@ export function createFunctionWithDependencyInjections(source: string, dependenc
         else return fn;
     }
     catch (e) {
-        console.error(source)
+        console.error("createFunctionWithDependencyInjections", e, source)
         throw e;
     }
     

@@ -109,7 +109,7 @@ export class Function<T extends (...args: any) => any = (...args: any) => any> e
             try {
                 throw new Error("Cannot convert a bound function to a DATEX function");
             } catch (e) {
-                console.error(e)
+                console.error("createFromJSFunction", e)
                 return () => {};
             }
         }
@@ -321,7 +321,7 @@ export class Function<T extends (...args: any) => any = (...args: any) => any> e
             if (this.proxy_fn) {
                 if (SCOPE.impersonation_permission) return this.proxy_fn(value);
                 else {
-                    console.error(this.proxy_fn)
+                    console.error("No permission to execute functions on external endpoints", this.proxy_fn)
                     throw new PermissionError("No permission to execute functions on external endpoints ("+this.name+","+this.proxy_fn.name+")", SCOPE)
                 }
             }
