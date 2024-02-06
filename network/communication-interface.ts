@@ -255,7 +255,8 @@ export abstract class CommunicationInterfaceSocket extends EventTarget {
 			// message from another endpoint, record as indirect socket connection
 			else if (header.sender !== this.endpoint && !communicationHub.handler.hasSocket(this as ConnectedCommunicationInterfaceSocket, header.sender)) {
 				if (header.sender === Runtime.endpoint) {
-					this.logger.error("Indirect connection to own endpoint detected at "+this)
+					// loopback connection to own endpoint, this is not a problem, but might help with debugging
+					this.logger.debug("Indirect connection to own endpoint detected at " + this + " (loopback)");
 				}
 				else communicationHub.handler.registerSocket(this as ConnectedCommunicationInterfaceSocket, header.sender)
 			}
@@ -347,10 +348,15 @@ export abstract class CommunicationInterface<Socket extends CommunicationInterfa
 	async #reconnect() {
 		if (this.#connecting) return;
 		this.#connecting = true;
+		let reconnecting = false;
 		while (!await this.connect()) {
-			await sleep(this.properties.reconnectInterval || 3000)
+			const interval = this.properties.reconnectInterval || 3000;
+			reconnecting = true;
+			this.logger.error("Could not connect to " + this + ", trying again in " + Math.round(interval/1000) + "s");
+			await sleep(interval)
 		}
-		this.logger.success("Connected to " + this);
+		if (reconnecting) this.logger.success("Reconnected to " + this);
+		else this.logger.debug("Connected to " + this);
 		this.#connecting = false;
 	}
 
