@@ -68,7 +68,7 @@ export class WindowInterface extends CommunicationInterface {
 			window.setAttribute("sandbox", "allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox")
             this.#windowOrigin = new URL(window.src).origin;
 			windowOriginURL = new URL(window.src);
-			this.logger.info("initializing as parent window, child iframe origin: " + this.#windowOrigin)
+			this.logger.debug("initializing as parent window, child iframe origin: " + this.#windowOrigin)
 		} 
 		// is opened child window or inside iframe
 		else if (window === self.window.opener || globalThis.self !== globalThis.top) {
@@ -89,7 +89,7 @@ export class WindowInterface extends CommunicationInterface {
 					this.#windowOrigin = new URL(document.referrer).origin;
 				}
 			}
-            this.logger.info("initializing as child window, parent window origin: " + this.#windowOrigin)
+            this.logger.debug("initializing as child window, parent window origin: " + this.#windowOrigin)
 		}
 		// is the parent document
         else {
@@ -102,7 +102,7 @@ export class WindowInterface extends CommunicationInterface {
 			else {
 				throw new Error("The origin of the child window cannot be determined automatically. Please provide windowOrigin as second argument.");				
 			}
-            this.logger.info("initializing as parent window, child window origin: " + this.#windowOrigin)
+            this.logger.debug("initializing as parent window, child window origin: " + this.#windowOrigin)
         }
 
 		this.properties.name = windowOriginURL?.toString() || this.#windowOrigin;
