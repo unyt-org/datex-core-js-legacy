@@ -85,7 +85,6 @@ export class WindowInterface extends CommunicationInterface {
 				}
 				// try document.referrer
 				catch {
-					console.log("doc",document,document.referrer)
 					if (!document.referrer) throw new Error("The origin of the parent window cannot be determined automatically. Please provide windowOrigin as second argument.");
 					this.#windowOrigin = new URL(document.referrer).origin;
 				}
@@ -222,7 +221,6 @@ export class WindowInterface extends CommunicationInterface {
 		windowInterface.onClose = () => {
 			communicationHub.removeInterface(windowInterface)
 		}
-		console.log("iframe", iframe)
 
 		return new Promise<Endpoint|null>((resolve) => {
 			windowInterface.addEventListener("connect", e => {
