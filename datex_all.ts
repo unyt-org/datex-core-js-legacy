@@ -23,7 +23,6 @@ export * from "./compiler/unit_codes.ts";
 
 
 // network
-export * from "./network/client.ts";
 export * from "./network/supranet.ts";
 export * from "./network/network_utils.ts";
 export * from "./network/unyt.ts";
@@ -61,8 +60,8 @@ export * from "./types/tuple.ts";
 export * from "./types/type.ts";
 export * from "./types/quantity.ts";
 export * from "./types/time.ts";
-export * from "./types/storage_map.ts";
-export * from "./types/storage_set.ts";
+export * from "./types/storage-map.ts";
+export * from "./types/storage-set.ts";
 export * from "./types/struct.ts";
 
 // polyfills
