@@ -33,18 +33,18 @@ export function always<T=unknown>(script:TemplateStringsArray, ...vars:any[]): P
 export function always(scriptOrJSTransform:TemplateStringsArray|SmartTransformFunction<any>, ...vars:any[]) {
     // js function
     if (typeof scriptOrJSTransform == "function") {
-		// make sure handler is not an async function
-		if (scriptOrJSTransform.constructor.name == "AsyncFunction") {
-			throw new Error("Async functions are not allowed as always transforms")
-		}
-		const ptr = Pointer.createSmartTransform(scriptOrJSTransform, undefined, undefined, undefined, vars[0]);
-		if (!ptr.value_initialized && ptr.waiting_for_always_promise) {
-			throw new PointerError(`Promises cannot be returned from always transforms - use 'asyncAlways' instead`);
-		}
-		else {
-			return Ref.collapseValue(ptr);
-		}
-	}
+        // make sure handler is not an async function
+        if (scriptOrJSTransform.constructor.name == "AsyncFunction") {
+            throw new Error("Async functions are not allowed as always transforms")
+        }
+        const ptr = Pointer.createSmartTransform(scriptOrJSTransform, undefined, undefined, undefined, vars[0]);
+        if (!ptr.value_initialized && ptr.waiting_for_always_promise) {
+            throw new PointerError(`Promises cannot be returned from always transforms - use 'asyncAlways' instead`);
+        }
+        else {
+            return Ref.collapseValue(ptr);
+        }
+    }
     // datex script
     else return (async ()=>Ref.collapseValue(await datex(`always (${scriptOrJSTransform.raw.join(INSERT_MARK)})`, vars)))()
 }
@@ -66,17 +66,17 @@ export function always(scriptOrJSTransform:TemplateStringsArray|SmartTransformFu
  */
 export async function asyncAlways<T>(transform:SmartTransformFunction<T>, options?: SmartTransformOptions): Promise<MinimalJSRef<T>> { // return signature from Value.collapseValue(Pointer.smartTransform())
     // make sure handler is not an async function
-	if (transform.constructor.name == "AsyncFunction") {
-		throw new Error("asyncAlways cannot be used with async functions, but with functions returning a Promise")
-	}
-	const ptr = Pointer.createSmartTransform(transform, undefined, undefined, undefined, options);
-	if (!ptr.value_initialized && ptr.waiting_for_always_promise) {
-		await ptr.waiting_for_always_promise;
-	}
-	else {
-		logger.warn("asyncAlways: transform function did not return a Promise, you should use 'always' instead")
-	}
-	return Ref.collapseValue(ptr) as MinimalJSRef<T>
+    if (transform.constructor.name == "AsyncFunction") {
+        throw new Error("asyncAlways cannot be used with async functions, but with functions returning a Promise")
+    }
+    const ptr = Pointer.createSmartTransform(transform, undefined, undefined, undefined, options);
+    if (!ptr.value_initialized && ptr.waiting_for_always_promise) {
+        await ptr.waiting_for_always_promise;
+    }
+    else {
+        logger.warn("asyncAlways: transform function did not return a Promise, you should use 'always' instead")
+    }
+    return Ref.collapseValue(ptr) as MinimalJSRef<T>
 }
 
 /**
@@ -98,14 +98,25 @@ export async function asyncAlways<T>(transform:SmartTransformFunction<T>, option
  * ```
  */
 export function reactiveFn<ReturnType, Args extends unknown[]>(fn: (...args: Args) => Awaited<RestrictSameType<RefOrValue<ReturnType>>>) {
-	return (...args: MapToRefOrVal<Args>) => always(() => {
-		const collapsedArgs = args.map(arg => Ref.collapseValue(arg, true, true)) as Args;
-		return fn(...collapsedArgs)
-	});
+    return (...args: MapToRefOrVal<Args>) => always(() => {
+        const collapsedArgs = args.map(arg => Ref.collapseValue(arg, true, true)) as Args;
+        return fn(...collapsedArgs)
+    });
 }
 
 type MapToRefOrVal<T extends unknown[]> = {[K in keyof T]: T[K] extends Ref ? T[K] : RefOrValue<T[K]>}
 
+
+const getGreetingMessage = (country: RefOrValue<string>) => {
+    return always(() => {
+        switch (country) {
+            case "de": return "Hallo";
+            case "fr": return "Bonjour";
+            case "es": return "Hola";
+            default: return "Hello";
+        }
+    })
+}
 
 /**
  * Runs each time a dependency reference value changes.
@@ -127,46 +138,46 @@ type MapToRefOrVal<T extends unknown[]> = {[K in keyof T]: T[K] extends Ref ? T[
  */
 export function effect<W extends Record<string, WeakKey>|undefined>(handler:W extends undefined ? () => void|Promise<void> :(weakVariables: W) => void|Promise<void>, weakVariables?: W): {dispose: () => void, [Symbol.dispose]: () => void} {
     
-	let ptr: Pointer;
+    let ptr: Pointer;
 
-	// make sure handler is not an async function
-	if (handler.constructor.name == "AsyncFunction") {
-		throw new Error("Async functions are not allowed as effect handlers")
-	}
+    // make sure handler is not an async function
+    if (handler.constructor.name == "AsyncFunction") {
+        throw new Error("Async functions are not allowed as effect handlers")
+    }
 
-	// weak variable binding
-	if (weakVariables) {
-		const weakVariablesProxy = {};
-		for (const [k, v] of Object.entries(weakVariables)) {
-			const weakRef = new WeakRef(v);
-			Object.defineProperty(weakVariablesProxy, k, {get() {
-			  const val = weakRef.deref()
-			  if (!val) {
-				// dispose effect
-				ptr.is_persistent = false;
-				ptr.delete()
-				throw Pointer.WEAK_EFFECT_DISPOSED;
-			  }
-			  else return val;
-			}})
-		}
-		const originalHandler = handler;
-		handler = (() => originalHandler(weakVariablesProxy)) as any;
-	}
-	
-	ptr = Pointer.createSmartTransform(handler as any, undefined, true, true);
-	ptr.is_persistent = true;
+    // weak variable binding
+    if (weakVariables) {
+        const weakVariablesProxy = {};
+        for (const [k, v] of Object.entries(weakVariables)) {
+            const weakRef = new WeakRef(v);
+            Object.defineProperty(weakVariablesProxy, k, {get() {
+              const val = weakRef.deref()
+              if (!val) {
+                // dispose effect
+                ptr.is_persistent = false;
+                ptr.delete()
+                throw Pointer.WEAK_EFFECT_DISPOSED;
+              }
+              else return val;
+            }})
+        }
+        const originalHandler = handler;
+        handler = (() => originalHandler(weakVariablesProxy)) as any;
+    }
+    
+    ptr = Pointer.createSmartTransform(handler as any, undefined, true, true);
+    ptr.is_persistent = true;
 
-	return {
-		[Symbol.dispose||Symbol.for("Symbol.dispose")]() {
-			ptr.is_persistent = false;
-			ptr.delete()
-		},
-		dispose() {
-			ptr.is_persistent = false;
-			ptr.delete()
-		}
-	}
+    return {
+        [Symbol.dispose||Symbol.for("Symbol.dispose")]() {
+            ptr.is_persistent = false;
+            ptr.delete()
+        },
+        dispose() {
+            ptr.is_persistent = false;
+            ptr.delete()
+        }
+    }
 }
 
 
@@ -199,77 +210,77 @@ export async function transformAsync<T,V extends TransformFunctionInputs>(depend
 
 
 export function map<T, U, O extends 'array'|'map' = 'array'>(iterable: Iterable<T>, mapFn: (value: MaybeObjectRef<T>, index: number, array: Iterable<T>) => U, options?: {outType: O}): O extends "array" ? U[] : Map<number, U> {
-	let mapped:U[]|Map<number, U>
-	
-	// live map
-	if (Datex.Ref.isRef(iterable)) {
+    let mapped:U[]|Map<number, U>
+    
+    // live map
+    if (Datex.Ref.isRef(iterable)) {
 
-		// return map
-		if (options?.outType == "map") {
-			mapped = $$(new Map())
+        // return map
+        if (options?.outType == "map") {
+            mapped = $$(new Map())
 
-			const iterableHandler = new IterableHandler(iterable, {
-				map: (v,k)=>{
-					return mapFn(v,k,iterable)
-				},
-				onEntryRemoved: (v,k) => {
-					(mapped as Map<number,U>).delete(k)
-				},
-				onNewEntry: (v,k) => (mapped as Map<number,U>).set(k,v),
-				onEmpty: () => (mapped as Map<number,U>).clear()
-			})
-			// reverse transform binding
-			Datex.Pointer.bindDisposable(mapped, iterableHandler)
-		}
+            const iterableHandler = new IterableHandler(iterable, {
+                map: (v,k)=>{
+                    return mapFn(v,k,iterable)
+                },
+                onEntryRemoved: (v,k) => {
+                    (mapped as Map<number,U>).delete(k)
+                },
+                onNewEntry: (v,k) => (mapped as Map<number,U>).set(k,v),
+                onEmpty: () => (mapped as Map<number,U>).clear()
+            })
+            // reverse transform binding
+            Datex.Pointer.bindDisposable(mapped, iterableHandler)
+        }
 
-		// return array
-		else {
-			mapped = $$([])
+        // return array
+        else {
+            mapped = $$([])
 
-			// no gaps in a set -> array splice required
-			const spliceArray = iterable instanceof Set; 
+            // no gaps in a set -> array splice required
+            const spliceArray = iterable instanceof Set; 
 
-			const iterableHandler = new IterableHandler(iterable, {
-				map: (v,k)=>{
-					return mapFn(v,k,iterable)
-				},
-				onEntryRemoved: (v,k) => {
-					if (spliceArray) (mapped as U[]).splice(k, 1);
-					else delete (mapped as U[])[k];
-				},
-				onNewEntry: (v,k) => {
-					(mapped as U[])[k] = v
-				},
-				onEmpty: () => {
-					(mapped as U[]).length = 0
-				}
-			})
-			// reverse transform binding
-			Datex.Pointer.bindDisposable(mapped, iterableHandler)
-		}
+            const iterableHandler = new IterableHandler(iterable, {
+                map: (v,k)=>{
+                    return mapFn(v,k,iterable)
+                },
+                onEntryRemoved: (v,k) => {
+                    if (spliceArray) (mapped as U[]).splice(k, 1);
+                    else delete (mapped as U[])[k];
+                },
+                onNewEntry: (v,k) => {
+                    (mapped as U[])[k] = v
+                },
+                onEmpty: () => {
+                    (mapped as U[]).length = 0
+                }
+            })
+            // reverse transform binding
+            Datex.Pointer.bindDisposable(mapped, iterableHandler)
+        }
 
-	}
+    }
 
-	// static map
-	else {
-		if (options?.outType == "map") {
-			mapped = new Map()
-			let i = 0;
-			for (const val of iterable) {
-				mapped.set(i, mapFn(val, i++, iterable))
-			}
-		}
-		else {
-			mapped = []
-			let i = 0;
-			for (const val of iterable) {
-				mapped.push(mapFn(val, i++, iterable))
-			}
-		}
-		
-	}
-	
-	return mapped as any;
+    // static map
+    else {
+        if (options?.outType == "map") {
+            mapped = new Map()
+            let i = 0;
+            for (const val of iterable) {
+                mapped.set(i, mapFn(val, i++, iterable))
+            }
+        }
+        else {
+            mapped = []
+            let i = 0;
+            for (const val of iterable) {
+                mapped.push(mapFn(val, i++, iterable))
+            }
+        }
+        
+    }
+    
+    return mapped as any;
 }
 
 
@@ -316,8 +327,8 @@ export function map<T, U, O extends 'array'|'map' = 'array'>(iterable: Iterable<
  */
 export function toggle<T>(value:RefLike<boolean>, if_true:T, if_false:T): MinimalJSRef<T> {
     return transform([value], v=>v?<any>if_true:<any>if_false, 
-	// dx transforms not working correctly (with uix)
-	/*`
+    // dx transforms not working correctly (with uix)
+    /*`
     always (
         if (${Runtime.valueToDatexString(value)}) (${Runtime.valueToDatexString(if_true)}) 
         else (${Runtime.valueToDatexString(if_false)})
@@ -338,8 +349,8 @@ export const select = toggle;
  */
 export function equals<T,V>(a:RefLike<T>|T, b: RefLike<V>|V): Datex.Pointer<boolean> {
     return transform([a, b], (a,b) =>  Datex.Ref.collapseValue(a, true, true) === Datex.Ref.collapseValue(b, true, true), 
-	// dx transforms not working correctly (with uix)
-		/*`always (${Runtime.valueToDatexString(a)} === ${Runtime.valueToDatexString(b)})`*/) as any;
+    // dx transforms not working correctly (with uix)
+        /*`always (${Runtime.valueToDatexString(a)} === ${Runtime.valueToDatexString(b)})`*/) as any;
 }
 
 

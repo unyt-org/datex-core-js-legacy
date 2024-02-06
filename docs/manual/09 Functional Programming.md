@@ -208,25 +208,25 @@ One way to achieve this is by wrapping the body of a normal function with `alway
 ```ts
 // normal function
 const getGreetingMessage = (country: string) => {
-  switch (country) {
-			case "de": return "Hallo";
-			case "fr": return "Bonjour";
-			case "es": return "Hola";
-			default: return "Hello";
-	}
+    switch (country) {
+        case "de": return "Hallo";
+        case "fr": return "Bonjour";
+        case "es": return "Hola";
+        default: return "Hello";
+    }
 }
 
 // reactive version
 const getGreetingMessageReactive = (country: RefOrValue<string>) => {
-  // returns a Ref<string> that gets updated reactively
-	return always(() => {
-		switch (country) {
-			case "de": return "Hallo";
-			case "fr": return "Bonjour";
-			case "es": return "Hola";
-			default: return "Hello";
-		}
-	})
+    // returns a Ref<string> that gets updated reactively
+    return always(() => {
+        switch (country) {
+            case "de": return "Hallo";
+            case "fr": return "Bonjour";
+            case "es": return "Hola";
+            default: return "Hello";
+        }
+    })
 }
 ```
 
@@ -236,12 +236,12 @@ Although the created reactive function is called with `Ref` values, you don't ne
 ```ts
 // reactive function, returns a Ref<string> that gets updated reactively when 'country' changes
 const getGreetingMessageReactive = reactiveFn((country: string) => {
-  switch (country) {
-			case "de": return "Hallo";
-			case "fr": return "Bonjour";
-			case "es": return "Hola";
-			default: return "Hello";
-	}
+    switch (country) {
+        case "de": return "Hallo";
+        case "fr": return "Bonjour";
+        case "es": return "Hola";
+        default: return "Hello";
+    }
 })
 
 const country: Ref<string> = $$("de");
