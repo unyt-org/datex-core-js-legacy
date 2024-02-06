@@ -198,6 +198,60 @@ const output = await asyncAlways(() => (async (val) => val * 10)(input.val) ) //
 > any dependency value after the first `await` is not captured. 
 > To avoid confusion, async transform functions are always disallowed for `asyncAlways`.
 
+## Reactive functions
+
+The `always` transform function is useful for inline transforms, but sometimes you might want to define
+reusable reactive functions.
+
+One way to achieve this is by wrapping the body of a normal function with `always`:
+
+```ts
+// normal function
+const getGreetingMessage = (country: string) => {
+  switch (country) {
+			case "de": return "Hallo";
+			case "fr": return "Bonjour";
+			case "es": return "Hola";
+			default: return "Hello";
+	}
+}
+
+// reactive version
+const getGreetingMessageReactive = (country: RefOrValue<string>) => {
+  // returns a Ref<string> that gets updated reactively
+	return always(() => {
+		switch (country) {
+			case "de": return "Hallo";
+			case "fr": return "Bonjour";
+			case "es": return "Hola";
+			default: return "Hello";
+		}
+	})
+}
+```
+
+You can simplify this by just wrapping a normal function with `reactiveFn`.
+Although the created reactive function is called with `Ref` values, you don't need to set the input argument types to `Ref` or `RefOrValue`:
+
+```ts
+// reactive function, returns a Ref<string> that gets updated reactively when 'country' changes
+const getGreetingMessageReactive = reactiveFn((country: string) => {
+  switch (country) {
+			case "de": return "Hallo";
+			case "fr": return "Bonjour";
+			case "es": return "Hola";
+			default: return "Hello";
+	}
+})
+
+const country: Ref<string> = $$("de");
+const greetingMessage: Ref<string> = getGreetingMessageReactive(country);
+
+console.log(greetingMessage.val) // "Hallo"
+
+country.val = "fr";
+console.log(greetingMessage.val) // "Bonjour"
+```
 
 ## Dedicated transform functions
 
