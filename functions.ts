@@ -8,7 +8,7 @@ import { AsyncTransformFunction, CollapsedValue, CollapsedValueAdvanced, Decorat
 import { Datex } from "./mod.ts";
 import { PointerError } from "./types/errors.ts";
 import { IterableHandler } from "./utils/iterable-handler.ts";
-
+import { RestrictSameType } from "./runtime/pointers.ts";
 
 
 /**
@@ -79,6 +79,32 @@ export async function asyncAlways<T>(transform:SmartTransformFunction<T>, option
 	return Ref.collapseValue(ptr) as MinimalJSRef<T>
 }
 
+/**
+ * Decorator for creating a reactive function.
+ * Functions decorated with `reactiveFn` always return a pointer that is automatically updated when input references are updated.
+ * This has the same effect as wrapping the function body with `always`.
+ * A reactive functions accepts references or values as arguments, but is always called with collapsed values. 
+ * This means that you don't have to specifiy `Ref` values as arguments, but can use regular types.
+ * 
+ * Example:
+ * ```ts
+ * // create reactive function 'getSquared'
+ * const getSquared = reactiveFn((x: number) => x * x);
+ * 
+ * const x = $$(2);
+ * const y = getSquared(x); // Ref<4>
+ * x.val = 3;
+ * y // Ref<9>
+ * ```
+ */
+export function reactiveFn<ReturnType, Args extends unknown[]>(fn: (...args: Args) => Awaited<RestrictSameType<RefOrValue<ReturnType>>>) {
+	return (...args: MapToRefOrVal<Args>) => always(() => {
+		const collapsedArgs = args.map(arg => Ref.collapseValue(arg, true, true)) as Args;
+		return fn(...collapsedArgs)
+	});
+}
+
+type MapToRefOrVal<T extends unknown[]> = {[K in keyof T]: T[K] extends Ref ? T[K] : RefOrValue<T[K]>}
 
 
 /**
