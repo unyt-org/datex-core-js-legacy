@@ -69,7 +69,7 @@ export class WindowInterface extends CommunicationInterface {
             this.#windowOrigin = new URL(window.src).origin;
             windowOriginURL = new URL(window.src);
             this.logger.debug("initializing as parent window, child iframe origin: " + this.#windowOrigin)
-        } 
+        }
         // is opened child window or inside iframe
         else if (window === self.window.opener || globalThis.self !== globalThis.top) {
             this.#isChild = true;
