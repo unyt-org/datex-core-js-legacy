@@ -9,4 +9,6 @@ import { WindowInterface } from "../network/communication-interfaces/window-inte
 
 await Datex.Supranet.init();
 const windowInterface = WindowInterface.createParentInterface(window.parent)
-await communicationHub.addInterface(windowInterface, true)
+// use as default interface only if no other default interface active
+const useAsDefaultInterface = !communicationHub.defaultSocket
+await communicationHub.addInterface(windowInterface, useAsDefaultInterface)
