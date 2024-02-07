@@ -68,13 +68,12 @@ export class Supranet {
 
         // already connected to endpoint during init
         if (this.#connected && endpoint === Runtime.endpoint) {
-            const switched = shouldSwitchInstance ? await this.handleSwitchToInstance() : false;
+            if (shouldSwitchInstance) await this.handleSwitchToInstance()
             logger.success("Connected to the supranet as " + endpoint)
             return true;
         }
 
         if (alreadyConnected) {
-            this.#connected = true;
             if (shouldSwitchInstance) await this.handleSwitchToInstance();
             return true;
         }
