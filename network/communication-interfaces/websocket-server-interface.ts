@@ -31,7 +31,7 @@ export class WebSocketServerInterface extends WebSocketInterface {
 		// is websocket upgrade?
 		if (requestEvent.request.headers.get("upgrade") === "websocket") {
 			try {
-				const socket = await this.upgradeWebSocket(requestEvent);
+				const socket = this.upgradeWebSocket(requestEvent);
 				await this.initWebSocket(socket);
 				return true;
 			}
@@ -42,11 +42,15 @@ export class WebSocketServerInterface extends WebSocketInterface {
         else return false;
     }
 
-	protected async upgradeWebSocket(requestEvent: Deno.RequestEvent) {
+	protected upgradeWebSocket(requestEvent: Deno.RequestEvent) {
 		// upgrade to websocket
 		const req = requestEvent.request; 
 		const { socket, response } = Deno.upgradeWebSocket(req);
-		await requestEvent.respondWith(response);
+		
+		requestEvent
+			.respondWith(response)
+			.catch(() => {}); // ignore error
+
 
 		// infer interface ws url from request url
 		if (!this.properties.name) {

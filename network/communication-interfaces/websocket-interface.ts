@@ -65,12 +65,18 @@ export abstract class WebSocketInterface extends CommunicationInterface<WebSocke
 						this.onWebSocketClosed(socket)
 					}
 				};
+
 				const openHandler = async () => {
 					await this.addSocket(socket);
 					connectionOpen = true;
 					this.onWebSocketOpened(webSocket);
 					resolve(true);
 				};
+
+				// webSocket already open, call openHandler immediately
+				if (webSocket.readyState === WebSocket.OPEN) {
+					openHandler();
+				}
 
 				webSocket.addEventListener('open', openHandler);
 				webSocket.addEventListener('error', errorHandler);
