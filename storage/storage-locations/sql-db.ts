@@ -11,7 +11,7 @@ import { NOT_EXISTING } from "../../runtime/constants.ts";
 import { client_type } from "../../utils/constants.ts";
 import { Compiler } from "../../compiler/compiler.ts";
 import { ExecConditions } from "../../utils/global_types.ts";
-import { Runtime } from "../runtime.ts";
+import { Runtime } from "../../runtime/runtime.ts";
 
 const logger = new Logger("SQL Storage");
 

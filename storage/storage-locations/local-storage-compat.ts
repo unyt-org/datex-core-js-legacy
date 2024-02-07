@@ -2,7 +2,7 @@
 
 import { logger } from "../../utils/global_values.ts";
 import { client_type } from "../../utils/constants.ts";
-import { ptr_cache_path } from "../cache_path.ts";
+import { ptr_cache_path } from "../../runtime/cache_path.ts";
 import { normalizePath } from "../../utils/normalize-path.ts";
 
 class LocalStorage implements Storage {

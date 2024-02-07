@@ -2,7 +2,7 @@ import { Runtime } from "../../runtime/runtime.ts";
 import { Compiler } from "../../compiler/compiler.ts";
 import { Pointer } from "../../runtime/pointers.ts";
 
-import { NOT_EXISTING } from "../constants.ts";
+import { NOT_EXISTING } from "../../runtime/constants.ts";
 import { AsyncStorageLocation, site_suffix } from "../storage.ts";
 
 import localforage from "../../lib/localforage/localforage.js";

@@ -35,10 +35,11 @@ export * from "./runtime/io_handler.ts";
 export * from "./runtime/js_interface.ts";
 export * from "./runtime/performance_measure.ts";
 export * from "./runtime/pointers.ts";
-export * from "./runtime/storage.ts";
 export * from "./runtime/cli.ts";
 export * from "./runtime/cache_path.ts";
 
+// storage
+export * from "./storage/storage.ts";
 
 // types
 export * from "./types/abstract_types.ts";

@@ -3,7 +3,7 @@
 import { Compiler } from "../compiler/compiler.ts";
 import { DX_PTR } from "../runtime/constants.ts";
 import { Pointer } from "../runtime/pointers.ts";
-import { Storage } from "../runtime/storage.ts";
+import { Storage } from "../storage/storage.ts";
 import { Logger } from "../utils/logger.ts";
 
 const logger = new Logger("StorageMap");

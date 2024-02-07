@@ -2,9 +2,9 @@ import { Runtime } from "../../runtime/runtime.ts";
 import { Compiler } from "../../compiler/compiler.ts";
 import { Pointer } from "../../runtime/pointers.ts";
 
-import { NOT_EXISTING } from "../constants.ts";
+import { NOT_EXISTING } from "../../runtime/constants.ts";
 import { AsyncStorageLocation } from "../storage.ts";
-import { ptr_cache_path } from "../cache_path.ts";
+import { ptr_cache_path } from "../../runtime/cache_path.ts";
 import { client_type } from "../../utils/constants.ts";
 import { normalizePath } from "../../utils/normalize-path.ts";
 import { ExecConditions } from "../../utils/global_types.ts";
