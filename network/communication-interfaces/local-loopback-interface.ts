@@ -4,68 +4,68 @@ import { CommunicationInterface, CommunicationInterfaceSocket, InterfaceDirectio
 
 export class LocalLoopbackInterfaceSocket extends CommunicationInterfaceSocket {
 
-	open() {}
-	close() {}
+    open() {}
+    close() {}
 
-	send(dxb: ArrayBuffer) {
-		Runtime.datexIn({
-			dxb,
-			socket: this
-		})
-		return true;
-	}
+    send(dxb: ArrayBuffer) {
+        Runtime.datexIn({
+            dxb,
+            socket: this
+        })
+        return true;
+    }
 
-	override async sendHello(_dxb:ArrayBuffer) {
-		// ignore
-	}
-	override async sendGoodbye(_dxb:ArrayBuffer) {
-		// ignore
-	}
+    override async sendHello(_dxb:ArrayBuffer) {
+        // ignore
+    }
+    override async sendGoodbye(_dxb:ArrayBuffer) {
+        // ignore
+    }
 }
 
 /**
  * Loopback interface for sending and DATEX messages to the local endpoint
  */
 export class LocalLoopbackInterface extends CommunicationInterface<LocalLoopbackInterfaceSocket> {
-	
-	public properties: InterfaceProperties = {
-		type: "local",
-		direction: InterfaceDirection.OUT,
-		latency: 0,
-		bandwidth: 1_000_000
-	}
+    
+    public properties: InterfaceProperties = {
+        type: "local",
+        direction: InterfaceDirection.OUT,
+        latency: 0,
+        bandwidth: 1_000_000
+    }
 
-	#currentSocket?: LocalLoopbackInterfaceSocket
+    #currentSocket?: LocalLoopbackInterfaceSocket
 
-	constructor() {
-		super();
-	}
+    constructor() {
+        super();
+    }
 
-	connect() {
-		// default @@local socket (never removed)
-		this.createSocket(LOCAL_ENDPOINT);
+    connect() {
+        // default @@local socket (never removed)
+        this.createSocket(LOCAL_ENDPOINT);
 
-		Runtime.onEndpointChanged((endpoint) => {
-			if (endpoint === LOCAL_ENDPOINT) return;
-			// remove socket for previous endpoint
-			if (this.#currentSocket) this.removeSocket(this.#currentSocket)
-			// add new socket for endpoint
-			this.#currentSocket = this.createSocket(endpoint);
-		})
+        Runtime.onEndpointChanged((endpoint) => {
+            if (endpoint === LOCAL_ENDPOINT) return;
+            // remove socket for previous endpoint
+            if (this.#currentSocket) this.removeSocket(this.#currentSocket)
+            // add new socket for endpoint
+            this.#currentSocket = this.createSocket(endpoint);
+        })
 
-		return true;
-	}
-	disconnect() {}	
+        return true;
+    }
+    disconnect() {}	
 
-	private createSocket(endpoint: Endpoint) {
-		const socket = new LocalLoopbackInterfaceSocket();
-		socket.endpoint = endpoint;
-		this.addSocket(socket)
-		return socket;
-	}
+    private createSocket(endpoint: Endpoint) {
+        const socket = new LocalLoopbackInterfaceSocket();
+        socket.endpoint = endpoint;
+        this.addSocket(socket)
+        return socket;
+    }
 
-	cloneSocket(_socket: LocalLoopbackInterfaceSocket): never {
-		throw new Error("LocalLoopbackInterface does not support cloning")
-	}
-	
+    cloneSocket(_socket: LocalLoopbackInterfaceSocket): never {
+        throw new Error("LocalLoopbackInterface does not support cloning")
+    }
+    
 }

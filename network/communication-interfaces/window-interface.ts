@@ -4,157 +4,157 @@ import { CommunicationInterface, CommunicationInterfaceSocket, InterfaceDirectio
 import { communicationHub } from "../communication-hub.ts";
 
 export class WindowInterfaceSocket extends CommunicationInterfaceSocket {
-	constructor(public readonly window: Window, public readonly windowOrigin: string) {
-		super();
-	}
+    constructor(public readonly window: Window, public readonly windowOrigin: string) {
+        super();
+    }
 
-	handleReceive = (event: MessageEvent) => {
-		if (event.origin == this.windowOrigin && event.data instanceof ArrayBuffer) {
-			this.receive(event.data)
-		}
-	}
+    handleReceive = (event: MessageEvent) => {
+        if (event.origin == this.windowOrigin && event.data instanceof ArrayBuffer) {
+            this.receive(event.data)
+        }
+    }
 
-	open() {
-		globalThis.addEventListener('message', this.handleReceive);
-	}
+    open() {
+        globalThis.addEventListener('message', this.handleReceive);
+    }
 
-	close() {
-		globalThis.removeEventListener('message', this.handleReceive);
-	}
+    close() {
+        globalThis.removeEventListener('message', this.handleReceive);
+    }
 
-	send(dxb: ArrayBuffer) {
-		try {
-			this.window.postMessage(dxb, this.windowOrigin)
-			return true;
-		}
-		catch {
-			return false;
-		}
-	}
+    send(dxb: ArrayBuffer) {
+        try {
+            this.window.postMessage(dxb, this.windowOrigin)
+            return true;
+        }
+        catch {
+            return false;
+        }
+    }
 }
 
 /**
  * Creates a direct DATEX communication channel between a parent and child window
  */
 export class WindowInterface extends CommunicationInterface {
-	
-	public properties: InterfaceProperties = {
-		type: "window",
-		direction: InterfaceDirection.IN_OUT,
-		latency: 15,
-		bandwidth: 1_000_000
-	}
+    
+    public properties: InterfaceProperties = {
+        type: "window",
+        direction: InterfaceDirection.IN_OUT,
+        latency: 15,
+        bandwidth: 1_000_000
+    }
 
-	#windowOrIFrame: Window|HTMLIFrameElement
-	#windowOrigin: string
-	#isChild: boolean
+    #windowOrIFrame: Window|HTMLIFrameElement
+    #windowOrigin: string
+    #isChild: boolean
 
-	get window() {
-		return this.#windowOrIFrame instanceof HTMLIFrameElement ? this.#windowOrIFrame.contentWindow! : this.#windowOrIFrame;
-	}
+    get window() {
+        return this.#windowOrIFrame instanceof HTMLIFrameElement ? this.#windowOrIFrame.contentWindow! : this.#windowOrIFrame;
+    }
 
-	constructor(window: Window, windowOrigin?: string|URL)
-	constructor(iframe: HTMLIFrameElement, iframeOrigin?: string|URL)
-	constructor(window: Window|HTMLIFrameElement, windowOrigin?: string|URL) {
-		super()
+    constructor(window: Window, windowOrigin?: string|URL)
+    constructor(iframe: HTMLIFrameElement, iframeOrigin?: string|URL)
+    constructor(window: Window|HTMLIFrameElement, windowOrigin?: string|URL) {
+        super()
 
-		let windowOriginURL = windowOrigin ? new URL(windowOrigin) : null;
+        let windowOriginURL = windowOrigin ? new URL(windowOrigin) : null;
 
-		this.#windowOrIFrame = window;
+        this.#windowOrIFrame = window;
 
-		// is parent document, has iframe
-		if (window instanceof HTMLIFrameElement) {
-			this.#isChild = false;
-			window.setAttribute("sandbox", "allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox")
+        // is parent document, has iframe
+        if (window instanceof HTMLIFrameElement) {
+            this.#isChild = false;
+            window.setAttribute("sandbox", "allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox")
             this.#windowOrigin = new URL(window.src).origin;
-			windowOriginURL = new URL(window.src);
-			this.logger.debug("initializing as parent window, child iframe origin: " + this.#windowOrigin)
-		} 
-		// is opened child window or inside iframe
-		else if (window === self.window.opener || globalThis.self !== globalThis.top) {
-			this.#isChild = true;
+            windowOriginURL = new URL(window.src);
+            this.logger.debug("initializing as parent window, child iframe origin: " + this.#windowOrigin)
+        } 
+        // is opened child window or inside iframe
+        else if (window === self.window.opener || globalThis.self !== globalThis.top) {
+            this.#isChild = true;
 
-			// explicitly set window origin
-			if (windowOriginURL) {
-				this.#windowOrigin = windowOriginURL.origin;
-			}
-			else {
-				// first try window.location.origin
-				try {
-					this.#windowOrigin = window.location.origin;
-				}
-				// try document.referrer
-				catch {
-					if (!document.referrer) throw new Error("The origin of the parent window cannot be determined automatically. Please provide windowOrigin as second argument.");
-					this.#windowOrigin = new URL(document.referrer).origin;
-				}
-			}
+            // explicitly set window origin
+            if (windowOriginURL) {
+                this.#windowOrigin = windowOriginURL.origin;
+            }
+            else {
+                // first try window.location.origin
+                try {
+                    this.#windowOrigin = window.location.origin;
+                }
+                // try document.referrer
+                catch {
+                    if (!document.referrer) throw new Error("The origin of the parent window cannot be determined automatically. Please provide windowOrigin as second argument.");
+                    this.#windowOrigin = new URL(document.referrer).origin;
+                }
+            }
             this.logger.debug("initializing as child window, parent window origin: " + this.#windowOrigin)
-		}
-		// is the parent document
+        }
+        // is the parent document
         else {
-			this.#isChild = false;
+            this.#isChild = false;
 
-			// explicitly set window origin
-			if (windowOriginURL) {
-				this.#windowOrigin = windowOriginURL.origin;
-			}
-			else {
-				throw new Error("The origin of the child window cannot be determined automatically. Please provide windowOrigin as second argument.");				
-			}
+            // explicitly set window origin
+            if (windowOriginURL) {
+                this.#windowOrigin = windowOriginURL.origin;
+            }
+            else {
+                throw new Error("The origin of the child window cannot be determined automatically. Please provide windowOrigin as second argument.");				
+            }
             this.logger.debug("initializing as parent window, child window origin: " + this.#windowOrigin)
         }
 
-		this.properties.name = windowOriginURL?.toString() || this.#windowOrigin;
-	
-		globalThis.addEventListener("message", this.onReceive);
-		if (this.#isChild) {
-			// if in sub window: send INIT to parent immediately
-			this.sendInit();
-		}
-		this.handleClose();
-	}
+        this.properties.name = windowOriginURL?.toString() || this.#windowOrigin;
+    
+        globalThis.addEventListener("message", this.onReceive);
+        if (this.#isChild) {
+            // if in sub window: send INIT to parent immediately
+            this.sendInit();
+        }
+        this.handleClose();
+    }
 
-	connect() {
-		return true;
-	}
+    connect() {
+        return true;
+    }
 
-	disconnect() {
-		// make sure event listener is removed if INIT not yet completed
-		globalThis.removeEventListener("message", this.onReceive);
-	}
-	
+    disconnect() {
+        // make sure event listener is removed if INIT not yet completed
+        globalThis.removeEventListener("message", this.onReceive);
+    }
+    
 
-	private sendInit() {
+    private sendInit() {
         this.window.postMessage({
             type: "INIT",
             endpoint: Runtime.endpoint.toString()
         }, this.#windowOrigin);
     }
 
-	onClose?: ()=>void
+    onClose?: ()=>void
 
-	private handleClose() {
-		// check window.closed every second
-		const interval = setInterval(() => {
-			if (this.window?.closed) {
-				clearInterval(interval);
-				this.clearSockets()
-				this.onClose?.()
-			}
-		}, 1000);
-	}
+    private handleClose() {
+        // check window.closed every second
+        const interval = setInterval(() => {
+            if (this.window?.closed) {
+                clearInterval(interval);
+                this.clearSockets()
+                this.onClose?.()
+            }
+        }, 1000);
+    }
 
-	private onReceive = (event: MessageEvent) => {
+    private onReceive = (event: MessageEvent) => {
         if (event.origin == this.#windowOrigin) {
             const data = event.data;
 
-           	if (data?.type == "INIT") {
-				globalThis.removeEventListener("message", this.onReceive);
+               if (data?.type == "INIT") {
+                globalThis.removeEventListener("message", this.onReceive);
 
-				const socket = new WindowInterfaceSocket(this.window, this.#windowOrigin)
-				socket.endpoint = Target.get(data.endpoint) as Endpoint;
-				this.addSocket(socket)
+                const socket = new WindowInterfaceSocket(this.window, this.#windowOrigin)
+                socket.endpoint = Target.get(data.endpoint) as Endpoint;
+                this.addSocket(socket)
 
                 // if in parent: send INIT to window after initialized
                 if (!this.#isChild) this.sendInit();
@@ -162,76 +162,76 @@ export class WindowInterface extends CommunicationInterface {
         }
     }
 
-	cloneSocket(socket: WindowInterfaceSocket) {
-		return new WindowInterfaceSocket(socket.window, socket.windowOrigin);
-	}
+    cloneSocket(socket: WindowInterfaceSocket) {
+        return new WindowInterfaceSocket(socket.window, socket.windowOrigin);
+    }
 
-	
-	static createChildWindowInterface(childWindow: Window, windowOrigin: string|URL) {
-		return new WindowInterface(childWindow, windowOrigin)
-	}
+    
+    static createChildWindowInterface(childWindow: Window, windowOrigin: string|URL) {
+        return new WindowInterface(childWindow, windowOrigin)
+    }
 
-	static createChildIFrameInterface(iframe: HTMLIFrameElement) {
-		return new WindowInterface(iframe)
-	}
+    static createChildIFrameInterface(iframe: HTMLIFrameElement) {
+        return new WindowInterface(iframe)
+    }
 
-	static createParentInterface(parentWindow: Window, windowOrigin?: string|URL) {
-		return new WindowInterface(parentWindow, windowOrigin)
-	}
+    static createParentInterface(parentWindow: Window, windowOrigin?: string|URL) {
+        return new WindowInterface(parentWindow, windowOrigin)
+    }
 
 
-	/**
-	 * Opens a new window and registers a attached WindowInterface.
-	 * The WindowInterface is automatically removed when the window is closed.
-	 */
-	static createWindow(url: string | URL, target?: string, features?: string, connectionTimeout?: number) {
-		const newWindow = window.open(url, target, features);
-		if (!newWindow) return Promise.resolve({window: null, endpoint: null});
-		const windowInterface = this.createChildWindowInterface(newWindow, url)
-		
-		communicationHub.addInterface(windowInterface)
-		windowInterface.onClose = () => {
-			communicationHub.removeInterface(windowInterface)
-		}
+    /**
+     * Opens a new window and registers a attached WindowInterface.
+     * The WindowInterface is automatically removed when the window is closed.
+     */
+    static createWindow(url: string | URL, target?: string, features?: string, connectionTimeout?: number) {
+        const newWindow = window.open(url, target, features);
+        if (!newWindow) return Promise.resolve({window: null, endpoint: null});
+        const windowInterface = this.createChildWindowInterface(newWindow, url)
+        
+        communicationHub.addInterface(windowInterface)
+        windowInterface.onClose = () => {
+            communicationHub.removeInterface(windowInterface)
+        }
 
-		return new Promise<{window:Window|null, endpoint: Endpoint|null}>((resolve) => {
-			windowInterface.addEventListener("connect", e => {
-				resolve({
-					window: newWindow,
-					endpoint: e.endpoint
-				})
-			})
-			if (connectionTimeout!=null && isFinite(connectionTimeout)) { 
-				setTimeout(() => {
-					newWindow.close();
-					resolve({window: newWindow, endpoint: null})
-				}, connectionTimeout);
-			}
-		})
-	}
+        return new Promise<{window:Window|null, endpoint: Endpoint|null}>((resolve) => {
+            windowInterface.addEventListener("connect", e => {
+                resolve({
+                    window: newWindow,
+                    endpoint: e.endpoint
+                })
+            })
+            if (connectionTimeout!=null && isFinite(connectionTimeout)) { 
+                setTimeout(() => {
+                    newWindow.close();
+                    resolve({window: newWindow, endpoint: null})
+                }, connectionTimeout);
+            }
+        })
+    }
 
-	/**
-	 * Binds a Iframe and registers a attached WindowInterface.
-	 * The WindowInterface is automatically removed when the iframe is closed.
-	 */
-	static bindIFrame(iframe: HTMLIFrameElement, connectionTimeout?: number) {
-		const windowInterface = this.createChildIFrameInterface(iframe)
-		
-		communicationHub.addInterface(windowInterface)
-		windowInterface.onClose = () => {
-			communicationHub.removeInterface(windowInterface)
-		}
+    /**
+     * Binds a Iframe and registers a attached WindowInterface.
+     * The WindowInterface is automatically removed when the iframe is closed.
+     */
+    static bindIFrame(iframe: HTMLIFrameElement, connectionTimeout?: number) {
+        const windowInterface = this.createChildIFrameInterface(iframe)
+        
+        communicationHub.addInterface(windowInterface)
+        windowInterface.onClose = () => {
+            communicationHub.removeInterface(windowInterface)
+        }
 
-		return new Promise<Endpoint|null>((resolve) => {
-			windowInterface.addEventListener("connect", e => {
-				resolve(e.endpoint)
-			})
-			if (connectionTimeout!=null && isFinite(connectionTimeout)) { 
-				setTimeout(() => {
-					resolve(null)
-				}, connectionTimeout);
-			}
-		})
-	}
+        return new Promise<Endpoint|null>((resolve) => {
+            windowInterface.addEventListener("connect", e => {
+                resolve(e.endpoint)
+            })
+            if (connectionTimeout!=null && isFinite(connectionTimeout)) { 
+                setTimeout(() => {
+                    resolve(null)
+                }, connectionTimeout);
+            }
+        })
+    }
 
 }
