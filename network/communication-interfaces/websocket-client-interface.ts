@@ -58,7 +58,7 @@ export class WebSocketClientInterface extends WebSocketInterface {
     }
 
     onWebSocketOpened(_webSocket: WebSocket) {
-        if (this.origin.protocol == 'ws' && !this.origin.host.match(/localhost(:\d+)?/)) 
+        if (this.origin.protocol === 'ws:' && !this.origin.host.match(/(localhost|127\.0\.0\.1)(:\d+)?/)) 
             this.logger.warn(`unsecure websocket connection to ${this.origin.host}`)
     }
 
