@@ -1925,6 +1925,8 @@ export class Pointer<T = any> extends Ref<T> {
     #unwrapped_transform_type?: Type
 
     #loaded = false
+    #indirectReference?: Pointer
+    get indirectReference() {return this.#indirectReference}
 
     get value_initialized() {return this.#loaded}
 
@@ -2464,8 +2466,8 @@ export class Pointer<T = any> extends Ref<T> {
         // get transform wrapper
         if (is_transform) val = this.getInitialTransformValue(val)
 
-        // Get type from initial value, keep as <any> if initial value is null/undefined
-        if (val!==undefined && val !== null) this.#type = Type.ofValue(val);
+        // Get type from initial value, keep as <any> if initial value is null/undefined or indirect reference
+        if (val!==undefined && val !== null && !this.#indirectReference) this.#type = Type.ofValue(val);
 
         // console.log("loaded : "+ this.id + " - " + this.#type, val)
 
@@ -2475,10 +2477,13 @@ export class Pointer<T = any> extends Ref<T> {
         // init proxy value for non-JS-primitives value (also treat non-uix HTML Elements as primitives)
         if (!this.is_js_primitive) {
 
-            // already an existing non-primitive pointer
-            if (Pointer.getByValue(val)) {
+            // already an existing non-primitive pointer (indirect reference)
+            const existingPointer = Pointer.getByValue(val);
+            if (existingPointer) {
                 this.#loaded = true;
+                this.#indirectReference = existingPointer;
                 super.setVal(val, true, is_transform)
+                logger.debug(`Set indirect reference for ${this.idString()} to ${existingPointer.idString()}`)
             }
 
             // normal
@@ -2743,7 +2748,8 @@ export class Pointer<T = any> extends Ref<T> {
 
     protected getInitialTransformValue(val: T) {
         const type = Type.ofValue(val);
-        this.#unwrapped_transform_type = type;
+        // special edge case: only update type if not void for transforms (TODO: better solution)
+        if (type !== Type.std.void as Type<T>) this.#unwrapped_transform_type = type;
         if (type.interface_config?.wrap_transform) val = type.interface_config.wrap_transform(val);
         return val;
     }
@@ -2821,8 +2827,7 @@ export class Pointer<T = any> extends Ref<T> {
                             ({capturedGetters, capturedGettersWithKeys} = Ref.getCapturedGetters());
                         }
                     }
-    
-    
+        
                     // promise returned, wait for promise to resolve
                     if (val instanceof Promise) {
                         // force live required for async transforms (cannot synchronously calculate the value in a getter)

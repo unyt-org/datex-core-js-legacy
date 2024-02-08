@@ -42,7 +42,7 @@ export function always(scriptOrJSTransform:TemplateStringsArray|SmartTransformFu
 			throw new PointerError(`Promises cannot be returned from always transforms - use 'asyncAlways' instead`);
 		}
 		else {
-			return Ref.collapseValue(ptr);
+			return ptr.indirectReference ? ptr : Ref.collapseValue(ptr);
 		}
 	}
     // datex script
@@ -321,7 +321,7 @@ export function toggle<T>(value:RefLike<boolean>, if_true:T, if_false:T): Minima
     always (
         if (${Runtime.valueToDatexString(value)}) (${Runtime.valueToDatexString(if_true)}) 
         else (${Runtime.valueToDatexString(if_false)})
-    )`*/).js_value;
+    )`*/);
 }
 
 
