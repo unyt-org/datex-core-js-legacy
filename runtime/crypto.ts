@@ -325,11 +325,6 @@ export class Crypto {
             if (!exported_keys) {
                 logger.debug("requesting keys for " + endpoint);
 
-                // TODO: only workaround
-                if (Runtime.endpoint.main.toString() == "@+unyt2") {
-                    reject(new Error("skipping @+unyt2"));
-                    return;
-                }
                 // get endpoint public keys
                 // TODO: don't sign?, does not work when running as @+unyt2: await datex('#public.Blockchain.getEndpointPublicKeys(?)', [endpoint], Target.get('@+unyt2'), false)
                 try {
