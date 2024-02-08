@@ -150,7 +150,6 @@ export class WindowInterface extends CommunicationInterface {
     private onReceive = (event: MessageEvent) => {
         if (event.origin == this.#windowOrigin) {
             const data = event.data;
-            console.log("data",data)
             if (data?.type == "INIT") {
                 this.#connectedPromise.resolve(true)
                 
@@ -158,7 +157,6 @@ export class WindowInterface extends CommunicationInterface {
                 this.clearSockets();
 
                 const socket = new WindowInterfaceSocket(this.window, this.#windowOrigin)
-                socket.endpoint = Target.get(data.endpoint) as Endpoint;
                 this.addSocket(socket)
 
                 // if in parent: send INIT to window after initialized

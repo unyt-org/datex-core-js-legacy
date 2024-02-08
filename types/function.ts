@@ -267,7 +267,7 @@ export class Function<T extends (...args: any) => any = (...args: any) => any> e
             
             // run in scope, get result
             try {
-                const res = await Runtime.datexOut(compile_info, endpoint, undefined, true, undefined, undefined, false, undefined, this.datex_timeout);
+                const res = await Runtime.datexOut(compile_info, endpoint, undefined, true, undefined, undefined, false, this.datex_timeout);
                 return res;
             } catch (e) {
                 // error occured during scope execution => scope is broken, can no longer be used => create new scope
@@ -339,7 +339,6 @@ export class Function<T extends (...args: any) => any = (...args: any) => any> e
 
         // no function or DATEX provided
         if (!this.fn) {
-            console.dir(this)
             throw new RuntimeError("Cannot apply values to a <Function> with no executable DATEX or valid native target");
         }
 

@@ -298,7 +298,7 @@ export class Compiler {
 
     static SIGN_DEFAULT = true; // can be changed
 
-    static BIG_BANG_TIME = new Date(2022, 0, 22, 0, 0, 0, 0).getTime() // 1642806000000
+    static BIG_BANG_TIME = Date.UTC(2024, 0, 0, 0, 0, 0, 0)
     static MAX_INT_32 = 2_147_483_647;
     static MIN_INT_32 = -2_147_483_648;
 
@@ -416,12 +416,6 @@ export class Compiler {
         return parseInt(binary, 2);
     }
 
-    /** Set TTL of header of existing block */
-    public static setHeaderTTL(dx_block:ArrayBuffer, ttl:number):ArrayBuffer {
-        const uint8 = new Uint8Array(dx_block);
-        uint8[4] = ttl;
-        return uint8.buffer;
-    }
 
     // get sender from header
     public static extractHeaderSender(dx_block: ArrayBuffer, last_byte?:[number], _appspace_byte = true, _start = 8): Endpoint|undefined {
@@ -606,7 +600,7 @@ export class Compiler {
     }
 
     /** Add a header to a Datex block */
-    public static DEFAULT_TTL = 64;
+    public static DEFAULT_TTL = 10;
 
     private static device_types = {
         "default": 0,
@@ -783,8 +777,8 @@ export class Compiler {
         // ROUTING HEADER /////////////////////////////////////////////////
         // ttl
         pre_header_uint8[i++] = __routing_ttl;
-        // priority
-        pre_header_uint8[i++] = __routing_prio;
+        // initial ttl (originally: prio, currently unused)
+        pre_header_uint8[i++] = __routing_ttl; //__routing_prio;
 
         // signed = 1, encrypted+signed = 2, encrypted = 3, others = 0
         pre_header_uint8[i++] = sign && !encrypt ? 1: (sign && encrypt ? 2 : (!sign && encrypt ? 3 : 0));
@@ -2751,6 +2745,8 @@ export class Compiler {
 
             if (value?.[DX_REPLACE]) value = value[DX_REPLACE];
 
+            const indirectReferencePtr = (value instanceof Pointer && value.indirectReference) ? value : undefined;
+
             // make sure normal pointers are collapsed (ignore error if uninitialized pointer is passed in)
             try {
                 value = Ref.collapseValue(value);
@@ -2845,7 +2841,8 @@ export class Compiler {
             const option_collapse = SCOPE.options.collapse_pointers && !(SCOPE.options.keep_external_pointers && value instanceof Pointer && !value.is_origin);
             const no_proxify = value instanceof Ref && (((value instanceof Pointer && value.is_anonymous) || option_collapse) || skip_first_collapse);
 
-             
+            // if (indirectReferencePtr) console.log("ptr",indirectReferencePtr.idString(), value?.idString(), no_proxify)
+
             // proxify pointer exceptions:
             if (no_proxify) {
                

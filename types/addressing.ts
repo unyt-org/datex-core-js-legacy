@@ -260,7 +260,7 @@ export class Endpoint extends Target {
 		} 
 		// probably network error, endpoint not reachable
 		catch (e) {
-			console.debug("error getting '" + this + "." + key + "'",e)
+			logger.debug("error getting '" + this + "." + key + "': " + e.message)
 		}
 		// fallback: Blockchain
 		const res = Runtime.Blockchain.getEndpointProperty(this, key);
@@ -311,7 +311,7 @@ export class Endpoint extends Target {
 		const properties = previous?.socket?.interfaceProperties;
 		trace.push({endpoint:Runtime.endpoint, socket: {type: properties?.type??"unknown", name: properties?.name}, timestamp: new Date()});
 
-		const res = await Runtime.datexOut(['?', [trace], {type:previous?.header?.type ?? ProtocolDataType.TRACE, sign:false}], this, previous?.header?.sid, true, false, undefined, false, undefined, 60_000, previous?.socket);
+		const res = await Runtime.datexOut(['?', [trace], {type:previous?.header?.type ?? ProtocolDataType.TRACE, sign:false, inc: 0, sid: previous?.header?.sid }], this, previous?.header?.sid, true, false, undefined, false, 60_000, previous?.socket);
 		return res;
 	}
 
@@ -351,14 +351,19 @@ export class Endpoint extends Target {
 
 		pre += `\n${ESCAPE_SEQUENCES.BOLD}Hops:${ESCAPE_SEQUENCES.RESET}\n\n`;
 
+		let index = 0;
 		for (let i = 0; i<traceStack.length; i++) {
 			const current = traceStack[i];
 			const next = traceStack[i+1];
 			if (!next) break;
 
-			if (i == hopsToDest) pre += `\n${ESCAPE_SEQUENCES.BOLD}Return Trip:${ESCAPE_SEQUENCES.RESET}\n\n`;
+			if (i == hopsToDest) {
+				index = 0;
+				pre += `\n${ESCAPE_SEQUENCES.BOLD}Return Trip:${ESCAPE_SEQUENCES.RESET}\n\n`;
+			}
 
-			pre += `${ESCAPE_SEQUENCES.BOLD} #${(i%hopsToDest)+1} ${ESCAPE_SEQUENCES.RESET}(${next.socket ? next.socket.type : '[update endpoint to show interface type]'}${next.socket?.name ? ' ' + next.socket.name : ''})${ESCAPE_SEQUENCES.RESET}:\n  ${format(current.endpoint)}${ESCAPE_SEQUENCES.RESET} ──▶ ${format(next.endpoint)}${ESCAPE_SEQUENCES.RESET}\n\n`
+			index++;
+			pre += `${ESCAPE_SEQUENCES.BOLD} #${index} ${ESCAPE_SEQUENCES.RESET}(${next.socket ? next.socket.type : '[update endpoint to show interface type]'}${next.socket?.name ? ' ' + next.socket.name : ''})${ESCAPE_SEQUENCES.RESET}:\n  ${format(current.endpoint)}${ESCAPE_SEQUENCES.RESET} ──▶ ${format(next.endpoint)}${ESCAPE_SEQUENCES.RESET}\n\n`
 		}
 
 
@@ -483,7 +488,6 @@ export class Endpoint extends Target {
 				false, 
 				undefined, 
 				false, 
-				undefined,
 				Endpoint.unyt_nodes.includes(this.main.toString()) ? 
 					Endpoint.max_ping_response_time_unyt_node : 
 					Endpoint.max_ping_response_time

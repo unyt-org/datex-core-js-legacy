@@ -11,6 +11,7 @@ import { Runtime } from "../runtime/runtime.ts";
 import { ProtocolDataType } from "../compiler/protocol_types.ts";
 import { Crypto } from "../runtime/crypto.ts";
 import { IOHandler } from "../runtime/io_handler.ts";
+import { DATEX_ERROR } from "../types/error_codes.ts";
 
 export type DatexInData = {
     dxb: ArrayBuffer|ReadableStreamDefaultReader<Uint8Array>,
@@ -20,7 +21,7 @@ export type DatexInData = {
 export type DatexOutData = {
     dxb: ArrayBuffer,
     receivers: Endpoint|Disjunction<Endpoint>, // @@any for broadcasts
-    socket?: CommunicationInterfaceSocket
+    socket: CommunicationInterfaceSocket
 }
 
 /**
@@ -86,6 +87,11 @@ export class CommunicationHub {
 
 export const COM_HUB_SECRET = Symbol("COM_HUB_SECRET")
 
+type DynamicProperties = {
+    knownSince: number,
+    distance: number
+}
+
 /**
  * Internal handler for managing CommunicationInterfaces
  */
@@ -101,7 +107,7 @@ export class CommunicationHubHandler {
     
     #interfaces = new Set<CommunicationInterface>()
     // CommunicationInterfaceSockets are ordered, most recent last
-    #endpointSockets = new Map<Endpoint, Set<ConnectedCommunicationInterfaceSocket>>().setAutoDefault(Set).enableAutoRemove()
+    #endpointSockets = new Map<Endpoint, Map<ConnectedCommunicationInterfaceSocket, DynamicProperties>>().setAutoDefault(Map).enableAutoRemove()
     #registeredSockets = new Map<ConnectedCommunicationInterfaceSocket, Set<Endpoint>>().setAutoDefault(Set).enableAutoRemove()
 
     get registeredSockets() {
@@ -166,24 +172,24 @@ export class CommunicationHubHandler {
         string += `Registered Interfaces: ${this.#interfaces.size}\n`
         string += `Connected Sockets: ${this.#registeredSockets.size}\n\n`
 
-        const mapping = new Map<string, Set<[Endpoint, CommunicationInterfaceSocket]>>()
+        const mapping = new Map<string, Map<CommunicationInterfaceSocket, {directEndpoint?: Endpoint, directEndpointDynamicProperties?: DynamicProperties, indirectEndpoints: Map<Endpoint, DynamicProperties>}>>()
+
+        const endpointPreferredSockets = new Map<Endpoint, CommunicationInterfaceSocket|undefined>()
 
         // interfaces with direct sockets
         for (const comInterface of this.#interfaces) {
             const sockets = new Set(
                 [...comInterface.getSockets()]
-                    .map(socket => [socket.endpoint, socket] as [Endpoint, CommunicationInterfaceSocket])
+                    .map(socket => [socket.endpoint, socket] as [Endpoint, ConnectedCommunicationInterfaceSocket])
             )
             const identifier = comInterface.toString()
-            if (mapping.has(identifier)) {
-                sockets.forEach(([endpoint, socket]) => mapping.get(identifier)!.add([endpoint, socket]))
-            }
-            else mapping.set(identifier, sockets)
+            if (!mapping.has(identifier)) mapping.set(identifier, new Map())
+            sockets.forEach(([endpoint, socket]) => mapping.get(identifier)!.set(socket, {directEndpoint: endpoint, directEndpointDynamicProperties: this.#endpointSockets.get(endpoint)!.get(socket)!, indirectEndpoints: new Map()}))
         }
 
         // indirect connections
         for (const [endpoint, sockets] of this.#endpointSockets) {
-            for (const socket of sockets) {
+            for (const [socket, dynamicProperties] of sockets) {
                 // check if endpoint is indirect
                 if (socket.endpoint !== endpoint) {
                     if (!socket.interfaceProperties) {
@@ -191,10 +197,10 @@ export class CommunicationHubHandler {
                         continue;
                     }
                     const identifier = socket.toString();
-                    if (mapping.has(identifier)) {
-                        mapping.get(identifier)!.add([endpoint, socket])
-                    }
-                    else mapping.set(identifier, new Set([[endpoint, socket]]))
+                    if (!mapping.has(identifier)) mapping.set(identifier, new Map());
+                    if (!mapping.get(identifier)!.has(socket)) mapping.get(identifier)!.set(socket, {indirectEndpoints: new Map});
+
+                    mapping.get(identifier)!.get(socket)!.indirectEndpoints.set(endpoint, dynamicProperties);
                 }
             }
         }
@@ -210,24 +216,34 @@ export class CommunicationHubHandler {
         const DARK_GREY = `\x1b[38;2;${COLORS.DARK_GREY.join(';')}m`
         const DARK_RED = `\x1b[38;2;${COLORS.DARK_RED.join(';')}m`
 
+        const getFormattedSocketString = (socket: CommunicationInterfaceSocket, endpoint: Endpoint, dynamicProperties: DynamicProperties) => {
+            if (socket.interfaceProperties?.noContinuousConnection && endpoint == BROADCAST) return "";
+
+            if (!endpointPreferredSockets.has(endpoint)) endpointPreferredSockets.set(endpoint, this.getPreferredSocketForEndpoint(endpoint));
+            const isPreferred = endpointPreferredSockets.get(endpoint)! === socket;
+
+            const directionSymbolColor = isPreferred ? ESCAPE_SEQUENCES.BOLD : ESCAPE_SEQUENCES.GREY;
+            const directionSymbol =  directionSymbolColor + this.directionSymbols[socket.interfaceProperties?.direction as InterfaceDirection] ?? "?";
+            const isDirect = socket.endpoint === endpoint;
+            const color = socket.connected ? 
+                (
+                    socket.endpoint ? 
+                    (isDirect ? ESCAPE_SEQUENCES.UNYT_GREEN : DARK_GREEN) :
+                    (isDirect ? ESCAPE_SEQUENCES.UNYT_GREY : DARK_GREY)
+                ) : 
+                (isDirect ? ESCAPE_SEQUENCES.UNYT_RED : DARK_RED)
+            const connectedState = `${color}⬤${ESCAPE_SEQUENCES.RESET}`
+            return `  ${connectedState} ${directionSymbol}${isDirect?'':' (indirect)'}${isDirect&&this.defaultSocket==socket?' (default)':''} ${endpoint??'unknown endpoint'}${ESCAPE_SEQUENCES.GREY}(distance:${dynamicProperties.distance}, knownSince:${((Date.now()-dynamicProperties.knownSince)/1000).toFixed(2)}s)${ESCAPE_SEQUENCES.RESET}\n`
+        }
+
         // print
         for (const [identifier, sockets] of mapping) {
             string += `\n${ESCAPE_SEQUENCES.BOLD}${identifier}${ESCAPE_SEQUENCES.RESET}\n`
-            for (const [endpoint, socket] of sockets) {
-                // skip placeholder @@any for noContinuosConnection interfaces
-                if (socket.interfaceProperties?.noContinuousConnection && endpoint == BROADCAST) continue;
-
-                const directionSymbol = this.directionSymbols[socket.interfaceProperties?.direction as InterfaceDirection] ?? "?"
-                const isDirect = socket.endpoint === endpoint;
-                const color = socket.connected ? 
-                    (
-                        socket.endpoint ? 
-                        (isDirect ? ESCAPE_SEQUENCES.UNYT_GREEN : DARK_GREEN) :
-                        (isDirect ? ESCAPE_SEQUENCES.UNYT_GREY : DARK_GREY)
-                    ) : 
-                    (isDirect ? ESCAPE_SEQUENCES.UNYT_RED : DARK_RED)
-                const connectedState = `${color}⬤${ESCAPE_SEQUENCES.RESET}`
-                string += `  ${connectedState} ${directionSymbol}${isDirect?'':' (indirect)'}${isDirect&&this.defaultSocket==socket?' (default)':''} ${endpoint??'unknown endpoint'}${ESCAPE_SEQUENCES.RESET}\n`
+            for (const [socket, {directEndpoint, directEndpointDynamicProperties, indirectEndpoints}] of sockets) {
+                if (directEndpoint) string += getFormattedSocketString(socket, directEndpoint, directEndpointDynamicProperties!)
+                for (const [endpoint, dynamicProperties] of indirectEndpoints) {
+                    string += getFormattedSocketString(socket, endpoint, dynamicProperties)
+                }
             }
         }
 
@@ -250,7 +266,7 @@ export class CommunicationHubHandler {
 
     /** Internal methods: */
 
-    public registerSocket(socket: ConnectedCommunicationInterfaceSocket, endpoint: Endpoint|undefined = socket.endpoint) {
+    public registerSocket(socket: ConnectedCommunicationInterfaceSocket, endpoint: Endpoint|undefined = socket.endpoint, dynamicProperties: DynamicProperties) {
         if (this.#endpointSockets.get(endpoint)?.has(socket)) return;
 
         if (!endpoint) throw new Error("Cannot register socket to communication hub without endpoint.")
@@ -267,7 +283,7 @@ export class CommunicationHubHandler {
 
         this.#logger.debug("Added new" + (isDirect?'':' indirect') + " socket " + socket.toString() + " for endpoint " + endpoint.toString())
         this.#registeredSockets.getAuto(socket).add(endpoint);
-        this.#endpointSockets.getAuto(endpoint).add(socket);
+        this.#endpointSockets.getAuto(endpoint).set(socket, dynamicProperties);
         // add to instances map if not main endpoint
         if (endpoint.main !== endpoint)	this.#activeEndpointInstances.getAuto(endpoint.main).add(endpoint);
         this.sortSockets(endpoint)
@@ -438,31 +454,32 @@ export class CommunicationHubHandler {
     private sortSockets(endpoint: Endpoint) {
         const sockets = this.#endpointSockets.get(endpoint)
         if (!sockets) throw new Error("No sockets for endpoint " + endpoint);
-        const sortedSockets = new Set(
-                Object
-                // group by direct/indirect
-                .entries(Object.groupBy(sockets, socket => (socket.endpoint!==endpoint).toString()))
-                // sort by direct/indirect
-                .toSorted()
-
-                // sort by channelFactor and recency, flatten
-                .flatMap(([_, sockets]) => this.sortSocketsByChannelFactorAndRecency(sockets!))
-        )
+        const sortedSockets = 
+            new Map(
+                    // sort by direct/indirect, direct first
+                    this.sortGrouped(sockets, ([socket]) => socket.endpoint === endpoint ? 0 : 1, 1)
+                .map(sockets => 
+                    // sort by channelFactor, highest first
+                    this.sortGrouped(sockets, ([socket]) => socket.channelFactor, -1)
+                .map(sockets => 
+                    // sort by distance, smallest first
+                    this.sortGrouped(sockets, ([_, {distance}]) => distance, 1)
+                .map(sockets => 
+                    // sort by knownSince, newest (highest) first
+                    this.sortGrouped(sockets, ([_, {knownSince}]) => knownSince, -1)
+                )))
+            .flat(4)
+            )
         this.#endpointSockets.set(endpoint, sortedSockets)
     }
 
-    private sortSocketsByChannelFactorAndRecency(sockets: Iterable<ConnectedCommunicationInterfaceSocket>) {
+    private sortGrouped<I extends Iterable<unknown>>(iterable: I, groupBy: (item: I extends Iterable<infer Item> ? Item : unknown) => number, sortDirection = 1) {
         return Object
             // group by channelFactor
-            .entries(Object.groupBy(sockets, socket => socket.channelFactor))
+            .entries(Object.groupBy(iterable as any, groupBy))
             // sort by channelFactor
-            .toSorted(([a], [b]) => Number(b) - Number(a))
-            // sort by connectTimestamp in each channelFactor group
-            .map(([channelFactor, sockets]) => [channelFactor, sockets!.toSorted(
-                (a, b) => b.connectTimestamp - a.connectTimestamp
-            )] as const)
-            // flatten
-            .flatMap(([_, sockets]) => sockets)
+            .toSorted(([a], [b]) => (Number(a) - Number(b)) * sortDirection)
+            .map(([_, values]) => values!)
     }
 
 
@@ -494,7 +511,7 @@ export class CommunicationHubHandler {
     
 
     private *iterateEndpointSockets(endpoint: Endpoint, onlyDirect = true, onlyOutgoing = true) {
-        for (const socket of this.#endpointSockets.get(endpoint) ?? []) {
+        for (const socket of this.#endpointSockets.get(endpoint)?.keys() ?? []) {
             if (onlyDirect && socket.endpoint !== endpoint) continue;
             if (onlyOutgoing && !socket.canSend) continue;
             yield socket;
@@ -514,6 +531,8 @@ export class CommunicationHubHandler {
      */
     public async datexOut(data: DatexOutData):Promise<void> {
         
+        this.updateTTL(data.dxb, -1) // decrement TTL
+
         // broadcast
         if (data.receivers == BROADCAST) return this.datexBroadcastOut(data);
 
@@ -573,12 +592,24 @@ export class CommunicationHubHandler {
 
         const success = await destSocket.sendBlock(addressdDXB);
         if (!success) {
+            this.updateTTL(dxb, 1) // reset TTL to original
             return this.datexOut({
                 dxb,
                 receivers,
                 socket: destSocket
             })
         }
+    }
+
+    private updateTTL(dxb: ArrayBuffer, delta = -1) {
+        const uint8 = new Uint8Array(dxb);
+        const currentTTL = uint8[5];
+        // console.log("currentTTL", currentTTL, delta);
+
+        // too many redirects (ttl is 0)
+        if (currentTTL <= 0) throw new NetworkError(DATEX_ERROR.TOO_MANY_REDIRECTS);
+
+        uint8[5] = currentTTL + delta;
     }
 
 }

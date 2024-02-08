@@ -26,7 +26,7 @@ export namespace Crypto {
 export class Crypto {
     
     // cached public keys for endpoints
-    private static public_keys = new WeakMap<Endpoint, [CryptoKey|null, CryptoKey|null]>(); // verify_key, enc_key
+    public static public_keys = new WeakMap<Endpoint, [CryptoKey|null, CryptoKey|null]>(); // verify_key, enc_key
     private static public_keys_exported = new WeakMap<Endpoint, [ArrayBuffer, ArrayBuffer]>(); // only because node crypto is causing problems
 
     // own keys
@@ -343,6 +343,7 @@ export class Crypto {
                     }
                 }
                 catch (e) {
+                    console.error(e);
                     reject(new Error("could not get keys for " + endpoint + " from network"));
                     this.#waiting_key_requests.delete(endpoint); // remove from key promises
                     return;
