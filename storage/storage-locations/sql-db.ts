@@ -34,16 +34,23 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			]
 		},
 		pointerMapping: {
-			name: "datex_pointers",
+			name: "datex_pointer_mapping",
 			columns: [
 				[this.#pointerMysqlColumnName, this.#pointerMysqlType, "PRIMARY KEY"],
 				["table_name", "varchar(50)"]
 			]
 		},
+		rawPointers: {
+			name: "datex_pointers_raw",
+			columns: [
+				["id", "varchar(50)", "PRIMARY KEY"],
+				["value", "blob"]
+			]
+		},
 		items: {
 			name: "datex_items",
 			columns: [
-				["key", "varchar(50)", "PRIMARY KEY"],
+				["key", "varchar(200)", "PRIMARY KEY"],
 				["value", "blob"]
 			]
 		}
@@ -85,7 +92,23 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 	}
 
 	async #query<row=object>(query_string:string, query_params?:any[]): Promise<row[]> {
-        if (typeof query_string != "string") {console.error("invalid query:", query_string); throw new Error("invalid query")}
+
+		// handle arraybuffers
+		if (query_params) {
+			for (let i = 0; i < query_params.length; i++) {
+				const param = query_params[i];
+				if (param instanceof ArrayBuffer) {
+					query_params[i] = new TextDecoder().decode(param)
+				}
+				if (param instanceof Array) {
+					query_params[i] = param.map(p => p instanceof ArrayBuffer ? new TextDecoder().decode(p) : p)
+				}
+			}
+		}
+		
+        // console.log("QUERY: " + query_string, query_params)
+
+		if (typeof query_string != "string") {console.error("invalid query:", query_string); throw new Error("invalid query")}
         if (!query_string) throw new Error("empty query");
         try {
             const result = await this.#sqlClient!.execute(query_string, query_params);
@@ -143,9 +166,12 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 
 	async #createTableForType(type: Datex.Type) {
 		const columns:ColumnDefinition[] = [
-			[this.#pointerMysqlColumnName, this.#pointerMysqlType, "PRIMARY KEY INVISIBLE"]
+			[this.#pointerMysqlColumnName, this.#pointerMysqlType, 'PRIMARY KEY INVISIBLE DEFAULT "0"']
 		]
 		const constraints: ConstraintsDefinition[] = []
+
+		this.log?.("Creating table for type " + type)
+		console.log(type)
 
 		for (const [propName, propType] of Object.entries(type.template as {[key:string]:Datex.Type})) {
 			let mysqlType: mysql_data_type|undefined
@@ -161,14 +187,16 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 				columns.push([propName, mysqlType!])
 			}
 			// no matching primitive type found
-			else if (!mysqlType && propType.template) {
-				const foreignTable = await this.#getTableForType(propType);
+			else if (!mysqlType) {
+				let foreignTable = propType.template ? await this.#getTableForType(propType) : null;
 
-				if (!foreignTable) throw new Error("Cannot map type " + propType + " to a SQL table")
-				else {
-					columns.push([propName, this.#pointerMysqlType])
-					constraints.push(`FOREIGN KEY (\`${propName}\`) REFERENCES \`${foreignTable}\`(\`${this.#pointerMysqlColumnName}\`)`)
+				if (!foreignTable) {
+					logger.warn("Cannot map type " + propType + " to a SQL table, falling back to raw DXB storage")
+					foreignTable = this.#metaTables.rawPointers.name;
 				}
+
+				columns.push([propName, this.#pointerMysqlType])
+				constraints.push(`FOREIGN KEY (\`${propName}\`) REFERENCES \`${foreignTable}\`(\`${this.#pointerMysqlColumnName}\`)`)
 			}
 
 			else {
@@ -252,8 +280,8 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		}
 		// this.log("cols", insertData)
 
-		await this.#query('INSERT INTO ?? ?? VALUES ?;', [table, Object.keys(insertData), Object.values(insertData)])
 
+		await this.#query('INSERT INTO ?? ?? VALUES ?;', [table, Object.keys(insertData), Object.values(insertData)])
 	}
 
 	async #updatePointer(pointer: Datex.Pointer, keys:string[]) {
@@ -288,7 +316,8 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		await this.#init();
 		const dependencies = new Set<Pointer>()
 		const encoded = Compiler.encodeValue(value, dependencies);
-		await this.#query('INSERT INTO ?? ?? VALUES ?;', [this.#metaTables.items.name, ["key", "value"], [key, encoded]])
+		console.log("db set item", key)
+		await this.#query('INSERT INTO ?? ?? VALUES ? ON DUPLICATE KEY UPDATE value=?;', [this.#metaTables.items.name, ["key", "value"], [key, encoded], encoded])
         // await datex_item_storage.setItem(key, Compiler.encodeValue(value, dependencies));
 		return dependencies;
 	}
@@ -331,24 +360,42 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		const dependencies = new Set<Pointer>()
 
 		await this.#init();
-		this.log?.("update " + pointer.id + " - " + pointer.type, partialUpdateKey, await this.#pointerEntryExists(pointer))
 
-		// new full insert
-		if (!await this.#pointerEntryExists(pointer))
-			await this.#insertPointer(pointer)
-		else {
-			// partial update
-			if (partialUpdateKey !== NOT_EXISTING) {
-				if (typeof partialUpdateKey !== "string") throw new Error("invalid key type for SQL table: " + Datex.Type.ofValue(partialUpdateKey))
-				await this.#updatePointer(pointer, [partialUpdateKey])
-			}
-			// full udpdate
+		// is templatable pointer type
+		if (pointer.type.template) {
+			this.log?.("update " + pointer.id + " - " + pointer.type, partialUpdateKey, await this.#pointerEntryExists(pointer))
+
+			// new full insert
+			if (!await this.#pointerEntryExists(pointer))
+				await this.#insertPointer(pointer)
 			else {
-				// TODO
+				// partial update
+				if (partialUpdateKey !== NOT_EXISTING) {
+					if (typeof partialUpdateKey !== "string") throw new Error("invalid key type for SQL table: " + Datex.Type.ofValue(partialUpdateKey))
+					await this.#updatePointer(pointer, [partialUpdateKey])
+				}
+				// full udpdate
+				else {
+					// TODO
+				}
 			}
 		}
+
+		// no template, just add a raw DXB entry
+		else {
+			await this.setPointerRaw(pointer)
+		}
 		
-		
+		return dependencies;
+	}
+
+	async setPointerRaw(pointer: Pointer) {
+		console.log("storing raw pointer: " + Runtime.valueToDatexStringExperimental(pointer, true, true))
+		await this.#init();
+		const dependencies = new Set<Pointer>()
+		const encoded = Compiler.encodeValue(pointer, dependencies, true, false, true);
+		await this.#query('INSERT INTO ?? ?? VALUES ? ON DUPLICATE KEY UPDATE value=?;', [this.#metaTables.rawPointers.name, ["id", "value"], [pointer.id, encoded], encoded])
+        // await datex_item_storage.setItem(key, Compiler.encodeValue(value, dependencies));
 		return dependencies;
 	}
 
