@@ -53,9 +53,9 @@ export class WindowInterface extends CommunicationInterface {
         return this.#windowOrIFrame instanceof HTMLIFrameElement ? this.#windowOrIFrame.contentWindow! : this.#windowOrIFrame;
     }
 
-    constructor(window: Window, windowOrigin?: string|URL)
-    constructor(iframe: HTMLIFrameElement, iframeOrigin?: string|URL)
-    constructor(window: Window|HTMLIFrameElement, windowOrigin?: string|URL) {
+    constructor(window: Window, windowOrigin?: string|URL, type?: "parent"|"child")
+    constructor(iframe: HTMLIFrameElement, iframeOrigin?: string|URL, type?: "parent"|"child")
+    constructor(window: Window|HTMLIFrameElement, windowOrigin?: string|URL, type?: "parent"|"child") {
         super()
 
         let windowOriginURL = windowOrigin ? new URL(windowOrigin) : null;
@@ -71,7 +71,7 @@ export class WindowInterface extends CommunicationInterface {
             this.logger.debug("initializing as parent window, child iframe origin: " + this.#windowOrigin)
         }
         // is opened child window or inside iframe
-        else if (window === self.window.opener || globalThis.self !== globalThis.top) {
+        else if (type !== "parent" && (type === "child" || window === self.window.opener || globalThis.self !== globalThis.top)) {
             this.#isChild = true;
 
             // explicitly set window origin
@@ -115,8 +115,10 @@ export class WindowInterface extends CommunicationInterface {
         this.handleClose();
     }
 
+    #connectedPromise = Promise.withResolvers<true>()
+
     connect() {
-        return true;
+        return this.#connectedPromise.promise;
     }
 
     disconnect() {
@@ -148,9 +150,12 @@ export class WindowInterface extends CommunicationInterface {
     private onReceive = (event: MessageEvent) => {
         if (event.origin == this.#windowOrigin) {
             const data = event.data;
-
-               if (data?.type == "INIT") {
-                globalThis.removeEventListener("message", this.onReceive);
+            console.log("data",data)
+            if (data?.type == "INIT") {
+                this.#connectedPromise.resolve(true)
+                
+                // only one active socket allowed, remove existing
+                this.clearSockets();
 
                 const socket = new WindowInterfaceSocket(this.window, this.#windowOrigin)
                 socket.endpoint = Target.get(data.endpoint) as Endpoint;
@@ -168,15 +173,15 @@ export class WindowInterface extends CommunicationInterface {
 
     
     static createChildWindowInterface(childWindow: Window, windowOrigin: string|URL) {
-        return new WindowInterface(childWindow, windowOrigin)
+        return new WindowInterface(childWindow, windowOrigin, "parent")
     }
 
     static createChildIFrameInterface(iframe: HTMLIFrameElement) {
-        return new WindowInterface(iframe)
+        return new WindowInterface(iframe, undefined, "parent")
     }
 
     static createParentInterface(parentWindow: Window, windowOrigin?: string|URL) {
-        return new WindowInterface(parentWindow, windowOrigin)
+        return new WindowInterface(parentWindow, windowOrigin, "child")
     }
 
 
