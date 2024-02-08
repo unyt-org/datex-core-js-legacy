@@ -1,12 +1,13 @@
 // deno-lint-ignore-file no-async-promise-executor
 import { logger } from "../utils/global_values.ts";
-import { Endpoint, Target } from "../types/addressing.ts";
+import { Endpoint, Target, WildcardTarget } from "../types/addressing.ts";
 import { SecurityError, ValueError } from "../types/errors.ts";
 import { NetworkUtils } from "../network/network_utils.ts";
 import { Storage } from "../runtime/storage.ts";
 import { Runtime } from "./runtime.ts";
 import { displayFatalError } from "./display.ts";
 import { Supranet } from "../network/supranet.ts";
+import { Compiler, to } from "../datex_all.ts";
 
 // crypto
 export const crypto = globalThis.crypto
@@ -25,8 +26,8 @@ export namespace Crypto {
 export class Crypto {
     
     // cached public keys for endpoints
-    private static public_keys = new Map<Endpoint, [CryptoKey|null, CryptoKey|null]>(); // verify_key, enc_key
-    private static public_keys_exported = new Map<Endpoint, [ArrayBuffer, ArrayBuffer]>(); // only because node crypto is causing problems
+    private static public_keys = new WeakMap<Endpoint, [CryptoKey|null, CryptoKey|null]>(); // verify_key, enc_key
+    private static public_keys_exported = new WeakMap<Endpoint, [ArrayBuffer, ArrayBuffer]>(); // only because node crypto is causing problems
 
     // own keys
     private static rsa_sign_key:CryptoKey
@@ -133,11 +134,13 @@ export class Crypto {
 
 
     // returns the public verify + encrypt keys for an endpoint (from cache or from network)
-    static getKeysForEndpoint(endpoint:Endpoint):Promise<[CryptoKey?, CryptoKey?]>|[CryptoKey?, CryptoKey?] {
-        if (this.public_keys.has(endpoint) || this.public_keys.has(endpoint.main)) return <[CryptoKey, CryptoKey]>(this.public_keys.get(endpoint)||this.public_keys.get(endpoint.main));
+    static getKeysForEndpoint(endpoint:Endpoint) {
+        if (this.public_keys.has(endpoint) || this.public_keys.has(endpoint.main)) {
+            return (this.public_keys.get(endpoint)||this.public_keys.get(endpoint.main)) as [CryptoKey, CryptoKey];
+        }
         // keys not found, request from network
         else {
-            return this.requestKeys(endpoint.main)
+            return this.requestKeys(endpoint.main);
         }
     }
 
@@ -160,9 +163,6 @@ export class Crypto {
 
         if (this.public_keys.has(endpoint)) return false; // keys already exist
  
-        const storage_item_key = "keys_"+endpoint;
-        if (await Storage.hasItem(storage_item_key)) return false; // keys already in storage
-
         try {      
             const keys = [
                 verify_key ? await Crypto.importVerifyKey(verify_key) : null,
@@ -170,15 +170,114 @@ export class Crypto {
             ] as [CryptoKey | null, CryptoKey | null];      
             const exportedKeys = [verify_key, enc_key] as [ArrayBuffer, ArrayBuffer];
 
-            this.public_keys.set(endpoint.main, keys)
+            this.public_keys.set(endpoint, keys)
             this.public_keys_exported.set(endpoint, exportedKeys);
 
-            await Storage.setItem(storage_item_key, exportedKeys);
             return true;
         } catch(e) {
             logger.error(e);
             throw new Error("Could not register keys for endpoint " + endpoint + " (invalid keys or no permisssion)");
         }
+    }
+
+    // list of all endpoints with actively used keys
+    static #activeEndpoints = new WeakSet<Endpoint>();
+
+
+    /**
+     * Adds an endpoint to the list of active endpoints and makes
+     * sure the keys are stored persistently
+     * @returns true if keys could be stored
+     */
+    static activateEndpoint(endpoint: Endpoint) {
+        endpoint = endpoint.main;
+        if (!this.#activeEndpoints.has(endpoint)) {
+            this.#activeEndpoints.add(endpoint)
+            return this.storeKeys(endpoint);
+        }
+        return Promise.resolve(true)
+    }
+
+    /**
+     * Stores the keys for an endpoint persistently and
+     * updates the last used timestamp
+     */
+    static async storeKeys(endpoint:Endpoint, exportedKeys?: [ArrayBuffer, ArrayBuffer]) {
+        // always bind to main endpoint
+        endpoint = endpoint.main;
+
+        if (!exportedKeys && !this.public_keys_exported.has(endpoint)) return false;
+        if (!exportedKeys) exportedKeys = this.public_keys_exported.get(endpoint)!;
+
+        const storage_item_key = "keys_"+endpoint;
+        if (await Storage.hasItem(storage_item_key)) return true; // keys already in storage
+        else {
+            // validate with stored hash if exists
+            const storedHash = await Storage.getItem('hash_keys_' + endpoint) as string;
+            const currentHash = await Compiler.getValueHashString(exportedKeys);
+            if (storedHash && storedHash !== currentHash) {
+                throw new SecurityError("Keys for " + endpoint + " are not valid (Fingerprint mismatch)");
+            }
+            logger.debug("Storing keys for " + endpoint + " persistently")
+            await Storage.setItem(storage_item_key, [...exportedKeys, Date.now()]);
+            if (storedHash) await Storage.removeItem('hash_keys_' + endpoint);
+            return true;
+        }
+    }
+
+    static KEY_CLEANUP_INTERVAL = 1000*60*60; // 1 hour
+    static MAX_KEY_LIFETIME = 1000*60*60*24*7; // 7 days
+
+    static initCleanup() {
+        // run cleanup once at startup
+        this.cleanupKeys();
+        // run cleanup every hour
+        setInterval(() => this.cleanupKeys(), this.KEY_CLEANUP_INTERVAL);
+    }
+
+    static async cleanupKeys() {
+        let removeCount = 0;
+        let totalCount = 0;
+
+        for (const key of await Storage.getItemKeysStartingWith("keys_")) {
+            try {
+                totalCount++;
+                const endpoint = Endpoint.get(key.replace('keys_', ''))
+
+                let isActiveEndpoint = false
+                // is active endpoint if in activeEndpoints list and endpoint still online
+                if (endpoint instanceof Endpoint && this.#activeEndpoints.has(endpoint)) {
+                    isActiveEndpoint = await endpoint.isOnline();
+                    this.#activeEndpoints.delete(endpoint);
+                }
+                
+                const [verifyKey, encKey, timestamp] = await Storage.getItem(key);
+                if (!isActiveEndpoint && (!timestamp || Date.now() - timestamp > this.MAX_KEY_LIFETIME)) {
+                    await Storage.removeItem(key);
+                    // store key hash
+                    await Storage.setItem('hash_keys_' + endpoint, await Compiler.getValueHashString([verifyKey, encKey]));
+                    removeCount++;
+                }
+                else {
+                    await Storage.setItem(key, [verifyKey, encKey, Date.now()]);
+                }
+            }
+            catch (e) {
+                console.error(e)
+            }
+        }
+
+        const totalKeyHashCount = await Storage.getItemCountStartingWith('hash_keys_');
+
+        logger.debug(`Cleaned up ${removeCount} stored keys. Remaining: ${totalCount-removeCount} keys and ${totalKeyHashCount} key hashes.`);
+
+        if (totalCount > 1000) {
+            logger.warn("Stored keys entries exceed 1000");
+        }
+        if (totalKeyHashCount > 5000) {
+            logger.warn("Stored key hash entries exceed 5000");
+        }
+
     }
 
     static #waiting_key_requests = new Map<Endpoint, Promise<[CryptoKey, CryptoKey]>>();
@@ -236,8 +335,8 @@ export class Crypto {
                 try {
                     exported_keys = await Runtime.Blockchain.getEndpointPublicKeys(endpoint);
                     if (!exported_keys) exported_keys = await NetworkUtils.get_keys(endpoint);
-                    if (exported_keys) await Storage.setItem("keys_"+endpoint, exported_keys);
-                    else {
+                    // if (exported_keys) await this.storeKeys(endpoint, exported_keys);
+                    if (!exported_keys) {
                         reject(new Error("could not get keys from network"));
                         this.#waiting_key_requests.delete(endpoint); // remove from key promises
                         return;
@@ -254,6 +353,7 @@ export class Crypto {
             try {
                 const keys:[CryptoKey, CryptoKey] = [await this.importVerifyKey(exported_keys[0])||null, await this.importEncKey(exported_keys[1])||null];
                 this.public_keys.set(endpoint.main, keys);
+                this.public_keys_exported.set(endpoint, exported_keys);
                 logger.debug("saving keys for " + endpoint);
                 resolve(keys);
                 this.#waiting_key_requests.delete(endpoint); // remove from key promises

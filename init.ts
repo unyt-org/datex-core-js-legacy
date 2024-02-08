@@ -14,6 +14,7 @@ import { MessageLogger } from "./utils/message_logger.ts";
 import { Path } from "./utils/path.ts";
 import { communicationHub } from "./network/communication-hub.ts";
 import { LocalLoopbackInterface } from "./network/communication-interfaces/local-loopback-interface.ts";
+import { Crypto } from "./runtime/crypto.ts";
 
 /**
  * Runtime init (sets ENV, storage, endpoint, ...)
@@ -168,4 +169,7 @@ export async function init() {
 			await Storage.clearAndReload();
 		}
 	}
+
+	// init cleanup interval to remove crypto entries (endpoint keyss)
+	Crypto.initCleanup();
 }

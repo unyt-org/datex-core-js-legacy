@@ -1911,7 +1911,11 @@ export class Runtime {
             if (header_callback instanceof globalThis.Function) header_callback(header);
 
             // assume sender endpoint is online now  
-            if (header.sender) header.sender.setOnline(true)
+            if (header.sender) header.sender.setOnline(true);
+
+            if (header.type !== ProtocolDataType.GOODBYE && header.type !== ProtocolDataType.HELLO && header.signed) {
+                Crypto.activateEndpoint(header.sender);
+            }
         }
 
         // needs to be redirected 

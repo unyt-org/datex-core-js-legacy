@@ -1295,7 +1295,14 @@ export class Storage {
 
         // remove keys items that are unrelated to normal storage
         for (const [key] of items.snapshot) {
-            if (key.startsWith("keys_")) items.snapshot.delete(key);
+            if (key.startsWith("keys_") || key.startsWith("hash_keys_")) {
+                if (options.internalItems) {
+                    for (const [location, _value] of items.snapshot.get(key)!) {
+                        items.snapshot.get(key)!.set(location, "..." + ESCAPE_SEQUENCES.RESET);
+                    }
+                }
+                else items.snapshot.delete(key);
+            }
         }
 
         // iterate over storage maps and sets and render all entries
