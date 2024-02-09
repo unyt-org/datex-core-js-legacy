@@ -2790,7 +2790,7 @@ export class Pointer<T = any> extends Ref<T> {
 
     protected get supportsIndirectRefs() {
         // only supported if indirect references are not already handled by a custom transform (e.g. for UIX elements)
-        return Runtime.OPTIONS.INDIRECT_REFERENCES && !this.type.interface_config?.handle_transform
+        return Runtime.OPTIONS.INDIRECT_REFERENCES && this.type.supportsIndirectRefs
     }
 
     protected customTransformUpdate(val: T) {
