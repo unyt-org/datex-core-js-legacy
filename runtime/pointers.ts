@@ -317,12 +317,22 @@ export abstract class Ref<T = any> extends EventTarget {
 
     // utility functions
 
-    static collapseValue<V extends RefOrValue<unknown>, P1 extends boolean|undefined = false, P2 extends boolean|undefined = false>(value:V, collapse_pointer_properties?:P1, collapse_primitive_pointers?:P2): CollapsedValueAdvanced<V, P1, P2> {
+    static collapseValue<V extends RefOrValue<unknown>, P1 extends boolean|undefined = false, P2 extends boolean|undefined = false>(value:V, collapse_indirect_references?:P1, collapse_primitive_pointers?:P2): CollapsedValueAdvanced<V, P1, P2> {
         // don't collapse js primitive pointers per default
         if (collapse_primitive_pointers == undefined) collapse_primitive_pointers = <P2>false;
-        if (collapse_pointer_properties == undefined) collapse_pointer_properties = <P1>false;
+        // dont' collapse pointer properties or indirect pointer references per default
+        if (collapse_indirect_references == undefined) collapse_indirect_references = <P1>false;
 
-        if (value instanceof Ref && (collapse_primitive_pointers || !(value instanceof Pointer && value.is_js_primitive)) && (collapse_pointer_properties || !(value instanceof PointerProperty))) {
+        if (
+            value instanceof Ref && 
+            (
+                collapse_primitive_pointers || 
+                !(value instanceof Pointer && value.is_js_primitive)
+            ) && (
+                collapse_indirect_references || 
+                !(value instanceof PointerProperty || value.indirectReference)
+            )
+        ) {
             return value.val
         }
         else return <CollapsedValueAdvanced<V, P1, P2>> value;
@@ -1440,6 +1450,7 @@ export class Pointer<T = any> extends Ref<T> {
 
         // get value if pointer value not yet loaded
         if (!pointer.#loaded) {
+            
             // first try loading from storage
             let stored:any = NOT_EXISTING;
             let source:PointerSource|null = null;
@@ -1462,8 +1473,8 @@ export class Pointer<T = any> extends Ref<T> {
                     if (stored instanceof Pointer && stored.transform_scope) {
                         await pointer.handleTransformAsync(stored.transform_scope.internal_vars, stored.transform_scope);
                     }
-                    // set normal value
-                    else pointer = pointer.setValue(stored);
+                    // set normal value, force placeholder move
+                    else pointer = pointer.setValue(stored, true);
                 }
                
                 // now sync if source (pointer storage) can sync pointer
@@ -2292,6 +2303,9 @@ export class Pointer<T = any> extends Ref<T> {
 
     // make normal pointer from placeholder
     unPlaceholder(id?:string|Uint8Array) {
+        if (!this.#is_placeholder) {
+            logger.error("Pointer is not a placeholder pointer (id: " + this.idString() + ")");
+        }
         this.#is_anonymous = false; // before id change
         this.id = id ?? Pointer.getUniquePointerID(this) // set id
         this.#is_placeholder = false; // after id change
@@ -2338,18 +2352,24 @@ export class Pointer<T = any> extends Ref<T> {
         }
     }
 
-    // set value, might return new pointer if placeholder pointer existed or converted to primitive pointer
-    setValue<TT>(v:T extends typeof NOT_EXISTING ? TT : T):Pointer<T extends typeof NOT_EXISTING ? TT : T> {
+    /**
+     * Set value, might return new pointer if placeholder pointer existed or converted to primitive pointer
+     * If forcePlaceholderMove is true, an existing pointer for the value is returned, even if it is not marked as placeholder
+     */
+    setValue<TT>(v:T extends typeof NOT_EXISTING ? TT : T, forcePlaceholderMove = false):Pointer<T extends typeof NOT_EXISTING ? TT : T> {
+
         // primitive value and not yet initialized-> new pointer
         if (!this.value_initialized && (Object(v) !== v || v instanceof ArrayBuffer)) {
             Pointer.pointers.delete(this.id); // force remove previous non-primitive pointer (assume it has not yet been used)
             Pointer.primitive_pointers.delete(this.id)
             return <any>Pointer.create(this.id, v, this.sealed, this.origin, this.is_persistent, this.is_anonymous, false, this.allowed_access, this.datex_timeout)
         }
-        //placeholder replacement
-        if (Pointer.pointer_value_map.has(v)) {
+        const existingPtr = Pointer.pointer_value_map.get(v);
+
+        // placeholder replacement
+        if (existingPtr?.is_placeholder || (existingPtr && forcePlaceholderMove)) {
+            if (forcePlaceholderMove) existingPtr.#is_placeholder = true; // force placeholder
             if (this.#loaded) {
-                console.log("value",v)
                 throw new PointerError("Cannot assign a new value to an already initialized pointer")
             }
             const existing_pointer = Pointer.pointer_value_map.get(v)!;
@@ -2479,9 +2499,10 @@ export class Pointer<T = any> extends Ref<T> {
 
             // already an existing non-primitive pointer (indirect reference)
             const existingPointer = Pointer.getByValue(val);
-            if (existingPointer) {
+            if (this.supportsIndirectRefs && existingPointer) {
                 this.#loaded = true;
                 this.#indirectReference = existingPointer;
+                this.#original_value = this.#shadow_object = <any> new WeakRef(<any>val);
                 super.setVal(val, true, is_transform)
                 logger.debug(`Set indirect reference for ${this.idString()} to ${existingPointer.idString()}`)
             }
@@ -2639,19 +2660,32 @@ export class Pointer<T = any> extends Ref<T> {
             if (!didCustomUpdate) updatePromise = super.setVal(val, trigger_observers, is_transform);
         }
         else {
+            // custom update
             const didCustomUpdate = this.customTransformUpdate(val)
-            if (!didCustomUpdate) this.type.updateValue(this.original_value, val);
-            if (trigger_observers) updatePromise = this.triggerValueInitEvent(is_transform); // super.value setter is not called, trigger value INIT seperately
+
+            if (!didCustomUpdate) {
+                // is indirect reference, set new value
+                if (this.supportsIndirectRefs && (this.#indirectReference || Ref.isRef(val))) {
+                    this.#indirectReference = Pointer.getByValue(val);
+                    super.setVal(val, trigger_observers, is_transform);
+                }
+                // mutate value internally
+                else {
+                    this.type.updateValue(this.original_value, val);
+                }
+            }
+            
+            if (trigger_observers) updatePromise = this.triggerValueInitEvent(is_transform); // super.value setter is not called, trigger value INIT separately
         }
 
         // propagate updates via datex
         if (this.send_updates_to_origin) {
-            this.handleDatexUpdate(null, '#0 = ?; ? = #0', [this.current_val, this], this.origin, true)
+            this.handleDatexUpdate(null, this.idString()+' = ?', [this.indirectReference??this.current_val], this.origin, this.indirectReference ? false : true)
         }
         if (this.update_endpoints.size) {
             logger.debug("forwarding update to subscribers", this.update_endpoints);
             // console.log(this.#update_endpoints);
-            this.handleDatexUpdate(null, '#0 = ?; ? = #0', [this.current_val, this], this.update_endpoints, true)
+            this.handleDatexUpdate(null, this.idString()+' = ?', [this.indirectReference??this.current_val], this.update_endpoints, this.indirectReference ? false : true)
         }
 
         // pointer value change listeners
@@ -2754,6 +2788,10 @@ export class Pointer<T = any> extends Ref<T> {
         return val;
     }
 
+    protected get supportsIndirectRefs() {
+        // only supported if indirect references are not already handled by a custom transform (e.g. for UIX elements)
+        return Runtime.OPTIONS.INDIRECT_REFERENCES && !this.type.interface_config?.handle_transform
+    }
 
     protected customTransformUpdate(val: T) {
         if (this.type.interface_config?.handle_transform) {

@@ -42,7 +42,7 @@ export function always(scriptOrJSTransform:TemplateStringsArray|SmartTransformFu
 			throw new PointerError(`Promises cannot be returned from always transforms - use 'asyncAlways' instead`);
 		}
 		else {
-			return ptr.indirectReference ? ptr : Ref.collapseValue(ptr);
+			return Ref.collapseValue(ptr);
 		}
 	}
     // datex script
