@@ -835,6 +835,8 @@ export type JSValueWith$<T> = ObjectRef<T>;
 
 // converts Object to Record<string|symbol, unknown>
 
+export type AnyObjectRef = {$: Record<string,unknown>, $$: Record<string,unknown>}
+
 export type WrappedPointerValue = number|string|boolean|bigint|URL|Endpoint
 
 // convert from any JS/DATEX value to minimal representation with reference
@@ -842,7 +844,9 @@ export type MinimalJSRef<T, _C = CollapsedValue<T>> =
     _C extends symbol ? symbol : (
         _C extends WrappedPointerValue ?
             PointerWithPrimitive<_C>: // keep pointer reference
-            ObjectRef<_C> // collapsed object
+            _C extends AnyObjectRef ?
+                Pointer<_C> : // pointer wrapper to keep indirect reference intact
+                ObjectRef<_C> // collapsed object
     )
 
 // return Pointer<T>&T for primitives (excluding boolean) and Pointer<T> otherwise
@@ -2790,7 +2794,7 @@ export class Pointer<T = any> extends Ref<T> {
 
     protected get supportsIndirectRefs() {
         // only supported if indirect references are not already handled by a custom transform (e.g. for UIX elements)
-        return Runtime.OPTIONS.INDIRECT_REFERENCES && this.type.supportsIndirectRefs
+        return this.type.supportsIndirectRefs
     }
 
     protected customTransformUpdate(val: T) {
