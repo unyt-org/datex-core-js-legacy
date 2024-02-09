@@ -11,11 +11,12 @@ import { Compiler } from "../compiler/compiler.ts";
 import { Stream } from "./stream.ts"
 import { PermissionError, RuntimeError, TypeError, ValueError } from "./errors.ts";
 import { ProtocolDataType } from "../compiler/protocol_types.ts";
-import { VOID } from "../runtime/constants.ts";
+import { DX_EXTERNAL_FUNCTION_NAME, DX_EXTERNAL_SCOPE_NAME, VOID } from "../runtime/constants.ts";
 import { Type, type_clause } from "./type.ts";
 import { callWithMetadata, callWithMetadataAsync, getMeta } from "../utils/caller_metadata.ts";
 import { Datex } from "../mod.ts";
 import { Callable, ExtensibleFunction, getDeclaredExternalVariables, getDeclaredExternalVariablesAsync, getSourceWithoutUsingDeclaration } from "./function-utils.ts";
+import { Conjunction, Disjunction, Target } from "../datex_all.ts";
 
 
 
@@ -455,23 +456,39 @@ export class Function<T extends (...args: any) => any = (...args: any) => any> e
  * add to() extension method to functions
  */
 
+type Receiver = target_clause|string|Iterable<Target|string>
+
 declare global {
 	interface CallableFunction {
-		to<T, A extends unknown[], R>(this: (this: T, ...args: A) => R, receiver?:string): (...args: A)=>Promise<Awaited<Promise<R>>>;
+		to<T, A extends unknown[], R>(this: (this: T, ...args: A) => R, receiver?:Receiver): (...args: A)=>Promise<Awaited<Promise<R>>>;
 	}
 }
 
-function to (receiver:endpoint_name):any
-function to (receivers:target_clause):any
-function to (this:any, receivers:target_clause|endpoint_name) {
+function to (this:Function, receivers:Receiver) {
+    if (
+        receivers 
+        && typeof receivers == "object" 
+        && typeof (receivers as any)[Symbol.iterator] === 'function'
+        && !(receivers instanceof Conjunction) 
+        && !(receivers instanceof Disjunction)
+    ) {
+        receivers = new Disjunction(...[...(receivers as Iterable<Target|endpoint_name>)].map(r => r instanceof Target ? r : Target.get(r as endpoint_name)));
+    }
     if (this instanceof Function) {
         return new Proxy(this, {
-            apply: (_target, thisArg, argArray:any[]) => {
+            apply: (_target, thisArg, argArray:unknown[]) => {
                 return (_target as any).apply(thisArg, argArray) // TODO: inject receivers
             }
         })
     }
-    else throw new Error("This function has no bindings for external calls, .to() cannot be used.")
+    else return new Proxy(this, {
+        apply: (target, _thisArg, argArray:unknown[]) => {
+            const externalScopeName = target[DX_EXTERNAL_SCOPE_NAME];
+            const externalFunctionName = target[DX_EXTERNAL_FUNCTION_NAME];
+            console.log("call",externalScopeName, externalFunctionName, argArray)
+            return datex(`#public.?.? ?`, [externalScopeName, externalFunctionName, new Tuple(argArray)], receivers as target_clause)
+        }
+    })
 }
 
 // @ts-ignore override function prototype
