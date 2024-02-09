@@ -298,7 +298,7 @@ export class Compiler {
 
     static SIGN_DEFAULT = true; // can be changed
 
-    static BIG_BANG_TIME = new Date(2022, 0, 22, 0, 0, 0, 0).getTime() // 1642806000000
+    static BIG_BANG_TIME = Date.UTC(2024, 0, 0, 0, 0, 0, 0)
     static MAX_INT_32 = 2_147_483_647;
     static MIN_INT_32 = -2_147_483_648;
 
@@ -416,12 +416,6 @@ export class Compiler {
         return parseInt(binary, 2);
     }
 
-    /** Set TTL of header of existing block */
-    public static setHeaderTTL(dx_block:ArrayBuffer, ttl:number):ArrayBuffer {
-        const uint8 = new Uint8Array(dx_block);
-        uint8[4] = ttl;
-        return uint8.buffer;
-    }
 
     // get sender from header
     public static extractHeaderSender(dx_block: ArrayBuffer, last_byte?:[number], _appspace_byte = true, _start = 8): Endpoint|undefined {
@@ -606,7 +600,7 @@ export class Compiler {
     }
 
     /** Add a header to a Datex block */
-    public static DEFAULT_TTL = 64;
+    public static DEFAULT_TTL = 10;
 
     private static device_types = {
         "default": 0,
@@ -783,8 +777,8 @@ export class Compiler {
         // ROUTING HEADER /////////////////////////////////////////////////
         // ttl
         pre_header_uint8[i++] = __routing_ttl;
-        // priority
-        pre_header_uint8[i++] = __routing_prio;
+        // initial ttl (originally: prio, currently unused)
+        pre_header_uint8[i++] = __routing_ttl; //__routing_prio;
 
         // signed = 1, encrypted+signed = 2, encrypted = 3, others = 0
         pre_header_uint8[i++] = sign && !encrypt ? 1: (sign && encrypt ? 2 : (!sign && encrypt ? 3 : 0));
@@ -2188,12 +2182,17 @@ export class Compiler {
             const pointer_origin = (id_buffer[0]==BinaryCode.ENDPOINT || id_buffer[0]==BinaryCode.PERSON_ALIAS || id_buffer[0]==BinaryCode.INSTITUTION_ALIAS) ? <IdEndpoint> Target.get(id_buffer.slice(1,19), id_buffer.slice(19,21), id_buffer[0]) : null;
             
             const singleReceiver = 
-                SCOPE.options.to instanceof Endpoint ||
-                (
-                    SCOPE.options.to instanceof Disjunction && 
-                    SCOPE.options.to.size == 1 && 
-                    [...SCOPE.options.to][0] instanceof Endpoint
-                )
+                SCOPE.options.to instanceof Endpoint ? 
+                    SCOPE.options.to :
+                    (
+                        (
+                            SCOPE.options.to instanceof Disjunction && 
+                            SCOPE.options.to.size == 1 && 
+                            [...SCOPE.options.to][0] instanceof Endpoint
+                        ) ? 
+                        [...SCOPE.options.to][0] as Endpoint :
+                        null
+                    )
 
             if (
                 pointer_origin && 
@@ -2201,7 +2200,7 @@ export class Compiler {
                 action_type == ACTION_TYPE.GET && // is get
                 Runtime.endpoint.equals(pointer_origin) &&  // is own pointer
                 SCOPE.options.to != Runtime.endpoint && // not sending to self
-                !Pointer.get(id)?.subscribers?.has(singleReceiver) // receiver is subscribed to pointer - assume it already has the current pointer value
+                !(singleReceiver && Pointer.get(id)?.subscribers?.has(singleReceiver)) // receiver is subscribed to pointer - assume it already has the current pointer value
             ) {
                 return Compiler.builder.addPreemptivePointer(SCOPE, id)
             }
@@ -2259,10 +2258,11 @@ export class Compiler {
 
             // preemptive value already exists and was not yet initialized in scope
             if (ptr?.value_initialized && !alreadyInitializing) {
+
                 parentScope.preemptive_pointers.set(normalized_id, SCOPE);
                 Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+1, SCOPE);
                 SCOPE.uint8[SCOPE.b_index++] = BinaryCode.SUBSCOPE_START;
-                Compiler.builder.addPointerNormal(SCOPE, id, ACTION_TYPE.INIT, undefined, true, ptr.val, (ptr.force_local_transform && ptr.transform_scope) ? ptr.transform_scope : undefined); // sync
+                Compiler.builder.addPointerNormal(SCOPE, id, ACTION_TYPE.INIT, undefined, true, ptr, (ptr.force_local_transform && ptr.transform_scope) ? ptr.transform_scope : undefined); // sync
                 Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+1, SCOPE);
                 SCOPE.uint8[SCOPE.b_index++] = BinaryCode.CLOSE_AND_STORE;
                 Compiler.builder.addPointerNormal(SCOPE, id, ACTION_TYPE.GET, undefined, undefined, ptr.val); // sync
@@ -2315,7 +2315,14 @@ export class Compiler {
             if (Runtime.OPTIONS.PROTECT_POINTERS) {
                 const receiver = Compiler.builder.getScopeReceiver(SCOPE);
                 if (receiver !== Runtime.endpoint) {
-                    p.grantAccessTo(receiver)
+                    if (receiver instanceof Endpoint) p.grantAccessTo(receiver)
+                    else if (receiver instanceof Disjunction) {
+                        for (const endpoint of receiver) {
+                            if (endpoint instanceof Endpoint) p.grantAccessTo(endpoint)
+                            else logger.error("Can't grant access to receiver:" + endpoint);
+                        }
+                    }
+                    else logger.error("Can't grant access to receivers:" + receiver);
                 }
             }
             
@@ -2324,7 +2331,7 @@ export class Compiler {
                 Compiler.builder.insertExtractedVariable(<compiler_scope>SCOPE, BinaryCode.POINTER, buffer2hex(p.id_buffer));
             }
             // add normally
-            else return Compiler.builder.addPointerByID (SCOPE, p.id_buffer, action_type, action_specifier, undefined, NOT_EXISTING)
+            else return Compiler.builder.addPointerByID(SCOPE, p.id_buffer, action_type, action_specifier, undefined, NOT_EXISTING)
         },
 
         // add <Array>
@@ -2751,6 +2758,8 @@ export class Compiler {
 
             if (value?.[DX_REPLACE]) value = value[DX_REPLACE];
 
+            const indirectReferencePtr = (value instanceof Pointer && value.indirectReference) ? true : false;
+
             // make sure normal pointers are collapsed (ignore error if uninitialized pointer is passed in)
             try {
                 value = Ref.collapseValue(value);
@@ -2808,7 +2817,7 @@ export class Compiler {
             const start_index = Compiler.builder.getDynamicIndex(SCOPE.b_index, SCOPE);
 
             // add original value to inserted values map (only if useful, exclude short values like boolean and null)
-            if (!(SCOPE.options.no_duplicate_value_optimization && (typeof value == "bigint" || typeof value == "number" || typeof value == "string")) && value!==VOID && 
+            if (!indirectReferencePtr && !(SCOPE.options.no_duplicate_value_optimization && (typeof value == "bigint" || typeof value == "number" || typeof value == "string")) && value!==VOID && 
                 value !==null && 
                 typeof value != "boolean" &&
                 !((typeof value == "bigint" || typeof value == "number") && value<=Compiler.MAX_INT_32 && value>=Compiler.MIN_INT_32)
@@ -2845,7 +2854,6 @@ export class Compiler {
             const option_collapse = SCOPE.options.collapse_pointers && !(SCOPE.options.keep_external_pointers && value instanceof Pointer && !value.is_origin);
             const no_proxify = value instanceof Ref && (((value instanceof Pointer && value.is_anonymous) || option_collapse) || skip_first_collapse);
 
-             
             // proxify pointer exceptions:
             if (no_proxify) {
                
@@ -2857,6 +2865,13 @@ export class Compiler {
 
                     Compiler.builder.insert_transform_scope(SCOPE, value.transform_scope);
                 
+                    return;
+                }
+
+                // indirect reference pointer
+                if (indirectReferencePtr) {
+                    SCOPE.options._first_insert_done = true;
+                    Compiler.builder.insert(Ref.collapseValue(value, true), SCOPE, is_root, parents, unassigned_children);
                     return;
                 }
 

@@ -110,7 +110,7 @@ export abstract class CommunicationInterfaceSocket extends EventTarget {
     static defaultLogger = new Logger("CommunicationInterfaceSocket")
     public logger = CommunicationInterfaceSocket.defaultLogger;
 
-    #connectTimestamp = Date.now()
+    #connectTimestamp = 0
 
     get connectTimestamp() {
         return this.#connectTimestamp
@@ -171,9 +171,8 @@ export abstract class CommunicationInterfaceSocket extends EventTarget {
 
         if (this.#connected) {
             if (!this.isRegistered) {
-                this.#connectTimestamp = Date.now()
                 this.dispatchEvent(new EndpointConnectEvent(this.#endpoint))
-                communicationHub.handler.registerSocket(this as ConnectedCommunicationInterfaceSocket)
+                communicationHub.handler.registerSocket(this as ConnectedCommunicationInterfaceSocket, undefined, {knownSince: this.#connectTimestamp, distance: 0})
             }
         }
         else {
@@ -258,11 +257,20 @@ export abstract class CommunicationInterfaceSocket extends EventTarget {
                     // loopback connection to own endpoint, this is not a problem, but might help with debugging
                     this.logger.debug("Indirect connection to own endpoint detected at " + this + " (loopback)");
                 }
-                else communicationHub.handler.registerSocket(this as ConnectedCommunicationInterfaceSocket, header.sender)
+                else {
+                    const ttl = header.routing?.ttl;
+                    const maxTTL = header.routing?.prio;
+                    const hops = (maxTTL??0) - (ttl??0);
+                    this.logger.debug("New indirect connection detected at " + this + " (from " + header.sender + " - ttl:" + ttl + "/" + maxTTL + " hops:" + hops + ")");
+                    if (!header.timestamp) this.logger.warn("header timestamp missing for indirect connection to " + header.sender);
+                    communicationHub.handler.registerSocket(this as ConnectedCommunicationInterfaceSocket, header.sender, {knownSince: header.timestamp?.getTime() || Date.now(), distance: hops})
+                }
             }
         }
         // detect new endpoint
         else if (header.sender) {
+            if (!header.timestamp) this.logger.warn("header timestamp missing for direct connection to " + header.sender)
+            this.#connectTimestamp = header.timestamp?.getTime() || Date.now();
             this.endpoint = header.sender
         }
     }

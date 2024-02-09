@@ -55,13 +55,16 @@ class AutoRemoveMap<K, V> extends Map<K, V> {
     }
 
     #enableAutoRemove(mapKey: K, value: V) {
-        if (value instanceof Set) {
+        if (value instanceof Set || value instanceof Map) {
             const originalDelete = value.delete.bind(value);
             value.delete = (key: K) => {
                 const res = originalDelete(key);
                 if (value.size == 0) this.delete(mapKey);
                 return res;
             }
+        }
+        else {
+            throw new Error("auto remove not implemented for this type of value")
         }
         // TODO: more types
     }

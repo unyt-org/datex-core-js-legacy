@@ -121,6 +121,13 @@ export class Type<T = any> extends ExtensibleFunction {
         return this.#about_md
     }
 
+    /**
+     * true if this type has no custom handling for indirect references
+     */
+    get supportsIndirectRefs() {
+        // only supported if indirect references are not already handled by a custom transform (e.g. for UIX elements)
+        return !this.interface_config?.handle_transform
+    }
 
     // templated type (struct)
     #template: {[key:string]:Type}|any[] & T

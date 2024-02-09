@@ -321,7 +321,7 @@ export function toggle<T>(value:RefLike<boolean>, if_true:T, if_false:T): Minima
     always (
         if (${Runtime.valueToDatexString(value)}) (${Runtime.valueToDatexString(if_true)}) 
         else (${Runtime.valueToDatexString(if_false)})
-    )`*/).js_value;
+    )`*/);
 }
 
 
