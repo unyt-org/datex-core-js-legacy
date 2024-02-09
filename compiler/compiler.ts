@@ -2182,12 +2182,17 @@ export class Compiler {
             const pointer_origin = (id_buffer[0]==BinaryCode.ENDPOINT || id_buffer[0]==BinaryCode.PERSON_ALIAS || id_buffer[0]==BinaryCode.INSTITUTION_ALIAS) ? <IdEndpoint> Target.get(id_buffer.slice(1,19), id_buffer.slice(19,21), id_buffer[0]) : null;
             
             const singleReceiver = 
-                SCOPE.options.to instanceof Endpoint ||
-                (
-                    SCOPE.options.to instanceof Disjunction && 
-                    SCOPE.options.to.size == 1 && 
-                    [...SCOPE.options.to][0] instanceof Endpoint
-                )
+                SCOPE.options.to instanceof Endpoint ? 
+                    SCOPE.options.to :
+                    (
+                        (
+                            SCOPE.options.to instanceof Disjunction && 
+                            SCOPE.options.to.size == 1 && 
+                            [...SCOPE.options.to][0] instanceof Endpoint
+                        ) ? 
+                        [...SCOPE.options.to][0] as Endpoint :
+                        null
+                    )
 
             if (
                 pointer_origin && 
@@ -2195,7 +2200,7 @@ export class Compiler {
                 action_type == ACTION_TYPE.GET && // is get
                 Runtime.endpoint.equals(pointer_origin) &&  // is own pointer
                 SCOPE.options.to != Runtime.endpoint && // not sending to self
-                !Pointer.get(id)?.subscribers?.has(singleReceiver) // receiver is subscribed to pointer - assume it already has the current pointer value
+                !(singleReceiver && Pointer.get(id)?.subscribers?.has(singleReceiver)) // receiver is subscribed to pointer - assume it already has the current pointer value
             ) {
                 return Compiler.builder.addPreemptivePointer(SCOPE, id)
             }
