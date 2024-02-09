@@ -3208,7 +3208,7 @@ export class Runtime {
                     try {
                         if (SCOPE.header.type==ProtocolDataType.UPDATE) p[0].excludeEndpointFromUpdates(SCOPE.sender); 
                         if (isSet || isInit) {
-                            const ptr = p[0].setValue(el);
+                            const ptr = p[0].setValue(el, true);
 
                             // remote pointer value was set - handle subscription
                             if (!ptr.is_origin) {

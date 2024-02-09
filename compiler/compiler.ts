@@ -2871,7 +2871,6 @@ export class Compiler {
                 // indirect reference pointer
                 if (indirectReferencePtr) {
                     SCOPE.options._first_insert_done = true;
-                    console.log("reinsert", value?.idString())
                     Compiler.builder.insert(Ref.collapseValue(value, true), SCOPE, is_root, parents, unassigned_children);
                     return;
                 }
