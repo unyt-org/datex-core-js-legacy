@@ -485,7 +485,6 @@ function to (this:Function, receivers:Receiver) {
         apply: (target, _thisArg, argArray:unknown[]) => {
             const externalScopeName = target[DX_EXTERNAL_SCOPE_NAME];
             const externalFunctionName = target[DX_EXTERNAL_FUNCTION_NAME];
-            console.log("call",externalScopeName, externalFunctionName, argArray)
             return datex(`#public.?.? ?`, [externalScopeName, externalFunctionName, new Tuple(argArray)], receivers as target_clause)
         }
     })
