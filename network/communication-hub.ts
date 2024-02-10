@@ -312,23 +312,31 @@ export class CommunicationHubHandler {
 
         const endpointSockets = this.#endpointSockets.get(endpoint)!;
         const socketEndpoints = this.#registeredSockets.get(connectedSocket)!;
-        const endpointInstances = this.#activeEndpointInstances.getAuto(endpoint.main)
 
         // remove own socket endpoint
         endpointSockets.delete(connectedSocket)
         socketEndpoints.delete(endpoint)
-        endpointInstances.delete(endpoint)
+        this.safeDeleteEndpointInstance(endpoint)
         
         // direct socket removed, also remove all indirect sockets
         if (isDirect) {
             for (const indirectEndpoint of socketEndpoints) {
                 this.#endpointSockets.get(indirectEndpoint)?.delete(connectedSocket)
-                this.#activeEndpointInstances.get(indirectEndpoint.main)?.delete(indirectEndpoint)
+                this.safeDeleteEndpointInstance(indirectEndpoint)
             }
             this.#registeredSockets.delete(connectedSocket)
         }
     }
 
+    /**
+     * Only completely remove endpoint instance from main->instance mapping if no more sockets are registered for the instance
+     * @param endpoint 
+     */
+    private safeDeleteEndpointInstance(endpoint: Endpoint) {
+        if (!this.#endpointSockets.get(endpoint)?.size) {
+            this.#activeEndpointInstances.get(endpoint.main)?.delete(endpoint)
+        }
+    }
 
     public setDatexInHandler(handler: DatexInHandler) {
         this.#datexInHandler = handler
