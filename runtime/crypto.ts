@@ -309,6 +309,9 @@ export class Crypto {
     
     // loads keys from network or cache
     static requestKeys(endpoint:Endpoint):Promise<[CryptoKey?, CryptoKey?]> {
+
+        endpoint = endpoint.main;
+
         // already requesting/loading keys for this endpoint
         if (this.#waiting_key_requests.has(endpoint)) return <Promise<[CryptoKey, CryptoKey]>>this.#waiting_key_requests.get(endpoint);
 
