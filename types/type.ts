@@ -126,7 +126,7 @@ export class Type<T = any> extends ExtensibleFunction {
      */
     get supportsIndirectRefs() {
         // only supported if indirect references are not already handled by a custom transform (e.g. for UIX elements)
-        return !this.interface_config?.handle_transform
+        return Runtime.OPTIONS.INDIRECT_REFERENCES && !this.interface_config?.handle_transform
     }
 
     // templated type (struct)

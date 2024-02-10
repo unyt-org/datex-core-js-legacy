@@ -309,6 +309,9 @@ export class Crypto {
     
     // loads keys from network or cache
     static requestKeys(endpoint:Endpoint):Promise<[CryptoKey?, CryptoKey?]> {
+
+        endpoint = endpoint.main;
+
         // already requesting/loading keys for this endpoint
         if (this.#waiting_key_requests.has(endpoint)) return <Promise<[CryptoKey, CryptoKey]>>this.#waiting_key_requests.get(endpoint);
 
@@ -348,7 +351,7 @@ export class Crypto {
             // convert to CryptoKeys
             try {
                 const keys:[CryptoKey, CryptoKey] = [await this.importVerifyKey(exported_keys[0])||null, await this.importEncKey(exported_keys[1])||null];
-                this.public_keys.set(endpoint.main, keys);
+                this.public_keys.set(endpoint, keys);
                 this.public_keys_exported.set(endpoint, exported_keys);
                 logger.debug("saving keys for " + endpoint);
                 resolve(keys);

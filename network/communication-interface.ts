@@ -110,7 +110,7 @@ export abstract class CommunicationInterfaceSocket extends EventTarget {
     static defaultLogger = new Logger("CommunicationInterfaceSocket")
     public logger = CommunicationInterfaceSocket.defaultLogger;
 
-    #connectTimestamp = 0
+    #connectTimestamp = Date.now();
 
     get connectTimestamp() {
         return this.#connectTimestamp
