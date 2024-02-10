@@ -77,7 +77,7 @@ addEventListener("message", async function (event) {
 			const endpoint = Datex.Target.get(data.endpoint as any) as DatexType.Endpoint;
 
 			// TODO: Worker type?
-			await communicationHub.addInterface(new WorkerInterface(self as unknown as Worker, endpoint), true);
+			await communicationHub.addInterface(new WorkerInterface(self as unknown as Worker, endpoint));
 
 			messageTarget.postMessage({type: "INITIALIZED", remoteModule, endpoint: Datex.Runtime.endpoint.toString()});
 			// trust parent endpoint
