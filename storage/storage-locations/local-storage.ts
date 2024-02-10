@@ -1,8 +1,8 @@
 import { Compiler } from "../../compiler/compiler.ts";
 import { Storage, SyncStorageLocation } from "../storage.ts";
-import { Pointer } from "../pointers.ts";
+import { Pointer } from "../../runtime/pointers.ts";
 import { Runtime } from "../../runtime/runtime.ts";
-import { NOT_EXISTING } from "../constants.ts";
+import { NOT_EXISTING } from "../../runtime/constants.ts";
 import { base64ToArrayBuffer } from "../../utils/utils.ts";
 import { arrayBufferToBase64 } from "../../datex_all.ts";
 import { localStorage } from "./local-storage-compat.ts";

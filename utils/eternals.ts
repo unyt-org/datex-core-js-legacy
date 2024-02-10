@@ -1,5 +1,5 @@
 import { NOT_EXISTING } from "../runtime/constants.ts";
-import { Storage } from "../runtime/storage.ts";
+import { Storage } from "../storage/storage.ts";
 import { getCallerInfo } from "./caller_metadata.ts";
 import { logger } from "./global_values.ts";
 

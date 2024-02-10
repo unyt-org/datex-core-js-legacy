@@ -1,6 +1,6 @@
 
 
-//import { Storage } from "../runtime/storage.ts"; TODO Storage cannot be importet here, handle file caching somehow (somewhere else)
+//import { Storage } from "../storage/storage.ts"; TODO Storage cannot be importet here, handle file caching somehow (somewhere else)
 import { ValueError } from "../types/errors.ts";
 import { baseURL, Deno } from "./global_values.ts";
 import { client_type } from "./constants.ts";

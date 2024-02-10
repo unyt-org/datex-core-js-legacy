@@ -2,11 +2,11 @@ import { Runtime } from "./runtime/runtime.ts";
 import { Pointer } from "./runtime/pointers.ts";
 import { LOCAL_ENDPOINT } from "./types/addressing.ts";
 import { client_type } from "./utils/constants.ts";
-import { Storage, registerStorageAsPointerSource } from "./runtime/storage.ts";
+import { Storage, registerStorageAsPointerSource } from "./storage/storage.ts";
 import { cwdURL, logger } from "./utils/global_values.ts";
-import { IndexedDBStorageLocation } from "./runtime/storage-locations/indexed-db.ts";
-import { LocalStorageLocation } from "./runtime/storage-locations/local-storage.ts";
-import { DenoKVStorageLocation } from "./runtime/storage-locations/deno-kv.ts";
+import { IndexedDBStorageLocation } from "./storage/storage-locations/indexed-db.ts";
+import { LocalStorageLocation } from "./storage/storage-locations/local-storage.ts";
+import { DenoKVStorageLocation } from "./storage/storage-locations/deno-kv.ts";
 import { loadEternalValues } from "./utils/eternals.ts";
 import { DX_BOUND_LOCAL_SLOT } from "./runtime/constants.ts";
 import { verboseArg } from "./utils/logger.ts";
@@ -46,9 +46,9 @@ export async function init() {
 		}
 
 		if (await storageInitModule?.fsExists()) {
-			logger.info("Initializing custom storage configuration (" + storageInitModule!.normal_pathname + ")")
+			logger.info("Initializing custom storage configuration (" + storageInitModule!.toString() + ")")
 			try {
-				await import(storageInitModule!.normal_pathname);
+				await import(storageInitModule!.toString());
 			}
 			catch (e) {
 				console.error(e)

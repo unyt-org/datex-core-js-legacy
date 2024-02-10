@@ -4,11 +4,11 @@ import { Runtime } from "../runtime/runtime.ts";
 import type { ExecConditions, PointerSource } from "../utils/global_types.ts";
 import { logger } from "../utils/global_values.ts";
 import { client_type } from "../utils/constants.ts";
-import { NOT_EXISTING } from "./constants.ts";
-import { Pointer, type MinimalJSRef, Ref } from "./pointers.ts";
+import { NOT_EXISTING } from "../runtime/constants.ts";
+import { Pointer, type MinimalJSRef, Ref } from "../runtime/pointers.ts";
 import { localStorage } from "./storage-locations/local-storage-compat.ts";
 import { MessageLogger } from "../utils/message_logger.ts";
-import { displayFatalError } from "./display.ts"
+import { displayFatalError } from "../runtime/display.ts"
 import { Type } from "../types/type.ts";
 import { addPersistentListener } from "../utils/persistent-listeners.ts";
 import { Endpoint, LOCAL_ENDPOINT } from "../types/addressing.ts";
@@ -16,7 +16,7 @@ import { ESCAPE_SEQUENCES } from "../utils/logger.ts";
 import { StorageMap } from "../types/storage-map.ts";
 import { StorageSet } from "../types/storage-set.ts";
 import { IterableWeakSet } from "../utils/iterable-weak-set.ts";
-import { LazyPointer } from "./lazy-pointer.ts";
+import { LazyPointer } from "../runtime/lazy-pointer.ts";
 
 
 // displayInit();

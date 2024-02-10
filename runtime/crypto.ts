@@ -3,7 +3,7 @@ import { logger } from "../utils/global_values.ts";
 import { Endpoint, Target, WildcardTarget } from "../types/addressing.ts";
 import { SecurityError, ValueError } from "../types/errors.ts";
 import { NetworkUtils } from "../network/network_utils.ts";
-import { Storage } from "../runtime/storage.ts";
+import { Storage } from "../storage/storage.ts";
 import { Runtime } from "./runtime.ts";
 import { displayFatalError } from "./display.ts";
 import { Supranet } from "../network/supranet.ts";

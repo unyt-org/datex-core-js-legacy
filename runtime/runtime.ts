@@ -32,7 +32,7 @@ import { BROADCAST, Endpoint, endpoints, IdEndpoint, LOCAL_ENDPOINT, Target, tar
 import { RuntimePerformance } from "./performance_measure.ts";
 import { NetworkError, PermissionError, PointerError, RuntimeError, SecurityError, ValueError, Error as DatexError, CompilerError, TypeError, SyntaxError, AssertionError } from "../types/errors.ts";
 import { Function as DatexFunction } from "../types/function.ts";
-import { Storage } from "../runtime/storage.ts";
+import { Storage } from "../storage/storage.ts";
 import { Observers } from "../utils/observers.ts";
 import { BinaryCode } from "../compiler/binary_codes.ts";
 import type { ExecConditions, trace, compile_info, datex_meta, datex_scope, dxb_header, routing_info } from "../utils/global_types.ts";
