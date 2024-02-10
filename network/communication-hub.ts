@@ -545,21 +545,21 @@ export class CommunicationHubHandler {
         const receivers = data.receivers instanceof Endpoint ? [data.receivers] : [...data.receivers];
         const outGroups = receivers.length == 1 ? 
         
-        // single endpoint shortcut
-        new Map([[this.getPreferredSocketForEndpoint(receivers[0], data.socket), new Disjunction(...receivers)]]) :
-        
-        // group for multiple endpoints
-        new Map(
-            // group receivers by socket
-            [...Map.groupBy(
-                    // map receivers to sockets
-                    receivers.map(r => ({endpoint: r, socket: this.getPreferredSocketForEndpoint(r, data.socket)}),
-                ), ({socket}) => socket
-                ).entries()
-            ]
-            // map endpoint object arrays to Set<Endpoint>
-            .map(([k, v]) => [k, new Disjunction(...v.map(({endpoint}) => endpoint))] as const)
-        );
+            // single endpoint shortcut
+            new Map([[this.getPreferredSocketForEndpoint(receivers[0], data.socket), new Disjunction(receivers[0])]]) :
+            
+            // group for multiple endpoints
+            new Map(
+                // group receivers by socket
+                [...Map.groupBy(
+                        // map receivers to sockets
+                        receivers.map(r => ({endpoint: r, socket: this.getPreferredSocketForEndpoint(r, data.socket)}),
+                    ), ({socket}) => socket
+                    ).entries()
+                ]
+                // map endpoint object arrays to Set<Endpoint>
+                .map(([k, v]) => [k, new Disjunction(...v.map(({endpoint}) => endpoint))] as const)
+            );
 
 
         const promises = []
