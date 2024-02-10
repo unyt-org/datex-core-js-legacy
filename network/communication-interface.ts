@@ -172,7 +172,7 @@ export abstract class CommunicationInterfaceSocket extends EventTarget {
         if (this.#connected) {
             if (!this.isRegistered) {
                 this.dispatchEvent(new EndpointConnectEvent(this.#endpoint))
-                communicationHub.handler.registerSocket(this as ConnectedCommunicationInterfaceSocket, undefined, {knownSince: this.#connectTimestamp, distance: 0})
+                communicationHub.handler.registerSocket(this as ConnectedCommunicationInterfaceSocket, undefined, {knownSince: this.#connectTimestamp, distance: 1})
             }
         }
         else {
@@ -207,7 +207,7 @@ export abstract class CommunicationInterfaceSocket extends EventTarget {
         const successful = await this.send(dxb)
         if (!successful) {
             console.error("Failed to send block via " + this + (this.endpoint ? ` - ${this.endpoint}`: "") + " (channel broken). Disconnecting socket.")
-            // send was not succesful, meaning the channel is broken. Disconnect socket
+            // send was not successful, meaning the channel is broken. Disconnect socket
             this.dispatchEvent(new BrokenChannelEvent())
             this.connected = false
         }

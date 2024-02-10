@@ -3299,7 +3299,7 @@ export class Pointer<T = any> extends Ref<T> {
      
         this.subscribers.add(subscriber);
         if (this.subscribers.size == 1) this.updateGarbageCollection() // first subscriber
-        if (this.streaming.length) setTimeout(()=>this.startStreamOutForEndpoint(subscriber), 1000); // TODO do without timeout?
+        if (this.streaming.length) this.startStreamOutForEndpoint(subscriber) // setTimeout(()=>, 200); // TODO do without timeout?
         // force enable live mode also if primitive (subscriber is not handled a new observer)
         if (this.is_js_primitive) this.setForcedLiveTransform(true)
 
@@ -3321,6 +3321,9 @@ export class Pointer<T = any> extends Ref<T> {
             if (this.is_js_primitive) this.setForcedLiveTransform(false)
             this.updateGarbageCollection() 
         }
+
+        // stop streaming
+        this.stopStreamOutForEndpoint(subscriber)
 
         // remove from endpoint subscriptions map
         Pointer.#endpoint_subscriptions.get(subscriber)?.delete(this)
@@ -3985,22 +3988,42 @@ export class Pointer<T = any> extends Ref<T> {
 
         this.streaming.push(true); // also stream for all future subscribers
 
+        // TODO: stream to multiple endpoints in single DXB block
+        // if (this.send_updates_to_origin) {
+        //     logger.info("streaming to parent " + this.origin);
+        //     this.handleDatexUpdate(null, '? << ?'/*DatexRuntime.PRECOMPILED_DXB.STREAM*/, [this, obj], this.origin)
+        // }
+        // if (this.update_endpoints.size) {
+        //     logger.info("streaming to subscribers " + this.update_endpoints);
+        //     this.handleDatexUpdate(null, '? << ?'/*DatexRuntime.PRECOMPILED_DXB.STREAM*/, [this, obj], this.update_endpoints)
+        // }
+
         if (this.send_updates_to_origin) {
-            logger.info("streaming to parent " + this.origin);
-            this.handleDatexUpdate(null, '? << ?'/*DatexRuntime.PRECOMPILED_DXB.STREAM*/, [this, obj], this.origin)
+            this.startStreamOutForEndpoint(this.origin);
         }
-        if (this.update_endpoints.size) {
-            logger.info("streaming to subscribers " + this.update_endpoints);
-            this.handleDatexUpdate(null, '? << ?'/*DatexRuntime.PRECOMPILED_DXB.STREAM*/, [this, obj], this.update_endpoints)
+        for (const endpoint of this.update_endpoints) {
+            this.startStreamOutForEndpoint(endpoint);
         }
     }
 
+    #streamAbortControllers = new Map<Endpoint, AbortController>()
+
     // TODO better way than streaming individually to every new subscriber?
     startStreamOutForEndpoint(endpoint:Endpoint) {
+        const abortController = new AbortController();
+        this.#streamAbortControllers.set(endpoint, abortController);
         logger.info("streaming to new subscriber " + endpoint);
-        this.handleDatexUpdate(null, '? << ?'/*DatexRuntime.PRECOMPILED_DXB.STREAM*/, [this, this.current_val], endpoint)
+        this.handleDatexUpdate(null, '? << ?', [this, this.current_val], endpoint, undefined, abortController.signal)
     }
     
+    stopStreamOutForEndpoint(endpoint: Endpoint) {
+        if (this.#streamAbortControllers.has(endpoint)) {
+            logger.info("stopping streaming to subscriber " + endpoint);
+            this.#streamAbortControllers.get(endpoint)?.abort();
+            this.#streamAbortControllers.delete(endpoint);
+        }
+    }
+
 
     /** all values are removed */
     handleClear() {
@@ -4201,7 +4224,7 @@ export class Pointer<T = any> extends Ref<T> {
 
     // actual update to subscribers/origin
     // if identifier is set, further updates to the same identifier are overwritten
-    async handleDatexUpdate(identifier:string|null, datex:string|PrecompiledDXB, data:any[], receiver:endpoints, collapse_first_inserted = false){
+    async handleDatexUpdate(identifier:string|null, datex:string|PrecompiledDXB, data:any[], receiver:endpoints, collapse_first_inserted = false, stream_abort_signal?: AbortSignal){
         
         // let schedulter handle updates (cannot throw errors)
         if (this.#scheduler) {
@@ -4212,7 +4235,7 @@ export class Pointer<T = any> extends Ref<T> {
         else {
             if (receiver instanceof Disjunction && !receiver.size) return;
             try {
-                await Runtime.datexOut([datex, data, {collapse_first_inserted, type:ProtocolDataType.UPDATE, preemptive_pointer_init: true}], receiver, undefined, false, undefined, undefined, false, this.datex_timeout);
+                await Runtime.datexOut([datex, data, {collapse_first_inserted, type:ProtocolDataType.UPDATE, preemptive_pointer_init: true, stream_abort_signal}], receiver, undefined, false, undefined, undefined, false, this.datex_timeout);
             } catch(e) {
                 //throw e;
                 console.error("forwarding failed", e, datex, data)

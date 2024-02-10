@@ -401,11 +401,11 @@ export class Logger {
         if (this.origin) Logger.loggers_by_origin.get(this.origin)?.delete(this);
     }
 
-    private log(color: COLOR, text: string, data:any[], log_level:LOG_LEVEL = LOG_LEVEL.DEFAULT, only_log_own_stream = false, add_tag = true) {
+    private log(color: COLOR, text: string, data:any[], log_level:LOG_LEVEL = LOG_LEVEL.DEFAULT, only_log_own_stream = false, add_tag = true, raw = false) {
 
         if (this.production && (log_level < Logger.production_log_level)) return; // don't log for production
         if (!this.production && (log_level < Logger.development_log_level)) return; // don't log for development
-        const log_string = this.generateLogString(color, text, data, add_tag);
+        const log_string = raw ? text : this.generateLogString(color, text, data, add_tag);
         this.logRaw(log_string, log_level, only_log_own_stream);
     }
 
@@ -743,6 +743,10 @@ export class Logger {
         this.log(console_theme == 'dark' ?  COLOR.WHITE : COLOR.BLACK, this.normalizeLogText(text), data, LOG_LEVEL.DEFAULT, false, false)
     }
 
+    public raw(text:string) {
+        this.log(console_theme == 'dark' ?  COLOR.WHITE : COLOR.BLACK, this.normalizeLogText(text), [], LOG_LEVEL.DEFAULT, false, false, true)
+    }
+
     // does not have an effect in the native browser console or log streams with multiple logger inputs (intentionally)
     public clear(silent = false){
         this.logRaw(ESCAPE_SEQUENCES.CLEAR, LOG_LEVEL.DEFAULT, true)
@@ -898,8 +902,8 @@ export class Logger {
         }
         // stream for specific origins
         else {
-            for (let origin of filter_origins) {
-                for (let logger of this.loggers_by_origin.get(origin)??[]) {
+            for (const origin of filter_origins) {
+                for (const logger of this.loggers_by_origin.get(origin)??[]) {
                     logger.out_streams.add(stream);
                     if (!this.loggersForStream.has(stream)) this.loggersForStream.set(stream, new Set());
                     this.loggersForStream.get(stream)?.add(logger);

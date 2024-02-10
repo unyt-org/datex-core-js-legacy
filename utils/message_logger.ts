@@ -33,16 +33,17 @@ export class MessageLogger {
 		if (!this.logger) this.logger = new Logger("DATEX Message");
 
         IOHandler.onDatexReceived((header, dxb, socket)=>{
+            const log = (dxb as any)._is_stream ? console.log : this.logger.raw.bind(this.logger);
+
             // ignore incoming requests from own endpoint to own endpoint
             const receivers = header.routing?.receivers;
             const receiverIsOwnEndpoint = receivers instanceof Logical && receivers?.size == 1 && (receivers.has(Runtime.endpoint) || receivers.has(Runtime.endpoint.main));
             if (!showRedirectedMessages && !receiverIsOwnEndpoint) return;
             if (header.sender == Runtime.endpoint && receiverIsOwnEndpoint && header.type != ProtocolDataType.RESPONSE && header.type != ProtocolDataType.DEBUGGER) return;
 
-
             // ignore hello messages
             if (header.type == ProtocolDataType.HELLO || header.type == ProtocolDataType.GOODBYE) {
-                this.logger.plain(`\n#color(blue)◀── ${header.sender||'@*'} ${header.type!=undefined? `(${ProtocolDataType[header.type]}) ` : ''}${socket ? `via ${socket.toString()}` : ''}`);
+                log(`${ESCAPE_SEQUENCES.BLUE}◀── ${header.sender||'@*'} ${header.type!=undefined? `(${ProtocolDataType[header.type]}) ` : ''}${socket ? `via ${socket.toString()}` : ''}`);
                 return;
             };
             
@@ -50,13 +51,16 @@ export class MessageLogger {
             if (content.trim() == "\x1b[38;2;219;45;129mvoid\x1b[39m;") return; // dont log void; messages
             
             content = 
-                `\n${ESCAPE_SEQUENCES.BLUE}${receiverIsOwnEndpoint?'':Runtime.valueToDatexStringExperimental(receivers, false, false)+ ' '}◀── ${header.sender||'@*'} ${header.type!=undefined ? `(${ProtocolDataType[header.type]}) ` : ''}${socket ? `via ${socket.toString()} ` : ''}`.padEnd(80, '─') + '\n'
+                `${ESCAPE_SEQUENCES.BLUE}${receiverIsOwnEndpoint?'':Runtime.valueToDatexStringExperimental(receivers, false, false)+ ' '}◀── ${header.sender||'@*'} ${header.type!=undefined ? `(${ProtocolDataType[header.type]}) ` : ''}${socket ? `via ${socket.toString()} ` : ''}`.padEnd(80, '─') + '\n'
                 + content
                 + `\n${ESCAPE_SEQUENCES.BLUE}──────────────────────────────────────────────────────────────────────────\n`;
-            console.log(content)
+            log(content)
         });
 
         IOHandler.onDatexSent((header, dxb, socket) => {
+            
+            const log = (dxb as any)._is_stream ? console.log : this.logger.raw.bind(this.logger);
+
             // ignore outgoing responses from own endpoint to own endpoint
             const receivers = header.routing?.receivers;
             if (header.sender == Runtime.endpoint && (receivers instanceof Logical && receivers?.size == 1 && receivers.has(Runtime.endpoint)) && header.type != ProtocolDataType.RESPONSE && header.type != ProtocolDataType.DEBUGGER) return;
@@ -65,7 +69,7 @@ export class MessageLogger {
 
             // ignore hello messages
             if (header.type == ProtocolDataType.HELLO || header.type == ProtocolDataType.GOODBYE) {
-                this.logger.plain(`\n#color(green)${header.sender||'@*'} ──▶ ${receivers||'@*'} ${header.type!=undefined ? `(${ProtocolDataType[header.type]}) ` : ''}${socket ? `via ${socket.toString()}` : ''}`);
+                log(`${ESCAPE_SEQUENCES.GREEN}${header.sender||'@*'} ──▶ ${receivers||'@*'} ${header.type!=undefined ? `(${ProtocolDataType[header.type]}) ` : ''}${socket ? `via ${socket.toString()}` : ''}`);
                 return;
             };
             
@@ -73,11 +77,11 @@ export class MessageLogger {
             if (content.trim() == "\x1b[38;2;219;45;129mvoid\x1b[39m;") return; // dont log void; messages
  
             content = 
-                `\n${ESCAPE_SEQUENCES.GREEN}${senderIsOwnEndpoint?'':Runtime.valueToDatexStringExperimental(header.sender, false, false)+' '}──▶ ${receivers||'@*'} ${header.type!=undefined ? `(${ProtocolDataType[header.type]}) ` : ''}${socket ? `via ${socket.toString()} ` : ''}`.padEnd(80, '─') + '\n'
+                `${ESCAPE_SEQUENCES.GREEN}${senderIsOwnEndpoint?'':Runtime.valueToDatexStringExperimental(header.sender, false, false)+' '}──▶ ${receivers||'@*'} ${header.type!=undefined ? `(${ProtocolDataType[header.type]}) ` : ''}${socket ? `via ${socket.toString()} ` : ''}`.padEnd(80, '─') + '\n'
                 + content
                 + `\n${ESCAPE_SEQUENCES.GREEN}──────────────────────────────────────────────────────────────────────────\n`;
 
-            console.log(content);
+            log(content);
         });
 
 	}

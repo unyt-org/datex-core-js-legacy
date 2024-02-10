@@ -252,17 +252,21 @@ export class CommunicationHubHandler {
         return string;
     }
 
-    public printEndpointSockets(endpoint: Endpoint|string) {
+    public getEndpointSockets(endpoint: Endpoint|string) {
         endpoint = endpoint instanceof Endpoint ? endpoint : Endpoint.get(endpoint) as Endpoint;
 
         let string = "";
         string += `Available sockets for ${endpoint}:\n`
 
-        for (const socket of this.iterateEndpointSockets(endpoint, false, false)) {
+        for (const socket of this.iterateEndpointSockets(endpoint, false, true)) {
             string += "  - " + socket.toString() + "\n";
         }
 
-        console.log(string)
+        return string;
+    }
+
+    public printEndpointSockets(endpoint: Endpoint|string) {
+        console.log(this.getEndpointSockets(endpoint))
     }
 
 
@@ -542,14 +546,14 @@ export class CommunicationHubHandler {
         const outGroups = receivers.length == 1 ? 
         
         // single endpoint shortcut
-        new Map([[this.getPreferredSocketForEndpoint(receivers[0]), new Disjunction(...receivers)]]) :
+        new Map([[this.getPreferredSocketForEndpoint(receivers[0], data.socket), new Disjunction(...receivers)]]) :
         
         // group for multiple endpoints
         new Map(
             // group receivers by socket
             [...Map.groupBy(
                     // map receivers to sockets
-                    receivers.map(r => ({endpoint: r, socket: this.getPreferredSocketForEndpoint(r)}),
+                    receivers.map(r => ({endpoint: r, socket: this.getPreferredSocketForEndpoint(r, data.socket)}),
                 ), ({socket}) => socket
                 ).entries()
             ]
@@ -587,13 +591,17 @@ export class CommunicationHubHandler {
     }
 
     public async sendAddressedBlockToReceivers(dxb: ArrayBuffer, receivers: Disjunction<Endpoint>, destSocket: CommunicationInterfaceSocket) {
-        const addressdDXB = Compiler.updateHeaderReceiver(dxb, receivers);
-        if (!addressdDXB) throw new Error("Failed to update header receivers");
+        const addressedDXB = Compiler.updateHeaderReceiver(dxb, receivers);
+        if ((dxb as any)._is_stream) {
+            (addressedDXB as any)._is_stream = true
+        }
+        if (!addressedDXB) throw new Error("Failed to update header receivers");
 
-        IOHandler.handleDatexSent(addressdDXB, receivers, destSocket)
+        IOHandler.handleDatexSent(addressedDXB, receivers, destSocket)
 
-        const success = await destSocket.sendBlock(addressdDXB);
+        const success = await destSocket.sendBlock(addressedDXB);
         if (!success) {
+            this.#logger.warn("Failed to send block to " + receivers.toString() + " via " + destSocket.toString() + ", retrying");
             this.updateTTL(dxb, 1) // reset TTL to original
             return this.datexOut({
                 dxb,
