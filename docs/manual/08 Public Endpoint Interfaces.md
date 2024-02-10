@@ -17,13 +17,6 @@ await Datex.Supranet.connect();
 }
 ```
 
-Other endpoints can call this function by accessing the `MyAPI` as an endpoint property:
-
-```ts
-// assuming the endpoint running my-api.ts is @example
-// call exampleFunction and get the return value
-const result = await datex `@example.MyAPI.exampleFunction(1.5, "xyz")`
-```
 
 Inside a public function (like in any function), the [`datex.meta` property](./08%20The%20DATEX%20API.md) can be used
 to find out which endpoint called the function:
@@ -47,3 +40,42 @@ const admin = f `@exampleAdmin`
 ```
 
 This can be used to restrict permissions for certain functionalities to specific endpoints or implement rate limiting.
+
+
+
+## Calling public functions on remote endpoints
+
+Methods defined in a public endpoint interface class can be called on other endpoints that also implement
+the interface. 
+To specify the receivers, chain a `.to()` method call together with the actual method call:
+
+```ts
+
+// call locally
+const result1 = await MyAPI.exampleFunction(42, 'xyz');
+
+// call on @example
+const result2 = await MyAPI.exampleFunction.to('@example')(42, 'xyz');
+```
+
+You can call the function on multiple endpoint at once by passing an array or set of `Endpoint` objects
+or endpoint identifier to the `to()` call.:
+
+```ts
+// call on @example1 and @example2
+const result3 = await MyAPI.exampleFunction.to(['@example1', '@example2'])(42, 'xyz');
+```
+
+
+> [!WARNING]
+> When calling a function on multiple endpoints in a single call,
+> only the first received response is returned (similar to Promise.race).
+
+
+Altenatively, you can access a public interface directly with DATEX Script code:
+
+```ts
+// assuming the endpoint running my-api.ts is @example
+// call exampleFunction and get the return value
+const result = await datex `@example.MyAPI.exampleFunction(1.5, "xyz")`
+```

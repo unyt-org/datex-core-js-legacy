@@ -23,7 +23,7 @@ import { Error as DatexError, ValueError } from "../types/errors.ts";
 import { Function as DatexFunction } from "../types/function.ts";
 import { DatexObject } from "../types/object.ts";
 import { Tuple } from "../types/tuple.ts";
-import { DX_PERMISSIONS, DX_TYPE, DX_ROOT, INIT_PROPS } from "../runtime/constants.ts";
+import { DX_PERMISSIONS, DX_TYPE, DX_ROOT, INIT_PROPS, DX_EXTERNAL_SCOPE_NAME, DX_EXTERNAL_FUNCTION_NAME } from "../runtime/constants.ts";
 import { type Class } from "../utils/global_types.ts";
 import { Conjunction, Disjunction, Logical } from "../types/logic.ts";
 import { client_type } from "../utils/constants.ts";
@@ -661,6 +661,10 @@ function exposeStaticClass(original_class:Class, data:class_data) {
             if (typeof current_value == "function")  {
                 // set allowed endpoints for this method
                 //static_scope.setAllowedEndpointsForProperty(name, this.method_a_filters.get(name))
+
+                const fn = original_class[name];
+                fn[DX_EXTERNAL_SCOPE_NAME] = static_scope.name;
+                fn[DX_EXTERNAL_FUNCTION_NAME] = exposed_public[name]
 
                 const dx_function = Pointer.proxifyValue(DatexFunction.createFromJSFunction(current_value, original_class, name), true, undefined, false, true) ; // generate <Function>
 
