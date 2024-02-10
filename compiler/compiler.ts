@@ -5189,7 +5189,9 @@ export class Compiler {
                             // insert another value
                             else SCOPE.buffer = Compiler.compileValue(value, {}, false);
 
-                            controller.enqueue(await Compiler.createBlockFromScope(SCOPE));
+                            const buffer = await Compiler.createBlockFromScope(SCOPE);
+                            (buffer as any)._is_stream = true; // internal flag, set when the outgoing message is a stream, used to prevent recursive stream logs
+                            controller.enqueue(buffer);
                         }
 
                         // continue after stream, reset SCOPE to previous state
