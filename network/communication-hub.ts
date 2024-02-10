@@ -233,7 +233,9 @@ export class CommunicationHubHandler {
                 ) : 
                 (isDirect ? ESCAPE_SEQUENCES.UNYT_RED : DARK_RED)
             const connectedState = `${color}⬤${ESCAPE_SEQUENCES.RESET}`
-            return `  ${connectedState} ${directionSymbol}${isDirect?'':' (indirect)'}${isDirect&&this.defaultSocket==socket?' (default)':''} ${endpoint??'unknown endpoint'}${ESCAPE_SEQUENCES.GREY} (distance:${dynamicProperties.distance}, knownSince:${((Date.now()-dynamicProperties.knownSince)/1000).toFixed(2)}s)${ESCAPE_SEQUENCES.RESET}\n`
+            const knownSince = (Date.now()-dynamicProperties.knownSince)/1000;
+            const distance = dynamicProperties.distance
+            return `  ${connectedState} ${directionSymbol}${isDirect?'':' (indirect)'}${isDirect&&this.defaultSocket==socket?' (default)':''} ${endpoint??'unknown endpoint'}${ESCAPE_SEQUENCES.GREY} (distance:${distance < 0 ? 'unknown' : distance}, knownSince:${knownSince < 0 ? 'unknown' : knownSince.toFixed(2)+'s'})${ESCAPE_SEQUENCES.RESET}\n`
         }
 
         // print
