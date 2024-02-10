@@ -7,6 +7,7 @@ import { Endpoint, Target, target_clause } from "../types/addressing.ts"
 import { compiler_options, PrecompiledDXB, DatexResponse } from "../compiler/compiler.ts"
 import { cnf, Connective, Disjunction } from "../types/logic.ts"
 import { NOT_EXISTING } from "../runtime/constants.ts";
+import { CommunicationInterfaceSocket } from "../network/communication-interface.ts";
 
 
 // return type for remote function calls
@@ -144,6 +145,15 @@ export type datex_variables_scope = { [key: string]: any } & { // all available 
 
 export type datex_meta = {encrypted?:boolean, signed?:boolean, sender:Endpoint, timestamp:Date, type:ProtocolDataType, local?:boolean};
 
+export type trace = {
+    endpoint: Endpoint, 
+    timestamp: Date, 
+    destReached?: boolean,
+    socket: {
+        type: string, 
+        name?:string
+    }
+}
 
 export type datex_scope = {
     sid: number,
@@ -151,7 +161,7 @@ export type datex_scope = {
     sender: Endpoint, // sender of the scope
     origin: Endpoint, // origin to use for pointers / casting (default is sender)
 
-    source?: any // original source (com interface) from which this scope was received
+    socket?: CommunicationInterfaceSocket // original socket (com interface) from which this scope was received
 
     current_index: number,
     start_index: number, // keep track of index to jump back to

@@ -13,9 +13,10 @@ import { Type } from "../types/type.ts";
 import { addPersistentListener } from "../utils/persistent-listeners.ts";
 import { Endpoint, LOCAL_ENDPOINT } from "../types/addressing.ts";
 import { ESCAPE_SEQUENCES } from "../utils/logger.ts";
-import { StorageMap } from "../types/storage_map.ts";
-import { StorageSet } from "../types/storage_set.ts";
+import { StorageMap } from "../types/storage-map.ts";
+import { StorageSet } from "../types/storage-set.ts";
 import { IterableWeakSet } from "../utils/iterable-weak-set.ts";
+import { LazyPointer } from "./lazy-pointer.ts";
 
 
 // displayInit();
@@ -189,6 +190,10 @@ export class Storage {
 
     static #locations = new Map<StorageLocation, storage_location_options<StorageLocation>>()
     static #auto_sync_enabled = false;
+
+    public static get locations() {
+        return this.#locations;
+    }
 
     // set options for storage location and enable
     public static addLocation<L extends StorageLocation>(location:L, options:storage_location_options<L>) {
@@ -892,6 +897,16 @@ export class Storage {
         })()
     }
 
+    public static async getItemCountStartingWith(prefix:string, location?:StorageLocation) {
+        const keyIterator = await Storage.getItemKeys(location);
+        let count = 0;
+        for (const key of keyIterator) {
+            if (key.startsWith(prefix)) count++;
+        }
+        return count
+    }
+
+
     public static async getPointerKeys(location?:StorageLocation){
 
 		// for specific location
@@ -994,12 +1009,17 @@ export class Storage {
 		else return false;
     }
 
-    public static async removeItem(key:string, location?:StorageLocation):Promise<void> {
+    public static async removeItem(key:string, location?:StorageLocation):Promise<boolean> {
 
         logger.debug("Removing item '" + key + "' from storage" + (location ? " (" + location.name + ")" : ""))
 
 		// remove from specific location
-		if (location) return location.removeItem(key);
+		if (location) {
+            // TODO: handle hasItem() internally in storage locations
+            const itemExists = await location.hasItem(key);
+            await location.removeItem(key);
+            return itemExists;
+        }
 		// remove from all
 		else {
             Storage.cache.delete(key); // delete from cache
@@ -1007,9 +1027,13 @@ export class Storage {
             // clear dependencies
             this.updateItemDependencies(key, [])
 
+            let itemExists = false;
 			for (const location of this.#locations.keys()) {
+                // TODO: handle hasItem() internally in storage locations
+                if (!itemExists) itemExists = await location.hasItem(key);
 				await location.removeItem(key);
 			}
+            return itemExists;
 		}
     }
 
@@ -1149,10 +1173,6 @@ export class Storage {
         else throw new Error("Cannot find or create the state '" + id + "'")
     }
 
-    static #replaceLastOccurenceOf(search: string, replace: string, str: string) {
-        const n = str.lastIndexOf(search);
-        return str.substring(0, n) + replace + str.substring(n + search.length);
-    }
 
     public static async printSnapshot(options: StorageSnapshotOptions = {internalItems: false, expandStorageMapsAndSets: true}) {
         const {items, pointers} = await this.getSnapshot(options);
@@ -1182,7 +1202,7 @@ export class Storage {
             const storedInAll = [...this.#locations.keys()].every(l => locations.includes(l));
             
             const value = [...storageMap.values()][0];
-            string += `  • ${COLOR_PTR}$${key}${ESCAPE_SEQUENCES.GREY}${storedInAll ? "" : (` (only in ${locations.map(l=>l.name).join(",")})`)} = ${this.#replaceLastOccurenceOf("\n  ", "", value.replaceAll("\n", "\n  "))}\n`
+            string += `  • ${COLOR_PTR}$${key}${ESCAPE_SEQUENCES.GREY}${storedInAll ? "" : (` (only in ${locations.map(l=>l.name).join(",")})`)} = ${value.replaceAll("\n", "\n    ")}\n`
         }
         console.log(string+"\n");
 
@@ -1196,7 +1216,7 @@ export class Storage {
             const storedInAll = [...this.#locations.keys()].every(l => locations.includes(l));
             
             const value = [...storageMap.values()][0];
-            string += `  • ${key}${ESCAPE_SEQUENCES.GREY}${storedInAll ? "" : (` (only in ${locations.map(l=>l.name).join(",")})`)} = ${value}`
+            string += `  • ${key}${ESCAPE_SEQUENCES.GREY}${storedInAll ? "" : (` (only in ${locations.map(l=>l.name).join(",")})`)} = ${value}\n`
         }
         console.log(string+"\n");
 
@@ -1252,7 +1272,7 @@ export class Storage {
             string += `${ESCAPE_SEQUENCES.ITALIC}Inconsistencies between storage locations don't necessarily indicate that something is wrong. They can occur when a storage location is not updated immediately (e.g. when only using SAVE_ON_EXIT).\n\n${ESCAPE_SEQUENCES.RESET}`
             for (const [key, storageMap] of pointers.inconsistencies) {
                 for (const [location, value] of storageMap) {
-                    string += `  • ${COLOR_PTR}$${key}${ESCAPE_SEQUENCES.GREY} (${(location.name+")").padEnd(15, " ")} = ${this.#replaceLastOccurenceOf("\n  ", "", value.replaceAll("\n", "\n  "))}\n`
+                    string += `  • ${COLOR_PTR}$${key}${ESCAPE_SEQUENCES.GREY} (${(location.name+")").padEnd(15, " ")} = ${value.replaceAll("\n", "\n    ")}\n`
                 }
                 string += `\n`
             }
@@ -1275,7 +1295,14 @@ export class Storage {
 
         // remove keys items that are unrelated to normal storage
         for (const [key] of items.snapshot) {
-            if (key.startsWith("keys_")) items.snapshot.delete(key);
+            if (key.startsWith("keys_") || key.startsWith("hash_keys_")) {
+                if (options.internalItems) {
+                    for (const [location, _value] of items.snapshot.get(key)!) {
+                        items.snapshot.get(key)!.set(location, "..." + ESCAPE_SEQUENCES.RESET);
+                    }
+                }
+                else items.snapshot.delete(key);
+            }
         }
 
         // iterate over storage maps and sets and render all entries
@@ -1286,13 +1313,18 @@ export class Storage {
 
                 if (value.startsWith("\x1b[38;2;50;153;220m<StorageMap>") || value.startsWith("\x1b[38;2;50;153;220m<StorageSet>")) {
                     const ptr = await Pointer.load(ptrId, undefined, true);
+                    if (ptr instanceof LazyPointer) {
+                        console.error("LazyPointer in StorageMap/StorageSet");
+                        continue;
+                    }
                     if (ptr.val instanceof StorageMap) {
                         const map = ptr.val;
                         let inner = "";
                         for await (const [key, val] of map) {
                             inner += `   ${Runtime.valueToDatexStringExperimental(key, true, true)}\x1b[0m => ${Runtime.valueToDatexStringExperimental(val, true, true)}\n`
                         }
-                        if (inner) storageMap.set(location, "\x1b[38;2;50;153;220m<StorageMap> \x1b[0m{\n"+inner+"\x1b[0m\n}")
+                        // substring: remove last \n
+                        if (inner) storageMap.set(location, "\x1b[38;2;50;153;220m<StorageMap> \x1b[0m{\n"+inner.substring(0, inner.length-1)+"\x1b[0m\n}")
                     }
                     else if (ptr.val instanceof StorageSet) {
                         const set = ptr.val;
@@ -1300,7 +1332,8 @@ export class Storage {
                         for await (const val of set) {
                             inner += `   ${Runtime.valueToDatexStringExperimental(val, true, true)},\n`
                         }
-                        if (inner) storageMap.set(location, "\x1b[38;2;50;153;220m<StorageSet> \x1b[0m{\n"+inner+"\x1b[0m\n}")
+                        // substring: remove last \n
+                        if (inner) storageMap.set(location, "\x1b[38;2;50;153;220m<StorageSet> \x1b[0m{\n"+inner.substring(0, inner.length-1)+"\x1b[0m\n}")
                     }
                 }
             }

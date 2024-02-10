@@ -3,7 +3,7 @@ import { Pointer } from "./runtime/pointers.ts";
 import { LOCAL_ENDPOINT } from "./types/addressing.ts";
 import { client_type } from "./utils/constants.ts";
 import { Storage, registerStorageAsPointerSource } from "./runtime/storage.ts";
-import { logger } from "./utils/global_values.ts";
+import { cwdURL, logger } from "./utils/global_values.ts";
 import { IndexedDBStorageLocation } from "./runtime/storage-locations/indexed-db.ts";
 import { LocalStorageLocation } from "./runtime/storage-locations/local-storage.ts";
 import { DenoKVStorageLocation } from "./runtime/storage-locations/deno-kv.ts";
@@ -11,7 +11,10 @@ import { loadEternalValues } from "./utils/eternals.ts";
 import { DX_BOUND_LOCAL_SLOT } from "./runtime/constants.ts";
 import { verboseArg } from "./utils/logger.ts";
 import { MessageLogger } from "./utils/message_logger.ts";
-
+import { Path } from "./utils/path.ts";
+import { communicationHub } from "./network/communication-hub.ts";
+import { LocalLoopbackInterface } from "./network/communication-interfaces/local-loopback-interface.ts";
+import { Crypto } from "./runtime/crypto.ts";
 
 /**
  * Runtime init (sets ENV, storage, endpoint, ...)
@@ -20,11 +23,42 @@ export async function init() {
 
 	// register DatexStorage as pointer source
 	registerStorageAsPointerSource();
-	// default storage config:
 
+	// bind communication hub handlers to runtime
+	communicationHub.handler.init()
+	communicationHub.handler.setDatexInHandler(Runtime.datexIn.bind(Runtime))
+	Runtime.setDatexOutHandler(communicationHub.handler.datexOut.bind(communicationHub.handler))
+	await communicationHub.addInterface(new LocalLoopbackInterface())
+
+	
 	// @ts-ignore NO_INIT
 	if (!globalThis.NO_INIT) {
+
+		// custom storage module (storage.ts next to .dx config)
+		let storageInitModule: Path|undefined
 		if (client_type == "browser") {
+			// TODO: handle storage.ts URL in browser
+			// storageInitModule = new URL('/storage.ts', globalThis.location.href)
+		}
+		else if (client_type == "deno") {
+			// TODO: dynamic storage.ts location - use uix path backend/storage.ts as workaround
+			storageInitModule = new Path('./backend/storage.ts', cwdURL)
+		}
+
+		if (await storageInitModule?.fsExists()) {
+			logger.info("Initializing custom storage configuration (" + storageInitModule!.normal_pathname + ")")
+			try {
+				await import(storageInitModule!.normal_pathname);
+			}
+			catch (e) {
+				console.error(e)
+			}
+
+			if (Storage.locations.size === 0)
+				logger.warn(`No storage location was added in storage.ts - cannot store persistent data!`)
+		}
+
+		else if (client_type == "browser") {
 			await Storage.addLocation(new IndexedDBStorageLocation(), {
 				modes: [Storage.Mode.SAVE_ON_CHANGE, Storage.Mode.SAVE_PERIODICALLY],
 				primary: true
@@ -53,6 +87,7 @@ export async function init() {
 		
 	}
 
+	
 	// listen for endpoint changes
 	Runtime.onEndpointChanged((endpoint) => {
 		Pointer.pointer_prefix = endpoint.getPointerPrefix();
@@ -76,8 +111,8 @@ export async function init() {
 	await Runtime.precompile();
 
 	// set Runtime ENV (not persistent if globalThis.NO_INIT)
-	Runtime.ENV = globalThis.NO_INIT ? getDefaultEnv() : await Storage.loadOrCreate("Datex.Runtime.ENV", getDefaultEnv);
-	Runtime.ENV[DX_BOUND_LOCAL_SLOT] = "env"
+	Runtime.ENV = (globalThis as any).NO_INIT ? getDefaultEnv() : await Storage.loadOrCreate("Datex.Runtime.ENV", getDefaultEnv);
+	(Runtime.ENV as any)[DX_BOUND_LOCAL_SLOT] = "env"
 
 	// workaround, should never happen
 	if (!Runtime.ENV) {
@@ -101,8 +136,8 @@ export async function init() {
 
 	function getDefaultEnv() {
 		return {
-			LANG: globalThis.localStorage?.lang ?? globalThis?.navigator?.language?.split("-")[0]?.split("_")[0] ?? 'en',
-			DATEX_VERSION: null
+			LANG: globalThis.localStorage?.lang as string ?? globalThis?.navigator?.language?.split("-")[0]?.split("_")[0] ?? 'en',
+			DATEX_VERSION: ""
 		}
 	}
 
@@ -111,7 +146,7 @@ export async function init() {
 	Runtime.persistent_memory = (await Storage.loadOrCreate("Datex.Runtime.MEMORY", ()=>new Map())).setAutoDefault(Object);
 
 
-	if (!globalThis.NO_INIT) {
+	if (!(globalThis as any).NO_INIT) {
 		Runtime.init();
 
 		// @ts-ignore
@@ -126,5 +161,15 @@ export async function init() {
 	if (!globalThis.NO_INIT) await loadEternalValues();
 
 	// enables message logger when running with -v
-	if (verboseArg) MessageLogger.enable()
+	if (verboseArg) MessageLogger.enable();
+
+	if (client_type == "deno") {
+		const { clear } = await import("./utils/args.ts");
+		if (clear) {
+			await Storage.clearAndReload();
+		}
+	}
+
+	// init cleanup interval to remove crypto entries (endpoint keyss)
+	Crypto.initCleanup();
 }

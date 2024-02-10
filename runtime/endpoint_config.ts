@@ -262,7 +262,7 @@ class EndpointConfig implements EndpointConfigData {
 	}
 
 	// select a node that provides a channel of the requested type
-	public getNodeWithChannelType(types:string[], force_use_node?:Endpoint):[Endpoint|null, string|null] {
+	public getNodeWithInterfaceType(types:string[], force_use_node?:Endpoint):[Endpoint|null, string|null] {
 		for (const type of types) {
 			const list = this.#node_channels_by_type.get(type);
 			if (list?.length) {

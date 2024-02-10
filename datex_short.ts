@@ -14,6 +14,8 @@ import { eternals, getLazyEternal, waitingEternals, waitingLazyEternals } from "
 
 import {instance} from "./js_adapter/js_class_adapter.ts";
 import { client_type } from "./utils/constants.ts";
+import { communicationHub } from "./network/communication-hub.ts";
+import { MessageLogger } from "./utils/message_logger.ts";
 export {instance} from "./js_adapter/js_class_adapter.ts";
 
 declare global {
@@ -139,7 +141,7 @@ function _datex(dx:string|TemplateStringsArray|PrecompiledDXB, data?:unknown[], 
     // local execution
     if (to === Runtime.endpoint) return Runtime.executeDatexLocally(dx, data, {plugins, sign, encrypt}, context_location ? new URL(context_location.toString()) : undefined); 
     // remote execution
-    else return Runtime.datexOut([dx, data, {plugins, sign, encrypt, context_location: context_location ? new URL(context_location.toString()) : undefined}], typeof to == "string" ? f(<endpoint_name>to) : to, undefined, undefined, undefined, undefined, undefined, undefined, timeout);
+    else return Runtime.datexOut([dx, data, {plugins, sign, encrypt, context_location: context_location ? new URL(context_location.toString()) : undefined}], typeof to == "string" ? f(<endpoint_name>to) : to, undefined, undefined, undefined, undefined, undefined, timeout);
     
 }
 
@@ -525,11 +527,29 @@ export function printTrace(endpoint: string|Endpoint) {
     endpoint = typeof endpoint == "string" ? Target.get(endpoint) as Endpoint : endpoint;
     return endpoint.printTrace()
 }
-
 type printTraceT = typeof printTrace;
+
+export function printComStatus() {
+    return communicationHub.printStatus()
+}
+type printComStatusT = typeof printComStatus;
+
+export function enableMessageLogger(showRedirectMessages?: boolean) {
+    return MessageLogger.enable(showRedirectMessages)
+}
+type enableMessageLoggerT = typeof enableMessageLogger;
+
+export function disableMessageLogger() {
+    return MessageLogger.disable()
+}
+type disableMessageLoggerT = typeof disableMessageLogger;
+
 declare global {
     const printTrace: printTraceT;
+    const printComStatus: printComStatusT;
     const printSnapshot: typeof Storage.printSnapshot
+    const enableMessageLogger: enableMessageLoggerT;
+    const disableMessageLogger: disableMessageLoggerT;    
 }
 
 
@@ -658,6 +678,12 @@ globalThis.f = f;
 // @ts-ignore
 globalThis.printTrace = printTrace;
 // @ts-ignore
+globalThis.printComStatus = printComStatus;
+// @ts-ignore
 globalThis.printSnapshot = Storage.printSnapshot.bind(Storage);
+// @ts-ignore
+globalThis.enableMessageLogger = enableMessageLogger;
+// @ts-ignore
+globalThis.disableMessageLogger = disableMessageLogger;
 // @ts-ignore
 globalThis.props = props;

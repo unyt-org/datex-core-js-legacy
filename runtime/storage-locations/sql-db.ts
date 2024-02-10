@@ -9,6 +9,9 @@ import { Datex } from "../../mod.ts";
 import { datex_type_mysql_map } from "./sql-type-map.ts";
 import { NOT_EXISTING } from "../../runtime/constants.ts";
 import { client_type } from "../../utils/constants.ts";
+import { Compiler } from "../../compiler/compiler.ts";
+import { ExecConditions } from "../../utils/global_types.ts";
+import { Runtime } from "../runtime.ts";
 
 const logger = new Logger("SQL Storage");
 
@@ -36,6 +39,13 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 				[this.#pointerMysqlColumnName, this.#pointerMysqlType, "PRIMARY KEY"],
 				["table_name", "varchar(50)"]
 			]
+		},
+		items: {
+			name: "datex_items",
+			columns: [
+				["key", "varchar(50)", "PRIMARY KEY"],
+				["value", "blob"]
+			]
 		}
 	} satisfies Record<string, TableDefinition>;
 
@@ -48,6 +58,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 	async #connect(){
 		if (this.#connected) return;
         this.#sqlClient = await new Client().connect(this.#options);
+		this.log?.("Connected to SQL database " + this.#options.db + " on " + this.#options.hostname + ":" + this.#options.port)
         this.#connected = true;
     }
 
@@ -196,7 +207,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 	async #setupMetaTables() {
 		for (const definition of Object.values(this.#metaTables)) {
 			const createdNew = await this.#createTableIfNotExists(definition);
-			if (createdNew) logger.debug("Created meta table '" + definition.name + "'")
+			if (createdNew) this.log?.("Created meta table '" + definition.name + "'")
 		}
 	}
 
@@ -274,10 +285,24 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 	}
 
 	async setItem(key: string,value: unknown) {
-		
+		await this.#init();
+		const dependencies = new Set<Pointer>()
+		const encoded = Compiler.encodeValue(value, dependencies);
+		await this.#query('INSERT INTO ?? ?? VALUES ?;', [this.#metaTables.items.name, ["key", "value"], [key, encoded]])
+        // await datex_item_storage.setItem(key, Compiler.encodeValue(value, dependencies));
+		return dependencies;
 	}
-	async getItem(key: string): Promise<unknown> {
-		
+	async getItem(key: string, conditions: ExecConditions): Promise<unknown> {
+		const encoded = (await this.#queryFirst<{value: ArrayBuffer}>(
+			new Query()
+				.table(this.#metaTables.items.name)
+				.select("value")
+				.where(Where.eq("key", key))
+				.build()
+		));
+		console.log("encoded",encoded)
+		if (!encoded) return null;
+		else return Runtime.decodeValue(encoded, false, conditions);
 	}
 
 	async hasItem(key:string) {
@@ -303,8 +328,10 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 	}
 
 	async setPointer(pointer: Pointer<any>, partialUpdateKey: unknown|typeof NOT_EXISTING): Promise<Set<Pointer<any>>> {
+		const dependencies = new Set<Pointer>()
+
 		await this.#init();
-		this.log("update " + pointer.id + " - " + pointer.type, partialUpdateKey, await this.#pointerEntryExists(pointer))
+		this.log?.("update " + pointer.id + " - " + pointer.type, partialUpdateKey, await this.#pointerEntryExists(pointer))
 
 		// new full insert
 		if (!await this.#pointerEntryExists(pointer))
@@ -322,7 +349,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		}
 		
 		
-		return new Set();
+		return dependencies;
 	}
 
 	async getPointerValue(pointerId: string, outer_serialized: boolean): Promise<unknown> {

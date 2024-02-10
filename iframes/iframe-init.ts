@@ -4,7 +4,11 @@
  */
 
 import { Datex } from "../datex.ts";
-import "./iframe-com-interface.ts";
+import { communicationHub } from "../network/communication-hub.ts";
+import { WindowInterface } from "../network/communication-interfaces/window-interface.ts";
 
-await Datex.Supranet.connect();
-await Datex.InterfaceManager.connect("iframe", undefined, [parent])
+await Datex.Supranet.init();
+const windowInterface = WindowInterface.createParentInterface(window.parent)
+// use as default interface only if no other default interface active
+const useAsDefaultInterface = !communicationHub.defaultSocket
+await communicationHub.addInterface(windowInterface, useAsDefaultInterface)

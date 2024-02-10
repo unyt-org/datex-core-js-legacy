@@ -1,5 +1,4 @@
 import { Logger, console_theme } from "../utils/logger.ts";
-import "./worker-com-interface.ts";
 import { Equals } from "../utils/global_types.ts";
 
 const logger = new Logger("thread-runner");
@@ -13,6 +12,8 @@ import { PromiseMapReturnType, PromiseMappingFn } from "./promise-fn-types.ts";
 import { JSTransferableFunction } from "../types/js-function.ts";
 import { INSERT_MARK } from "../compiler/compiler.ts";
 import { ComputeCluster } from "./compute-clusters.ts";
+import { communicationHub } from "../network/communication-hub.ts";
+import { WorkerInterface } from "../network/communication-interfaces/worker-interface.ts";
 
 export type ThreadModule<imports extends Record<string, unknown> = Record<string, unknown>> = {
 	[key in keyof imports]: imports[key] extends ((...args: infer args) => infer returnType) ? ((...args: args) => Promise<returnType>) : imports[key]
@@ -23,7 +24,7 @@ export type ThreadPool<imports extends Record<string, unknown> = Record<string, 
 	& {readonly __tag: unique symbol} & {[Symbol.dispose]: ()=>void}
 
 export type MessageToWorker = 
-	{type: "INIT", datexURL: string, comInterfaceURL: string, moduleURL: string, tsInterfaceGeneratorURL:string, endpoint: string, importMap:Record<string,any>, theme:"dark"|"light"} |
+	{type: "INIT", datexURL: string, workerInterfaceURL: string, communicationHubURL: string, moduleURL: string, tsInterfaceGeneratorURL:string, endpoint: string, importMap:Record<string,any>, theme:"dark"|"light"} |
 	{type: "INIT_PORT"}
 
 export type MessageFromWorker = 
@@ -304,8 +305,6 @@ export async function getServiceWorkerThread<imports extends Record<string,unkno
 const availableThreads = new Map<ThreadModule, number>();
 let spawningThreads = 0;
 
-globalThis.availableThreads = availableThreads;
-
 /**
  * spawns a new thread or returns an existing thread from the pool
  */
@@ -514,7 +513,8 @@ export async function _initWorker(worker: Worker|ServiceWorkerRegistration, modu
 		type: "INIT",
 		importMap: importMap,
 		datexURL: import.meta.resolve("../datex.ts"),
-		comInterfaceURL: import.meta.resolve("./worker-com-interface.ts"),
+		workerInterfaceURL: import.meta.resolve("../network/communication-interfaces/worker-interface.ts"),
+		communicationHubURL: import.meta.resolve("../network/communication-hub.ts"),
 		tsInterfaceGeneratorURL: import.meta.resolve("../utils/interface-generator.ts"),
 		moduleURL: modulePath ? import.meta.resolve(modulePath.toString()): null,
 		endpoint: Datex.Runtime.endpoint.toString(),
@@ -548,10 +548,11 @@ export async function _initWorker(worker: Worker|ServiceWorkerRegistration, modu
 		else if (data.type == "INITIALIZED") {
 			const endpoint = f(data.endpoint as "@")
 			endpoint.setOnline(true); // always assumed to be online, without ping
+			if (worker instanceof ServiceWorkerRegistration) throw new Error("Expected worker, got service worker");
 
 			// connect directly via worker com interface
 			logger.debug("connecting via worker com interface to " + data.endpoint);
-			const connected = await Datex.InterfaceManager.connect("worker", endpoint, [worker])
+			const connected = await communicationHub.addInterface(new WorkerInterface(worker, endpoint), false, 5000)
 			checkAborted();
 			if (!connected) {
 				reject(new Error("Could not connect via worker com interface"));
@@ -685,7 +686,10 @@ export async function run<ReturnType>(task: (() => ReturnType)|JSTransferableFun
 		else if (e instanceof Error && e.message.endsWith("is offline")) {
 			console.log("cluster endpoint " + endpoint + " is offline");
 			removeThreadEndpoint(thread);
-			return run(task, options, _meta);
+			// template string array
+			if (task instanceof Array) return run(task);
+			// function
+			else return run(task as () => ReturnType, options, _meta);
 		}
 		else if (e instanceof Error) {
 			throw new Error(e.message);

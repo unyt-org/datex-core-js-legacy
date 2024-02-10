@@ -29,7 +29,7 @@ import { IterableWeakMap } from "../utils/iterable-weak-map.ts";
 import { LazyPointer } from "./lazy-pointer.ts";
 import { ReactiveArrayMethods } from "../types/reactive-methods/array.ts";
 import { Assertion } from "../types/assertion.ts";
-import { StorageSet } from "../types/storage_set.ts";
+import { StorageSet } from "../types/storage-set.ts";
 import { Storage } from "./storage.ts";
 
 export type observe_handler<K=any, V extends RefLike = any> = (value:V extends RefLike<infer T> ? T : V, key?:K, type?:Ref.UPDATE_TYPE, transform?:boolean, is_child_update?:boolean, previous?: any, atomic_id?:symbol)=>void|boolean
@@ -317,12 +317,22 @@ export abstract class Ref<T = any> extends EventTarget {
 
     // utility functions
 
-    static collapseValue<V extends RefOrValue<unknown>, P1 extends boolean|undefined = false, P2 extends boolean|undefined = false>(value:V, collapse_pointer_properties?:P1, collapse_primitive_pointers?:P2): CollapsedValueAdvanced<V, P1, P2> {
+    static collapseValue<V extends RefOrValue<unknown>, P1 extends boolean|undefined = false, P2 extends boolean|undefined = false>(value:V, collapse_indirect_references?:P1, collapse_primitive_pointers?:P2): CollapsedValueAdvanced<V, P1, P2> {
         // don't collapse js primitive pointers per default
         if (collapse_primitive_pointers == undefined) collapse_primitive_pointers = <P2>false;
-        if (collapse_pointer_properties == undefined) collapse_pointer_properties = <P1>false;
+        // dont' collapse pointer properties or indirect pointer references per default
+        if (collapse_indirect_references == undefined) collapse_indirect_references = <P1>false;
 
-        if (value instanceof Ref && (collapse_primitive_pointers || !(value instanceof Pointer && value.is_js_primitive)) && (collapse_pointer_properties || !(value instanceof PointerProperty))) {
+        if (
+            value instanceof Ref && 
+            (
+                collapse_primitive_pointers || 
+                !(value instanceof Pointer && value.is_js_primitive)
+            ) && (
+                collapse_indirect_references || 
+                !(value instanceof PointerProperty || value.indirectReference)
+            )
+        ) {
             return value.val
         }
         else return <CollapsedValueAdvanced<V, P1, P2>> value;
@@ -558,6 +568,9 @@ export type InferredPointerProperty<Parent, Key> = PointerProperty<Parent extend
 
 // interface to access (read/write) pointer value properties
 export class PointerProperty<T=any> extends Ref<T> {
+
+    // override hasInstance from Ref
+    static [Symbol.hasInstance]: (val: unknown) => val is PointerProperty
 
     #leak_js_properties: boolean
 
@@ -822,6 +835,8 @@ export type JSValueWith$<T> = ObjectRef<T>;
 
 // converts Object to Record<string|symbol, unknown>
 
+export type AnyObjectRef = {$: Record<string,unknown>, $$: Record<string,unknown>}
+
 export type WrappedPointerValue = number|string|boolean|bigint|URL|Endpoint
 
 // convert from any JS/DATEX value to minimal representation with reference
@@ -829,7 +844,9 @@ export type MinimalJSRef<T, _C = CollapsedValue<T>> =
     _C extends symbol ? symbol : (
         _C extends WrappedPointerValue ?
             PointerWithPrimitive<_C>: // keep pointer reference
-            ObjectRef<_C> // collapsed object
+            _C extends AnyObjectRef ?
+                Pointer<_C> : // pointer wrapper to keep indirect reference intact
+                ObjectRef<_C> // collapsed object
     )
 
 // return Pointer<T>&T for primitives (excluding boolean) and Pointer<T> otherwise
@@ -986,7 +1003,7 @@ export class UpdateScheduler {
             }
 
             if (!(receiver instanceof Disjunction && !receiver.size)) {
-                Runtime.datexOut([datex, data, {end_of_scope:false, type:ProtocolDataType.UPDATE, preemptive_pointer_init: true}], receiver, undefined, false, undefined, undefined, false, undefined, this.datex_timeout)
+                Runtime.datexOut([datex, data, {end_of_scope:false, type:ProtocolDataType.UPDATE, preemptive_pointer_init: true}], receiver, undefined, false, undefined, undefined, false, this.datex_timeout)
                     .then(() => {
                         // Success
                     })
@@ -1090,6 +1107,9 @@ const observableArrayMethods = new Set<string>([
 /** Wrapper class for all pointer values ($xxxxxxxx) */
 export class Pointer<T = any> extends Ref<T> {
 
+    // override hasInstance from Ref
+    static [Symbol.hasInstance]: (val: unknown) => val is Pointer
+        
     /** STATIC */
 
     /** Pointer observers */
@@ -1372,8 +1392,15 @@ export class Pointer<T = any> extends Ref<T> {
     // load from storage or request from remote endpoint if pointer not yet loaded
     static load(id:string|Uint8Array, SCOPE?:datex_scope, only_load_local = false, sender_knows_pointer = true, allow_failure = true): Promise<Pointer>|Pointer|LazyPointer<unknown> {
 
-        const id_string = Pointer.normalizePointerId(id);
+        // pointer already exists
+        const existing_pointer = Pointer.get(id);
+        if (existing_pointer?.value_initialized) {
+            // check read permissions
+            existing_pointer.assertEndpointCanRead(SCOPE?.sender)
+            return existing_pointer;
+        }
 
+        const id_string = Pointer.normalizePointerId(id);
         // only load if local pointer id
         if (SCOPE?.exec_conditions?.onlyLocalPointers) {
             const origin = Pointer.getOriginFromPointerId(id_string);
@@ -1383,9 +1410,7 @@ export class Pointer<T = any> extends Ref<T> {
         }
 
         if (SCOPE) {
-            // recursive pointer loading! TODO
             if (this.loading_pointers.get(id_string)?.scopeList.has(SCOPE)) {
-                // logger.debug("recursive pointer loading: $"+ id_string);
                 return new LazyPointer(id_string)
             }
         }
@@ -1398,7 +1423,6 @@ export class Pointer<T = any> extends Ref<T> {
 
         this.loading_pointers.set(id_string, null as any);
         const loadPromise = this.handleLoad(id_string, id, SCOPE, only_load_local, sender_knows_pointer, allow_failure);
-
         // only add load data if load not already finished
         if (this.loading_pointers.has(id_string)) {
             this.addLoadingPointerPromise(id_string, loadPromise, SCOPE);
@@ -1430,6 +1454,7 @@ export class Pointer<T = any> extends Ref<T> {
 
         // get value if pointer value not yet loaded
         if (!pointer.#loaded) {
+            
             // first try loading from storage
             let stored:any = NOT_EXISTING;
             let source:PointerSource|null = null;
@@ -1452,8 +1477,8 @@ export class Pointer<T = any> extends Ref<T> {
                     if (stored instanceof Pointer && stored.transform_scope) {
                         await pointer.handleTransformAsync(stored.transform_scope.internal_vars, stored.transform_scope);
                     }
-                    // set normal value
-                    else pointer = pointer.setValue(stored);
+                    // set normal value, force placeholder move
+                    else pointer = pointer.setValue(stored, true);
                 }
                
                 // now sync if source (pointer storage) can sync pointer
@@ -1915,6 +1940,8 @@ export class Pointer<T = any> extends Ref<T> {
     #unwrapped_transform_type?: Type
 
     #loaded = false
+    #indirectReference?: Pointer
+    get indirectReference() {return this.#indirectReference}
 
     get value_initialized() {return this.#loaded}
 
@@ -1950,6 +1977,9 @@ export class Pointer<T = any> extends Ref<T> {
     #scheduler: UpdateScheduler|null = null  // has fixed update_interval
 
     #allowed_access?: target_clause // who has access to this pointer?, undefined = all
+
+    // reverse mapping for allowed_access
+    static #allowed_access_by_endpoint = new Map<Endpoint, IterableWeakSet<Pointer>>().setAutoDefault(IterableWeakSet);
 
     #garbage_collectable = false;
     #garbage_collected = false;
@@ -2005,11 +2035,14 @@ export class Pointer<T = any> extends Ref<T> {
         if (
             Runtime.OPTIONS.PROTECT_POINTERS 
             && !(endpoint == Runtime.endpoint)
-            && this.is_origin 
-            && (!endpoint || !Logical.matches(endpoint, this.allowed_access, Target))
+            && this.is_origin
+            && (
+                !endpoint || 
+                (this.allowed_access instanceof Disjunction && this.allowed_access.size==0) || // TODO: this case is just added because Logical.matches currently always returns true for an empty Disjunction, which is not intended here
+                !Logical.matches(endpoint, this.allowed_access, Target))
             && (endpoint && !Runtime.trustedEndpoints.get(endpoint.main)?.includes("protected-pointer-access"))
         ) {
-            throw new PermissionError("Endpoint has no read permissions for this pointer ("+this.idString()+")");
+            throw new PermissionError("Endpoint "+endpoint+" has no read permissions for pointer "+this.idString()+" (origin: "+this.origin+")");
         }
     }
 
@@ -2026,7 +2059,10 @@ export class Pointer<T = any> extends Ref<T> {
     public grantAccessTo(endpoint: Endpoint, _force = false) {
         if (!_force && !Runtime.OPTIONS.PROTECT_POINTERS) throw new Error("Read permissions are not enabled per default (set Datex.Runtime.OPTIONS.PROTECT_POINTERS to true)")
         if (!this.#allowed_access || this.#allowed_access == BROADCAST) this.#allowed_access = new Disjunction()
-        if (this.#allowed_access instanceof Disjunction) this.#allowed_access.add(endpoint)
+        if (this.#allowed_access instanceof Disjunction) {
+            this.#allowed_access.add(endpoint)
+            Pointer.#allowed_access_by_endpoint.getAuto(endpoint).add(this);
+        }
         else throw new Error("Invalid access filter, cannot add endpoint (TODO)")
     }
 
@@ -2047,7 +2083,14 @@ export class Pointer<T = any> extends Ref<T> {
      */
     public revokeAccessFor(endpoint: Endpoint, _force = false) {
         if (!_force && !Runtime.OPTIONS.PROTECT_POINTERS) throw new Error("Read permissions are not enabled per default (set Datex.Runtime.OPTIONS.PROTECT_POINTERS to true)")
-        if (this.#allowed_access instanceof Disjunction) this.#allowed_access.delete(endpoint)
+        if (this.#allowed_access instanceof Disjunction) {
+            this.#allowed_access.delete(endpoint);
+            const allowed_access_list = Pointer.#allowed_access_by_endpoint.get(endpoint);
+            if (allowed_access_list) {
+                allowed_access_list.delete(this);
+                if (allowed_access_list.size == 0) Pointer.#allowed_access_by_endpoint.delete(endpoint);
+            }
+        }
         else throw new Error("Invalid access filter, cannot add endpoint (TODO)")
     }
 
@@ -2264,6 +2307,9 @@ export class Pointer<T = any> extends Ref<T> {
 
     // make normal pointer from placeholder
     unPlaceholder(id?:string|Uint8Array) {
+        if (!this.#is_placeholder) {
+            logger.error("Pointer is not a placeholder pointer (id: " + this.idString() + ")");
+        }
         this.#is_anonymous = false; // before id change
         this.id = id ?? Pointer.getUniquePointerID(this) // set id
         this.#is_placeholder = false; // after id change
@@ -2310,18 +2356,24 @@ export class Pointer<T = any> extends Ref<T> {
         }
     }
 
-    // set value, might return new pointer if placeholder pointer existed or converted to primitive pointer
-    setValue<TT>(v:T extends typeof NOT_EXISTING ? TT : T):Pointer<T extends typeof NOT_EXISTING ? TT : T> {
+    /**
+     * Set value, might return new pointer if placeholder pointer existed or converted to primitive pointer
+     * If forcePlaceholderMove is true, an existing pointer for the value is returned, even if it is not marked as placeholder
+     */
+    setValue<TT>(v:T extends typeof NOT_EXISTING ? TT : T, forcePlaceholderMove = false):Pointer<T extends typeof NOT_EXISTING ? TT : T> {
+
         // primitive value and not yet initialized-> new pointer
         if (!this.value_initialized && (Object(v) !== v || v instanceof ArrayBuffer)) {
             Pointer.pointers.delete(this.id); // force remove previous non-primitive pointer (assume it has not yet been used)
             Pointer.primitive_pointers.delete(this.id)
             return <any>Pointer.create(this.id, v, this.sealed, this.origin, this.is_persistent, this.is_anonymous, false, this.allowed_access, this.datex_timeout)
         }
-        //placeholder replacement
-        if (Pointer.pointer_value_map.has(v)) {
+        const existingPtr = Pointer.pointer_value_map.get(v);
+
+        // placeholder replacement
+        if (existingPtr?.is_placeholder || (existingPtr && forcePlaceholderMove)) {
+            if (forcePlaceholderMove) existingPtr.#is_placeholder = true; // force placeholder
             if (this.#loaded) {
-                console.log("value",v)
                 throw new PointerError("Cannot assign a new value to an already initialized pointer")
             }
             const existing_pointer = Pointer.pointer_value_map.get(v)!;
@@ -2438,8 +2490,8 @@ export class Pointer<T = any> extends Ref<T> {
         // get transform wrapper
         if (is_transform) val = this.getInitialTransformValue(val)
 
-        // Get type from initial value, keep as <any> if initial value is null/undefined
-        if (val!==undefined && val !== null) this.#type = Type.ofValue(val);
+        // Get type from initial value, keep as <any> if initial value is null/undefined or indirect reference
+        if (val!==undefined && val !== null && !this.#indirectReference) this.#type = Type.ofValue(val);
 
         // console.log("loaded : "+ this.id + " - " + this.#type, val)
 
@@ -2449,10 +2501,14 @@ export class Pointer<T = any> extends Ref<T> {
         // init proxy value for non-JS-primitives value (also treat non-uix HTML Elements as primitives)
         if (!this.is_js_primitive) {
 
-            // already an existing non-primitive pointer
-            if (Pointer.getByValue(val)) {
+            // already an existing non-primitive pointer (indirect reference)
+            const existingPointer = Pointer.getByValue(val);
+            if (this.supportsIndirectRefs && existingPointer) {
                 this.#loaded = true;
+                this.#indirectReference = existingPointer;
+                this.#original_value = this.#shadow_object = <any> new WeakRef(<any>val);
                 super.setVal(val, true, is_transform)
+                logger.debug(`Set indirect reference for ${this.idString()} to ${existingPointer.idString()}`)
             }
 
             // normal
@@ -2608,19 +2664,32 @@ export class Pointer<T = any> extends Ref<T> {
             if (!didCustomUpdate) updatePromise = super.setVal(val, trigger_observers, is_transform);
         }
         else {
+            // custom update
             const didCustomUpdate = this.customTransformUpdate(val)
-            if (!didCustomUpdate) this.type.updateValue(this.original_value, val);
-            if (trigger_observers) updatePromise = this.triggerValueInitEvent(is_transform); // super.value setter is not called, trigger value INIT seperately
+
+            if (!didCustomUpdate) {
+                // is indirect reference, set new value
+                if (this.supportsIndirectRefs && (this.#indirectReference || Ref.isRef(val))) {
+                    this.#indirectReference = Pointer.getByValue(val);
+                    super.setVal(val, trigger_observers, is_transform);
+                }
+                // mutate value internally
+                else {
+                    this.type.updateValue(this.original_value, val);
+                }
+            }
+            
+            if (trigger_observers) updatePromise = this.triggerValueInitEvent(is_transform); // super.value setter is not called, trigger value INIT separately
         }
 
         // propagate updates via datex
         if (this.send_updates_to_origin) {
-            this.handleDatexUpdate(null, '#0 = ?; ? = #0', [this.current_val, this], this.origin, true)
+            this.handleDatexUpdate(null, this.idString()+' = ?', [this.indirectReference??this.current_val], this.origin, this.indirectReference ? false : true)
         }
         if (this.update_endpoints.size) {
             logger.debug("forwarding update to subscribers", this.update_endpoints);
             // console.log(this.#update_endpoints);
-            this.handleDatexUpdate(null, '#0 = ?; ? = #0', [this.current_val, this], this.update_endpoints, true)
+            this.handleDatexUpdate(null, this.idString()+' = ?', [this.indirectReference??this.current_val], this.update_endpoints, this.indirectReference ? false : true)
         }
 
         // pointer value change listeners
@@ -2717,11 +2786,16 @@ export class Pointer<T = any> extends Ref<T> {
 
     protected getInitialTransformValue(val: T) {
         const type = Type.ofValue(val);
-        this.#unwrapped_transform_type = type;
+        // special edge case: only update type if not void for transforms (TODO: better solution)
+        if (type !== Type.std.void as Type<T>) this.#unwrapped_transform_type = type;
         if (type.interface_config?.wrap_transform) val = type.interface_config.wrap_transform(val);
         return val;
     }
 
+    protected get supportsIndirectRefs() {
+        // only supported if indirect references are not already handled by a custom transform (e.g. for UIX elements)
+        return this.type.supportsIndirectRefs
+    }
 
     protected customTransformUpdate(val: T) {
         if (this.type.interface_config?.handle_transform) {
@@ -2795,8 +2869,7 @@ export class Pointer<T = any> extends Ref<T> {
                             ({capturedGetters, capturedGettersWithKeys} = Ref.getCapturedGetters());
                         }
                     }
-    
-    
+        
                     // promise returned, wait for promise to resolve
                     if (val instanceof Promise) {
                         // force live required for async transforms (cannot synchronously calculate the value in a getter)
@@ -3265,7 +3338,7 @@ export class Pointer<T = any> extends Ref<T> {
     public static enablePeriodicSubscriberCleanup(interval = 15 * 60) {
         logger.debug(`periodic pointer subscriber cleanup enabled (interval: ${interval} seconds)`);
         if (Pointer.#periodicSubscriberCleanup) clearInterval(Pointer.#periodicSubscriberCleanup);
-        Pointer.#periodicSubscriberCleanup = setInterval(() => this.cleanupSubscribers(), interval * 1000); 
+        Pointer.#periodicSubscriberCleanup = setInterval(() => this.cleanupEndpoints(), interval * 1000); 
     }
 
     /**
@@ -3280,14 +3353,23 @@ export class Pointer<T = any> extends Ref<T> {
     }
 
     /**
-     * Removes all subscribers that are no longer online
+     * Iterates over all subscribers and access endpoints
      */
-    public static async cleanupSubscribers() {
-        logger.debug("cleaning up subscribers");
+    static *#subscribersAndAccessEndpoints() {
+        for (const endpoint of Pointer.#endpoint_subscriptions.keys()) yield endpoint;
+        for (const endpoint of Pointer.#allowed_access_by_endpoint.keys()) yield endpoint;
+    }
 
-        for (const endpoint of Pointer.#endpoint_subscriptions.keys()) {
+    /**
+     * Removes all referenced endpoints that are no longer online
+     */
+    public static async cleanupEndpoints() {
+        logger.debug("cleaning up endpoints with subscriptions or access permissions");
+
+        for (const endpoint of this.#subscribersAndAccessEndpoints()) {
             if (!(await endpoint.isOnline())) {
                 this.clearEndpointSubscriptions(endpoint);
+                this.clearEndpointPermissions(endpoint)
             }
         }
     }
@@ -3304,6 +3386,20 @@ export class Pointer<T = any> extends Ref<T> {
         }
 
         if (removeCount) logger.debug("removed " + removeCount + " subscriptions for " + endpoint);
+    }
+
+    /**
+     * Removes all permissions for an endpoint given with grantAccessTo
+     */
+    public static clearEndpointPermissions(endpoint: Endpoint) {
+        if (!Runtime.OPTIONS.PROTECT_POINTERS) return; // ignore if pointer protection is disabled
+
+        let removeCount = 0;
+        for (const pointer of Pointer.#allowed_access_by_endpoint.get(endpoint) ?? []) {
+            pointer.revokeAccessFor(endpoint);
+            removeCount++;
+        }
+        if (removeCount) logger.debug("removed " + removeCount + " pointer access permissions for " + endpoint);
     }
 
 
@@ -3682,7 +3778,7 @@ export class Pointer<T = any> extends Ref<T> {
                     }
                     catch (e) {
                         console.log(obj, name);
-                        console.log(e)
+                        console.error(e)
                     }
                 }
             }
@@ -4116,7 +4212,7 @@ export class Pointer<T = any> extends Ref<T> {
         else {
             if (receiver instanceof Disjunction && !receiver.size) return;
             try {
-                await Runtime.datexOut([datex, data, {collapse_first_inserted, type:ProtocolDataType.UPDATE, preemptive_pointer_init: true}], receiver, undefined, false, undefined, undefined, false, undefined, this.datex_timeout);
+                await Runtime.datexOut([datex, data, {collapse_first_inserted, type:ProtocolDataType.UPDATE, preemptive_pointer_init: true}], receiver, undefined, false, undefined, undefined, false, this.datex_timeout);
             } catch(e) {
                 //throw e;
                 console.error("forwarding failed", e, datex, data)
@@ -4317,7 +4413,7 @@ export function getProxyFunction(method_name:string, params:{filter:target_claus
         if (params_proto!==Object.prototype) params_proto.dynamic_filter = undefined; // reset, no longer needed for call
 
         const compile_info:compile_info = [`#public.${params.scope_name}.${method_name} ?`, [new Tuple(args)], {to:filter, sign:params.sign}];
-        return Runtime.datexOut(compile_info, filter, undefined, true, undefined, undefined, false, undefined, params.timeout);
+        return Runtime.datexOut(compile_info, filter, undefined, true, undefined, undefined, false, params.timeout);
     }
 }
 
@@ -4330,7 +4426,7 @@ export function getProxyStaticValue(name:string, params:{filter?:target_clause, 
         if (params_proto!==Object.prototype) params_proto.dynamic_filter = undefined; // reset, no longer needed for call
 
         const compile_info:compile_info = [`#public.${params.scope_name}.${name}`, [], {to:filter, sign:params.sign}];
-        return Runtime.datexOut(compile_info, filter, undefined, true, undefined, undefined, false, undefined, params.timeout);
+        return Runtime.datexOut(compile_info, filter, undefined, true, undefined, undefined, false, params.timeout);
     }
 }
 

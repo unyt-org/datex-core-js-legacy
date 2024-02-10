@@ -1,7 +1,7 @@
 
 // extends Map class to automatically create new empty entries when the getAuto() method is called and the entry does not exist
 
-import type { any_class } from "unyt_core/utils/global_types.ts";
+import type { any_class } from "./global_types.ts";
 
 const DEFAULT_CLASS = Symbol('DEFAULT_CLASS')
 const DEFAULT_IS_CLASS = Symbol('DEFAULT_IS_CLASS')
@@ -11,7 +11,10 @@ const DEFAULT_VALUE = Symbol('DEFAULT_VALUE')
 
 export const _ = "_";
 
-export type AutoMap<K,V> = Map<K,V> & {getAuto(key: K): V}
+export type AutoMap<K,V> = Map<K,V> & {
+    getAuto(key: K): V;
+    enableAutoRemove(): AutoRemoveMap<K,V> & AutoMap<K,V>
+}
 
 // TODO
 declare global {
@@ -36,6 +39,49 @@ Map.prototype.setAutoDefault = function<V>(default_class_or_creator_function_or_
     else this[DEFAULT_VALUE] = <V>default_class_or_creator_function_or_value;
     return this;
 }
+
+
+class AutoRemoveMap<K, V> extends Map<K, V> {
+    constructor(entries?: readonly (readonly [K, V])[] | null) {
+        super(entries);
+        for (const [key, value] of this) {
+            this.#enableAutoRemove(key, value);
+        }
+    }
+
+    set(key: K, value: V) {
+        this.#enableAutoRemove(key, value);
+        return super.set(key, value);
+    }
+
+    #enableAutoRemove(mapKey: K, value: V) {
+        if (value instanceof Set || value instanceof Map) {
+            const originalDelete = value.delete.bind(value);
+            value.delete = (key: K) => {
+                const res = originalDelete(key);
+                if (value.size == 0) this.delete(mapKey);
+                return res;
+            }
+        }
+        else {
+            throw new Error("auto remove not implemented for this type of value")
+        }
+        // TODO: more types
+    }
+}
+
+Map.prototype.enableAutoRemove = function() {
+    const map = new AutoRemoveMap([...this.entries()]);
+
+    if ((this as any)[DEFAULT_CLASS]) (map as any)[DEFAULT_CLASS] = (this as any)[DEFAULT_CLASS]
+    if ((this as any)[DEFAULT_IS_CLASS]) (map as any)[DEFAULT_IS_CLASS] = (this as any)[DEFAULT_IS_CLASS]
+    if ((this as any)[DEFAULT_CLASS_PRIMITIVE]) (map as any)[DEFAULT_CLASS_PRIMITIVE] = (this as any)[DEFAULT_CLASS_PRIMITIVE]
+    if ((this as any)[DEFAULT_CREATOR_FUNCTION]) (map as any)[DEFAULT_CREATOR_FUNCTION] = (this as any)[DEFAULT_CREATOR_FUNCTION]
+    if ((this as any)[DEFAULT_VALUE]) (map as any)[DEFAULT_VALUE] = (this as any)[DEFAULT_VALUE]
+
+    return map;
+}
+
 
 Map.prototype.getAuto = function<K,V>(key: K): V {
     if (!this.has(key)) this.set(key, 

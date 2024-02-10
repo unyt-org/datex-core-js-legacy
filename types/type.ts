@@ -19,8 +19,8 @@ import { Time } from "./time.ts";
 import type { Task } from "./task.ts";
 import { Assertion } from "./assertion.ts";
 import type { Iterator } from "./iterator.ts";
-import {StorageMap, StorageWeakMap} from "./storage_map.ts"
-import {StorageSet, StorageWeakSet} from "./storage_set.ts"
+import {StorageMap, StorageWeakMap} from "./storage-map.ts"
+import {StorageSet, StorageWeakSet} from "./storage-set.ts"
 import { ExtensibleFunction } from "./function-utils.ts";
 import type { JSTransferableFunction } from "./js-function.ts";
 
@@ -121,6 +121,13 @@ export class Type<T = any> extends ExtensibleFunction {
         return this.#about_md
     }
 
+    /**
+     * true if this type has no custom handling for indirect references
+     */
+    get supportsIndirectRefs() {
+        // only supported if indirect references are not already handled by a custom transform (e.g. for UIX elements)
+        return Runtime.OPTIONS.INDIRECT_REFERENCES && !this.interface_config?.handle_transform
+    }
 
     // templated type (struct)
     #template: {[key:string]:Type}|any[] & T

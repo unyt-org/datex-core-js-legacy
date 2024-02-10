@@ -8,6 +8,9 @@ import { client_type } from "../utils/constants.ts";
 import { Endpoint, Target, target_clause } from "../types/addressing.ts";
 import { Runtime } from "./runtime.ts";
 import { Datex } from "../mod.ts";
+import { CommunicationInterfaceSocket } from "../network/communication-interface.ts";
+
+type ioEventHandler = (header:dxb_header, dxb:ArrayBuffer, socket?:CommunicationInterfaceSocket)=>void;
 
 // handles observers for all incoming/outgoing DATEX
 export class IOHandler {
@@ -33,14 +36,14 @@ export class IOHandler {
     private static e_std_ins = new Map<Target, globalThis.Function>();
 
     // listeners for all incoming DATEX requests
-    private static datex_in_handler: (header:dxb_header, dxb:ArrayBuffer)=>void/* = (header, dxb)=>{
+    private static datex_in_handler?: ioEventHandler/* = (header, dxb)=>{
         console.debug('from ' + header.sender, DatexRuntime.decompile(dxb));
     }*/
-    private static datex_in_handlers_per_endpoint = new Map<Target, (header:dxb_header,dxb:ArrayBuffer)=>void>();
+    private static datex_in_handlers_per_endpoint = new Map<Target, ioEventHandler>();
 
     // listeners for all outgoing DATEX requests
-    private static datex_out_handler: (header:dxb_header, dxb:ArrayBuffer)=>void
-    private static datex_out_handlers_per_endpoint = new Map<Endpoint, (header:dxb_header,dxb:ArrayBuffer)=>void>();
+    private static datex_out_handler?: ioEventHandler
+    private static datex_out_handlers_per_endpoint = new Map<Endpoint, ioEventHandler>();
     
     // listen for finished scopes with return value: sid -> callback
     private static scope_result_listeners = new Map<number, (scope:datex_scope)=>void>();
@@ -60,14 +63,19 @@ export class IOHandler {
     }
 
     // set DATEX listeners
-    static onDatexReceived(handler:(header:dxb_header,dxb:ArrayBuffer)=>void, endpoint?:Target){
+    static onDatexReceived(handler:ioEventHandler, endpoint?:Target){
         if (endpoint) this.datex_in_handlers_per_endpoint.set(endpoint, handler);
         else this.datex_in_handler = handler;
     }
-    static onDatexSent(handler:(header:dxb_header,dxb:ArrayBuffer)=>void, endpoint?:Endpoint){
+    static onDatexSent(handler:ioEventHandler, endpoint?:Endpoint){
         if (endpoint) this.datex_out_handlers_per_endpoint.set(endpoint, handler);  
         else this.datex_out_handler = handler;
     } 
+
+    static resetDatexHandlers() {
+        this.datex_in_handler = undefined;
+        this.datex_out_handler = undefined;
+    }
 
     // add scope result listener
     static addScopeResultListener(sid:number, output_callback:(data:datex_scope)=>void){
@@ -91,20 +99,20 @@ export class IOHandler {
     }
 
     // called when scope received 
-    static handleDatexReceived(scope:datex_scope, dxb:ArrayBuffer) {
-        let endpoint = scope.sender;
+    static handleDatexReceived(header:dxb_header, dxb:ArrayBuffer, socket?: CommunicationInterfaceSocket) {
+        const endpoint = header.sender as Endpoint;
 
-        if (this.datex_in_handlers_per_endpoint.has(endpoint)) this.datex_in_handlers_per_endpoint.get(endpoint)(scope.header, dxb);
-        if (this.datex_in_handler) this.datex_in_handler(scope.header, dxb);
+        if (this.datex_in_handlers_per_endpoint.has(endpoint)) this.datex_in_handlers_per_endpoint.get(endpoint)!(header, dxb, socket);
+        if (this.datex_in_handler) this.datex_in_handler(header, dxb, socket);
     }
 
     // called when datex sent out
-    static async handleDatexSent(dxb:ArrayBuffer, to:target_clause) {
+    static async handleDatexSent(dxb:ArrayBuffer, to:target_clause, socket?: CommunicationInterfaceSocket) {
         if (this.datex_out_handler || this.datex_out_handlers_per_endpoint.has(<Endpoint>to)) {
             let header = <dxb_header> (await Runtime.parseHeader(dxb, null, true));
 
-            if (this.datex_out_handler) this.datex_out_handler(header, dxb)
-            if (this.datex_out_handlers_per_endpoint.has(<Endpoint>to)) this.datex_out_handlers_per_endpoint.get(<Endpoint>to)(header, dxb)
+            if (this.datex_out_handler) this.datex_out_handler(header, dxb, socket)
+            if (this.datex_out_handlers_per_endpoint.has(<Endpoint>to)) this.datex_out_handlers_per_endpoint.get(<Endpoint>to)!(header, dxb, socket)
         }
     }
   

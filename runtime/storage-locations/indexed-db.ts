@@ -24,9 +24,9 @@ export class IndexedDBStorageLocation extends AsyncStorageLocation {
 	}
 
 	async setItem(key: string,value: unknown) {
-		const inserted_ptrs = new Set<Pointer>();
-        await datex_item_storage.setItem(key, <any>Compiler.encodeValue(value, inserted_ptrs));
-        return inserted_ptrs;
+		const dependencies = new Set<Pointer>();
+        await datex_item_storage.setItem(key, <any>Compiler.encodeValue(value, dependencies));
+        return dependencies;
 	}
 	async getItem(key: string, conditions: ExecConditions): Promise<unknown> {
 		const buffer = <ArrayBuffer><any>await datex_item_storage.getItem(key);
@@ -67,9 +67,9 @@ export class IndexedDBStorageLocation extends AsyncStorageLocation {
 	}
 
 	async setPointer(pointer: Pointer<any>): Promise<Set<Pointer<any>>> {
-		const inserted_ptrs = new Set<Pointer>();
-        await datex_pointer_storage.setItem(pointer.id, <any>Compiler.encodeValue(pointer, inserted_ptrs, true, false, true));
-        return inserted_ptrs;
+		const dependencies = new Set<Pointer>();
+        await datex_pointer_storage.setItem(pointer.id, <any>Compiler.encodeValue(pointer, dependencies, true, false, true));
+        return dependencies;
 	}
 	async getPointerValue(pointerId: string, outer_serialized: boolean, conditions: ExecConditions): Promise<unknown> {
 		const buffer = <ArrayBuffer><any>await datex_pointer_storage.getItem(pointerId);
