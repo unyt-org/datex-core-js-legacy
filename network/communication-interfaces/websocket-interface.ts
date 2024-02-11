@@ -51,7 +51,7 @@ export abstract class WebSocketInterface extends CommunicationInterface<WebSocke
                 let connectionOpen = false;
                 const errorHandler = () => {
                     // don't trigger any further errorHandlers
-                    webSocket.removeEventListener('close', errorHandler);
+                    // webSocket.removeEventListener('close', errorHandler);
                     webSocket.removeEventListener('error', errorHandler);
 
                     this.#webSockets.delete(webSocket);
@@ -80,7 +80,7 @@ export abstract class WebSocketInterface extends CommunicationInterface<WebSocke
 
                 webSocket.addEventListener('open', openHandler);
                 webSocket.addEventListener('error', errorHandler);
-                webSocket.addEventListener('close', errorHandler);
+                // webSocket.addEventListener('close', errorHandler);
 
                 this.#webSockets.set(webSocket, {
                     errorHandler,
@@ -108,7 +108,7 @@ export abstract class WebSocketInterface extends CommunicationInterface<WebSocke
             try {
                 webSocket.removeEventListener('open', openHandler);
                 webSocket.removeEventListener('error', errorHandler);
-                webSocket.removeEventListener('close', errorHandler);
+                // webSocket.removeEventListener('close', errorHandler);
                 webSocket.close();
             }
             catch {}
