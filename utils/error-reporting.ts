@@ -11,6 +11,7 @@ export async function sendReport(identifier: string, reportData:Record<string,an
 		identifier,
 		timestamp: new Date(),
 		metadata: {
+			endpoint: Runtime.endpoint.toString(),
 			datexcoreVersion: Runtime.VERSION,
 			uixVersion: globalThis.UIX?.version,
 			denoVersion: globalThis.Deno?.version.deno,
