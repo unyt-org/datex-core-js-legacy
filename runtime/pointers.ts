@@ -4226,6 +4226,12 @@ export class Pointer<T = any> extends Ref<T> {
     // if identifier is set, further updates to the same identifier are overwritten
     async handleDatexUpdate(identifier:string|null, datex:string|PrecompiledDXB, data:any[], receiver:endpoints, collapse_first_inserted = false, stream_abort_signal?: AbortSignal){
         
+        // cannot send updates as @@local
+        if (Runtime.endpoint == LOCAL_ENDPOINT) {
+            logger.warn("Skipped DATEX update " + this.idString() + " (" + identifier + ")" + " to " + receiver + ", own endpoint is @@local");
+            return;
+        }
+
         // let schedulter handle updates (cannot throw errors)
         if (this.#scheduler) {
             this.#scheduler.addUpdate(this, identifier, datex, data, receiver, collapse_first_inserted);
