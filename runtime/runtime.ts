@@ -1128,7 +1128,7 @@ export class Runtime {
      * @returns result of the redirected DATEX 
      */
     static redirectDatex(datex:ArrayBuffer, header:dxb_header, wait_for_result=true, socket?:CommunicationInterfaceSocket):Promise<any> {
-        logger.debug("redirect " + (ProtocolDataType[header.type]) + " " + header.sid + " > " + Runtime.valueToDatexString(header.routing.receivers) + ", ttl="+ (header.routing?.ttl));
+        logger.debug("redirect " + (ProtocolDataType[header.type]) + " " + header.sid + " " + header.sender + " > " + Runtime.valueToDatexString(header.routing.receivers) + ", ttl="+ (header.routing?.ttl));
         return this.datexOut(datex, header.routing.receivers, header.sid, wait_for_result, undefined, undefined, undefined, undefined, socket);
     }
 
