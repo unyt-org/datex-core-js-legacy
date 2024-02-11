@@ -1078,7 +1078,7 @@ export class Runtime {
                     .then(finish)
                     .catch(e => {
                         if (wait_for_result) reject(e);
-                        else logger.debug("Error sending datex block to " + [...to].map(t=>t.toString()).join(", "));
+                        else logger.debug("Error sending datex block to " + [...to].map(t=>t.toString()).join(", ") + ": " + e.message);
                     });
 
             }

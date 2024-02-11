@@ -473,11 +473,11 @@ export class CommunicationHubHandler {
                     // sort by direct/indirect, direct first
                     this.sortGrouped(sockets, ([socket]) => socket.endpoint === endpoint ? 0 : 1, 1)
                 .map(sockets => 
-                    // sort by channelFactor, highest first
-                    this.sortGrouped(sockets, ([socket]) => socket.channelFactor, -1)
-                .map(sockets => 
                     // sort by distance, smallest first
                     this.sortGrouped(sockets, ([_, {distance}]) => distance, 1)
+                .map(sockets => 
+                    // sort by channelFactor, highest first
+                    this.sortGrouped(sockets, ([socket]) => socket.channelFactor, -1)
                 .map(sockets => 
                     // sort by knownSince, newest (highest) first
                     this.sortGrouped(sockets, ([_, {knownSince}]) => knownSince, -1)
