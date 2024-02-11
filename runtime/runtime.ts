@@ -1881,7 +1881,7 @@ export class Runtime {
             if (header.sender) header.sender.setOnline(true);
 
             if (header.type !== ProtocolDataType.GOODBYE && header.type !== ProtocolDataType.HELLO && header.sender && header.signed) {
-                Crypto.activateEndpoint(header.sender);
+                await Crypto.activateEndpoint(header.sender)
             }
 
             if (header.type === ProtocolDataType.GOODBYE && header.sender && !Crypto.public_keys.has(header.sender.main)) {
