@@ -1,7 +1,6 @@
 import { ReadableStream } from "../runtime/runtime.ts";
 import { Pointer } from "../runtime/pointers.ts";
 import type { datex_scope } from "../utils/global_types.ts";
-import { TypedArray } from "../utils/global_values.ts";
 import { StreamConsumer } from "./abstract_types.ts";
 import { Logger } from "../utils/logger.ts";
 
@@ -37,7 +36,12 @@ export class Stream<T = ArrayBuffer> implements StreamConsumer<T> {
             }
         }
 
-        this.controller?.enqueue(chunk);
+        try {
+            this.controller?.enqueue(chunk);
+        }
+        catch (e) {
+            console.error("stream write error", e);
+        }
     }
 
     async pipe(in_stream:Stream<T>|ReadableStream<T>, scope?: datex_scope) {
@@ -52,6 +56,7 @@ export class Stream<T = ArrayBuffer> implements StreamConsumer<T> {
 
     close() {
         this.controller?.close()
+        this.controller = undefined;
     }
 
     getReader() {
