@@ -28,3 +28,23 @@ function showOpenFilePickerPolyfill(options) {
 if (typeof globalThis.showOpenFilePicker !== 'function') {
     globalThis.showOpenFilePicker = showOpenFilePickerPolyfill
 }
+
+/* Polyfill for SaFaRi https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map/groupBy */
+Object.groupBy ??= function groupBy (iterable, callbackfn) {
+    const obj = Object.create(null)
+    let i = 0
+    for (const value of iterable) {
+      const key = callbackfn(value, i++)
+      key in obj ? obj[key].push(value) : (obj[key] = [value])
+    }
+    return obj
+}
+Map.groupBy ??= function groupBy (iterable, callbackfn) {
+    const map = new Map()
+    let i = 0
+    for (const value of iterable) {
+        const key = callbackfn(value, i++), list = map.get(key)
+        list ? list.push(value) : map.set(key, [value])
+    }
+    return map
+}
