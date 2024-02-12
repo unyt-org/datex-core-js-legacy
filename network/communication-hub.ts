@@ -12,6 +12,8 @@ import { ProtocolDataType } from "../compiler/protocol_types.ts";
 import { Crypto } from "../runtime/crypto.ts";
 import { IOHandler } from "../runtime/io_handler.ts";
 import { DATEX_ERROR } from "../types/error_codes.ts";
+import { LocalLoopbackInterfaceSocket } from  "./communication-interfaces/local-loopback-interface.ts";
+import { Datex } from "../mod.ts";
 
 export type DatexInData = {
     dxb: ArrayBuffer|ReadableStreamDefaultReader<Uint8Array>,
@@ -41,6 +43,10 @@ export class CommunicationHub {
     static get() {
         if (!this.#instance) this.#instance = new CommunicationHub()
         return this.#instance;
+    }
+
+    get connected() {
+        return this.handler.connected;
     }
 
     get defaultSocket() {
@@ -101,7 +107,29 @@ export class CommunicationHubHandler {
      * Interval for checking online status for indirect/direct socket endpoints
      */
     readonly CLEANUP_INTERVAL = 10 * 60 * 1000; // 10min
+    #connected = false;
+    get connected() {
+        return this.#connected;
+    }
+    private updateConnectionStatus() {
+        const isConnected = this.isConnected();
+        if (isConnected !== this.connected) {
+            this.#connected = isConnected;
+            this.#logger.info(`Connection status was changed. This endpoint (${Datex.Runtime.endpoint}) is ${isConnected ? "online" : "offline"}!`);
+        }
+    }
 
+    private isConnected() {
+        if (this.#defaultInterface?.getSockets().size) {
+            return true;
+        }
+        for (const socket of this.iterateSockets(true)) {
+            if (!(socket instanceof LocalLoopbackInterfaceSocket)) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     #logger = new Logger("CommunicationHub")
     
@@ -143,7 +171,7 @@ export class CommunicationHubHandler {
     }
 
     constructor() {
-        this.startCleanupInterval()
+        this.startCleanupInterval();
     }
 
     /** Public facing methods: **/
@@ -153,12 +181,14 @@ export class CommunicationHubHandler {
         const connected = await comInterface.init(COM_HUB_SECRET, timeout);
         if (connected && setAsDefault) this.setDefaultInterface(comInterface)
         if (!connected) this.#interfaces.delete(comInterface);
+        this.updateConnectionStatus();
         return connected
     }
 
     public async removeInterface(comInterface: CommunicationInterface) {
         this.#interfaces.delete(comInterface)
         await comInterface.deinit(COM_HUB_SECRET);
+        this.updateConnectionStatus();
     }
 
     public printStatus() {
@@ -292,7 +322,8 @@ export class CommunicationHubHandler {
         this.#endpointSockets.getAuto(endpoint).set(socket, dynamicProperties);
         // add to instances map if not main endpoint
         if (endpoint.main !== endpoint)	this.#activeEndpointInstances.getAuto(endpoint.main).add(endpoint);
-        this.sortSockets(endpoint)
+        this.sortSockets(endpoint);
+        this.updateConnectionStatus();
     }
 
     public unregisterSocket(socket: CommunicationInterfaceSocket, endpoint: Endpoint|undefined = socket.endpoint) {
@@ -326,6 +357,7 @@ export class CommunicationHubHandler {
             }
             this.#registeredSockets.delete(connectedSocket)
         }
+        this.updateConnectionStatus();
     }
 
     /**
@@ -398,7 +430,7 @@ export class CommunicationHubHandler {
 
     private setDefaultInterface(defaultInterface: CommunicationInterface) {
         this.#defaultInterface = defaultInterface
-        this.defaultSocket = defaultInterface.getSockets().values().next().value
+        this.defaultSocket = defaultInterface.getSockets().values().next().value;
     }
 
     /**
