@@ -247,7 +247,7 @@ export class Endpoint extends Target {
 	}
 
 	public async getProperty(key:unknown) {
-		if (!Datex.Supranet.connected && this !== Datex.Runtime.endpoint) {
+		if (!communicationHub.connected && this !== Datex.Runtime.endpoint) {
 			// logger.error("cannot get endpoint property");
 			return new UnresolvedEndpointProperty(this, key)
 		}
