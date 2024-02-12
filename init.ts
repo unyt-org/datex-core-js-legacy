@@ -15,6 +15,23 @@ import { Path } from "./utils/path.ts";
 import { communicationHub } from "./network/communication-hub.ts";
 import { LocalLoopbackInterface } from "./network/communication-interfaces/local-loopback-interface.ts";
 import { Crypto } from "./runtime/crypto.ts";
+import { sendReport } from "./utils/error-reporting.ts";
+
+
+if (client_type == "deno") {
+	globalThis.addEventListener("unhandledrejection", (e: PromiseRejectionEvent) => {
+		const error = e.reason instanceof Error ? 
+			{ message: e.reason.message, stack: e.reason.stack } : 
+			e.reason ?? e;
+		console.error("Uncaught promise:", e.promise, e.reason);
+
+		if (error?.message?.includes("BadResource") || error?.includes?.("BadResource")) {
+			e.preventDefault();
+			sendReport("unhandledrejection", e instanceof Error ? {message: e.message, stack: e.stack} : e)
+				.catch(console.error)
+		}
+	}); 
+}
 
 /**
  * Runtime init (sets ENV, storage, endpoint, ...)
@@ -100,6 +117,7 @@ export async function init() {
 		else Pointer.is_local = true;
 	})
 
+
 	// enable periodic pointer subscriber cleanup
 	Pointer.enablePeriodicSubscriberCleanup();
 
@@ -163,7 +181,7 @@ export async function init() {
 	// enables message logger when running with -v
 	if (verboseArg) MessageLogger.enable();
 
-	if (client_type == "deno") {
+	if (client_type == "deno" && !(globalThis as any).NO_INIT) {
 		const { clear } = await import("./utils/args.ts");
 		if (clear) {
 			await Storage.clearAndReload();
