@@ -1,6 +1,7 @@
 import { Compiler } from "../compiler/compiler.ts";
 import { sendDatexViaHTTPChannel } from "../network/datex-http-channel.ts";
 import { Runtime } from "../runtime/runtime.ts";
+import { LOCAL_ENDPOINT } from "../types/addressing.ts";
 import { getCallerInfo } from "../utils/caller_metadata.ts";
 import { logger } from "./global_values.ts";
 
@@ -24,7 +25,7 @@ export async function sendReport(identifier: string, reportData:Record<string,an
 	}
 
 	const dx = `#endpoint.Reporting.sendReport(?)`
-	const dxb = <ArrayBuffer> await Compiler.compile(dx, [report], {sign: false, encrypt: false});
+	const dxb = <ArrayBuffer> await Compiler.compile(dx, [report], {sign: false, encrypt: false, to: LOCAL_ENDPOINT});
 	sendDatexViaHTTPChannel(dxb, "https://status.unyt.org")
 }
 

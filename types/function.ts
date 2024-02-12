@@ -225,7 +225,7 @@ export class Function<T extends (...args: any) => any = (...args: any) => any> e
         const args_match = function_body?.match(/^[^(]*\(([^)]*)\)/)?.[1];
 
         if (!args_match?.length) return tuple;
-        const args_strings = args_match.split(",");
+        const args_strings = this.normalizeFunctionParams(args_match).split(",");
         if (args_strings) {
             for (let arg of args_strings) {
                 arg = arg.trim().split(/[ =]/)[0];
@@ -242,6 +242,32 @@ export class Function<T extends (...args: any) => any = (...args: any) => any> e
         }
 
         return tuple;
+    }
+
+    /**
+     * Normalizes a function params string, replacing destructuring with a single variable
+     */
+    private static normalizeFunctionParams(params: string) {
+        let scopes = 0;
+        let nestedIndex = undefined;
+
+        let i=0;
+        let varCount = 0;
+        for (const x of params) {            
+            if (x === "["||x === "{") scopes++;
+            if (x === "]"||x === "}") scopes--;
+            if (nestedIndex == undefined && scopes !== 0) {
+                nestedIndex = i;
+            }
+            else if(nestedIndex != undefined && scopes == 0) {
+                params = [...params].toSpliced(nestedIndex, i-nestedIndex+1, 'x_'+(varCount++)).join("")
+                i = nestedIndex
+                nestedIndex = undefined;
+            }
+            i++;
+        }
+        
+        return params;
     }
 
 
