@@ -1150,26 +1150,31 @@ function getMethodParams(target:Function, method_name:string, meta_param_index?:
     
     if (!(method_name in target)) return null;
 
-    let tuple = new Tuple();
-    let metadata:any[] = MetadataReflect.getMetadata && MetadataReflect.getMetadata("design:paramtypes", target, method_name);
+    const tuple = new Tuple();
+    const metadata:any[] = MetadataReflect.getMetadata && MetadataReflect.getMetadata("design:paramtypes", target, method_name);
 
     if (!metadata) return null;
 
     // get parmeters names from function body string
     const function_body:string = target[method_name]?.toString();
-    const args_strings = function_body?.match(/^[^(]*\(([^)]*)\)/)?.[1]?.split(",");
 
-    if (args_strings) {
-        for (let i=0;i<args_strings.length;i++) {
-            args_strings[i] = args_strings[i].trim().split(/[ =]/)[0];
-        }
+    const args_match = function_body?.match(/^[^(]*\(([^)]*)\)/)?.[1];
 
-        // add type metadata
-        let i = 0;
-        for (let arg of args_strings) {
-            if (meta_param_index != null && meta_param_index == i) {i++; continue} // skip meta param index
-            tuple.set(arg, metadata[i] ? Type.getClassDatexType(metadata[i]) : Type.std.Any);
-            i++;
+    if (args_match) {
+        const args_strings = normalizeFunctionParams(args_match)?.split(",");
+
+        if (args_strings) {
+            for (let i=0;i<args_strings.length;i++) {
+                args_strings[i] = args_strings[i].trim().split(/[ =]/)[0];
+            }
+    
+            // add type metadata
+            let i = 0;
+            for (const arg of args_strings) {
+                if (meta_param_index != null && meta_param_index == i) {i++; continue} // skip meta param index
+                tuple.set(arg, metadata[i] ? Type.getClassDatexType(metadata[i]) : Type.std.Any);
+                i++;
+            }
         }
     }
 
@@ -1178,6 +1183,30 @@ function getMethodParams(target:Function, method_name:string, meta_param_index?:
 function getMetaParamIndex(target:Function, method_name:string):number {
     return target[METADATA]?.[Decorators.META_INDEX]?.public?.[method_name] ??
         (MetadataReflect.getMetadata && MetadataReflect.getMetadata("unyt:meta", target, method_name));
+}
+
+// TODO: refactor, merge with parser in function.ts
+function normalizeFunctionParams(params: string) {
+    let scopes = 0;
+    let nestedIndex = undefined;
+
+    let i=0;
+    let varCount = 0;
+    for (const x of params) {            
+        if (x === "["||x === "{") scopes++;
+        if (x === "]"||x === "}") scopes--;
+        if (nestedIndex == undefined && scopes !== 0) {
+            nestedIndex = i;
+        }
+        else if(nestedIndex != undefined && scopes == 0) {
+            params = [...params].toSpliced(nestedIndex, i-nestedIndex+1, 'x_'+(varCount++)).join("")
+            i = nestedIndex
+            nestedIndex = undefined;
+        }
+        i++;
+    }
+    
+    return params;
 }
 
 
