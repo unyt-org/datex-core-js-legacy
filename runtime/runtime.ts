@@ -5389,7 +5389,7 @@ export class Runtime {
 
         // workaround using decompiler:
         // pre-extract all pointers from script and pre-fetch pointer origin online states
-        if (Supranet.connected) {
+        if (communicationHub.connected) {
             try {
                 const content = MessageLogger.decompile(SCOPE.buffer_views.buffer, false, false)
                 const origins = [
