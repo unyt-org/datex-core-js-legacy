@@ -70,19 +70,16 @@ export class Supranet {
         if (alreadyConnected && endpoint === Runtime.endpoint) {
             if (shouldSwitchInstance) await this.handleSwitchToInstance()
             logger.success("Connected to the supranet as " + endpoint)
-            // this.#connected = true;
             return true;
         }
 
         if (alreadyConnected) {
             if (shouldSwitchInstance) await this.handleSwitchToInstance();
-            // this.#connected = true;
             return true;
         }
         else {
             const connected = await this._connect(via_node, !shouldSwitchInstance);
             if (shouldSwitchInstance) await this.handleSwitchToInstance()
-            this.#connected = connected;
             return connected;
         }
 
@@ -135,13 +132,11 @@ export class Supranet {
                 endpoint_config.endpoint = instance;
                 endpoint_config.save();
                 logger.success("Switched to endpoint instance " + instance)
-                this.#connected = true;
                 this.handleConnect();
                 return true;
             }
             catch {
                 logger.error("Could not determine endpoint instance (request error)");
-                // this.#connected = true;
                 this.handleConnect();
             }
         }
@@ -161,7 +156,7 @@ export class Supranet {
         // TODO: (does not work because response never reaches endpoint if valid endpoint already exists in network)
         // Crypto.validateOwnKeysAgainstNetwork();
 
-        // this.#connected = connected;
+        this.#connected = connected;
 
         return connected;
     }
@@ -250,7 +245,7 @@ export class Supranet {
         if (endpoint instanceof UnresolvedEndpointProperty) {
             const tmp_endpoint = <Endpoint> Endpoint.get(Endpoint.createNewID());
             await this._init(tmp_endpoint, true, sign_keys, enc_keys, keys);
-            this.#connected = await this._connect();
+            await this._connect();
             const res = await endpoint.resolve(); 
             // use fallback tmp_endpoint if endpoint property is void
 
