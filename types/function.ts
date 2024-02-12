@@ -225,7 +225,6 @@ export class Function<T extends (...args: any) => any = (...args: any) => any> e
         const args_match = function_body?.match(/^[^(]*\(([^)]*)\)/)?.[1];
 
         if (!args_match?.length) return tuple;
-        console.log("normalize",args_match, function_body)
         const args_strings = this.normalizeFunctionParams(args_match).split(",");
         if (args_strings) {
             for (let arg of args_strings) {
