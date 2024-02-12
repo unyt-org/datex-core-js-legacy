@@ -8,6 +8,7 @@ import { Runtime } from "./runtime.ts";
 import { displayFatalError } from "./display.ts";
 import { Supranet } from "../network/supranet.ts";
 import { Compiler, to } from "../datex_all.ts";
+import { communicationHub } from "../network/communication-hub.ts";
 
 // crypto
 export const crypto = globalThis.crypto
@@ -286,7 +287,7 @@ export class Crypto {
      * Checks if the current public keys match the offical public keys for this endpoint
      */
     static async validateOwnKeysAgainstNetwork() {
-        if (!Supranet.connected) {
+        if (!communicationHub.connected) {
             logger.debug("Could not validate local keys against registered public keys, not connected to Supranet")
             return
         }
