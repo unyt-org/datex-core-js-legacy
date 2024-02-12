@@ -115,7 +115,7 @@ export class CommunicationHubHandler {
         const isConnected = this.isConnected();
         if (isConnected !== this.connected) {
             this.#connected = isConnected;
-            this.#logger.info(`Connection status was changed. This endpoint (${Datex.Runtime.endpoint}) is ${isConnected ? "online" : "offline"}!`);
+            this.#logger.debug(`Connection status was changed. This endpoint (${Datex.Runtime.endpoint}) is ${isConnected ? "online" : "offline"}!`);
         }
     }
 
