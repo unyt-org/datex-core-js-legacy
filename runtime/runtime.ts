@@ -77,6 +77,7 @@ import { deleteCookie, getCookie, setCookie } from "../utils/cookies.ts";
 import { addPersistentListener, removePersistentListener } from "../utils/persistent-listeners.ts";
 import { endpoint_config } from "./endpoint_config.ts";
 import type { DatexInData, DatexOutData } from "../network/communication-hub.ts";
+import { communicationHub } from "../network/communication-hub.ts";
 
 const mime = client_type === "deno" ? (await import("https://deno.land/x/mimetypes@v1.0.0/mod.ts")).mime : null;
 
