@@ -65,7 +65,9 @@ export class WindowInterface extends CommunicationInterface {
         // is parent document, has iframe
         if (window instanceof HTMLIFrameElement) {
             this.#isChild = false;
-            window.setAttribute("sandbox", "allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-top-navigation")
+            // Modifying the sandbox attr does not make sense since here
+            // since the src is already set and iframe is sandboxed on load
+            // window.setAttribute("sandbox", "allow-popups-to-escape-sandbox allow-modals allow-forms allow-popups allow-scripts allow-same-origin allow-top-navigation")
             this.#windowOrigin = new URL(window.src).origin;
             windowOriginURL = new URL(window.src);
             this.logger.debug("initializing as parent window, child iframe origin: " + this.#windowOrigin)
