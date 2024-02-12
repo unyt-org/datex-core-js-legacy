@@ -4228,7 +4228,7 @@ export class Pointer<T = any> extends Ref<T> {
         
         // cannot send updates as @@local
         if (Runtime.endpoint == LOCAL_ENDPOINT) {
-            logger.warn("Skipped DATEX update " + this.idString() + " (" + identifier + ")" + " to " + receiver + ", own endpoint is @@local");
+            logger.debug("Skipped DATEX update " + this.idString() + " (" + identifier + ")" + " to " + receiver + ", own endpoint is @@local");
             return;
         }
 
