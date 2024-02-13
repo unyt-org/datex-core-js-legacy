@@ -907,7 +907,7 @@ export class Storage {
     }
 
 
-    public static async getPointerKeys(location?:StorageLocation){
+    public static async getPointerIds(location?:StorageLocation){
 
 		// for specific location
 		if (location) return location.getPointerIds();
@@ -938,7 +938,7 @@ export class Storage {
 
         const promises = [];
         
-        for (const pointer_id of await this.getPointerKeys(from)) {
+        for (const pointer_id of await this.getPointerIds(from)) {
 			const buffer = await from.getPointerValueDXB(pointer_id);
 			if (!buffer) logger.error("could not copy empty pointer value: " + pointer_id)
 			else promises.push(to.setPointerValueDXB(pointer_id, buffer))
@@ -1291,7 +1291,7 @@ export class Storage {
 
     public static async getSnapshot(options: StorageSnapshotOptions = {internalItems: false, expandStorageMapsAndSets: true}) {
         const items = await this.createSnapshot(this.getItemKeys.bind(this), this.getItemDecompiled.bind(this));
-        const pointers = await this.createSnapshot(this.getPointerKeys.bind(this), this.getPointerDecompiledFromLocation.bind(this));
+        const pointers = await this.createSnapshot(this.getPointerIds.bind(this), this.getPointerDecompiledFromLocation.bind(this));
 
         // remove keys items that are unrelated to normal storage
         for (const [key] of items.snapshot) {
@@ -1319,18 +1319,30 @@ export class Storage {
                     }
                     if (ptr.val instanceof StorageMap) {
                         const map = ptr.val;
+                        const keyIterator = await this.getItemKeysStartingWith((map as any)._prefix)
                         let inner = "";
-                        for await (const [key, val] of map) {
-                            inner += `   ${Runtime.valueToDatexStringExperimental(key, true, true)}\x1b[0m => ${Runtime.valueToDatexStringExperimental(val, true, true)}\n`
+                        for await (const key of keyIterator) {
+                            const valString = await this.getItemDecompiled(key, true, location);
+                            if (valString === NOT_EXISTING) {
+                                logger.error("Invalid entry in storage (" + location.name + "): " + key);
+                                continue;
+                            }
+                            inner += `   ${Runtime.valueToDatexStringExperimental(key, true, true)}\x1b[0m => ${valString}\n`
                         }
                         // substring: remove last \n
                         if (inner) storageMap.set(location, "\x1b[38;2;50;153;220m<StorageMap> \x1b[0m{\n"+inner.substring(0, inner.length-1)+"\x1b[0m\n}")
                     }
                     else if (ptr.val instanceof StorageSet) {
                         const set = ptr.val;
+                        const keyIterator = await this.getItemKeysStartingWith((set as any)._prefix)
                         let inner = "";
-                        for await (const val of set) {
-                            inner += `   ${Runtime.valueToDatexStringExperimental(val, true, true)},\n`
+                        for await (const key of keyIterator) {
+                            const valString = await this.getItemDecompiled(key, true, location);
+                            if (valString === NOT_EXISTING) {
+                                logger.error("Invalid entry in storage (" + location.name + "): " + key);
+                                continue;
+                            }
+                            inner += `   ${valString},\n`
                         }
                         // substring: remove last \n
                         if (inner) storageMap.set(location, "\x1b[38;2;50;153;220m<StorageSet> \x1b[0m{\n"+inner.substring(0, inner.length-1)+"\x1b[0m\n}")
