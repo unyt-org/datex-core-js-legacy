@@ -485,7 +485,7 @@ export class Decorators {
 
     /** @type(type:string|DatexType)/ (namespace:name)
      * sync class with type */
-    static type(value:any, name:context_name, kind:context_kind, is_static:boolean, is_private:boolean, setMetadata:context_meta_setter, getMetadata:context_meta_getter, params:[(string|Type)] = []) {
+    static type(value:any, name:context_name, kind:context_kind, is_static:boolean, is_private:boolean, setMetadata:context_meta_setter, getMetadata:context_meta_getter, params:[(string|Type|Class)] = []) {
         const type = normalizeType(params[0]);
         setMetadata(Decorators.FORCE_TYPE, type)
     }
@@ -571,7 +571,7 @@ export class Decorators {
  * @param allowTypeParams 
  * @returns 
  */
-function normalizeType(type:Type|string, allowTypeParams = true, defaultNamespace = "std") {
+function normalizeType(type:Type|string|Class, allowTypeParams = true, defaultNamespace = "std") {
     if (typeof type == "string") {
         // extract type name and parameters
         const [typeName, paramsString] = type.replace(/^\</,'').replace(/\>$/,'').match(/^((?:[\w-]+\:)?[\w-]*)(?:\((.*)\))?$/)?.slice(1) ?? [];
@@ -586,6 +586,11 @@ function normalizeType(type:Type|string, allowTypeParams = true, defaultNamespac
     else if (type instanceof Type) {
         if (!allowTypeParams && type.parameters?.length) throw new Error(`Type parameters not allowed (${type})`);
         return type
+    }
+    else if (typeof type == "function") {
+        const classType = Type.getClassDatexType(type)
+        if (!classType) throw new Error("Could not get a DATEX type for class " + type.name + ". Only @sync classes can be used as types");
+        return classType
     }
     else {
         console.error("invalid type",type)
