@@ -1,5 +1,5 @@
 import { Client } from "https://deno.land/x/mysql@v2.12.1/mod.ts";
-import { Query, replaceParams } from "https://deno.land/x/sql_builder@v1.9.2/mod.ts";
+import { Query } from "https://deno.land/x/sql_builder@v1.9.2/mod.ts";
 import { Where } from "https://deno.land/x/sql_builder@v1.9.2/where.ts";
 import { Pointer } from "../../runtime/pointers.ts";
 import { AsyncStorageLocation } from "../storage.ts";
@@ -12,6 +12,7 @@ import { client_type } from "../../utils/constants.ts";
 import { Compiler } from "../../compiler/compiler.ts";
 import { ExecConditions } from "../../utils/global_types.ts";
 import { Runtime } from "../../runtime/runtime.ts";
+import { Storage } from "../storage.ts";
 
 const logger = new Logger("SQL Storage");
 
@@ -29,28 +30,28 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 
 	readonly #metaTables = {
 		typeMapping: {
-			name: "datex_types",
+			name: "__datex_types",
 			columns: [
 				["type", "varchar(50)", "PRIMARY KEY"],
 				["table_name", "varchar(50)"]
 			]
 		},
 		pointerMapping: {
-			name: "datex_pointer_mapping",
+			name: "__datex_pointer_mapping",
 			columns: [
 				[this.#pointerMysqlColumnName, this.#pointerMysqlType, "PRIMARY KEY"],
 				["table_name", "varchar(50)"]
 			]
 		},
 		rawPointers: {
-			name: "datex_pointers_raw",
+			name: "__datex_pointers_raw",
 			columns: [
 				[this.#pointerMysqlColumnName, "varchar(50)", "PRIMARY KEY"],
 				["value", "blob"]
 			]
 		},
 		items: {
-			name: "datex_items",
+			name: "__datex_items",
 			columns: [
 				["key", "varchar(200)", "PRIMARY KEY"],
 				["value", "blob"]
@@ -163,6 +164,10 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 	}
 
 	async #getTableForType(type: Datex.Type) {
+
+		// type does not have a template, use raw pointer table
+		if (!type.template) return null
+
 		const existingTable = (await this.#queryFirst<{table_name: string}|undefined>(
 			new Query()
 				.table(this.#metaTables.typeMapping.name)
@@ -220,7 +225,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			}
 			// no matching primitive type found
 			else if (!mysqlType) {
-				let foreignTable = propType.template ? await this.#getTableForType(propType) : null;
+				let foreignTable = await this.#getTableForType(propType);
 
 				if (!foreignTable) {
 					logger.warn("Cannot map type " + propType + " to a SQL table, falling back to raw DXB storage")
@@ -293,8 +298,12 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		return this.#tableColumns.get(tableName)!;
 	}
 
+	/**
+	 * Insert a pointer into the database, pointer type must be templated
+	 */
 	async #insertPointer(pointer: Datex.Pointer) {
 		const table = await this.#getTableForType(pointer.type)
+		if (!table) throw new Error("Cannot store pointer of type " + pointer.type + " in a custom table")
 		const columns = await this.#getTableColumns(table);
 
 		const insertData:Record<string,unknown> = {
@@ -306,7 +315,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 				const propPointer = Datex.Pointer.getByValue(pointer.val[name]);
 				if (!propPointer) throw new Error("Cannot reference non-pointer value in SQL table")
 				insertData[name] = propPointer.id
-				await this.#insertPointer(propPointer)
+				await this.setPointer(propPointer, NOT_EXISTING)
 			}
 			else insertData[name] = pointer.val[name];
 		}
@@ -318,8 +327,12 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		await this.#updatePointerMapping(pointer.id, table)
 	}
 
+	/**
+	 * Update a pointer in the database, pointer type must be templated
+	 */
 	async #updatePointer(pointer: Datex.Pointer, keys:string[]) {
-		const table = await this.#getTableForType(pointer.type)
+		const table = await this.#getTableForType(pointer.type);
+		if (!table) throw new Error("Cannot store pointer of type " + pointer.type + " in a custom table")
 		const columns = await this.#getTableColumns(table);
 
 		for (const key of keys) {
@@ -328,9 +341,13 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		}
 	}
 
+	/**
+	 * Check if a pointer entry exists in the database
+	 */
 	async #pointerEntryExists(pointer: Datex.Pointer) {
 		const table = await this.#getTableForType(pointer.type)
-
+		// TODO: do we need to check if the pointer is actually in the table - if there
+		// is a table mapping entry, the pointer should be in the table
 		const exists = await this.#queryFirst<{COUNT:number}>(
 			`SELECT COUNT(*) as COUNT FROM ?? WHERE ??=?`, [
 				table,
@@ -341,6 +358,100 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		return (!!exists) && exists.COUNT > 0;
 	}
 
+	async #getTemplatedPointerValueString(pointerId: string, table?: string) {
+		table = table ?? await this.#getPointerTable(pointerId);
+		if (!table) {
+			logger.error("No table found for pointer " + pointerId);
+			return null;
+		}
+
+		const type = await this.#getTypeForTable(table);
+		if (!type) {
+			logger.error("No type found for table " + table);
+			return null;
+		}
+
+		const object = await this.#getTemplatedPointerObject(pointerId, table);
+		if (!object) return null;
+
+		// resolve foreign pointers
+		const foreignPointerPlaceholders: string[] = []
+		// const foreignPointerPlaceholderPromises: Promise<string | null>[] = []
+		for (const [colName, {foreignPtr}] of this.#tableColumns.get(table)!.entries()) {
+			// is an object type with a template
+			if (foreignPtr) {
+				if (typeof object[colName] == "string") {
+					const ptrId = object[colName] as string
+					object[colName] = `\u0001${foreignPointerPlaceholders.length}`
+					foreignPointerPlaceholders.push("$"+ptrId)
+				}
+				else {
+					logger.error("Cannot get pointer value for property " + colName + " in object " + pointerId + " - " + table)
+				}
+			}
+		}
+
+		// const foreignPointerPlaceholders = await Promise.all(foreignPointerPlaceholderPromises)
+
+		const objectString = Datex.Runtime.valueToDatexStringExperimental(object, false, false)
+			.replace(/"\u0001(\d+)"/g, (_, index) => foreignPointerPlaceholders[parseInt(index)]??"void")
+
+		return `${type.toString()} ${objectString}`
+	}
+
+	async #getTemplatedPointerObject(pointerId: string, table?: string) {
+		table = table ?? await this.#getPointerTable(pointerId);
+		if (!table) {
+			logger.error("No table found for pointer " + pointerId);
+			return null;
+		}
+		const object = await this.#queryFirst<Record<string,unknown>>(
+			new Query()
+				.table(table)
+				.select("*")
+				.where(Where.eq(this.#pointerMysqlColumnName, pointerId))
+				.build()
+		)
+		if (!object) return null;
+		const type = await this.#getTypeForTable(table);
+		if (!type) {
+			logger.error("No type found for table " + table);
+			return null;
+		}
+		return object;
+	}
+
+	async #getTemplatedPointerValueDXB(pointerId: string, table?: string) {
+		const string = await this.#getTemplatedPointerValueString(pointerId, table);
+		if (!string) return null;
+		console.log("string: " + string)
+		const compiled = await Compiler.compile(string, [], {sign: false, encrypt: false, to: Datex.Runtime.endpoint}, false) as ArrayBuffer;
+		return compiled
+	}
+
+	async #getPointerTable(pointerId: string) {
+		return (await this.#queryFirst<{table_name:string}>(
+			new Query()
+				.table(this.#metaTables.pointerMapping.name)
+				.select("table_name")
+				.where(Where.eq(this.#pointerMysqlColumnName, pointerId))
+				.build()
+		))?.table_name;
+	}
+
+	async #setPointerRaw(pointer: Pointer) {
+		console.log("storing raw pointer: " + Runtime.valueToDatexStringExperimental(pointer, true, true))
+		const dependencies = new Set<Pointer>()
+		const encoded = Compiler.encodeValue(pointer, dependencies, true, false, true);
+		await this.#query('INSERT INTO ?? ?? VALUES ? ON DUPLICATE KEY UPDATE value=?;', [this.#metaTables.rawPointers.name, [this.#pointerMysqlColumnName, "value"], [pointer.id, encoded], encoded])
+        // add to pointer mapping
+		await this.#updatePointerMapping(pointer.id, this.#metaTables.rawPointers.name)
+		return dependencies;
+	}
+
+	async #updatePointerMapping(pointerId: string, tableName: string) {
+		await this.#query('INSERT INTO ?? ?? VALUES ? ON DUPLICATE KEY UPDATE table_name=?;', [this.#metaTables.pointerMapping.name, [this.#pointerMysqlColumnName, "table_name"], [pointerId, tableName], tableName])
+	}
 
 	isSupported() {
 		return client_type === "deno";
@@ -440,27 +551,12 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			}
 		}
 
-		// no template, just add a raw DXB entry
+		// no template, just add a raw DXB entry, partial updates are not supported
 		else {
-			await this.setPointerRaw(pointer)
+			await this.#setPointerRaw(pointer)
 		}
 		
 		return dependencies;
-	}
-
-	async setPointerRaw(pointer: Pointer) {
-		console.log("storing raw pointer: " + Runtime.valueToDatexStringExperimental(pointer, true, true))
-		const dependencies = new Set<Pointer>()
-		const encoded = Compiler.encodeValue(pointer, dependencies, true, false, true);
-		await this.#query('INSERT INTO ?? ?? VALUES ? ON DUPLICATE KEY UPDATE value=?;', [this.#metaTables.rawPointers.name, [this.#pointerMysqlColumnName, "value"], [pointer.id, encoded], encoded])
-        // add to pointer mapping
-		await this.#updatePointerMapping(pointer.id, this.#metaTables.rawPointers.name)
-		// await datex_item_storage.setItem(key, Compiler.encodeValue(value, dependencies));
-		return dependencies;
-	}
-
-	async #updatePointerMapping(pointerId: string, tableName: string) {
-		await this.#query('INSERT INTO ?? ?? VALUES ? ON DUPLICATE KEY UPDATE table_name=?;', [this.#metaTables.pointerMapping.name, [this.#pointerMysqlColumnName, "table_name"], [pointerId, tableName], tableName])
 	}
 
 	async getPointerValue(pointerId: string, outer_serialized: boolean): Promise<unknown> {
@@ -499,7 +595,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 				// is an object type with a template
 				if (foreignPtr) {
 					if (typeof object[colName] == "string") {
-						object[colName] = await this.getPointerValue(object[colName] as string, false);
+						object[colName] = await Storage.getPointer(object[colName] as string);
 					}
 					else {
 						logger.error("Cannot get pointer value for property " + colName + " in object " + pointerId + " - " + table)
@@ -511,76 +607,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		}
 	}
 
-	async #getTemplatedPointerValueString(pointerId: string, table?: string) {
-		table = table ?? await this.#getPointerTable(pointerId);
-		if (!table) {
-			logger.error("No table found for pointer " + pointerId);
-			return null;
-		}
-
-		const type = await this.#getTypeForTable(table);
-		if (!type) {
-			logger.error("No type found for table " + table);
-			return null;
-		}
-
-		const object = await this.#getTemplatedPointerObject(pointerId, table);
-		if (!object) return null;
-
-		// resolve foreign pointers
-		const foreignPointerPlaceholders: string[] = []
-		// const foreignPointerPlaceholderPromises: Promise<string | null>[] = []
-		for (const [colName, {foreignPtr}] of this.#tableColumns.get(table)!.entries()) {
-			// is an object type with a template
-			if (foreignPtr) {
-				if (typeof object[colName] == "string") {
-					const ptrId = object[colName] as string
-					object[colName] = `\u0001${foreignPointerPlaceholders.length}`
-					foreignPointerPlaceholders.push("$"+ptrId)
-				}
-				else {
-					logger.error("Cannot get pointer value for property " + colName + " in object " + pointerId + " - " + table)
-				}
-			}
-		}
-
-		// const foreignPointerPlaceholders = await Promise.all(foreignPointerPlaceholderPromises)
-
-		const objectString = Datex.Runtime.valueToDatexStringExperimental(object, false, false)
-			.replace(/"\u0001(\d+)"/g, (_, index) => foreignPointerPlaceholders[parseInt(index)]??"void")
-
-		return `${type.toString()} ${objectString}`
-	}
-
-	async #getTemplatedPointerObject(pointerId: string, table?: string) {
-		table = table ?? await this.#getPointerTable(pointerId);
-		if (!table) {
-			logger.error("No table found for pointer " + pointerId);
-			return null;
-		}
-		const object = await this.#queryFirst<Record<string,unknown>>(
-			new Query()
-				.table(table)
-				.select("*")
-				.where(Where.eq(this.#pointerMysqlColumnName, pointerId))
-				.build()
-		)
-		if (!object) return null;
-		const type = await this.#getTypeForTable(table);
-		if (!type) {
-			logger.error("No type found for table " + table);
-			return null;
-		}
-		return object;
-	}
-
-	async #getTemplatedPointerValueDXB(pointerId: string, table?: string) {
-		const string = await this.#getTemplatedPointerValueString(pointerId, table);
-		if (!string) return null;
-		console.log("string: " + string)
-		const compiled = await Compiler.compile(string, [], {sign: false, encrypt: false, to: Datex.Runtime.endpoint}, false) as ArrayBuffer;
-		return compiled
-	}
+	
 
 	async removePointer(pointerId: string): Promise<void> {
 		// get table where pointer is stored
@@ -616,20 +643,17 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 
 	}
 
-	async #getPointerTable(pointerId: string) {
-		return (await this.#queryFirst<{table_name:string}>(
-			new Query()
-				.table(this.#metaTables.pointerMapping.name)
-				.select("table_name")
-				.where(Where.eq(this.#pointerMysqlColumnName, pointerId))
-				.build()
-		))?.table_name;
-	}
-
 	async setPointerValueDXB(pointerId: string, value: ArrayBuffer) {
-		await this.#query('INSERT INTO ?? ?? VALUES ? ON DUPLICATE KEY UPDATE value=?;', [this.#metaTables.rawPointers.name, [this.#pointerMysqlColumnName, "value"], [pointerId, value], value])
-		// add to pointer mapping
-		await this.#updatePointerMapping(pointerId, this.#metaTables.rawPointers.name)
+		// check if raw pointer, otherwise not yet supported
+		const table = await this.#getPointerTable(pointerId);
+		if (table == this.#metaTables.rawPointers.name) {
+			await this.#query('INSERT INTO ?? ?? VALUES ? ON DUPLICATE KEY UPDATE value=?;', [table, [this.#pointerMysqlColumnName, "value"], [pointerId, value], value])
+			// add to pointer mapping
+			await this.#updatePointerMapping(pointerId, this.#metaTables.rawPointers.name)
+		}
+		else {
+			logger.error("Setting raw dxb value for templated pointer is not yet supported in SQL storage (pointer: " + pointerId + ", table: " + table + ")");
+		}
 	}
 
 	async hasPointer(pointerId: string): Promise<boolean> {
