@@ -92,6 +92,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 	}
 
 	async #query<row=object>(query_string:string, query_params?:any[]): Promise<row[]> {
+		await this.#init();
 
 		// handle arraybuffers
 		if (query_params) {
@@ -330,20 +331,47 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 				.build()
 		));
 		console.log("encoded",encoded)
-		if (!encoded) return null;
-		else return Runtime.decodeValue(encoded, false, conditions);
+		if (!encoded.value) return null;
+		else return Runtime.decodeValue(encoded.value, false, conditions);
 	}
 
 	async hasItem(key:string) {
-		return false
+		const count = (await this.#queryFirst<{COUNT: number}>(
+			new Query()
+				.table(this.#metaTables.items.name)
+				.select("COUNT(*) as COUNT")
+				.where(Where.eq("key", key))
+				.build()
+		));
+		return count.COUNT > 0;
 	}
 
 	async getItemKeys() {
-		return function*(){}()
+		const keys = []/*await this.#query<{key:string}>(
+			new Query()
+				.table(this.#metaTables.items.name)
+				.select("key")
+				.build()
+		)*/
+		return function*(){
+			for (const {key} of keys) {
+				yield key;
+			} 
+		}()
 	}
 
 	async getPointerIds() {
-		return function*(){}()
+		const pointerIds = []/*await this.#query<{_ptr_id:string}>(
+			new Query()
+				.table(this.#metaTables.pointerMapping.name)
+				.select(this.#pointerMysqlColumnName)
+				.build()
+		)*/
+		return function*(){
+			for (const {_ptr_id} of pointerIds) {
+				yield _ptr_id;
+			} 
+		}()
 	}
 
 	async removeItem(key: string): Promise<void> {
