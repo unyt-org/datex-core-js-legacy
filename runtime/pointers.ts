@@ -129,7 +129,7 @@ export abstract class Ref<T = any> extends EventTarget {
             if (!pointer) throw new Error("Nested pointer properties are currently not supported");
         }
 
-        if (!(this instanceof Pointer)) throw new Error("Cannot use $, not a pointer");
+        if (!(pointer instanceof Pointer)) throw new Error("Cannot use $, not a pointer");
 
         handler.ownKeys = () => {
             return Reflect.ownKeys(pointer.val);
@@ -840,13 +840,21 @@ export type AnyObjectRef = {$: Record<string,unknown>, $$: Record<string,unknown
 export type WrappedPointerValue = number|string|boolean|bigint|URL|Endpoint
 
 // convert from any JS/DATEX value to minimal representation with reference
-export type MinimalJSRef<T, _C = CollapsedValue<T>> =
+// if a value is a object ref, it is converted to a Pointer<T>
+export type MinimalJSRefWithIndirectRef<T, _C = CollapsedValue<T>> =
     _C extends symbol ? symbol : (
         _C extends WrappedPointerValue ?
             PointerWithPrimitive<_C>: // keep pointer reference
             _C extends AnyObjectRef ?
                 Pointer<_C> : // pointer wrapper to keep indirect reference intact
                 ObjectRef<_C> // collapsed object
+    )
+
+export type MinimalJSRef<T, _C = CollapsedValue<T>> =
+    _C extends symbol ? symbol : (
+        _C extends WrappedPointerValue ?
+            PointerWithPrimitive<_C>: // keep pointer reference
+            ObjectRef<_C> // collapsed object
     )
 
 // return Pointer<T>&T for primitives (excluding boolean) and Pointer<T> otherwise

@@ -8,7 +8,7 @@ import { AsyncTransformFunction, CollapsedValue, CollapsedValueAdvanced, Decorat
 import { Datex } from "./mod.ts";
 import { PointerError } from "./types/errors.ts";
 import { IterableHandler } from "./utils/iterable-handler.ts";
-import { RestrictSameType } from "./runtime/pointers.ts";
+import { MinimalJSRefWithIndirectRef, RestrictSameType } from "./runtime/pointers.ts";
 
 
 /**
@@ -23,13 +23,13 @@ import { RestrictSameType } from "./runtime/pointers.ts";
  * y.val // 10
  * ```
  */
-export function always<T>(transform:SmartTransformFunction<T>, options?: SmartTransformOptions): MinimalJSRef<T> // return signature from Value.collapseValue(Pointer.smartTransform())
+export function always<T>(transform:SmartTransformFunction<T>, options?: SmartTransformOptions): MinimalJSRefWithIndirectRef<T> // return signature from Value.collapseValue(Pointer.smartTransform())
 /**
  * Shortcut for datex `always (...)`
  * @param script 
  * @param vars 
  */
-export function always<T=unknown>(script:TemplateStringsArray, ...vars:any[]): Promise<MinimalJSRef<T>>
+export function always<T=unknown>(script:TemplateStringsArray, ...vars:any[]): Promise<MinimalJSRefWithIndirectRef<T>>
 export function always(scriptOrJSTransform:TemplateStringsArray|SmartTransformFunction<any>, ...vars:any[]) {
     // js function
     if (typeof scriptOrJSTransform == "function") {
@@ -64,7 +64,7 @@ export function always(scriptOrJSTransform:TemplateStringsArray|SmartTransformFu
  * }
  * ```
  */
-export async function asyncAlways<T>(transform:SmartTransformFunction<T>, options?: SmartTransformOptions): Promise<MinimalJSRef<T>> { // return signature from Value.collapseValue(Pointer.smartTransform())
+export async function asyncAlways<T>(transform:SmartTransformFunction<T>, options?: SmartTransformOptions): Promise<MinimalJSRefWithIndirectRef<T>> { // return signature from Value.collapseValue(Pointer.smartTransform())
     // make sure handler is not an async function
     if (transform.constructor.name == "AsyncFunction") {
         throw new Error("asyncAlways cannot be used with async functions, but with functions returning a Promise")
