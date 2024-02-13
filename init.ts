@@ -21,13 +21,14 @@ import { sendReport } from "./utils/error-reporting.ts";
 if (client_type == "deno") {
 	globalThis.addEventListener("unhandledrejection", (e: PromiseRejectionEvent) => {
 		const error = e.reason instanceof Error ? 
-			{ message: e.reason.message, stack: e.reason.stack } : 
+			{ name: e.reason.name, message: e.reason.message, stack: e.reason.stack } : 
 			e.reason ?? e;
-		console.error("Uncaught promise:", e.promise, e.reason);
+		console.error("Uncaught promise:", e.promise);
 
-		if (error?.message?.includes("BadResource") || error?.includes?.("BadResource")) {
+		if (error?.message?.includes("BadResource") || error?.includes?.("BadResource") || error?.name === "BadResource") {
+			console.debug("Handeled rejection");
 			e.preventDefault();
-			sendReport("unhandledrejection", e instanceof Error ? {message: e.message, stack: e.stack} : e)
+			sendReport("unhandledrejection", error)
 				.catch(console.error)
 		}
 	}); 
