@@ -129,7 +129,7 @@ export abstract class Ref<T = any> extends EventTarget {
             if (!pointer) throw new Error("Nested pointer properties are currently not supported");
         }
 
-        if (!(this instanceof Pointer)) throw new Error("Cannot use $, not a pointer");
+        if (!(pointer instanceof Pointer)) throw new Error("Cannot use $, not a pointer");
 
         handler.ownKeys = () => {
             return Reflect.ownKeys(pointer.val);
