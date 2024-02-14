@@ -83,6 +83,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 	}
 
 	async #resetAll() {
+		
 		// drop all custom type tables
 		const tables = await this.#query<{table_name:string}>(
 			new Query()
@@ -90,13 +91,26 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 				.select("table_name")
 				.build()
 		)
-		const tableNames = tables.map(({table_name})=>'`'+table_name+'`')
-		await this.#query<{table_name:string}>(`DROP TABLE IF EXISTS ${tableNames.join(',')};`)
+		const tableNames = tables.map(({table_name})=>'`'+table_name+'`');
+
+		// TODO: better solution to handle drop with foreign constraints
+		// currently just runs multiple drop table queries on failure, which is not ideal
+		const iterations = 10;
+		for (let i = 0; i < iterations; i++) {
+			try {
+				await this.#query<{table_name:string}>(`DROP TABLE IF EXISTS ${tableNames.join(',')};`)
+				break;
+			}
+			catch (e) {
+				console.error("Failed to drop some tables due to foreign constraints, repeating", e)
+			}
+		}
 
 		// truncate meta tables
 		for (const table of Object.values(this.#metaTables)) {
 			await this.#query<{table_name:string}>(`TRUNCATE TABLE ${table.name};`)
 		}
+
 	}
 
 	async #query<row=object>(query_string:string, query_params?:any[]): Promise<row[]> {
@@ -116,7 +130,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			}
 		}
 		
-        console.log("QUERY: " + query_string, query_params)
+        console.debug("QUERY: " + query_string, query_params)
 
 		if (typeof query_string != "string") {console.error("invalid query:", query_string); throw new Error("invalid query")}
         if (!query_string) throw new Error("empty query");
@@ -163,6 +177,11 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			).join(', ')}${definition.constraints?.length ? ',' + definition.constraints.join(',') : ''});`, [definition.name])
 	}
 
+	/**
+	 * Returns the table name for a given type, creates a new table if it does not exist
+	 * @param type 
+	 * @returns 
+	 */
 	async #getTableForType(type: Datex.Type) {
 
 		// type does not have a template, use raw pointer table
@@ -193,12 +212,25 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		return Datex.Type.get(type.type)
 	}
 
+	/**
+	 * Returns the table name for a given type.
+	 * Does not validate if the table exists
+	 */
 	#typeToTableName(type: Datex.Type) {
 		return type.namespace=="ext" ? type.name : `${type.namespace}_${type.name}`;
 	}
 
 	#typeToString(type: Datex.Type) {
 		return type.namespace + ":" + type.name;
+	}
+
+	*#iterateTableColumns(type: Datex.Type) {
+		const table = this.#typeToTableName(type);
+		const columns = this.#tableColumns.get(table);
+		if (!columns) throw new Error("Table columns for type " + type + " are not loaded");
+		for (const data of columns) {
+			yield data
+		}
 	}
 
 	async #createTableForType(type: Datex.Type) {
@@ -208,7 +240,6 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		const constraints: ConstraintsDefinition[] = []
 
 		this.log?.("Creating table for type " + type)
-		console.log(type)
 
 		for (const [propName, propType] of Object.entries(type.template as {[key:string]:Datex.Type})) {
 			let mysqlType: mysql_data_type|undefined
@@ -306,6 +337,8 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		if (!table) throw new Error("Cannot store pointer of type " + pointer.type + " in a custom table")
 		const columns = await this.#getTableColumns(table);
 
+		const dependencies = new Set<Pointer>()
+
 		const insertData:Record<string,unknown> = {
 			[this.#pointerMysqlColumnName]: pointer.id
 		}
@@ -315,7 +348,9 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 				const propPointer = Datex.Pointer.getByValue(pointer.val[name]);
 				if (!propPointer) throw new Error("Cannot reference non-pointer value in SQL table")
 				insertData[name] = propPointer.id
-				await this.setPointer(propPointer, NOT_EXISTING)
+				// must immediately add entry for foreign constraint to work
+				await Storage.setPointer(propPointer, true)
+				dependencies.add(propPointer)
 			}
 			else insertData[name] = pointer.val[name];
 		}
@@ -325,6 +360,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 	
 		// add to pointer mapping
 		await this.#updatePointerMapping(pointer.id, table)
+		return dependencies;
 	}
 
 	/**
@@ -424,7 +460,6 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 	async #getTemplatedPointerValueDXB(pointerId: string, table?: string) {
 		const string = await this.#getTemplatedPointerValueString(pointerId, table);
 		if (!string) return null;
-		console.log("string: " + string)
 		const compiled = await Compiler.compile(string, [], {sign: false, encrypt: false, to: Datex.Runtime.endpoint}, false) as ArrayBuffer;
 		return compiled
 	}
@@ -440,7 +475,6 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 	}
 
 	async #setPointerRaw(pointer: Pointer) {
-		console.log("storing raw pointer: " + Runtime.valueToDatexStringExperimental(pointer, true, true))
 		const dependencies = new Set<Pointer>()
 		const encoded = Compiler.encodeValue(pointer, dependencies, true, false, true);
 		await this.#query('INSERT INTO ?? ?? VALUES ? ON DUPLICATE KEY UPDATE value=?;', [this.#metaTables.rawPointers.name, [this.#pointerMysqlColumnName, "value"], [pointer.id, encoded], encoded])
@@ -460,7 +494,6 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 	async setItem(key: string,value: unknown) {
 		const dependencies = new Set<Pointer>()
 		const encoded = Compiler.encodeValue(value, dependencies);
-		console.log("db set item", key)
 		await this.setItemValueDXB(key, encoded)
 		return dependencies;
 	}
@@ -529,40 +562,43 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 	}
 
 	async setPointer(pointer: Pointer<any>, partialUpdateKey: unknown|typeof NOT_EXISTING): Promise<Set<Pointer<any>>> {
-		const dependencies = new Set<Pointer>()
 
 		// is templatable pointer type
 		if (pointer.type.template) {
-			this.log?.("update " + pointer.id + " - " + pointer.type, partialUpdateKey, await this.#pointerEntryExists(pointer))
+			// this.log?.("update " + pointer.id + " - " + pointer.type, partialUpdateKey, await this.#pointerEntryExists(pointer))
 
 			// new full insert
-			if (!await this.#pointerEntryExists(pointer))
-				await this.#insertPointer(pointer)
+			if (partialUpdateKey === NOT_EXISTING || !await this.#pointerEntryExists(pointer)) {
+				return this.#insertPointer(pointer)
+			}
+			// partial update
 			else {
-				// partial update
-				if (partialUpdateKey !== NOT_EXISTING) {
-					if (typeof partialUpdateKey !== "string") throw new Error("invalid key type for SQL table: " + Datex.Type.ofValue(partialUpdateKey))
-					await this.#updatePointer(pointer, [partialUpdateKey])
+				if (typeof partialUpdateKey !== "string") throw new Error("invalid key type for SQL table: " + Datex.Type.ofValue(partialUpdateKey))
+				await this.#updatePointer(pointer, [partialUpdateKey])
+				const dependencies = new Set<Pointer>()
+				// add all pointer properties to dependencies
+				for (const [name, {foreignPtr}] of this.#iterateTableColumns(pointer.type)) {
+					if (foreignPtr) {
+						const ptr = Pointer.pointerifyValue(pointer.getProperty(name));
+						if (ptr instanceof Pointer) {
+							dependencies.add(ptr)
+						}
+					}
 				}
-				// full update
-				else {
-					// TODO
-				}
+				return dependencies;
 			}
 		}
 
 		// no template, just add a raw DXB entry, partial updates are not supported
 		else {
-			await this.#setPointerRaw(pointer)
+			return this.#setPointerRaw(pointer)
 		}
 		
-		return dependencies;
 	}
 
 	async getPointerValue(pointerId: string, outer_serialized: boolean): Promise<unknown> {
 		// get table where pointer is stored
 		const table = await this.#getPointerTable(pointerId);
-		console.log("table for pointer", pointerId, table)
 		if (!table) {
 			logger.error("No table found for pointer " + pointerId);
 			return null;
@@ -595,14 +631,13 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 				// is an object type with a template
 				if (foreignPtr) {
 					if (typeof object[colName] == "string") {
-						object[colName] = await Storage.getPointer(object[colName] as string);
+						object[colName] = await Storage.getPointer(object[colName] as string, true);
 					}
 					else {
 						logger.error("Cannot get pointer value for property " + colName + " in object " + pointerId + " - " + table)
 					}
 				}
 			}
-			console.log("Templateo",object)
 			return type.cast(object, undefined, undefined, false);
 		}
 	}
@@ -622,7 +657,6 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 	async getPointerValueDXB(pointerId: string): Promise<ArrayBuffer|null> {
 		// get table where pointer is stored
 		const table = await this.#getPointerTable(pointerId);
-		console.log("table for pointer", pointerId, table)
 
 		// is raw pointer
 		if (table == this.#metaTables.rawPointers.name) {
