@@ -13,6 +13,9 @@ import { Compiler } from "../../compiler/compiler.ts";
 import { ExecConditions } from "../../utils/global_types.ts";
 import { Runtime } from "../../runtime/runtime.ts";
 import { Storage } from "../storage.ts";
+import { Type } from "../../types/type.ts";
+import { TypedArray } from "../../utils/global_values.ts";
+import { MessageLogger } from "../../utils/message_logger.ts";
 
 const logger = new Logger("SQL Storage");
 
@@ -60,7 +63,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 	} satisfies Record<string, TableDefinition>;
 
 	// cached table columns
-	#tableColumns = new Map<string, Map<string, {foreignPtr:boolean}>>()
+	#tableColumns = new Map<string, Map<string, {foreignPtr:boolean, type:string}>>()
 
     constructor(options:dbOptions, private log?:(...args:unknown[])=>void) {
 		super()
@@ -256,15 +259,24 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			}
 			// no matching primitive type found
 			else if (!mysqlType) {
-				let foreignTable = await this.#getTableForType(propType);
 
-				if (!foreignTable) {
-					logger.warn("Cannot map type " + propType + " to a SQL table, falling back to raw DXB storage")
-					foreignTable = this.#metaTables.rawPointers.name;
+				// is a primitive type -> assume no pointer, just store as dxb inline
+				if (propType == Type.std.Any || propType.is_primitive || propType.is_js_pseudo_primitive ) {
+					logger.warn("Cannot map primitive type " + propType + " to a SQL table, falling back to raw DXB")
+					columns.push([propName, "blob"])
+				}
+				else {
+					let foreignTable = await this.#getTableForType(propType);
+
+					if (!foreignTable) {
+						logger.warn("Cannot map type " + propType + " to a SQL table, falling back to raw pointer storage")
+						foreignTable = this.#metaTables.rawPointers.name;
+					}
+	
+					columns.push([propName, this.#pointerMysqlType])
+					constraints.push(`FOREIGN KEY (\`${propName}\`) REFERENCES \`${foreignTable}\`(\`${this.#pointerMysqlColumnName}\`)`)
 				}
 
-				columns.push([propName, this.#pointerMysqlType])
-				constraints.push(`FOREIGN KEY (\`${propName}\`) REFERENCES \`${foreignTable}\`(\`${this.#pointerMysqlColumnName}\`)`)
 			}
 
 			else {
@@ -309,11 +321,11 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 
 	async #getTableColumns(tableName: string) {
 		if (!this.#tableColumns.has(tableName)) {
-			const columnData = new Map<string, {foreignPtr: boolean}>()
-			const columns = await this.#query<{COLUMN_NAME:string, COLUMN_KEY:string}>(
+			const columnData = new Map<string, {foreignPtr: boolean, type: string}>()
+			const columns = await this.#query<{COLUMN_NAME:string, COLUMN_KEY:string, DATA_TYPE:string}>(
 				new Query()
 					.table("information_schema.columns")
-					.select("COLUMN_NAME", "COLUMN_KEY")
+					.select("COLUMN_NAME", "COLUMN_KEY", "DATA_TYPE")
 					.where(Where.eq("table_schema", this.#options.db))
 					.where(Where.eq("table_name", tableName))
 					.build()
@@ -321,7 +333,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 
 			for (const col of columns) {
 				if (col.COLUMN_NAME == this.#pointerMysqlColumnName) continue;
-				columnData.set(col.COLUMN_NAME, {foreignPtr: col.COLUMN_KEY == "MUL"})
+				columnData.set(col.COLUMN_NAME, {foreignPtr: col.COLUMN_KEY == "MUL", type: col.DATA_TYPE})
 			}
 
 			this.#tableColumns.set(tableName, columnData)
@@ -343,16 +355,29 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			[this.#pointerMysqlColumnName]: pointer.id
 		}
 
-		for (const [name, {foreignPtr}] of columns) {
+		for (const [name, {foreignPtr, type}] of columns) {
+			const value = pointer.val[name];
 			if (foreignPtr) {
-				const propPointer = Datex.Pointer.getByValue(pointer.val[name]);
-				if (!propPointer) throw new Error("Cannot reference non-pointer value in SQL table")
-				insertData[name] = propPointer.id
-				// must immediately add entry for foreign constraint to work
-				await Storage.setPointer(propPointer, true)
-				dependencies.add(propPointer)
+				const propPointer = Datex.Pointer.getByValue(value);
+				// no pointer value
+				if (!propPointer) {
+					// null values are okay, otherwise error
+					if (value !== undefined) {
+						logger.error("Cannot reference non-pointer value in SQL table")
+					}
+				}
+				else {
+					insertData[name] = propPointer.id
+					// must immediately add entry for foreign constraint to work
+					await Storage.setPointer(propPointer, true)
+					dependencies.add(propPointer)
+				}
 			}
-			else insertData[name] = pointer.val[name];
+			// is raw dxb value (exception for blob <->A rrayBuffer, TODO: better solution, can lead to issues)
+			else if (type == "blob" && !(value instanceof ArrayBuffer || value instanceof TypedArray)) {
+				insertData[name] = Compiler.encodeValue(value, dependencies, true, false, true);
+			}
+			else insertData[name] = value;
 		}
 		// this.log("cols", insertData)
 
@@ -372,7 +397,18 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		const columns = await this.#getTableColumns(table);
 
 		for (const key of keys) {
-			const val = columns.get(key)?.foreignPtr ? Datex.Pointer.getByValue(pointer.val[key])!.id : pointer.val[key];
+			const column = columns.get(key);
+			const val = 
+				column?.foreignPtr ?
+					// foreign pointer id
+					Datex.Pointer.getByValue(pointer.val[key])!.id : 
+					(
+						(column?.type == "blob" && !(pointer.val[key] instanceof ArrayBuffer || pointer.val[key] instanceof TypedArray)) ?
+							// raw dxb value
+							Compiler.encodeValue(pointer.val[key], new Set<Pointer>(), true, false, true) : 
+							// normal value
+							pointer.val[key]
+					)
 			await this.#query('UPDATE ?? SET ?? = ? WHERE ?? = ?;', [table, key, val, this.#pointerMysqlColumnName, pointer.id])
 		}
 	}
@@ -413,7 +449,15 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		// resolve foreign pointers
 		const foreignPointerPlaceholders: string[] = []
 		// const foreignPointerPlaceholderPromises: Promise<string | null>[] = []
-		for (const [colName, {foreignPtr}] of this.#tableColumns.get(table)!.entries()) {
+		const columns = await this.#getTableColumns(table);
+		if (!columns) throw new Error("No columns found for table " + table)
+		for (const [colName, {foreignPtr, type}] of columns.entries()) {
+
+			// convert blob strings to ArrayBuffer
+			if (type == "blob" && typeof object[colName] == "string") {
+				object[colName] = this.#stringToBinary(object[colName] as string)
+			}
+
 			// is an object type with a template
 			if (foreignPtr) {
 				if (typeof object[colName] == "string") {
@@ -425,12 +469,29 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 					logger.error("Cannot get pointer value for property " + colName + " in object " + pointerId + " - " + table)
 				}
 			}
+			// is blob, assume it is a DXB value
+			else if (type == "blob") {
+				object[colName] = `\u0001${foreignPointerPlaceholders.length}`
+				try {
+					// TODO: fix decompiling
+					foreignPointerPlaceholders.push(MessageLogger.decompile(object[colName] as ArrayBuffer, false, false, false)||"'error: empty'")
+				}
+				catch (e) {
+					console.error("error decompiling", object[colName], e)
+					foreignPointerPlaceholders.push("'error'")
+				}
+
+			}
 		}
 
 		// const foreignPointerPlaceholders = await Promise.all(foreignPointerPlaceholderPromises)
 
+		console.log("foreignPointerPlaceholders", foreignPointerPlaceholders)
+
 		const objectString = Datex.Runtime.valueToDatexStringExperimental(object, false, false)
-			.replace(/"\u0001(\d+)"/g, (_, index) => foreignPointerPlaceholders[parseInt(index)]??"void")
+			.replace(/"\u0001(\d+)"/g, (_, index) => foreignPointerPlaceholders[parseInt(index)]||"error: no placeholder")
+
+		console.log("objectString", objectString)
 
 		return `${type.toString()} ${objectString}`
 	}
@@ -627,7 +688,15 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			if (!object) return null;
 
 			// resolve foreign pointers
-			for (const [colName, {foreignPtr}] of this.#tableColumns.get(table)!.entries()) {
+			const columns = await this.#getTableColumns(table);
+			if (!columns) throw new Error("No columns found for table " + table)
+			for (const [colName, {foreignPtr, type}] of columns.entries()) {
+				
+				// convert blob strings to ArrayBuffer
+				if (type == "blob" && typeof object[colName] == "string") {
+					object[colName] = this.#stringToBinary(object[colName] as string)
+				}
+				
 				// is an object type with a template
 				if (foreignPtr) {
 					if (typeof object[colName] == "string") {
@@ -636,6 +705,10 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 					else {
 						logger.error("Cannot get pointer value for property " + colName + " in object " + pointerId + " - " + table)
 					}
+				}
+				// is blob, assume it is a DXB value
+				else if (type == "blob") {
+					object[colName] = await Runtime.decodeValue(object[colName] as ArrayBuffer, true);
 				}
 			}
 			return type.cast(object, undefined, undefined, false);
