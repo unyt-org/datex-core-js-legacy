@@ -17,6 +17,7 @@ import { StorageMap } from "../types/storage-map.ts";
 import { StorageSet } from "../types/storage-set.ts";
 import { IterableWeakSet } from "../utils/iterable-weak-set.ts";
 import { LazyPointer } from "../runtime/lazy-pointer.ts";
+import { AutoMap } from "../utils/auto_map.ts";
 
 
 // displayInit();
@@ -129,8 +130,18 @@ type storage_location_options<L extends StorageLocation> =
     L extends StorageLocation<infer T> ? storage_options<T> : never
 
 type StorageSnapshotOptions = {
+    /**
+     * Display all internally used items (e.g. for garbage collection)
+     */
     internalItems: boolean,
-    expandStorageMapsAndSets: boolean
+    /**
+     * List all items and pointers of storage maps and sets
+     */
+    expandStorageMapsAndSets: boolean,
+    /**
+     * Only display items (and related pointers) that contain the given string in their key
+     */
+    itemFilter?: string
 }
 
 export class Storage {
@@ -1289,9 +1300,15 @@ export class Storage {
 
     }
 
+    private static removeTrailingSemicolon(str:string) {
+        // replace ; and reset sequences with nothing
+        return str.replace(/;\x1b\[0m$/g, "")
+    }
+
     public static async getSnapshot(options: StorageSnapshotOptions = {internalItems: false, expandStorageMapsAndSets: true}) {
-        const items = await this.createSnapshot(this.getItemKeys.bind(this), this.getItemDecompiled.bind(this));
-        const pointers = await this.createSnapshot(this.getPointerIds.bind(this), this.getPointerDecompiledFromLocation.bind(this));
+        const allowedPointerIds = options.itemFilter ? new Set<string>() : undefined;
+        const items = await this.createSnapshot(this.getItemKeys.bind(this), this.getItemDecompiled.bind(this), options.itemFilter, allowedPointerIds);
+        const pointers = await this.createSnapshot(this.getPointerIds.bind(this), this.getPointerDecompiledFromLocation.bind(this), options.itemFilter, allowedPointerIds);
 
         // remove keys items that are unrelated to normal storage
         for (const [key] of items.snapshot) {
@@ -1304,6 +1321,9 @@ export class Storage {
                 else items.snapshot.delete(key);
             }
         }
+
+        // additional pointer entries from storage maps/sets
+        const additionalEntries = new Set<string>();
 
         // iterate over storage maps and sets and render all entries
         if (options.expandStorageMapsAndSets) {
@@ -1327,7 +1347,21 @@ export class Storage {
                                 logger.error("Invalid entry in storage (" + location.name + "): " + key);
                                 continue;
                             }
-                            inner += `   ${Runtime.valueToDatexStringExperimental(key, true, true)}\x1b[0m => ${valString}\n`
+                            const keyString = await this.getItemDecompiled('key.' + key, true, location);
+                            if (keyString === NOT_EXISTING) {
+                                logger.error("Invalid key in storage (" + location.name + "): " + key);
+                                continue;
+                            }
+                            inner += `   ${this.removeTrailingSemicolon(keyString)}\x1b[0m => ${this.removeTrailingSemicolon(valString)}\n`
+
+                            // additional pointer ids included in value or key
+                            if (allowedPointerIds) {
+                                const matches = [...valString.match(/\$[a-zA-Z0-9]+/g)??[], ...keyString.match(/\$[a-zA-Z0-9]+/g)??[]];
+                                for (const match of matches) {
+                                    const id = match.substring(1);
+                                    if (!allowedPointerIds.has(id)) additionalEntries.add(id);
+                                }
+                            }
                         }
                         // substring: remove last \n
                         if (inner) storageMap.set(location, "\x1b[38;2;50;153;220m<StorageMap> \x1b[0m{\n"+inner.substring(0, inner.length-1)+"\x1b[0m\n}")
@@ -1342,7 +1376,16 @@ export class Storage {
                                 logger.error("Invalid entry in storage (" + location.name + "): " + key);
                                 continue;
                             }
-                            inner += `   ${valString},\n`
+                            inner += `   ${this.removeTrailingSemicolon(valString)},\n`
+
+                            // additional pointer ids included in value
+                            if (allowedPointerIds) {
+                                const matches = valString.match(/\$[a-zA-Z0-9]+/g)??[];
+                                for (const match of matches) {
+                                    const id = match.substring(1);
+                                    if (!allowedPointerIds.has(id)) additionalEntries.add(id);
+                                }
+                            }
                         }
                         // substring: remove last \n
                         if (inner) storageMap.set(location, "\x1b[38;2;50;153;220m<StorageSet> \x1b[0m{\n"+inner.substring(0, inner.length-1)+"\x1b[0m\n}")
@@ -1351,26 +1394,67 @@ export class Storage {
             }
         }
 
+        if (additionalEntries.size > 0) {
+            await this.createSnapshot(this.getPointerIds.bind(this), this.getPointerDecompiledFromLocation.bind(this), options.itemFilter, additionalEntries, {
+                snapshot: pointers.snapshot,
+                inconsistencies: pointers.inconsistencies
+            });
+        }
+
         return {items, pointers}
     }
 
     private static async createSnapshot(
         keyGenerator: (location?: StorageLocation<Storage.Mode> | undefined) => Promise<Generator<string, void, unknown>>,
         itemGetter: (key: string, colorized: boolean, location: StorageLocation<Storage.Mode>) => Promise<string|symbol>,
+        filter?: string,
+        allowedPointerIds?: Set<string>,
+        baseSnapshot?: {
+            snapshot: AutoMap<string, Map<StorageLocation<Storage.Mode>, string>>;
+            inconsistencies: AutoMap<string, Map<StorageLocation<Storage.Mode>, string>>;
+        }
     ) {
-        const snapshot = new Map<string, Map<StorageLocation, string>>().setAutoDefault(Map);
-        const inconsistencies = new Map<string, Map<StorageLocation, string>>().setAutoDefault(Map);
+        const snapshot = baseSnapshot?.snapshot ?? new Map<string, Map<StorageLocation, string>>().setAutoDefault(Map);
+        const inconsistencies = baseSnapshot?.inconsistencies ?? new Map<string, Map<StorageLocation, string>>().setAutoDefault(Map);
+
+        const skippedEntries = new Set<string>();
+        const additionalEntries = new Set<string>();
+
         for (const location of new Set([this.#primary_location!, ...this.#locations.keys()].filter(l=>!!l))) {
             for (const key of await keyGenerator(location)) {
+                if (filter && !key.includes(filter) && !allowedPointerIds?.has(key)) {
+                    if (allowedPointerIds) skippedEntries.add(key); // remember skipped entries that might be added later
+                    continue;
+                }
                 const decompiled = await itemGetter(key, true, location);
+
                 if (typeof decompiled !== "string") {
                     console.error("Invalid entry in storage (" + location.name + "): " + key);
                     continue;
                 }
-                snapshot.getAuto(key).set(location, decompiled);
+
+                // collect referenced pointer ids
+                if (allowedPointerIds) {
+                    const matches = decompiled.match(/\$[a-zA-Z0-9]+/g);
+                    if (matches) {
+                        for (const match of matches) {
+                            const id = match.substring(1);
+                            if (skippedEntries.has(id)) additionalEntries.add(id);
+                            allowedPointerIds.add(id);
+                        }
+                    }
+                }
+                snapshot.getAuto(key).set(location, this.removeTrailingSemicolon(decompiled));
             }
         }
-
+        
+        // run again with additional entries
+        if (additionalEntries.size > 0) {
+            await this.createSnapshot(keyGenerator, itemGetter, filter, additionalEntries, {
+                snapshot,
+                inconsistencies
+            });
+        }
 
         // find inconsistencies
         for (const [key, storageMap] of snapshot) {

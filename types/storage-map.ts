@@ -4,9 +4,6 @@ import { Compiler } from "../compiler/compiler.ts";
 import { DX_PTR } from "../runtime/constants.ts";
 import { Pointer } from "../runtime/pointers.ts";
 import { Storage } from "../storage/storage.ts";
-import { Logger } from "../utils/logger.ts";
-
-const logger = new Logger("StorageMap");
 
 
 /**
@@ -20,10 +17,30 @@ export class StorageWeakMap<K,V> {
 
 	#prefix?: string;
 
+	/**
+	 * Time in milliseconds after which a value is removed from the in-memory cache
+	 * Default: 5min
+	 */
+	cacheTimeout = 5 * 60 * 1000;
+
+	/**
+	 * If true, non-pointer objects are allowed as 
+	 * values in the map (default)
+	 * Otherwise, object values are automatically proxified
+	 * when added to the map.
+	 */
+	allowNonPointerObjectValues = false;
+
+
 	constructor(){
 		Pointer.proxifyValue(this)
 	}
 
+	#_pointer?: Pointer;
+	get #pointer() {
+		if (!this.#_pointer) this.#_pointer = Pointer.getByValue(this);
+		return this.#_pointer;
+	}
 
 	static async from<K,V>(entries: readonly (readonly [K, V])[]){
 		const map = $$(new StorageWeakMap<K,V>());
@@ -67,15 +84,18 @@ export class StorageWeakMap<K,V> {
 		return this._set(storage_key, value);
 	}
 	protected _set(storage_key:string, value:V) {
+		// proxify value
+		if (!this.allowNonPointerObjectValues) {
+			value = this.#pointer.proxifyChild("", value);
+		}
 		this.activateCacheTimeout(storage_key);
 		return Storage.setItem(storage_key, value)
 	}
 
 	protected activateCacheTimeout(storage_key:string){
 		setTimeout(()=>{
-			logger.debug("removing item from cache: " + storage_key);
 			Storage.cache.delete(storage_key)
-		}, 60_000);
+		}, this.cacheTimeout);
 	}
 
 	protected async getStorageKey(key: K) {

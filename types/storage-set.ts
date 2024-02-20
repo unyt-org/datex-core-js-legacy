@@ -17,7 +17,27 @@ const logger = new Logger("StorageSet");
  */
 export class StorageWeakSet<V> {
 
+	/**
+	 * Time in milliseconds after which a value is removed from the in-memory cache
+	 * Default: 5min
+	 */
+	cacheTimeout = 5 * 60 * 1000;
+
+	/**
+	 * If true, non-pointer objects are allowed as 
+	 * values in the map (default)
+	 * Otherwise, object values are automatically proxified
+	 * when added to the map.
+	 */
+	allowNonPointerObjectValues = false;
+
 	#prefix?: string;
+
+	#_pointer?: Pointer;
+	get #pointer() {
+		if (!this.#_pointer) this.#_pointer = Pointer.getByValue(this);
+		return this.#_pointer;
+	}
 
 	constructor(){
 		Pointer.proxifyValue(this)
@@ -41,6 +61,10 @@ export class StorageWeakSet<V> {
 		return this;
 	}
 	protected _add(storage_key:string, value:V|null) {
+		// proxify value
+		if (!this.allowNonPointerObjectValues) {
+			value = this.#pointer.proxifyChild("", value);
+		}
 		this.activateCacheTimeout(storage_key);
 		return Storage.setItem(storage_key, value);
 	}
@@ -63,9 +87,8 @@ export class StorageWeakSet<V> {
 
 	protected activateCacheTimeout(storage_key:string){
 		setTimeout(()=>{
-			logger.debug("removing item from cache: " + storage_key);
 			Storage.cache.delete(storage_key)
-		}, 60_000);
+		}, this.cacheTimeout);
 	}
 
 	protected async getStorageKey(value: V) {

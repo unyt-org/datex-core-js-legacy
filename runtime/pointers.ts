@@ -3460,7 +3460,7 @@ export class Pointer<T = any> extends Ref<T> {
     }
 
     // proxify a (child) value, use the pointer context
-    private proxifyChild(name:string, value:unknown) {
+    proxifyChild(name:string, value:unknown) {
         if (NOT_EXISTING && !this.shadow_object) throw new Error("Cannot proxify child of non-object value");
         let child = value === NOT_EXISTING ? this.shadow_object![name] : value;
         
