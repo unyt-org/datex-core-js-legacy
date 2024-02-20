@@ -35,11 +35,40 @@ export const site_suffix = (()=>{
 })();
 
 
+export const comparatorKeys = [
+	"=", "!=", ">", ">=", "<", "<="
+] as const
+
+type _MatchInput<T> = T extends object ? 
+	{
+		[K in keyof T]?: MatchInputValue<T[K]>
+	} :
+	T|T[]
+type MatchInputValue<T> = 
+	_MatchInput<T>| // exact match
+	_MatchInput<T>[]| // or match
+	Partial<Record<typeof comparatorKeys[number], T>> // comparison matches
+
+export type MatchInput<T extends object> = MatchInputValue<T>
+
+
 
 export interface StorageLocation<SupportedModes extends Storage.Mode = Storage.Mode> {
     name: string
     isAsync: boolean
+    /**
+     * This storage location supports exec conditions for get operations
+     */
     supportsExecConditions?: boolean
+    /**
+     * This storage location supports prefix selection for get operations
+     */
+    supportsPrefixSelection?: boolean
+    /**
+     * This storage location supports match selection for get operations
+     * Must implement supportsMatchForType if true
+     */
+    supportsMatchSelection?: boolean
 
     isSupported(): boolean
     onAfterExit?(): void // called when deno process exits
@@ -51,7 +80,7 @@ export interface StorageLocation<SupportedModes extends Storage.Mode = Storage.M
     removeItem(key:string): Promise<void>|void
     getItemValueDXB(key:string): Promise<ArrayBuffer|null>|ArrayBuffer|null
     setItemValueDXB(key:string, value: ArrayBuffer):Promise<void>|void
-    getItemKeys(): Promise<Generator<string, void, unknown>> | Generator<string, void, unknown>
+    getItemKeys(prefix?:string): Promise<Generator<string, void, unknown>> | Generator<string, void, unknown>
 
     setPointer(pointer:Pointer, partialUpdateKey: unknown|typeof NOT_EXISTING): Promise<Set<Pointer>>|Set<Pointer>
     getPointerValue(pointerId:string, outer_serialized:boolean, conditions?:ExecConditions):Promise<unknown>|unknown
@@ -60,6 +89,9 @@ export interface StorageLocation<SupportedModes extends Storage.Mode = Storage.M
     getPointerIds(): Promise<Generator<string, void, unknown>> | Generator<string, void, unknown>
     getPointerValueDXB(pointerId:string): Promise<ArrayBuffer|null>|ArrayBuffer|null
     setPointerValueDXB(pointerId:string, value: ArrayBuffer):Promise<void>|void
+
+    supportsMatchForType?(type: Type): Promise<boolean>|boolean
+    matchQuery?<T extends object>(itemPrefix: string, valueType: Type<T>, match: MatchInput<T>, limit: number): Promise<T[]>|T[]
     clear(): Promise<void>|void
     
 }
@@ -74,7 +106,7 @@ export abstract class SyncStorageLocation implements StorageLocation<Storage.Mod
     abstract setItem(key: string,value: unknown): Set<Pointer>
     abstract getItem(key:string, conditions?:ExecConditions): Promise<unknown>|unknown
     abstract hasItem(key:string): boolean
-    abstract getItemKeys(): Generator<string, void, unknown>
+    abstract getItemKeys(prefix?:string): Generator<string, void, unknown>
 
     abstract removeItem(key: string): void
     abstract getItemValueDXB(key: string): ArrayBuffer|null
@@ -89,6 +121,9 @@ export abstract class SyncStorageLocation implements StorageLocation<Storage.Mod
     abstract setPointerValueDXB(pointerId:string, value: ArrayBuffer):void
     abstract hasPointer(pointerId: string): boolean
 
+    supportsMatchForType?(type: Type): |boolean
+    matchQuery?<T extends object>(itemPrefix: string, valueType: Type<T>, match: MatchInput<T>, limit: number): T[]
+
     abstract clear(): void
 }
 
@@ -102,7 +137,7 @@ export abstract class AsyncStorageLocation implements StorageLocation<Storage.Mo
     abstract setItem(key: string,value: unknown): Promise<Set<Pointer>>
     abstract getItem(key:string, conditions?:ExecConditions): Promise<unknown>
     abstract hasItem(key:string): Promise<boolean>
-    abstract getItemKeys(): Promise<Generator<string, void, unknown>>
+    abstract getItemKeys(prefix?:string): Promise<Generator<string, void, unknown>>
 
     abstract removeItem(key: string): Promise<void>
     abstract getItemValueDXB(key: string): Promise<ArrayBuffer|null> 
@@ -116,6 +151,9 @@ export abstract class AsyncStorageLocation implements StorageLocation<Storage.Mo
     abstract getPointerValueDXB(pointerId: string): Promise<ArrayBuffer|null>
     abstract setPointerValueDXB(pointerId:string, value: ArrayBuffer):Promise<void>
     abstract hasPointer(pointerId: string): Promise<boolean>
+
+    supportsMatchForType?(type: Type): Promise<boolean>
+    matchQuery?<T extends object>(itemPrefix: string, valueType: Type<T>, match: MatchInput<T>, limit: number): Promise<T[]>
 
     abstract clear(): Promise<void>
 }
@@ -416,6 +454,7 @@ export class Storage {
 
     static setItem(key:string, value:any, listen_for_pointer_changes = true, location:StorageLocation|null|undefined = this.#primary_location):Promise<boolean>|boolean {
         Storage.cache.set(key, value); // save in cache
+        console.warn("SETITEM",key,value)
 
         // cache deletion does not work, problems with storage item backup
         // setTimeout(()=>Storage.cache.delete(key), 10000);
@@ -873,16 +912,16 @@ export class Storage {
         return NOT_EXISTING;
     }
 
-    public static async getItemKeys(location?:StorageLocation){
+    public static async getItemKeys(location?:StorageLocation, prefix?: string){
 
 		// for specific location
-		if (location) return location.getItemKeys();
+		if (location) return location.getItemKeys(prefix);
 
 		// ... iterate over keys from all locations
 
 		const generators = [];
 		for (const location of this.#locations.keys()) {
-			generators.push(await location.getItemKeys())
+			generators.push(await location.getItemKeys(prefix))
 		}
 
         return (function*(){
@@ -900,7 +939,7 @@ export class Storage {
 
 
     public static async getItemKeysStartingWith(prefix:string, location?:StorageLocation) {
-        const keyIterator = await Storage.getItemKeys(location);
+        const keyIterator = await Storage.getItemKeys(location, prefix);
         return (function*(){
             for (const key of keyIterator) {
                 if (key.startsWith(prefix)) yield key;
@@ -909,12 +948,21 @@ export class Storage {
     }
 
     public static async getItemCountStartingWith(prefix:string, location?:StorageLocation) {
-        const keyIterator = await Storage.getItemKeys(location);
+        const keyIterator = await Storage.getItemKeys(location, prefix);
         let count = 0;
         for (const key of keyIterator) {
             if (key.startsWith(prefix)) count++;
         }
         return count
+    }
+
+    public static async supportsMatchQueries(type: Type) {
+        return (this.#primary_location?.supportsMatchSelection && await this.#primary_location?.supportsMatchForType!(type)) ?? false;
+    }
+
+    public static itemMatchQuery<T extends object>(itemPrefix: string, valueType:Type<T>, match: MatchInput<T>, limit = Infinity) {
+        if (!this.#primary_location?.supportsMatchSelection) return [];
+        return this.#primary_location.matchQuery!(itemPrefix, valueType, match, limit);
     }
 
 
@@ -992,6 +1040,7 @@ export class Storage {
 		const val = await location.getItem(key, conditions);
 		if (val == NOT_EXISTING) return NOT_EXISTING;
 
+        console.warn("GETFRMLOC",key,val)
 		Storage.cache.set(key, val);
 		await this.initItemFromTrustedLocation(key, val, location)
 
@@ -1000,7 +1049,7 @@ export class Storage {
 
     
     public static async hasItem(key:string, location?:StorageLocation):Promise<boolean> {
-
+        
         if (Storage.cache.has(key)) return true; // get from cache
  
         // try to find item at a storage location

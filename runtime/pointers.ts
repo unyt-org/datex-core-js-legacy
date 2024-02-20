@@ -29,8 +29,8 @@ import { IterableWeakMap } from "../utils/iterable-weak-map.ts";
 import { LazyPointer } from "./lazy-pointer.ts";
 import { ReactiveArrayMethods } from "../types/reactive-methods/array.ts";
 import { Assertion } from "../types/assertion.ts";
-import { StorageSet } from "../types/storage-set.ts";
 import { Storage } from "../storage/storage.ts";
+import { client_type } from "../utils/constants.ts";
 
 export type observe_handler<K=any, V extends RefLike = any> = (value:V extends RefLike<infer T> ? T : V, key?:K, type?:Ref.UPDATE_TYPE, transform?:boolean, is_child_update?:boolean, previous?: any, atomic_id?:symbol)=>void|boolean
 export type observe_options = {types?:Ref.UPDATE_TYPE[], ignore_transforms?:boolean, recursive?:boolean}
@@ -1285,6 +1285,18 @@ export class Pointer<T = any> extends Ref<T> {
     }
     public static get is_local() {return this.#is_local}
 
+    #createdInContext = true;
+    /**
+     * Indicates if the pointer was created in the current context
+     * or fetched (from storage or network)
+     */
+    public get createdInContext() {
+        return this.#createdInContext;
+    }
+    public set createdInContext(fetched: boolean) {
+        this.#createdInContext = fetched;
+    }
+
     /** 21 bytes address: 1 byte address type () 18/16 byte origin id - 2/4 byte origin instance - 4 bytes timestamp - 1 byte counter*/
     /**
      * Endpoint id types:
@@ -1462,6 +1474,9 @@ export class Pointer<T = any> extends Ref<T> {
 
         // get value if pointer value not yet loaded
         if (!pointer.#loaded) {
+
+            // was not created new in current context
+            pointer.createdInContext = false;
             
             // first try loading from storage
             let stored:any = NOT_EXISTING;
@@ -2710,7 +2725,8 @@ export class Pointer<T = any> extends Ref<T> {
         // potential storage pointer initialized
         Storage.providePointer(this);
 
-        if (this.isStored) {
+        // only in frontend, disabled for backend (TODO)
+        if (this.isStored && client_type == "browser") {
             // get subsriber caches
             Storage.getPointerSubscriberCache(this.id).then(cache => {
                 if (cache) {
@@ -3276,8 +3292,9 @@ export class Pointer<T = any> extends Ref<T> {
         // already subscribed
         if (this.subscribers.has(subscriber)) return;
 
-        // also store in subscriber cache
-        if (this.isStored) {
+        // also store in subscriber cache - only in frontend 
+        // (TODO: required for backend? currently disabled because backend is not stopped frequently, only leads to overhead)
+        if (this.isStored && client_type == "browser") {
             if (this.#subscriberCache) this.#subscriberCache.add(subscriber)
             else {
                 Storage.requestSubscriberCache(this.id).then(cache => {
@@ -3461,7 +3478,7 @@ export class Pointer<T = any> extends Ref<T> {
 
     // proxify a (child) value, use the pointer context
     proxifyChild(name:string, value:unknown) {
-        if (NOT_EXISTING && !this.shadow_object) throw new Error("Cannot proxify child of non-object value");
+        if (value === NOT_EXISTING && !this.shadow_object) throw new Error("Cannot proxify child of non-object value");
         let child = value === NOT_EXISTING ? this.shadow_object![name] : value;
         
         // special native function -> <Function> conversion;

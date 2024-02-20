@@ -39,6 +39,7 @@ export class StorageWeakMap<K,V> {
 	#_pointer?: Pointer;
 	get #pointer() {
 		if (!this.#_pointer) this.#_pointer = Pointer.getByValue(this);
+		if (!this.#_pointer) throw new Error(this.constructor.name + " not bound to a pointer")
 		return this.#_pointer;
 	}
 
@@ -88,6 +89,7 @@ export class StorageWeakMap<K,V> {
 		if (!this.allowNonPointerObjectValues) {
 			value = this.#pointer.proxifyChild("", value);
 		}
+		console.log("SET>",storage_key, value)
 		this.activateCacheTimeout(storage_key);
 		return Storage.setItem(storage_key, value)
 	}

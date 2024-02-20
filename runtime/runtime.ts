@@ -7208,7 +7208,8 @@ RuntimePerformance.createMeasureGroup("compile time", [
 
 // automatically sync newly added pointers if they are in the storage
 Pointer.onPointerAdded(async (pointer)=>{
-    if (await Storage.hasPointer(pointer)) {
+    // assume that already synced if createdInContext and stored in storage
+    if (!pointer.createdInContext && await Storage.hasPointer(pointer)) {
         Storage.syncPointer(pointer);
     }
 })
