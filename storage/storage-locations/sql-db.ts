@@ -17,6 +17,9 @@ import { Type } from "../../types/type.ts";
 import { TypedArray } from "../../utils/global_values.ts";
 import { MessageLogger } from "../../utils/message_logger.ts";
 import { Join } from "https://deno.land/x/sql_builder@v1.9.2/join.ts";
+import { LazyPointer } from "../../runtime/lazy-pointer.ts";
+import { MatchOptions } from "../storage.ts";
+import { MatchResult } from "../storage.ts";
 
 const logger = new Logger("SQL Storage");
 
@@ -399,7 +402,10 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		}
 		// this.log("cols", insertData)
 
-		await this.#query('INSERT INTO ?? ?? VALUES ?;', [table, Object.keys(insertData), Object.values(insertData)])
+		// replace if entry already exists
+
+		await this.#query('INSERT INTO ?? ?? VALUES ? ON DUPLICATE KEY UPDATE '+Object.keys(insertData).map((key) => `\`${key}\` = ?`).join(', '), [table, Object.keys(insertData), Object.values(insertData), ...Object.values(insertData)])
+		// await this.#query('INSERT INTO ?? ?? VALUES ?;', [table, Object.keys(insertData), Object.values(insertData)])
 	
 		// add to pointer mapping
 		await this.#updatePointerMapping(pointer.id, table)
@@ -522,7 +528,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 	async #getTemplatedPointerValueDXB(pointerId: string, table?: string) {
 		const string = await this.#getTemplatedPointerValueString(pointerId, table);
 		if (!string) return null;
-		const compiled = await Compiler.compile(string, [], {sign: false, encrypt: false, to: Datex.Runtime.endpoint}, false) as ArrayBuffer;
+		const compiled = await Compiler.compile(string, [], {sign: false, encrypt: false, to: Datex.Runtime.endpoint, preemptive_pointer_init: false}, false) as ArrayBuffer;
 		return compiled
 	}
 
@@ -557,34 +563,65 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		return client_type === "deno";
 	}
 
-	async supportsMatchForType(type: Datex.Type<any>): Promise<boolean> {
-		return (await this.#getTableForType(type)) != null;
+	supportsMatchForType(type: Datex.Type<any>) {
+		// only templated types are supported because they are stored in custom tables
+		return !!type.template
 	}
 
-	async matchQuery<T extends object>(itemPrefix: string, valueType: Datex.Type<T>, match: Datex.MatchInput<T>, limit: number): Promise<T[]> {
+	async matchQuery<T extends object, Options extends MatchOptions>(itemPrefix: string, valueType: Datex.Type<T>, match: Datex.MatchInput<T>, options: Options): Promise<MatchResult<T, Options>> {
 	  
 		const builder = new Query()
 			.table(this.#metaTables.items.name)
 			// .select(this.#pointerMysqlColumnName)
-			.select(`${this.#typeToTableName(valueType)}.${this.#pointerMysqlColumnName} as ptrId`)
+			.select(`SQL_CALC_FOUND_ROWS ${this.#typeToTableName(valueType)}.${this.#pointerMysqlColumnName} as ptrId`)
 			.where(Where.like("key", itemPrefix + "%"))
 			.join(
 				Join.left(this.#typeToTableName(valueType)).on(`${this.#metaTables.items.name}.${this.#pointerMysqlColumnName}`, `${this.#typeToTableName(valueType)}.${this.#pointerMysqlColumnName}`)
 			)
 
-		if (isFinite(limit)) builder.limit(0, limit)
+		// limit, do limit later if options.returnPointerIds
+		if (options && (options.limit !== undefined && isFinite(options.limit) && !options.returnPointerIds)) {
+			builder.limit(options.offset ?? 0, options.limit)
+		}
 			
 		const joins = new Map<string, Join>()
 		const where = this.buildQueryConditions(builder, match, joins, valueType)
 
-		builder.where(where);
+		if (where) builder.where(where);
 		joins.forEach(join => builder.join(join));
-			
-		const ptrIds = await this.#query<{ptrId:string}>(builder.build())
-		return Promise.all(ptrIds.map(({ptrId}) => Storage.getPointer(ptrId)))
+		
+		const ptrIds = (await this.#query<{ptrId:string}>(builder.build())).map(({ptrId}) => ptrId)
+		const limitedPtrIds = options.returnPointerIds ? 
+			// offset and limit manually after query
+			ptrIds.slice(options.offset ?? 0, options.limit ? (options.offset ?? 0) + options.limit : undefined) : 
+			// use ptrIds returned from query (already limited)
+			ptrIds	
+
+		// TODO: atomic operations for multiple queries
+		const {foundRows} = await this.#queryFirst<{foundRows: number}>("SELECT FOUND_ROWS() as foundRows") ?? {foundRows: -1}
+		console.log("foundRows", foundRows)
+
+		const result = new Set((await Promise.all(limitedPtrIds.map(ptrId => Pointer.load(ptrId)))).filter(ptr => {
+			if (ptr instanceof LazyPointer) {
+				logger.warn("Cannot return lazy pointer from match query (" + ptr.id + ")");
+				return false;
+			}
+			return true;
+		}).map(ptr => (ptr as Pointer).val as T))
+
+		if (options?.returnAdvanced) {
+			return {
+				matches: result,
+				total: foundRows,
+				...options?.returnPointerIds ? {pointerIds: new Set(ptrIds)} : {}
+			} as MatchResult<T, Options>;
+		}
+		else {
+			return result as MatchResult<T, Options>;
+		}
 	}
 
-	private buildQueryConditions(builder: Query, match: unknown, joins: Map<string, Join>, valueType:Type, namespacedKey?: string, previousKey?: string): Where {
+	private buildQueryConditions(builder: Query, match: unknown, joins: Map<string, Join>, valueType:Type, namespacedKey?: string, previousKey?: string): Where|undefined {
 
 		const matchOrs = match instanceof Array ? match : [match]
 		const entryIdentifier = previousKey ? previousKey + '.' + namespacedKey : namespacedKey // address.street
@@ -592,13 +629,12 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		let isPrimitiveArray = true;
 
 		for (const or of matchOrs) {
-			if (typeof or == "object") {
+			if (typeof or == "object" || or === null) {
 				isPrimitiveArray = false;
 				break;
 			}
 		}
 
-		
 		// only primitive array, use IN selector
 		if (isPrimitiveArray) {
 			if (!namespacedKey) throw new Error("missing namespacedKey");
@@ -610,11 +646,18 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			const wheresOr = []
 			for (const or of matchOrs) {
 
-				if (typeof or == "object") {
+				// regex
+				if (or instanceof RegExp) {
+					if (!namespacedKey) throw new Error("missing namespacedKey");
+					wheresOr.push(Where.expr(`${entryIdentifier!} REGEXP ?`, or.source))
+				}
+
+				else if (typeof or == "object" && or !== null) {
 
 					// is pointer
 					const ptr = Pointer.pointerifyValue(or);
 					if (ptr instanceof Pointer) {
+						if (!namespacedKey) throw new Error("missing namespacedKey");
 						wheresOr.push(Where.eq(entryIdentifier!, ptr.id))
 						continue;
 					}
@@ -629,19 +672,21 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 						valueType = valueType.template[namespacedKey];
 					}
 
-					const whereAnds = []
+					const whereAnds:Where[] = []
 					for (const [key, value] of Object.entries(or)) {
 						// const nestedKey = namespacedKey ? namespacedKey + "." + key : key; 
-						whereAnds.push(this.buildQueryConditions(builder, value, joins, valueType, key, namespacedKey))
+						const condition = this.buildQueryConditions(builder, value, joins, valueType, key, namespacedKey);
+						if (condition) whereAnds.push(condition)
 					}
-					wheresOr.push(Where.and(...whereAnds))
+					if (whereAnds.length > 1) wheresOr.push(Where.and(...whereAnds))
+					else if (whereAnds.length) wheresOr.push(whereAnds[0])
 				}
 				else {
 					if (!namespacedKey) throw new Error("missing namespacedKey");
 					wheresOr.push(Where.eq(entryIdentifier!, or))
 				}
 			}
-			return Where.or(...wheresOr)
+			if (wheresOr.length) return Where.or(...wheresOr)
 		}
 
 	}
@@ -727,7 +772,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 				.where(Where.eq("key", key))
 				.build()
 		));
-		if (encoded?.ptrId) return Compiler.compile(`$${encoded.ptrId}`, undefined, undefined, false) as Promise<ArrayBuffer>;
+		if (encoded?.ptrId) return Compiler.compile(`$${encoded.ptrId}`, undefined, {sign: false, encrypt: false, to: Datex.Runtime.endpoint, preemptive_pointer_init: false}, false) as Promise<ArrayBuffer>;
 		else if (encoded?.value) return this.#stringToBinary(encoded.value);
 		else return null;
 	}
@@ -818,7 +863,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 				// is an object type with a template
 				if (foreignPtr) {
 					if (typeof object[colName] == "string") {
-						object[colName] = await Storage.getPointer(object[colName] as string, true);
+						object[colName] = await Pointer.load(object[colName] as string);
 					}
 					else {
 						logger.error("Cannot get pointer value for property " + colName + " in object " + pointerId + " - " + table)

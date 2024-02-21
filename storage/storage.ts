@@ -39,11 +39,18 @@ export const comparatorKeys = [
 	"=", "!=", ">", ">=", "<", "<="
 ] as const
 
+type AtomicMatchInput<T> = T | 
+    (
+        T extends string ? 
+            RegExp :
+            never
+    )
+
 type _MatchInput<T> = T extends object ? 
 	{
 		[K in keyof T]?: MatchInputValue<T[K]>
 	} :
-	T|T[]
+	AtomicMatchInput<T>|AtomicMatchInput<T>[]
 type MatchInputValue<T> = 
 	_MatchInput<T>| // exact match
 	_MatchInput<T>[]| // or match
@@ -51,6 +58,48 @@ type MatchInputValue<T> =
 
 export type MatchInput<T extends object> = MatchInputValue<T>
 
+export type MatchOptions = {
+    /**
+     * Maximum number of matches to return
+     */
+    limit?: number,
+    /**
+     * Sort by key (e.g. address.street)
+     */
+    sortBy?: string,
+    /**
+     * Sort in descending order (only if sortBy is set)
+     */
+    sortDesc?: boolean,
+    /**
+     * Offset for match results
+     */
+    offset?: number,
+    /**
+     * Return advanced match results (e.g. total count of matches)
+     */
+    returnAdvanced?: boolean,
+    /**
+     * Return pointer ids of matched items
+     */
+    returnPointerIds?: boolean,
+}
+
+export type MatchResult<T, Options extends MatchOptions> = Options["returnAdvanced"] extends true ?
+    AdvancedMatchResult<T> & (
+        Options["returnPointerIds"] extends true ?
+            {
+                pointerIds: Set<string>
+            } :
+            unknown
+    ) :
+    Set<T>
+
+export type AdvancedMatchResult<T> = {
+    total: number,
+    pointerIds?: Set<string>,
+    matches: Set<T>
+}
 
 
 export interface StorageLocation<SupportedModes extends Storage.Mode = Storage.Mode> {
@@ -91,7 +140,7 @@ export interface StorageLocation<SupportedModes extends Storage.Mode = Storage.M
     setPointerValueDXB(pointerId:string, value: ArrayBuffer):Promise<void>|void
 
     supportsMatchForType?(type: Type): Promise<boolean>|boolean
-    matchQuery?<T extends object>(itemPrefix: string, valueType: Type<T>, match: MatchInput<T>, limit: number): Promise<T[]>|T[]
+    matchQuery?<T extends object, Options extends MatchOptions>(itemPrefix: string, valueType: Type<T>, match: MatchInput<T>, options:Options): Promise<MatchResult<T, Options>>|MatchResult<T, Options>
     clear(): Promise<void>|void
     
 }
@@ -121,8 +170,8 @@ export abstract class SyncStorageLocation implements StorageLocation<Storage.Mod
     abstract setPointerValueDXB(pointerId:string, value: ArrayBuffer):void
     abstract hasPointer(pointerId: string): boolean
 
-    supportsMatchForType?(type: Type): |boolean
-    matchQuery?<T extends object>(itemPrefix: string, valueType: Type<T>, match: MatchInput<T>, limit: number): T[]
+    supportsMatchForType?(type: Type): boolean
+    matchQuery?<T extends object, Options extends MatchOptions>(itemPrefix: string, valueType: Type<T>, match: MatchInput<T>, options:Options): MatchResult<T, Options>
 
     abstract clear(): void
 }
@@ -152,8 +201,8 @@ export abstract class AsyncStorageLocation implements StorageLocation<Storage.Mo
     abstract setPointerValueDXB(pointerId:string, value: ArrayBuffer):Promise<void>
     abstract hasPointer(pointerId: string): Promise<boolean>
 
-    supportsMatchForType?(type: Type): Promise<boolean>
-    matchQuery?<T extends object>(itemPrefix: string, valueType: Type<T>, match: MatchInput<T>, limit: number): Promise<T[]>
+    supportsMatchForType?(type: Type): Promise<boolean>|boolean
+    matchQuery?<T extends object, Options extends MatchOptions>(itemPrefix: string, valueType: Type<T>, match: MatchInput<T>, options:Options): Promise<MatchResult<T, Options>>
 
     abstract clear(): Promise<void>
 }
@@ -179,7 +228,11 @@ type StorageSnapshotOptions = {
     /**
      * Only display items (and related pointers) that contain the given string in their key
      */
-    itemFilter?: string
+    itemFilter?: string,
+    /**
+     * Only display general information about storage data, no items or pointers
+     */
+    onlyHeaders?: boolean
 }
 
 export class Storage {
@@ -454,7 +507,6 @@ export class Storage {
 
     static setItem(key:string, value:any, listen_for_pointer_changes = true, location:StorageLocation|null|undefined = this.#primary_location):Promise<boolean>|boolean {
         Storage.cache.set(key, value); // save in cache
-        console.warn("SETITEM",key,value)
 
         // cache deletion does not work, problems with storage item backup
         // setTimeout(()=>Storage.cache.delete(key), 10000);
@@ -468,21 +520,23 @@ export class Storage {
 
 	static async setItemAsync(location:AsyncStorageLocation, key: string, value: unknown,listen_for_pointer_changes: boolean) {
         this.setDirty(location, true)
+        const itemExisted = await location.hasItem(key);
         // store value (might be pointer reference)
         const dependencies = await location.setItem(key, value);
         if (Pointer.is_local) this.checkUnresolvedLocalDependenciesForItem(key, value, dependencies);
         this.updateItemDependencies(key, [...dependencies].map(p=>p.id));
         await this.saveDependencyPointersAsync(dependencies, listen_for_pointer_changes, location);
         this.setDirty(location, false)
-        return true;
+        return itemExisted;
 	}
 
 	static setItemSync(location:SyncStorageLocation, key: string, value: unknown,listen_for_pointer_changes: boolean) {
+        const itemExisted = location.hasItem(key);
         const dependencies = location.setItem(key, value);
         if (Pointer.is_local) this.checkUnresolvedLocalDependenciesForItem(key, value, dependencies);
         this.updateItemDependencies(key, [...dependencies].map(p=>p.id));
         this.saveDependencyPointersSync(dependencies, listen_for_pointer_changes, location);
-        return true;
+        return itemExisted;
 	}
 
     /**
@@ -960,9 +1014,10 @@ export class Storage {
         return (this.#primary_location?.supportsMatchSelection && await this.#primary_location?.supportsMatchForType!(type)) ?? false;
     }
 
-    public static itemMatchQuery<T extends object>(itemPrefix: string, valueType:Type<T>, match: MatchInput<T>, limit = Infinity) {
-        if (!this.#primary_location?.supportsMatchSelection) return [];
-        return this.#primary_location.matchQuery!(itemPrefix, valueType, match, limit);
+    public static itemMatchQuery<T extends object, Options extends MatchOptions>(itemPrefix: string, valueType:Type<T>, match: MatchInput<T>, options?:Options) {
+        options ??= {} as Options;
+        if (!this.#primary_location?.supportsMatchSelection) throw new Error("Primary storage location does not support match queries");
+        return this.#primary_location!.matchQuery!(itemPrefix, valueType, match, options);
     }
 
 
@@ -1040,7 +1095,6 @@ export class Storage {
 		const val = await location.getItem(key, conditions);
 		if (val == NOT_EXISTING) return NOT_EXISTING;
 
-        console.warn("GETFRMLOC",key,val)
 		Storage.cache.set(key, val);
 		await this.initItemFromTrustedLocation(key, val, location)
 
@@ -1069,6 +1123,9 @@ export class Storage {
 		else return false;
     }
 
+    /**
+     * Remove an item from storage, returns true if the item existed
+     */
     public static async removeItem(key:string, location?:StorageLocation):Promise<boolean> {
 
         logger.debug("Removing item '" + key + "' from storage" + (location ? " (" + location.name + ")" : ""))
@@ -1234,7 +1291,7 @@ export class Storage {
     }
 
 
-    public static async printSnapshot(options: StorageSnapshotOptions = {internalItems: false, expandStorageMapsAndSets: true}) {
+    public static async printSnapshot(options: StorageSnapshotOptions = {internalItems: false, expandStorageMapsAndSets: true, onlyHeaders: false}) {
         const {items, pointers} = await this.getSnapshot(options);
 
         const COLOR_PTR = `\x1b[38;2;${[65,102,238].join(';')}m`
@@ -1256,13 +1313,19 @@ export class Storage {
         string = ESCAPE_SEQUENCES.BOLD+"Pointers\n\n"+ESCAPE_SEQUENCES.RESET
         string += `${ESCAPE_SEQUENCES.ITALIC}A list of all pointers stored in any storage location. Pointers are only stored as long as they are referenced somewhere else in the storage.\n\n${ESCAPE_SEQUENCES.RESET}`
 
-        for (const [key, storageMap] of pointers.snapshot) {
-            // check if stored in all locations, otherwise print in which location it is stored (functional programming)
-            const locations = [...storageMap.keys()]
-            const storedInAll = [...this.#locations.keys()].every(l => locations.includes(l));
-            
-            const value = [...storageMap.values()][0];
-            string += `  • ${COLOR_PTR}$${key}${ESCAPE_SEQUENCES.GREY}${storedInAll ? "" : (` (only in ${locations.map(l=>l.name).join(",")})`)} = ${value.replaceAll("\n", "\n    ")}\n`
+        const pointersInMemory = [...pointers.snapshot.keys()].filter(id => Pointer.get(id)).length;
+        string += `\nTotal:     ${ESCAPE_SEQUENCES.BOLD}${pointers.snapshot.size}${ESCAPE_SEQUENCES.RESET} pointers`
+        string += `\nIn memory: ${ESCAPE_SEQUENCES.BOLD}${pointersInMemory}${ESCAPE_SEQUENCES.RESET} pointers\n\n`
+
+        if (!options.onlyHeaders) {
+            for (const [key, storageMap] of pointers.snapshot) {
+                // check if stored in all locations, otherwise print in which location it is stored (functional programming)
+                const locations = [...storageMap.keys()]
+                const storedInAll = [...this.#locations.keys()].every(l => locations.includes(l));
+                
+                const value = [...storageMap.values()][0];
+                string += `  • ${COLOR_PTR}$${key}${ESCAPE_SEQUENCES.GREY}${storedInAll ? "" : (` (only in ${locations.map(l=>l.name).join(",")})`)} = ${value.replaceAll("\n", "\n    ")}\n`
+            }
         }
         console.log(string+"\n");
 
@@ -1270,13 +1333,15 @@ export class Storage {
         string = ESCAPE_SEQUENCES.BOLD+"Items\n\n"+ESCAPE_SEQUENCES.RESET
         string += `${ESCAPE_SEQUENCES.ITALIC}A list of all named items stored in any storage location.\n\n${ESCAPE_SEQUENCES.RESET}`
 
-        for (const [key, storageMap] of items.snapshot) {
-            // check if stored in all locations, otherwise print in which location it is stored (functional programming)
-            const locations = [...storageMap.keys()]
-            const storedInAll = [...this.#locations.keys()].every(l => locations.includes(l));
-            
-            const value = [...storageMap.values()][0];
-            string += `  • ${key}${ESCAPE_SEQUENCES.GREY}${storedInAll ? "" : (` (only in ${locations.map(l=>l.name).join(",")})`)} = ${value}\n`
+        if (!options.onlyHeaders) {
+            for (const [key, storageMap] of items.snapshot) {
+                // check if stored in all locations, otherwise print in which location it is stored (functional programming)
+                const locations = [...storageMap.keys()]
+                const storedInAll = [...this.#locations.keys()].every(l => locations.includes(l));
+                
+                const value = [...storageMap.values()][0];
+                string += `  • ${key}${ESCAPE_SEQUENCES.GREY}${storedInAll ? "" : (` (only in ${locations.map(l=>l.name).join(",")})`)} = ${value}\n`
+            }
         }
         console.log(string+"\n");
 
@@ -1287,37 +1352,39 @@ export class Storage {
             let rc_string = ""
             let item_deps_string = ""
             let pointer_deps_string = ""
-            for (let i = 0, len = localStorage.length; i < len; ++i ) {
-                const key = localStorage.key(i)!;
-                if (key.startsWith(this.rc_prefix)) {
-                    const ptrId = key.substring(this.rc_prefix.length);
-                    const count = this.getReferenceCount(ptrId);
-                    rc_string += `\x1b[0m  • ${key} = ${COLOR_NUMBER}${count}\n`
-                }
-                else if (key.startsWith(this.item_deps_prefix)) {
-                    const depsRaw = localStorage.getItem(key);
-                    // single entry
-                    if (!depsRaw?.includes(",")) {
-                        item_deps_string += `\x1b[0m  • ${key} = (${COLOR_PTR}${depsRaw}\x1b[0m)\n`
+            if (!options.onlyHeaders) {
+                for (let i = 0, len = localStorage.length; i < len; ++i ) {
+                    const key = localStorage.key(i)!;
+                    if (key.startsWith(this.rc_prefix)) {
+                        const ptrId = key.substring(this.rc_prefix.length);
+                        const count = this.getReferenceCount(ptrId);
+                        rc_string += `\x1b[0m  • ${key} = ${COLOR_NUMBER}${count}\n`
                     }
-                    // multiple entries
-                    else {
-                        let deps = localStorage.getItem(key)!.split(",").join(`\x1b[0m,\n      ${COLOR_PTR}$`)
-                        if (deps) deps = `      ${COLOR_PTR}$`+deps
-                        item_deps_string += `\x1b[0m  • ${key} = (\n${COLOR_PTR}${deps}\x1b[0m\n    )\n`
+                    else if (key.startsWith(this.item_deps_prefix)) {
+                        const depsRaw = localStorage.getItem(key);
+                        // single entry
+                        if (!depsRaw?.includes(",")) {
+                            item_deps_string += `\x1b[0m  • ${key} = (${COLOR_PTR}${depsRaw}\x1b[0m)\n`
+                        }
+                        // multiple entries
+                        else {
+                            let deps = localStorage.getItem(key)!.split(",").join(`\x1b[0m,\n      ${COLOR_PTR}$`)
+                            if (deps) deps = `      ${COLOR_PTR}$`+deps
+                            item_deps_string += `\x1b[0m  • ${key} = (\n${COLOR_PTR}${deps}\x1b[0m\n    )\n`
+                        }
                     }
-                }
-                else if (key.startsWith(this.pointer_deps_prefix)) {
-                    const depsRaw = localStorage.getItem(key);
-                    // single entry
-                    if (!depsRaw?.includes(",")) {
-                        pointer_deps_string += `\x1b[0m  • ${key} = (${COLOR_PTR}${depsRaw}\x1b[0m)\n`
-                    }
-                    // multiple entries
-                    else {
-                        let deps = localStorage.getItem(key)!.split(",").join(`\x1b[0m,\n      ${COLOR_PTR}$`)
-                        if (deps) deps = `      ${COLOR_PTR}$`+deps
-                        pointer_deps_string += `\x1b[0m  • ${key} = (\n${COLOR_PTR}${deps}\x1b[0m\n    )\n`
+                    else if (key.startsWith(this.pointer_deps_prefix)) {
+                        const depsRaw = localStorage.getItem(key);
+                        // single entry
+                        if (!depsRaw?.includes(",")) {
+                            pointer_deps_string += `\x1b[0m  • ${key} = (${COLOR_PTR}${depsRaw}\x1b[0m)\n`
+                        }
+                        // multiple entries
+                        else {
+                            let deps = localStorage.getItem(key)!.split(",").join(`\x1b[0m,\n      ${COLOR_PTR}$`)
+                            if (deps) deps = `      ${COLOR_PTR}$`+deps
+                            pointer_deps_string += `\x1b[0m  • ${key} = (\n${COLOR_PTR}${deps}\x1b[0m\n    )\n`
+                        }
                     }
                 }
             }
@@ -1330,17 +1397,21 @@ export class Storage {
         if (pointers.inconsistencies.size > 0 || items.inconsistencies.size > 0) {
             string = ESCAPE_SEQUENCES.BOLD+"Inconsistencies\n\n"+ESCAPE_SEQUENCES.RESET
             string += `${ESCAPE_SEQUENCES.ITALIC}Inconsistencies between storage locations don't necessarily indicate that something is wrong. They can occur when a storage location is not updated immediately (e.g. when only using SAVE_ON_EXIT).\n\n${ESCAPE_SEQUENCES.RESET}`
-            for (const [key, storageMap] of pointers.inconsistencies) {
-                for (const [location, value] of storageMap) {
-                    string += `  • ${COLOR_PTR}$${key}${ESCAPE_SEQUENCES.GREY} (${(location.name+")").padEnd(15, " ")} = ${value.replaceAll("\n", "\n    ")}\n`
+            
+            
+            if (!options.onlyHeaders) {
+                for (const [key, storageMap] of pointers.inconsistencies) {
+                    for (const [location, value] of storageMap) {
+                        string += `  • ${COLOR_PTR}$${key}${ESCAPE_SEQUENCES.GREY} (${(location.name+")").padEnd(15, " ")} = ${value.replaceAll("\n", "\n    ")}\n`
+                    }
+                    string += `\n`
                 }
-                string += `\n`
-            }
-            for (const [key, storageMap] of items.inconsistencies) {
-                for (const [location, value] of storageMap) {
-                    string += `  • ${key}${ESCAPE_SEQUENCES.GREY} (${(location.name+")").padEnd(15, " ")} = ${value}`
+                for (const [key, storageMap] of items.inconsistencies) {
+                    for (const [location, value] of storageMap) {
+                        string += `  • ${key}${ESCAPE_SEQUENCES.GREY} (${(location.name+")").padEnd(15, " ")} = ${value}`
+                    }
+                    string += `\n`
                 }
-                string += `\n`
             }
 
             console.info(string+"\n");
@@ -1389,6 +1460,7 @@ export class Storage {
                     if (ptr.val instanceof StorageMap) {
                         const map = ptr.val;
                         const keyIterator = await this.getItemKeysStartingWith((map as any)._prefix)
+                        const pointerIds = new Set<string>();
                         let inner = "";
                         for await (const key of keyIterator) {
                             const valString = await this.getItemDecompiled(key, true, location);
@@ -1405,19 +1477,36 @@ export class Storage {
 
                             // additional pointer ids included in value or key
                             if (allowedPointerIds) {
-                                const matches = [...valString.match(/\$[a-zA-Z0-9]+/g)??[], ...keyString.match(/\$[a-zA-Z0-9]+/g)??[]];
-                                for (const match of matches) {
+                                const valMatches = valString.match(/\$[a-zA-Z0-9]+/g)??[]
+                                const keyMatches = keyString.match(/\$[a-zA-Z0-9]+/g)??[];
+
+                                for (const match of valMatches) {
+                                    const id = match.substring(1);
+                                    pointerIds.add(id)
+                                    if (!allowedPointerIds.has(id)) additionalEntries.add(id);
+                                }
+                                for (const match of keyMatches) {
                                     const id = match.substring(1);
                                     if (!allowedPointerIds.has(id)) additionalEntries.add(id);
+                                
                                 }
                             }
                         }
+
+                        // size in memory / total size
+                        const totalSize = await (ptr.val as StorageMap<unknown,unknown>).getSize();
+                        const totalDirectPointerSize = pointerIds.size;
+                        const inMemoryPointersSize= [...pointerIds].filter(id => Pointer.get(id)).length;
+                        const sizeInfo = `   ${ESCAPE_SEQUENCES.GREY}total size: ${totalSize}, in memory: ${inMemoryPointersSize}/${totalDirectPointerSize} pointers${ESCAPE_SEQUENCES.RESET}\n`
+
                         // substring: remove last \n
-                        if (inner) storageMap.set(location, "\x1b[38;2;50;153;220m<StorageMap> \x1b[0m{\n"+inner.substring(0, inner.length-1)+"\x1b[0m\n}")
+                        if (inner) storageMap.set(location, "\x1b[38;2;50;153;220m<StorageMap> \x1b[0m{\n"+sizeInfo+inner.substring(0, inner.length-1)+"\x1b[0m\n}")
                     }
                     else if (ptr.val instanceof StorageSet) {
                         const set = ptr.val;
                         const keyIterator = await this.getItemKeysStartingWith((set as any)._prefix)
+                        const pointerIds = new Set<string>();
+
                         let inner = "";
                         for await (const key of keyIterator) {
                             const valString = await this.getItemDecompiled(key, true, location);
@@ -1432,12 +1521,20 @@ export class Storage {
                                 const matches = valString.match(/\$[a-zA-Z0-9]+/g)??[];
                                 for (const match of matches) {
                                     const id = match.substring(1);
+                                    pointerIds.add(id)
                                     if (!allowedPointerIds.has(id)) additionalEntries.add(id);
                                 }
                             }
                         }
+
+                        // size in memory / total size
+                        const totalSize = await (ptr.val as StorageSet<unknown>).getSize();
+                        const totalDirectPointerSize = pointerIds.size;
+                        const inMemoryPointersSize= [...pointerIds].filter(id => Pointer.get(id)).length;
+                        const sizeInfo = `   ${ESCAPE_SEQUENCES.GREY}total size: ${totalSize}, in memory: ${inMemoryPointersSize}/${totalDirectPointerSize} pointers${ESCAPE_SEQUENCES.RESET}\n`
+
                         // substring: remove last \n
-                        if (inner) storageMap.set(location, "\x1b[38;2;50;153;220m<StorageSet> \x1b[0m{\n"+inner.substring(0, inner.length-1)+"\x1b[0m\n}")
+                        if (inner) storageMap.set(location, "\x1b[38;2;50;153;220m<StorageSet> \x1b[0m{\n"+sizeInfo+inner.substring(0, inner.length-1)+"\x1b[0m\n}")
                     }
                 }
             }

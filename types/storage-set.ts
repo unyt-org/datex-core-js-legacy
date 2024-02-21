@@ -3,8 +3,12 @@
 import { Compiler } from "../compiler/compiler.ts";
 import { DX_PTR } from "../runtime/constants.ts";
 import { Pointer } from "../runtime/pointers.ts";
-import { Storage } from "../storage/storage.ts";
+import { MatchResult, Storage } from "../storage/storage.ts";
 import { Logger } from "../utils/logger.ts";
+import { MatchInput, match } from "../utils/match.ts";
+import { Class } from "../utils/global_types.ts";
+import { MatchOptions } from "../utils/match.ts";
+import { Type } from "./type.ts";
 
 const logger = new Logger("StorageSet");
 
@@ -240,6 +244,10 @@ export class StorageSet<V> extends StorageWeakSet<V> {
 			const value = await Storage.getItem(key);
 			yield (<V> value);
 		}
+	}
+
+	match<Options extends MatchOptions, T extends V & object>(valueType:Class<T>|Type<T>, matchInput: MatchInput<T>, options?: Options): Promise<MatchResult<T, Options>> {
+		return match(this as unknown as StorageSet<T>, valueType, matchInput, options)
 	}
 
 }
