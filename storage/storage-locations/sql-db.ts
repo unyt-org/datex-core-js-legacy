@@ -20,6 +20,7 @@ import { Join } from "https://deno.land/x/sql_builder@v1.9.2/join.ts";
 import { LazyPointer } from "../../runtime/lazy-pointer.ts";
 import { MatchOptions } from "../storage.ts";
 import { MatchResult } from "../storage.ts";
+import { Time } from "../../types/time.ts";
 
 const logger = new Logger("SQL Storage");
 
@@ -241,6 +242,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 	 * Does not validate if the table exists
 	 */
 	#typeToTableName(type: Datex.Type) {
+		if (!type.template) throw new Error("Cannot create table for non-templated type " + type)
 		return type.namespace=="ext" ? type.name : `${type.namespace}_${type.name}`;
 	}
 
@@ -585,11 +587,17 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		}
 			
 		const joins = new Map<string, Join>()
-		const where = this.buildQueryConditions(builder, match, joins, valueType)
+		const collectedTableTypes = new Set<Type>([valueType])
+		const where = this.buildQueryConditions(builder, match, joins, collectedTableTypes, valueType)
 
 		if (where) builder.where(where);
 		joins.forEach(join => builder.join(join));
 		
+		// make sure all tables are created
+		for (const type of collectedTableTypes) {
+			await this.#getTableForType(type)
+		}
+
 		const ptrIds = (await this.#query<{ptrId:string}>(builder.build())).map(({ptrId}) => ptrId)
 		const limitedPtrIds = options.returnPointerIds ? 
 			// offset and limit manually after query
@@ -621,7 +629,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		}
 	}
 
-	private buildQueryConditions(builder: Query, match: unknown, joins: Map<string, Join>, valueType:Type, namespacedKey?: string, previousKey?: string): Where|undefined {
+	private buildQueryConditions(builder: Query, match: unknown, joins: Map<string, Join>, collectedTableTypes:Set<Type>, valueType:Type, namespacedKey?: string, previousKey?: string): Where|undefined {
 
 		const matchOrs = match instanceof Array ? match : [match]
 		const entryIdentifier = previousKey ? previousKey + '.' + namespacedKey : namespacedKey // address.street
@@ -629,7 +637,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		let isPrimitiveArray = true;
 
 		for (const or of matchOrs) {
-			if (typeof or == "object" || or === null) {
+			if (typeof or == "object" || or === null || or instanceof Date) {
 				isPrimitiveArray = false;
 				break;
 			}
@@ -652,7 +660,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 					wheresOr.push(Where.expr(`${entryIdentifier!} REGEXP ?`, or.source))
 				}
 
-				else if (typeof or == "object" && or !== null) {
+				else if (typeof or == "object" && !(or == null || or instanceof Date)) {
 
 					// is pointer
 					const ptr = Pointer.pointerifyValue(or);
@@ -664,6 +672,9 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 	
 					// only enter after first recursion
 					if (namespacedKey) {
+						collectedTableTypes.add(valueType);
+						collectedTableTypes.add(valueType.template[namespacedKey]);
+
 						const tableAName = this.#typeToTableName(valueType) + '.' + namespacedKey // User.address
 						const tableBName = this.#typeToTableName(valueType.template[namespacedKey]); // Address
 						const tableBIdentifier = namespacedKey + '.' + this.#pointerMysqlColumnName
@@ -675,7 +686,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 					const whereAnds:Where[] = []
 					for (const [key, value] of Object.entries(or)) {
 						// const nestedKey = namespacedKey ? namespacedKey + "." + key : key; 
-						const condition = this.buildQueryConditions(builder, value, joins, valueType, key, namespacedKey);
+						const condition = this.buildQueryConditions(builder, value, joins, collectedTableTypes, valueType, key, namespacedKey);
 						if (condition) whereAnds.push(condition)
 					}
 					if (whereAnds.length > 1) wheresOr.push(Where.and(...whereAnds))
@@ -855,9 +866,14 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			if (!columns) throw new Error("No columns found for table " + table)
 			for (const [colName, {foreignPtr, type}] of columns.entries()) {
 				
+				// custom conversions:
 				// convert blob strings to ArrayBuffer
 				if (type == "blob" && typeof object[colName] == "string") {
 					object[colName] = this.#stringToBinary(object[colName] as string)
+				}
+				// convert Date ot Time
+				else if (object[colName] instanceof Date) {
+					object[colName] = new Time(object[colName] as Date)
 				}
 				
 				// is an object type with a template
