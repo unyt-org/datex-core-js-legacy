@@ -174,6 +174,17 @@ export const UnitAliases = {
 } as const;
 
 
+export type UnitAliasUnits = {
+	[k in keyof typeof UnitAliases]: typeof UnitAliases[k][2]
+}
+
+// reverse mapping for all aliases of a unit e.g. Unit.SECOND -> "min" | "h" | "d" | "a" | "yr"
+export type UnitAliasesMap = {
+	[key in UnitAliasUnits[keyof UnitAliasUnits]]: {
+		[k in keyof UnitAliasUnits]: UnitAliasUnits[k] extends key ? k : never
+	}[keyof UnitAliasUnits]
+}
+
 
 // prefixes -----------------------------------------------------------------------------------------
 
@@ -282,8 +293,10 @@ export type unit_symbol = unit_base_symbol | keyof typeof UnitCodeBySymbolShortF
 export type unit_prefix = keyof typeof UnitPrefixCodeBySymbol;
 
 
-export type code_to_symbol = Combine<typeof UnitSymbol, typeof UnitSymbolShortFormsByCode>;
-export type symbol_to_code = Combine<typeof UnitCodeBySymbol, typeof UnitAliases>;
+export type code_to_symbol<C extends Unit> = typeof UnitSymbol[C] | typeof UnitSymbolShortFormsByCode[C & keyof typeof UnitSymbolShortFormsByCode];
+export type symbol_to_code = typeof UnitCodeBySymbol & UnitAliasUnits & typeof UnitCodeBySymbolShortForms;
 
-export type code_to_extended_symbol<C extends Unit = Unit> = C extends null ? string : code_to_symbol[C]|`${unit_prefix}${code_to_symbol[C]}`
+export type symbol_prefix_combinations<S extends string> = S|`${unit_prefix}${S}`
+
+export type code_to_extended_symbol<C extends Unit = Unit> = C extends null ? string : symbol_prefix_combinations<code_to_symbol<C>|UnitAliasesMap[C & keyof UnitAliasesMap]>
 export type symbol_with_prefix = unit_symbol|`${unit_prefix}${unit_symbol}`

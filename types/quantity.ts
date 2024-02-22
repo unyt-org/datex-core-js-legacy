@@ -38,7 +38,7 @@ type expanded_symbol = [factor_num:number|bigint, factor_den:number|bigint, unit
 
 
 // Quantity with unit
-export class Quantity<U extends Unit|undefined = undefined> {
+export class Quantity<U extends Unit = Unit> {
 
     static cached_binaries = new Map<string, ArrayBuffer>();
 
@@ -102,7 +102,7 @@ export class Quantity<U extends Unit|undefined = undefined> {
      * @param value can be a number, bigint, or string: '1.25', '1', '0.5e12', '1/10', or [numerator, denominator]
      * @param unit 
      */
-    constructor(value?:number|bigint|string|[num:number|bigint, den:number|bigint], unit?:U extends Unit ? code_to_extended_symbol<U> : unknown)
+    constructor(value?:number|bigint|string|[num:number|bigint, den:number|bigint], unit?:code_to_extended_symbol<U>)
     constructor(value?:number|bigint|string|[num:number|bigint, den:number|bigint], encoded_unit?:unit)
     constructor(value:number|bigint|string|[num:number|bigint, den:number|bigint] = 1, symbol_or_encoded_unit:string|unit = 'x') {
 
