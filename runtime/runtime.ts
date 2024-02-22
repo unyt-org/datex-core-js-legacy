@@ -32,7 +32,7 @@ import { BROADCAST, Endpoint, endpoints, IdEndpoint, LOCAL_ENDPOINT, Target, tar
 import { RuntimePerformance } from "./performance_measure.ts";
 import { NetworkError, PermissionError, PointerError, RuntimeError, SecurityError, ValueError, Error as DatexError, CompilerError, TypeError, SyntaxError, AssertionError } from "../types/errors.ts";
 import { Function as DatexFunction } from "../types/function.ts";
-import { Storage } from "../storage/storage.ts";
+import { MatchCondition, Storage } from "../storage/storage.ts";
 import { Observers } from "../utils/observers.ts";
 import { BinaryCode } from "../compiler/binary_codes.ts";
 import type { ExecConditions, trace, compile_info, datex_meta, datex_scope, dxb_header, routing_info } from "../utils/global_types.ts";
@@ -585,9 +585,9 @@ export class Runtime {
     }
 
     // get content of https://, file://, ...
-    public static async getURLContent<T=unknown, RAW extends boolean = false>(url_string:string, raw?:RAW, cached?:boolean):Promise<RAW extends false ? T : [data:unknown, type?:string]>
-    public static async getURLContent<T=unknown, RAW extends boolean = false>(url:URL, raw?:RAW, cached?:boolean):Promise<RAW extends false ? T : [data:unknown, type?:string]>
-    public static async getURLContent<T=unknown, RAW extends boolean = false>(url_string:string|URL, raw:RAW=false, cached = false):Promise<RAW extends false ? T : [data:unknown, type?:string]> {
+    public static async getURLContent<T=unknown, RAW extends boolean = false>(url_string:string, raw?:RAW, cached?:boolean, potentialDatexAsJsModule?: boolean):Promise<RAW extends false ? T : [data:unknown, type?:string]>
+    public static async getURLContent<T=unknown, RAW extends boolean = false>(url:URL, raw?:RAW, cached?:boolean, potentialDatexAsJsModule?:boolean):Promise<RAW extends false ? T : [data:unknown, type?:string]>
+    public static async getURLContent<T=unknown, RAW extends boolean = false>(url_string:string|URL, raw:RAW=false, cached = false, potentialDatexAsJsModule = true):Promise<RAW extends false ? T : [data:unknown, type?:string]> {
 
         if (url_string.toString().startsWith("route:") && window.location?.origin) url_string = new URL(url_string.toString().replace("route:", ""), window.location.origin)
 
@@ -609,11 +609,23 @@ export class Runtime {
 
         if (url.protocol == "https:" || url.protocol == "http:" || url.protocol == "blob:") {
             let response:Response|undefined = undefined;
+            let overrideContentType: string|undefined;
 
             let doFetch = true;
 
-            // possible js module import: fetch headers first and check content type:
-            if (!raw && (url_string.endsWith("js") || url_string.endsWith("ts") || url_string.endsWith("tsx") || url_string.endsWith("jsx") || url_string.endsWith("dx")  || url_string.endsWith("dxb"))) {
+
+            // exceptions to force potentialDatexAsJsModule (definitely dx files)
+            if (url_string.endsWith("/.dxb") || url_string.endsWith("/.dx") || url_string == "https://unyt.cc/nodes.dx") {
+                potentialDatexAsJsModule = false;
+            }
+
+            // js module import
+            if (!raw && (url_string.endsWith("js") || url_string.endsWith("ts") || url_string.endsWith("tsx") || url_string.endsWith("jsx"))) {
+                doFetch = false; // no body fetch required, can directly import() module
+                overrideContentType = "application/javascript"
+            }
+            // potential js module as dxb/dx: fetch headers first and check content type
+            else if (!raw && potentialDatexAsJsModule && (url_string.endsWith("dx")  || url_string.endsWith("dxb"))) {
                 try {
                     response = await fetch(url, {method: 'HEAD', cache: 'no-store'});
                     const type = response.headers.get('content-type');
@@ -641,33 +653,33 @@ export class Runtime {
                 }
             }
             
-            const type = response.headers.get('content-type');
+            const type = overrideContentType ?? response?.headers.get('content-type');
 
             if (type == "application/datex" || type == "text/dxb" || url_string.endsWith(".dxb")) {
-                const content = await response.arrayBuffer();
+                const content = await response!.arrayBuffer();
                 if (raw) result = [content, type];
                 else result = await this.executeDXBLocally(content, url);
             }
             else if (type?.startsWith("text/datex") || url_string.endsWith(".dx")) {
-                const content = await response.text()
+                const content = await response!.text()
                 if (raw) result = [content, type];
                 else result = await this.executeDatexLocally(content, undefined, undefined, url);
             }
             else if (type?.startsWith("application/json5") || url_string.endsWith(".json5")) {
-                const content = await response.text();
+                const content = await response!.text();
                 if (raw) result = [content, type];
                 else result = await Runtime.datexOut([content, [], {sign:false, encrypt:false, type:ProtocolDataType.DATA}]);
             }
             else if (type?.startsWith("application/json") || type?.endsWith("+json")) {
-                if (raw) result = [await response.text(), type]; 
-                else result = await response.json()
+                if (raw) result = [await response!.text(), type]; 
+                else result = await response!.json()
             }
             else if (type?.startsWith("text/javascript") || type?.startsWith("application/javascript")) {
-                if (raw) result = [await response.text(), type]; 
+                if (raw) result = [await response!.text(), type]; 
                 else result = await import(url_string)
             }
             else {
-                const content = await response.arrayBuffer()
+                const content = await response!.arrayBuffer()
                 if (raw) result = [content, type];
                 else {
                     if (!type) throw Error("Cannot infer type from URL content");
@@ -2828,8 +2840,8 @@ export class Runtime {
             const compiled = new Uint8Array(Compiler.encodeValue(value, undefined, false, deep_clone, collapse_value, false, true, false, true));
             return wasm_decompile(compiled, formatted, colorized, resolve_slots).replace(/\r\n$/, '');
         } catch (e) {
-            console.log(e);
-            return "/* ERROR: Decompiler Error */";
+            console.debug(e);
+            return this.valueToDatexString(value, formatted)
         }
         // return Decompiler.decompile(Compiler.encodeValue(value, undefined, false, deep_clone, collapse_value), true, formatted, formatted, false);
     }
@@ -7349,6 +7361,14 @@ Type.std.time.setJSInterface({
         else return INVALID;
     },
 
+})
+
+Type.std.MatchCondition.setJSInterface({
+    class: MatchCondition,
+    visible_children: new Set([
+        "type",
+        "data"
+    ])
 })
 
 

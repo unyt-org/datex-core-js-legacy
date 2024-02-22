@@ -45,8 +45,8 @@ import { client_type } from "../utils/constants.ts";
 import { normalizePath } from "../utils/normalize-path.ts";
 import { VolatileMap } from "../utils/volatile-map.ts";
 
-await wasm_init();
-wasm_init_runtime();
+// await wasm_init();
+// wasm_init_runtime();
 
 export const activePlugins:string[] = [];
 

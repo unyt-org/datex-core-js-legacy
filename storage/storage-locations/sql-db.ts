@@ -18,7 +18,7 @@ import { TypedArray } from "../../utils/global_values.ts";
 import { MessageLogger } from "../../utils/message_logger.ts";
 import { Join } from "https://deno.land/x/sql_builder@v1.9.2/join.ts";
 import { LazyPointer } from "../../runtime/lazy-pointer.ts";
-import { MatchOptions } from "../storage.ts";
+import { MatchOptions, MatchCondition, MatchConditionType } from "../storage.ts";
 import { MatchResult } from "../storage.ts";
 import { Time } from "../../types/time.ts";
 
@@ -56,8 +56,22 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		rawPointers: {
 			name: "__datex_pointers_raw",
 			columns: [
-				[this.#pointerMysqlColumnName, "varchar(50)", "PRIMARY KEY"],
+				[this.#pointerMysqlColumnName, this.#pointerMysqlType, "PRIMARY KEY"],
 				["value", "blob"]
+			]
+		},
+		sets: {
+			name: "__datex_sets",
+			columns: [
+				[this.#pointerMysqlColumnName, this.#pointerMysqlType, "PRIMARY KEY"],
+				["hash", "varchar(50)", "PRIMARY KEY"],
+				["value_dxb", "blob"],
+				["value_text", "text"],
+				["value_integer", "int"],
+				["value_decimal", "double"],
+				["value_boolean", "boolean"],
+				["value_time", "datetime"],
+				["value_pointer", this.#pointerMysqlType]
 			]
 		},
 		items: {
@@ -191,9 +205,17 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 	}
 
 	async #createTable(definition: TableDefinition) {
+		const compositePrimaryKeyColumns = definition.columns.filter(col => col[2]?.includes("PRIMARY KEY"));
+		if (compositePrimaryKeyColumns.length > 1) {
+			for (const col of compositePrimaryKeyColumns) {
+				col[2] = col[2]?.replace("PRIMARY KEY", "")
+			}
+		}
+		const primaryKeyDefinition = compositePrimaryKeyColumns.length > 1 ? `, PRIMARY KEY (${compositePrimaryKeyColumns.map(col => `\`${col[0]}\``).join(', ')})` : '';
+
 		await this.#queryFirst(`CREATE TABLE ?? (${definition.columns.map(col => 
 			`\`${col[0]}\` ${col[1]} ${col[2]??''}`
-			).join(', ')}${definition.constraints?.length ? ',' + definition.constraints.join(',') : ''});`, [definition.name])
+			).join(', ')}${definition.constraints?.length ? ',' + definition.constraints.join(',') : ''}${primaryKeyDefinition});`, [definition.name])
 	}
 
 	/**
@@ -239,11 +261,14 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 
 	/**
 	 * Returns the table name for a given type.
+	 * Converts UpperCamelCase to snake_case and pluralizes the name.
 	 * Does not validate if the table exists
 	 */
 	#typeToTableName(type: Datex.Type) {
 		if (!type.template) throw new Error("Cannot create table for non-templated type " + type)
-		return type.namespace=="ext" ? type.name : `${type.namespace}_${type.name}`;
+		const snakeCaseName = type.name.replace(/([A-Z])/g, "_$1").toLowerCase().slice(1);
+		const snakeCasePlural = snakeCaseName + (snakeCaseName.endsWith("s") ? "es" : "s");
+		return type.namespace=="ext" ? snakeCasePlural : `${type.namespace}_${snakeCasePlural}`;
 	}
 
 	#typeToString(type: Datex.Type) {
@@ -292,8 +317,16 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 					let foreignTable = await this.#getTableForType(propType);
 
 					if (!foreignTable) {
-						logger.warn("Cannot map type " + propType + " to a SQL table, falling back to raw pointer storage")
-						foreignTable = this.#metaTables.rawPointers.name;
+
+						// "set" table
+						if (propType.base_type == Type.std.Set) {
+							foreignTable = this.#metaTables.sets.name;
+						}
+						else {
+							logger.warn("Cannot map type " + propType + " to a SQL table, falling back to raw pointer storage")
+							foreignTable = this.#metaTables.rawPointers.name;
+						}
+						
 					}
 	
 					columns.push([propName, this.#pointerMysqlType])
@@ -367,7 +400,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 	/**
 	 * Insert a pointer into the database, pointer type must be templated
 	 */
-	async #insertPointer(pointer: Datex.Pointer) {
+	async #insertTemplatedPointer(pointer: Datex.Pointer) {
 		const table = await this.#getTableForType(pointer.type)
 		if (!table) throw new Error("Cannot store pointer of type " + pointer.type + " in a custom table")
 		const columns = await this.#getTableColumns(table);
@@ -553,6 +586,50 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		return dependencies;
 	}
 
+	async #setPointerSet(pointer: Pointer) {
+		if (!(pointer.val instanceof Set)) throw new Error("Pointer value must be a Set");
+
+		const dependencies = new Set<Pointer>()
+
+		const builder = new Query().table(this.#metaTables.sets.name)
+		const entries = []
+		// add default entry (also for empty set)
+		entries.push({
+			[this.#pointerMysqlColumnName]: pointer.id, 
+			hash: "",
+			value_dxb: null,
+			value_text: null,
+			value_integer: null,
+			value_decimal: null,
+			value_boolean: null,
+			value_time: null,
+			value_pointer: null
+		})
+
+		for (const val of pointer.val) {
+			const hash = await Compiler.getValueHashString(val)
+			const data = {[this.#pointerMysqlColumnName]: pointer.id, hash} as Record<string,unknown>;
+			const valPtr = Datex.Pointer.pointerifyValue(val);
+
+			if (typeof val == "string") data.value_text = val
+			else if (typeof val == "number") data.value_integer = val
+			else if (typeof val == "boolean") data.value_boolean = val
+			else if (val instanceof Date) data.value_time = val
+			else if (valPtr instanceof Pointer) {
+				data.value_pointer = valPtr.id
+				dependencies.add(valPtr);
+			}
+			else data.value_dxb = Compiler.encodeValue(val, dependencies, true, false, true)
+			entries.push(data)
+		}
+		builder.insert(entries);
+
+		const {result} = await this.#query(builder.build(), undefined, true)
+		// add to pointer mapping
+		if (result.affectedRows == 1) await this.#updatePointerMapping(pointer.id, this.#metaTables.sets.name)
+		return dependencies;
+	}
+
 	async #updatePointerMapping(pointerId: string, tableName: string) {
 		await this.#query('INSERT INTO ?? ?? VALUES ? ON DUPLICATE KEY UPDATE table_name=?;', [this.#metaTables.pointerMapping.name, [this.#pointerMysqlColumnName, "table_name"], [pointerId, tableName], tableName])
 	}
@@ -658,6 +735,39 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 				if (or instanceof RegExp) {
 					if (!namespacedKey) throw new Error("missing namespacedKey");
 					wheresOr.push(Where.expr(`${entryIdentifier!} REGEXP ?`, or.source))
+				}
+
+				// match condition
+				else if (or instanceof MatchCondition) {
+					if (!namespacedKey) throw new Error("missing namespacedKey");
+
+					if (or.type == MatchConditionType.BETWEEN) {
+						const condition = or as MatchCondition<MatchConditionType.BETWEEN, unknown>
+						wheresOr.push(Where.between(entryIdentifier!, condition.data[0], condition.data[1]))
+					}
+					else if (or.type == MatchConditionType.GREATER_THAN) {
+						const condition = or as MatchCondition<MatchConditionType.GREATER_THAN, unknown>
+						wheresOr.push(Where.gt(entryIdentifier!, condition.data))
+					}
+					else if (or.type == MatchConditionType.LESS_THAN) {
+						const condition = or as MatchCondition<MatchConditionType.LESS_THAN, unknown>
+						wheresOr.push(Where.lt(entryIdentifier!, condition.data))
+					}
+					else if (or.type == MatchConditionType.GREATER_OR_EQUAL) {
+						const condition = or as MatchCondition<MatchConditionType.GREATER_OR_EQUAL, unknown>
+						wheresOr.push(Where.gte(entryIdentifier!, condition.data))
+					}
+					else if (or.type == MatchConditionType.LESS_OR_EQUAL) {
+						const condition = or as MatchCondition<MatchConditionType.LESS_OR_EQUAL, unknown>
+						wheresOr.push(Where.lte(entryIdentifier!, condition.data))
+					}
+					else if (or.type == MatchConditionType.NOT_EQUAL) {
+						const condition = or as MatchCondition<MatchConditionType.NOT_EQUAL, unknown>
+						wheresOr.push(Where.ne(entryIdentifier!, condition.data))
+					}
+					else {
+						throw new Error("Unsupported match condition type " + or.type)
+					}
 				}
 
 				else if (typeof or == "object" && !(or == null || or instanceof Date)) {
@@ -800,7 +910,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 
 			// new full insert
 			if (partialUpdateKey === NOT_EXISTING || !await this.hasPointer(pointer.id)) {
-				return this.#insertPointer(pointer)
+				return this.#insertTemplatedPointer(pointer)
 			}
 			// partial update
 			else {
@@ -822,6 +932,11 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 				await this.#updatePointer(pointer, [partialUpdateKey])
 				return dependencies;
 			}
+		}
+
+		// is set, store in set table
+		else if (pointer.type == Type.std.Set) {
+			return this.#setPointerSet(pointer)
 		}
 
 		// no template, just add a raw DXB entry, partial updates are not supported
@@ -849,6 +964,28 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 					.build()
 			))?.value;
 			return value ? Runtime.decodeValue(this.#stringToBinary(value), outer_serialized) : NOT_EXISTING;
+		}
+
+		// is set pointer
+		else if (table == this.#metaTables.sets.name) {
+			const values = await this.#query<{value_text:string, value_integer:number, value_boolean:boolean, value_time:Date, value_pointer:string, value_dxb:string}>(
+				new Query()
+					.table(this.#metaTables.sets.name)
+					.select("value_text", "value_integer", "value_boolean", "value_time", "value_pointer", "value_dxb")
+					.where(Where.eq(this.#pointerMysqlColumnName, pointerId))
+					.where(Where.ne("hash", ""))
+					.build()
+			)
+			const result = new Set()
+			for (const {value_text, value_integer, value_boolean, value_time, value_pointer, value_dxb} of values) {
+				if (value_text !== undefined) result.add(value_text)
+				else if (value_integer !== undefined) result.add(value_integer)
+				else if (value_boolean !== undefined) result.add(value_boolean)
+				else if (value_time !== undefined) result.add(value_time)
+				else if (value_pointer !== undefined) result.add(await Pointer.load(value_pointer))
+				else if (value_dxb !== undefined) result.add(await Runtime.decodeValue(this.#stringToBinary(value_dxb)))
+			}
+			return result;
 		}
 
 		// is templated pointer

@@ -5,7 +5,7 @@ import { Logical } from "../types/logic.ts";
 import { Logger } from "./logger.ts";
 
 // WASM
-import {decompile as wasm_decompile} from "../wasm/adapter/pkg/datex_wasm.js";
+import wasm_init, {decompile as wasm_decompile} from "../wasm/adapter/pkg/datex_wasm.js";
 import { console } from "./ansi_compat.ts";
 import { ESCAPE_SEQUENCES } from "./logger.ts";
 
@@ -14,6 +14,7 @@ export class MessageLogger {
 	static logger:Logger
 
     static decompile(dxb:ArrayBuffer, has_header = true, colorized = true, resolve_slots = true){
+        if (!this.#initialized) return "[DATEX Decompiler not enabled]"
         try {
             // extract body (TODO: just temporary, rust impl does not yet support header decompilation)
             if (has_header) {
@@ -28,7 +29,14 @@ export class MessageLogger {
         }
     }
 
-	static enable(showRedirectedMessages = true){
+    static #initialized = false;
+    static async init() {
+        await wasm_init()
+        this.#initialized = true;
+    }
+
+	static async enable(showRedirectedMessages = true){
+        await this.init();
         IOHandler.resetDatexHandlers();
 		if (!this.logger) this.logger = new Logger("DATEX Message");
 

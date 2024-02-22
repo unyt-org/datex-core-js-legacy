@@ -18,6 +18,7 @@ import { StorageSet } from "../types/storage-set.ts";
 import { IterableWeakSet } from "../utils/iterable-weak-set.ts";
 import { LazyPointer } from "../runtime/lazy-pointer.ts";
 import { AutoMap } from "../utils/auto_map.ts";
+import { JSInterface } from "../runtime/js_interface.ts";
 
 
 // displayInit();
@@ -39,18 +40,22 @@ export const comparatorKeys = [
 	"=", "!=", ">", ">=", "<", "<="
 ] as const
 
-type AtomicMatchInput<T> = T | 
+type AtomicMatchInput<T> = T |
     (
         T extends string ? 
             RegExp :
             never
     )
 
-type _MatchInput<T> = T extends object ? 
-	{
-		[K in keyof T]?: MatchInputValue<T[K]>
-	} :
-	AtomicMatchInput<T>|AtomicMatchInput<T>[]
+type _MatchInput<T> = 
+    MatchCondition<MatchConditionType, T> |
+    (
+        T extends object ? 
+        {
+            [K in keyof T]?: MatchInputValue<T[K]>
+        } :
+        AtomicMatchInput<T>|AtomicMatchInput<T>[]
+    )
 type MatchInputValue<T> = 
 	_MatchInput<T>| // exact match
 	_MatchInput<T>[]| // or match
@@ -58,7 +63,16 @@ type MatchInputValue<T> =
 
 export type MatchInput<T extends object> = MatchInputValue<T>
 
-export type MatchOptions = {
+type ObjectKeyPaths<T> = 
+    T extends object ?
+        (
+            ObjectKeyPaths<T[keyof T]> extends never ? 
+            `${string & Exclude<keyof T, "$"|"$$">}` :
+            `${string & Exclude<keyof T, "$"|"$$">}`|`${string & Exclude<keyof T, "$"|"$$">}.${ObjectKeyPaths<T[Exclude<keyof T, "$"|"$$">]>}`
+        ):
+        never
+
+export type MatchOptions<T = unknown> = {
     /**
      * Maximum number of matches to return
      */
@@ -66,7 +80,7 @@ export type MatchOptions = {
     /**
      * Sort by key (e.g. address.street)
      */
-    sortBy?: string,
+    sortBy?: string // TODO: T extends object ? ObjectKeyPaths<T> : string,
     /**
      * Sort in descending order (only if sortBy is set)
      */
@@ -99,6 +113,41 @@ export type AdvancedMatchResult<T> = {
     total: number,
     pointerIds?: Set<string>,
     matches: Set<T>
+}
+
+export enum MatchConditionType {
+    BETWEEN = "BETWEEN",
+    LESS_THAN = "LESS_THAN",
+    GREATER_THAN = "GREATER_THAN",
+    LESS_OR_EQUAL = "LESS_OR_EQUAL",
+    GREATER_OR_EQUAL = "GREATER_OR_EQUAL",
+    NOT_EQUAL = "NOT_EQUAL"
+}
+export type MatchConditionData<T extends MatchConditionType, V> = 
+    T extends MatchConditionType.BETWEEN ? 
+        [V, V] :
+    T extends MatchConditionType.LESS_THAN|MatchConditionType.GREATER_THAN|MatchConditionType.LESS_OR_EQUAL|MatchConditionType.GREATER_OR_EQUAL|MatchConditionType.NOT_EQUAL ?
+        V :
+    never
+
+export class MatchCondition<Type extends MatchConditionType, V> {
+    
+    constructor(
+        public type: Type, 
+        public data: MatchConditionData<Type, V>
+    ) {}
+
+    static between<V>(lower: V, upper: V) {
+        return new MatchCondition(MatchConditionType.BETWEEN, [lower, upper])
+    }
+
+    static lessThan<V>(value: V) {
+        return new MatchCondition(MatchConditionType.LESS_THAN, value)
+    }
+
+    static greaterThan<V>(value: V) {
+        return new MatchCondition(MatchConditionType.GREATER_THAN, value)
+    }
 }
 
 
@@ -140,7 +189,7 @@ export interface StorageLocation<SupportedModes extends Storage.Mode = Storage.M
     setPointerValueDXB(pointerId:string, value: ArrayBuffer):Promise<void>|void
 
     supportsMatchForType?(type: Type): Promise<boolean>|boolean
-    matchQuery?<T extends object, Options extends MatchOptions>(itemPrefix: string, valueType: Type<T>, match: MatchInput<T>, options:Options): Promise<MatchResult<T, Options>>|MatchResult<T, Options>
+    matchQuery?<T extends object, Options extends MatchOptions<T>>(itemPrefix: string, valueType: Type<T>, match: MatchInput<T>, options:Options): Promise<MatchResult<T, Options>>|MatchResult<T, Options>
     clear(): Promise<void>|void
     
 }
@@ -171,7 +220,7 @@ export abstract class SyncStorageLocation implements StorageLocation<Storage.Mod
     abstract hasPointer(pointerId: string): boolean
 
     supportsMatchForType?(type: Type): boolean
-    matchQuery?<T extends object, Options extends MatchOptions>(itemPrefix: string, valueType: Type<T>, match: MatchInput<T>, options:Options): MatchResult<T, Options>
+    matchQuery?<T extends object, Options extends MatchOptions<T>>(itemPrefix: string, valueType: Type<T>, match: MatchInput<T>, options:Options): MatchResult<T, Options>
 
     abstract clear(): void
 }
@@ -202,7 +251,7 @@ export abstract class AsyncStorageLocation implements StorageLocation<Storage.Mo
     abstract hasPointer(pointerId: string): Promise<boolean>
 
     supportsMatchForType?(type: Type): Promise<boolean>|boolean
-    matchQuery?<T extends object, Options extends MatchOptions>(itemPrefix: string, valueType: Type<T>, match: MatchInput<T>, options:Options): Promise<MatchResult<T, Options>>
+    matchQuery?<T extends object, Options extends MatchOptions<T>>(itemPrefix: string, valueType: Type<T>, match: MatchInput<T>, options:Options): Promise<MatchResult<T, Options>>
 
     abstract clear(): Promise<void>
 }
@@ -1014,7 +1063,7 @@ export class Storage {
         return (this.#primary_location?.supportsMatchSelection && await this.#primary_location?.supportsMatchForType!(type)) ?? false;
     }
 
-    public static itemMatchQuery<T extends object, Options extends MatchOptions>(itemPrefix: string, valueType:Type<T>, match: MatchInput<T>, options?:Options) {
+    public static itemMatchQuery<T extends object, Options extends MatchOptions<T>>(itemPrefix: string, valueType:Type<T>, match: MatchInput<T>, options?:Options) {
         options ??= {} as Options;
         if (!this.#primary_location?.supportsMatchSelection) throw new Error("Primary storage location does not support match queries");
         return this.#primary_location!.matchQuery!(itemPrefix, valueType, match, options);

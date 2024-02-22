@@ -1,6 +1,6 @@
 import { DATEX_FILE_TYPE, FILE_TYPE } from "../compiler/compiler.ts";
 import { Runtime } from "../runtime/runtime.ts";
-import { decompile } from "../wasm/adapter/pkg/datex_wasm.js";
+import wasm_init, { decompile } from "../wasm/adapter/pkg/datex_wasm.js";
 
 export async function uploadDatexFile(){
 	const pickerOpts = {
@@ -30,6 +30,8 @@ export async function uploadDatexFile(){
 export type datex_file_data = {type: DATEX_FILE_TYPE, text:string, binary?:ArrayBuffer, fileHandle:any};
 
 export async function getDatexContentFromFileHandle(fileHandle:any) {
+	// init wasm
+	await wasm_init();
 	const fileData = <File> await fileHandle.getFile();
 
 	const data:datex_file_data = {

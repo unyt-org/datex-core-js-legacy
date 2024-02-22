@@ -23,6 +23,7 @@ import {StorageMap, StorageWeakMap} from "./storage-map.ts"
 import {StorageSet, StorageWeakSet} from "./storage-set.ts"
 import { ExtensibleFunction } from "./function-utils.ts";
 import type { JSTransferableFunction } from "./js-function.ts";
+import type { MatchCondition } from "../storage/storage.ts";
 
 export type inferDatexType<T extends Type> = T extends Type<infer JST> ? JST : any;
 
@@ -1024,6 +1025,8 @@ export class Type<T = any> extends ExtensibleFunction {
         Task: Type.get<Task>("std:Task"),
         Assertion:  Type.get<Assertion>("std:Assertion"),
         Iterator: Type.get<Iterator<any>>("std:Iterator"),
+
+        MatchCondition: Type.get<MatchCondition>("std:MatchCondition"),
 
         StorageMap: Type.get<StorageMap<unknown, unknown>>("std:StorageMap"),
         StorageWeakMap: Type.get<StorageWeakMap<unknown, unknown>>("std:StorageWeakMap"),
