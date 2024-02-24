@@ -574,7 +574,7 @@ export class PointerProperty<T=any> extends Ref<T> {
 
     #leak_js_properties: boolean
 
-    public pointer?: Pointer;
+    public readonly pointer?: Pointer;
     private lazy_pointer?: LazyPointer<unknown>;
 
     private constructor(pointer: Pointer|LazyPointer<unknown>|undefined, public key: any, leak_js_properties = false) {
@@ -596,8 +596,21 @@ export class PointerProperty<T=any> extends Ref<T> {
     private setPointer(ptr: Pointer) {
         this.pointer = ptr;
         this.pointer.is_persistent = true; // TODO: make unpersistent when pointer property deleted
+
         if (!PointerProperty.synced_pairs.has(ptr)) PointerProperty.synced_pairs.set(ptr, new Map());
-        PointerProperty.synced_pairs.get(ptr)!.set(this.key, this); // save in map
+        PointerProperty.synced_pairs.get(ptr)!.set(this.key, new WeakRef(this)); // save in map
+        PointerProperty.registerForFinalization(this);
+    }
+
+    private static finalizationRegistry = new FinalizationRegistry((ptr:Pointer) => {
+        this.synced_pairs.delete(ptr)
+        ptr.is_persistent = false;
+        console.log("freed pointer bound to pointer property: " + ptr)
+    });
+
+    private static registerForFinalization(ref:PointerProperty) {
+        if (!ref.pointer) throw new Error("Cannot register pointer property for finalization, no pointer");
+        this.finalizationRegistry.register(ref, ref.pointer!);
     }
 
     /**
@@ -610,7 +623,7 @@ export class PointerProperty<T=any> extends Ref<T> {
         else callback(this, this);
     }
 
-    private static synced_pairs = new WeakMap<Pointer, Map<any, PointerProperty>>()
+    private static synced_pairs = new WeakMap<Pointer, Map<unknown, WeakRef<PointerProperty>>>()
 
     // TODO: use InferredPointerProperty (does not collapse)
     /**
@@ -627,7 +640,14 @@ export class PointerProperty<T=any> extends Ref<T> {
 
         if (pointer instanceof Pointer) {
             if (!this.synced_pairs.has(pointer)) this.synced_pairs.set(pointer, new Map());
-            if (this.synced_pairs.get(pointer)!.has(key)) return this.synced_pairs.get(pointer)!.get(key)!; 
+            if (this.synced_pairs.get(pointer)!.has(key)) {
+                const weakRef = this.synced_pairs.get(pointer)!.get(key);
+                const pointerProperty = weakRef.deref();
+                if (pointerProperty) return pointerProperty;
+                else {
+                    this.synced_pairs.get(pointer)!.delete(key);
+                }
+            }
         }
 
         return new PointerProperty(pointer, key, leak_js_properties);
