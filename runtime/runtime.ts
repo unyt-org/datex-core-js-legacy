@@ -1275,6 +1275,15 @@ export class Runtime {
     }
 
     /**
+     * Removes all active datex scopes for an endpoint
+     */
+    public static clearEndpointScopes(endpoint: Endpoint) {
+        const removeCount = this.active_datex_scopes.get(endpoint)?.size;
+        this.active_datex_scopes.delete(endpoint);
+        if (removeCount) logger.debug("removed " + removeCount + " datex scopes for " + endpoint);
+    }
+
+    /**
      * Creates default static scopes
      * + other async initializations
      * @param endpoint initial local endpoint
@@ -1828,6 +1837,7 @@ export class Runtime {
                     header.sender.setOnline(false)
                     Pointer.clearEndpointSubscriptions(header.sender)
                     Pointer.clearEndpointPermissions(header.sender)
+                    this.clearEndpointScopes(header.sender);
                 }
                 else {
                     logger.error("ignoring unsigned GOODBYE message")
@@ -2027,7 +2037,7 @@ export class Runtime {
                     // save persistent memory
                     if (scope.persistent_vars) {
                         const identifier = scope.context_location.toString()
-                        for (let name of scope.persistent_vars) Runtime.saveScopeMemoryValue(identifier, name, scope.internal_vars[name]);
+                        for (const name of scope.persistent_vars) Runtime.saveScopeMemoryValue(identifier, name, scope.internal_vars[name]);
                     }
 
                     // cleanup
@@ -7384,8 +7394,8 @@ Type.get<JSTransferableFunction>("js:Function").setJSInterface({
     },
 
     apply_value(parent, args = []) {
-        if (args instanceof Tuple) return parent.call(...args.toArray())
-        else return parent.call(args)
+        if (args instanceof Tuple) return parent.handleCall(...args.toArray())
+        else return parent.handleCall(args)
     },
 
 });

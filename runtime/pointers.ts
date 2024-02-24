@@ -574,6 +574,8 @@ export class PointerProperty<T=any> extends Ref<T> {
 
     #leak_js_properties: boolean
 
+    private _strongRef?: any // strong reference to own pointer to prevent garbage collection
+
     public readonly pointer?: Pointer;
     private lazy_pointer?: LazyPointer<unknown>;
 
@@ -594,24 +596,15 @@ export class PointerProperty<T=any> extends Ref<T> {
     }
 
     private setPointer(ptr: Pointer) {
+        // @ts-ignore private
         this.pointer = ptr;
-        this.pointer.is_persistent = true; // TODO: make unpersistent when pointer property deleted
+
+        this._strongRef = ptr.val;
 
         if (!PointerProperty.synced_pairs.has(ptr)) PointerProperty.synced_pairs.set(ptr, new Map());
         PointerProperty.synced_pairs.get(ptr)!.set(this.key, new WeakRef(this)); // save in map
-        PointerProperty.registerForFinalization(this);
     }
 
-    private static finalizationRegistry = new FinalizationRegistry((ptr:Pointer) => {
-        this.synced_pairs.delete(ptr)
-        ptr.is_persistent = false;
-        console.log("freed pointer bound to pointer property: " + ptr)
-    });
-
-    private static registerForFinalization(ref:PointerProperty) {
-        if (!ref.pointer) throw new Error("Cannot register pointer property for finalization, no pointer");
-        this.finalizationRegistry.register(ref, ref.pointer!);
-    }
 
     /**
      * Called when the bound lazy pointer is loaded.
@@ -3418,6 +3411,8 @@ export class Pointer<T = any> extends Ref<T> {
             if (!(await endpoint.isOnline())) {
                 this.clearEndpointSubscriptions(endpoint);
                 this.clearEndpointPermissions(endpoint)
+                // TODO: this should ideally directly be handleded by the runtime
+                Runtime.clearEndpointScopes(endpoint);
             }
         }
     }
@@ -4418,7 +4413,9 @@ export class Pointer<T = any> extends Ref<T> {
         // key specific observers
         if (key!=undefined) {
             for (const [o, options] of this.change_observers.get(key)||[]) {
-                if ((!options?.types || options.types.includes(type)) && !(is_transform && options?.ignore_transforms) && (!is_child_update || !options || options.recursive)) promises.push(o(value, key, type, is_transform, is_child_update, previous, atomic_id)); 
+                if ((!options?.types || options.types.includes(type)) && !(is_transform && options?.ignore_transforms) && (!is_child_update || !options || options.recursive)) {
+                    promises.push(o(value, key, type, is_transform, is_child_update, previous, atomic_id)); 
+                }
             }
             // bound observers
             for (const [object, entries] of this.bound_change_observers.entries()) {

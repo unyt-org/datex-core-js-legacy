@@ -327,7 +327,7 @@ export class Storage {
     static item_deps_prefix = "deps::dxitem::"
     static subscriber_cache_prefix = "subscribers::"
 
-    static #storage_active_pointers = new Set<Pointer>();
+    static #storage_active_pointers = new IterableWeakSet<Pointer>();
     static #storage_active_pointer_ids = new Set<string>();
 
     /**
@@ -477,14 +477,14 @@ export class Storage {
             }
 
             // update pointers
-            for (const ptr of this.#storage_active_pointers) {
+            for (const ptr of [...this.#storage_active_pointers]) {
                 try {
                     c++;
                     const res = this.setPointer(ptr, true, location);
                     if (res instanceof Promise) res.catch(()=>{})
                 } catch (e) {}
             }
-            for (const id of this.#storage_active_pointer_ids) {
+            for (const id of [...this.#storage_active_pointer_ids]) {
                 try {
                     c++;
                     const ptr = Pointer.get(id);
@@ -744,7 +744,7 @@ export class Storage {
     }
 
 
-    private static synced_pointers = new Set<Pointer>();
+    private static synced_pointers = new WeakSet<Pointer>();
 
     static syncPointer(pointer: Pointer, location: StorageLocation|undefined = this.#primary_location) {
         if (!this.#auto_sync_enabled) return;
@@ -1327,6 +1327,13 @@ export class Storage {
 				await location.clear()
 			}
 		}
+
+        // remove internal localstorage entries
+        for (const key of Object.keys(localStorage)) {
+            if (key.startsWith(this.rc_prefix) || key.startsWith(this.item_deps_prefix) || key.startsWith(this.pointer_deps_prefix) || key.startsWith(this.meta_prefix)) {
+                localStorage.removeItem(key);
+            }
+        }
 
     }
 

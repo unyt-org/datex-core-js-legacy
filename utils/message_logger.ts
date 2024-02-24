@@ -31,7 +31,13 @@ export class MessageLogger {
 
     static #initialized = false;
     static async init() {
-        await wasm_init()
+        if (this.#initialized) return;
+        try {
+            await wasm_init()
+        }
+        catch (e) {
+            console.error(e)
+        }
         this.#initialized = true;
     }
 

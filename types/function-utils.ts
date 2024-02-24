@@ -60,7 +60,7 @@ declare global {
 
 function getUsedVars(fn: (...args:unknown[])=>unknown) {
     const source = fn.toString();
-    const usedVarsSource = source.match(/^(?:(?:[\w\s*])+\(.*\)\s*{|\(.*\)\s*=>\s*{?|.*\s*=>\s*{?)\s*use\s*\(([\s\S]*?)\)/)?.[1]
+    const usedVarsSource = source.match(/^(?:(?:[\w\s*])+\(.*?\)\s*{|\(.*?\)\s*=>\s*{?|.*?\s*=>\s*{?)\s*use\s*\(([\s\S]*?)\)/)?.[1]
     if (!usedVarsSource) return {};
 
     const usedVars = usedVarsSource.split(",").map(v=>v.trim()).filter(v=>!!v)

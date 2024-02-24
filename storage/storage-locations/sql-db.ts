@@ -109,6 +109,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		this.#initializing = true;
 		await this.#connect();
 		await this.#setupMetaTables();
+		await MessageLogger.init(); // required for decompiling
 		this.#initializing = false;
 		this.#initialized = true;
 	}
@@ -375,10 +376,11 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 	 * makes sure all DATEX meta tables exist in the database
 	 */
 	async #setupMetaTables() {
-		for (const definition of Object.values(this.#metaTables)) {
-			const createdNew = await this.#createTableIfNotExists(definition);
-			if (createdNew) this.log?.("Created meta table '" + definition.name + "'")
-		}
+		await Promise.all(
+			Object
+				.values(this.#metaTables)
+				.map(definition => this.#createTableIfNotExists(definition))
+		)
 	}
 
 	async #getTableColumns(tableName: string) {
@@ -513,16 +515,14 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 					object[colName] = `\u0001${foreignPointerPlaceholders.length}`
 					foreignPointerPlaceholders.push("$"+ptrId)
 				}
-				else {
-					logger.error("Cannot get pointer value for property " + colName + " in object " + pointerId + " - " + table)
-				}
+				// otherwise, property is null/undefined
 			}
 			// is blob, assume it is a DXB value
 			else if (type == "blob") {
 				object[colName] = `\u0001${foreignPointerPlaceholders.length}`
 				try {
 					// TODO: fix decompiling
-					foreignPointerPlaceholders.push(MessageLogger.decompile(object[colName] as ArrayBuffer, false, false, false)||"'error: empty'")
+					foreignPointerPlaceholders.push(MessageLogger.decompile(object[colName] as ArrayBuffer, false, false, false)||"void")
 				}
 				catch (e) {
 					console.error("error decompiling", object[colName], e)
@@ -1182,9 +1182,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 					if (typeof object[colName] == "string") {
 						object[colName] = await Pointer.load(object[colName] as string);
 					}
-					else {
-						logger.error("Cannot get pointer value for property " + colName + " in object " + pointerId + " - " + table)
-					}
+					// else property is null/undefined
 				}
 				// is blob, assume it is a DXB value
 				else if (type == "blob") {
@@ -1222,6 +1220,32 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 					.build()
 			))?.value;
 			return value ? this.#stringToBinary(value) : null;
+		}
+
+		// is set pointer
+		else if (table == this.#metaTables.sets.name) {
+			const values = await this.#query<{value_text:string, value_integer:number, value_decimal:number, value_boolean:boolean, value_time:Date, value_pointer:string, value_dxb:string}>(
+				new Query()
+					.table(this.#metaTables.sets.name)
+					.select("value_text", "value_integer", "value_decimal", "value_boolean", "value_time", "value_pointer", "value_dxb")
+					.where(Where.eq(this.#pointerMysqlColumnName, pointerId))
+					.where(Where.ne("hash", ""))
+					.build()
+			)
+			let setString = `<Set> [`
+			const setEntries:string[] = []
+
+			for (const {value_text, value_integer, value_decimal, value_boolean, value_time, value_pointer, value_dxb} of values) {
+				if (value_text != undefined) setEntries.push(Runtime.valueToDatexStringExperimental(value_text))
+				else if (value_integer != undefined) setEntries.push(Runtime.valueToDatexStringExperimental(value_integer))
+				else if (value_decimal != undefined) setEntries.push(Runtime.valueToDatexStringExperimental(value_decimal))
+				else if (value_boolean != undefined) setEntries.push(Runtime.valueToDatexStringExperimental(value_boolean))
+				else if (value_time != undefined) setEntries.push(Runtime.valueToDatexStringExperimental(value_time))
+				else if (value_pointer != undefined) setEntries.push(Runtime.valueToDatexStringExperimental(await Pointer.load(value_pointer)))
+				else if (value_dxb != undefined) setEntries.push(MessageLogger.decompile(this.#stringToBinary(value_dxb), false, false, false))
+			}
+			setString += setEntries.join(",") + "]"
+			return Compiler.compile(setString, [], {sign: false, encrypt: false, to: Datex.Runtime.endpoint, preemptive_pointer_init: false}, false) as ArrayBuffer;
 		}
 
 		// is templated pointer
