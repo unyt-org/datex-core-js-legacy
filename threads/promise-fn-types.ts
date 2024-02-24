@@ -3,7 +3,7 @@
  * Promise methods return type inference magic
  */
 
-import { Equals } from "../utils/global_types.ts";
+import type { Equals } from "../utils/global_types.ts";
 
 class _PromiseWrapper<T> {
 	all(e: T[]) {

@@ -52,7 +52,7 @@ import { JSInterface } from "./js_interface.ts";
 import { Stream } from "../types/stream.ts";
 import { Quantity } from "../types/quantity.ts";
 import { Scope } from "../types/scope.ts";
-import { fundamental } from "../types/abstract_types.ts";
+import type { fundamental } from "../types/abstract_types.ts";
 import { IterationFunction as IteratorFunction, Iterator, RangeIterator } from "../types/iterator.ts";
 import { Assertion } from "../types/assertion.ts";
 import { Deferred } from "../types/deferred.ts";

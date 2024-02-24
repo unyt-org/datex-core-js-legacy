@@ -24,7 +24,7 @@ import { Function as DatexFunction } from "../types/function.ts";
 import { DatexObject } from "../types/object.ts";
 import { Tuple } from "../types/tuple.ts";
 import { DX_PERMISSIONS, DX_TYPE, DX_ROOT, INIT_PROPS, DX_EXTERNAL_SCOPE_NAME, DX_EXTERNAL_FUNCTION_NAME } from "../runtime/constants.ts";
-import { type Class } from "../utils/global_types.ts";
+import type { Class } from "../utils/global_types.ts";
 import { Conjunction, Disjunction, Logical } from "../types/logic.ts";
 import { client_type } from "../utils/constants.ts";
 import { Assertion } from "../types/assertion.ts";

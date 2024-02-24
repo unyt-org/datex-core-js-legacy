@@ -1,4 +1,4 @@
-import { dxb_header } from "../utils/global_types.ts";
+import type { dxb_header } from "../utils/global_types.ts";
 import { Endpoint, BROADCAST, LOCAL_ENDPOINT } from "../types/addressing.ts";
 import { CommunicationInterface, CommunicationInterfaceSocket, ConnectedCommunicationInterfaceSocket } from "./communication-interface.ts";
 import { Disjunction } from "../types/logic.ts";

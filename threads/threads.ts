@@ -1,5 +1,5 @@
 import { Logger, console_theme } from "../utils/logger.ts";
-import { Equals } from "../utils/global_types.ts";
+import type { Equals } from "../utils/global_types.ts";
 
 const logger = new Logger("thread-runner");
 

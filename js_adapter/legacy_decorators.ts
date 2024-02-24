@@ -15,7 +15,7 @@ import { } from "../runtime/runtime.ts";
 import { endpoint_name, Target, target_clause } from "../types/addressing.ts";
 import { Type } from "../types/type.ts";
 import { UpdateScheduler, Pointer } from "../runtime/pointers.ts";
-import { Class } from "../utils/global_types.ts";
+import type { Class } from "../utils/global_types.ts";
 
 // decorator types
 export type context_kind = 'class'|'method'|'getter'|'setter'|'field'|'auto-accessor';

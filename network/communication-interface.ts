@@ -6,7 +6,7 @@ import { COM_HUB_SECRET, communicationHub } from "./communication-hub.ts";
 import { IOHandler } from "../runtime/io_handler.ts";
 import { LOCAL_ENDPOINT } from "../types/addressing.ts";
 import { Runtime } from "../runtime/runtime.ts";
-import { dxb_header } from "../utils/global_types.ts";
+import type { dxb_header } from "../utils/global_types.ts";
 
 export enum InterfaceDirection {
     /**

@@ -1,6 +1,6 @@
 import { StorageSet } from "../types/storage_set.ts";
 import { Type } from "../types/type.ts";
-import { Class } from "./global_types.ts";
+import type { Class } from "./global_types.ts";
 import { MatchInput, MatchResult, MatchOptions, Storage, comparatorKeys } from "../storage/storage.ts";
 
 export type { MatchInput, MatchOptions, MatchResult } from "../storage/storage.ts";

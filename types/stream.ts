@@ -1,7 +1,7 @@
 import { ReadableStream } from "../runtime/runtime.ts";
 import { Pointer } from "../runtime/pointers.ts";
 import type { datex_scope } from "../utils/global_types.ts";
-import { StreamConsumer } from "./abstract_types.ts";
+import type { StreamConsumer } from "./abstract_types.ts";
 import { Logger } from "../utils/logger.ts";
 
 const logger = new Logger("Stream")

@@ -11,7 +11,7 @@ import { BinaryCode } from "../compiler/binary_codes.ts";
 import { JSInterface } from "./js_interface.ts";
 import { Stream } from "../types/stream.ts";
 import { Tuple } from "../types/tuple.ts";
-import { primitive } from "../types/abstract_types.ts";
+import type { primitive } from "../types/abstract_types.ts";
 import { Function as DatexFunction } from "../types/function.ts";
 import { Quantity } from "../types/quantity.ts";
 import { buffer2hex, hex2buffer } from "../utils/utils.ts";

@@ -6,7 +6,7 @@ import { NOT_EXISTING } from "../../runtime/constants.ts";
 import { AsyncStorageLocation, site_suffix } from "../storage.ts";
 
 import localforage from "../../lib/localforage/localforage.js";
-import { ExecConditions } from "../../utils/global_types.ts";
+import type { ExecConditions } from "../../utils/global_types.ts";
 
 // db based storage for DATEX value caching (IndexDB in the browser)
 const datex_item_storage = <globalThis.Storage><unknown> localforage.createInstance({name: "dxitem::"+site_suffix});

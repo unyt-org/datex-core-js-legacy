@@ -10,7 +10,7 @@ import { datex_type_mysql_map } from "./sql-type-map.ts";
 import { NOT_EXISTING } from "../../runtime/constants.ts";
 import { client_type } from "../../utils/constants.ts";
 import { Compiler } from "../../compiler/compiler.ts";
-import { ExecConditions } from "../../utils/global_types.ts";
+import type { ExecConditions } from "../../utils/global_types.ts";
 import { Runtime } from "../../runtime/runtime.ts";
 import { Storage } from "../storage.ts";
 import { Type } from "../../types/type.ts";
@@ -580,9 +580,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 	async #setPointerRaw(pointer: Pointer) {
 		const dependencies = new Set<Pointer>()
 		const encoded = Compiler.encodeValue(pointer, dependencies, true, false, true);
-		const {result} = await this.#query('INSERT INTO ?? ?? VALUES ? ON DUPLICATE KEY UPDATE value=?;', [this.#metaTables.rawPointers.name, [this.#pointerMysqlColumnName, "value"], [pointer.id, encoded], encoded], true)
-        // add to pointer mapping
-		if (result.affectedRows == 1) await this.#updatePointerMapping(pointer.id, this.#metaTables.rawPointers.name)
+		await this.#setPointerInRawTable(pointer.id, encoded);
 		return dependencies;
 	}
 
@@ -624,9 +622,10 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		}
 		builder.insert(entries);
 
-		const {result} = await this.#query(builder.build(), undefined, true)
-		// add to pointer mapping
-		if (result.affectedRows == 1) await this.#updatePointerMapping(pointer.id, this.#metaTables.sets.name)
+		// replace INSERT with INSERT IGNORE to prevent duplicate key errors
+		const {result} = await this.#query(builder.build().replace("INSERT", "INSERT IGNORE"), undefined, true)
+		// add to pointer mapping TODO: better decision if to add to pointer mapping
+		if (result.affectedRows) await this.#updatePointerMapping(pointer.id, this.#metaTables.sets.name)
 		return dependencies;
 	}
 
@@ -950,7 +949,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		// get table where pointer is stored
 		const table = await this.#getPointerTable(pointerId);
 		if (!table) {
-			logger.error("No table found for pointer " + pointerId);
+			console.warn("No table found for pointer " + pointerId);
 			return NOT_EXISTING;
 		}
 
@@ -1071,14 +1070,18 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		// check if raw pointer, otherwise not yet supported
 		const table = await this.#getPointerTable(pointerId);
 		if (table == this.#metaTables.rawPointers.name) {
-			const {result} = await this.#query('INSERT INTO ?? ?? VALUES ? ON DUPLICATE KEY UPDATE value=?;', [table, [this.#pointerMysqlColumnName, "value"], [pointerId, value], value], true)
-			console.log("affectedRows", result.affectedRows)
-			// is newly inserted, add to pointer mapping
-			if (result.affectedRows == 1) await this.#updatePointerMapping(pointerId, this.#metaTables.rawPointers.name)
+			await this.#setPointerInRawTable(pointerId, value);
 		}
 		else {
 			logger.error("Setting raw dxb value for templated pointer is not yet supported in SQL storage (pointer: " + pointerId + ", table: " + table + ")");
 		}
+	}
+
+	async #setPointerInRawTable(pointerId: string, encoded: ArrayBuffer) {
+		const table = this.#metaTables.rawPointers.name;
+		const {result} = await this.#query('INSERT INTO ?? ?? VALUES ? ON DUPLICATE KEY UPDATE value=?;', [table, [this.#pointerMysqlColumnName, "value"], [pointerId, encoded], encoded], true)
+		// is newly inserted, add to pointer mapping
+		if (result.affectedRows == 1) await this.#updatePointerMapping(pointerId, table)
 	}
 
 	async hasPointer(pointerId: string): Promise<boolean> {

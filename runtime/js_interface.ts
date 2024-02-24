@@ -1,6 +1,6 @@
 import { Type } from "../types/type.ts";
 import { Endpoint } from "../types/addressing.ts";
-import { fundamental } from "../types/abstract_types.ts";
+import type { fundamental } from "../types/abstract_types.ts";
 import type { Class } from "../utils/global_types.ts";
 import { Pointer } from "./pointers.ts";
 import { INVALID, NOT_EXISTING } from "./constants.ts";

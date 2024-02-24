@@ -1,6 +1,6 @@
 import { Tuple } from "./tuple.ts";
 import type { datex_scope } from "../utils/global_types.ts";
-import { ValueConsumer } from "./abstract_types.ts";
+import type { ValueConsumer } from "./abstract_types.ts";
 
 export class Iterator<T> {
 

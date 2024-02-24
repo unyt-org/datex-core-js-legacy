@@ -1,7 +1,7 @@
 import { Pointer, Ref } from "../runtime/pointers.ts";
 import { Runtime } from "../runtime/runtime.ts";
 import { logger } from "../utils/global_values.ts";
-import { StreamConsumer, ValueConsumer } from "./abstract_types.ts";
+import type { StreamConsumer, ValueConsumer } from "./abstract_types.ts";
 import { BROADCAST, Endpoint, endpoint_name, LOCAL_ENDPOINT, target_clause } from "./addressing.ts";
 import { Markdown } from "./markdown.ts";
 import { Scope } from "./scope.ts";

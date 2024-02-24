@@ -6,7 +6,7 @@ import { Pointer } from "../runtime/pointers.ts";
 import { MatchResult, Storage } from "../storage/storage.ts";
 import { Logger } from "../utils/logger.ts";
 import { MatchInput, match } from "../utils/match.ts";
-import { Class } from "../utils/global_types.ts";
+import type { Class } from "../utils/global_types.ts";
 import { MatchOptions } from "../utils/match.ts";
 import { Type } from "./type.ts";
 
