@@ -36,10 +36,6 @@ export const site_suffix = (()=>{
 })();
 
 
-export const comparatorKeys = [
-	"=", "!=", ">", ">=", "<", "<="
-] as const
-
 type AtomicMatchInput<T> = T |
     (
         T extends string ? 
@@ -52,14 +48,13 @@ type _MatchInput<T> =
     (
         T extends object ? 
         {
-            [K in keyof T]?: MatchInputValue<T[K]>
+            [K in Exclude<keyof T,"$"|"$$">]?: MatchInputValue<T[K]>
         } :
         AtomicMatchInput<T>|AtomicMatchInput<T>[]
     )
 type MatchInputValue<T> = 
 	_MatchInput<T>| // exact match
-	_MatchInput<T>[]| // or match
-	Partial<Record<typeof comparatorKeys[number], T>> // comparison matches
+	_MatchInput<T>[] // or match
 
 export type MatchInput<T extends object> = MatchInputValue<T>
 
@@ -97,6 +92,10 @@ export type MatchOptions<T = unknown> = {
      * Return pointer ids of matched items
      */
     returnPointerIds?: boolean,
+    /**
+     * Custom computed properties for match query
+     */
+    computedProperties?: Record<string, MatchComputedProperty<MatchComputedPropertyType>>
 }
 
 export type MatchResult<T, Options extends MatchOptions> = Options["returnAdvanced"] extends true ?
@@ -121,18 +120,21 @@ export enum MatchConditionType {
     GREATER_THAN = "GREATER_THAN",
     LESS_OR_EQUAL = "LESS_OR_EQUAL",
     GREATER_OR_EQUAL = "GREATER_OR_EQUAL",
-    NOT_EQUAL = "NOT_EQUAL"
+    NOT_EQUAL = "NOT_EQUAL",
+    CONTAINS = "CONTAINS"
 }
 export type MatchConditionData<T extends MatchConditionType, V> = 
     T extends MatchConditionType.BETWEEN ? 
         [V, V] :
     T extends MatchConditionType.LESS_THAN|MatchConditionType.GREATER_THAN|MatchConditionType.LESS_OR_EQUAL|MatchConditionType.GREATER_OR_EQUAL|MatchConditionType.NOT_EQUAL ?
         V :
+    T extends MatchConditionType.CONTAINS ?
+        V :
     never
 
 export class MatchCondition<Type extends MatchConditionType, V> {
     
-    constructor(
+    private constructor(
         public type: Type, 
         public data: MatchConditionData<Type, V>
     ) {}
@@ -147,6 +149,31 @@ export class MatchCondition<Type extends MatchConditionType, V> {
 
     static greaterThan<V>(value: V) {
         return new MatchCondition(MatchConditionType.GREATER_THAN, value)
+    }
+
+    static contains<V>(...values: V[]) {
+        return new MatchCondition(MatchConditionType.CONTAINS, new Set(values))
+    }
+}
+
+export enum MatchComputedPropertyType {
+    GEOGRAPHIC_DISTANCE = "GEOGRAPHIC_DISTANCE"
+}
+
+export type MatchComputedPropertyData<Type extends MatchComputedPropertyType> =
+    Type extends MatchComputedPropertyType.GEOGRAPHIC_DISTANCE ?
+        {pointA: {lat: number|string, lon: number|string}, pointB: {lat: number|string, lon: number|string}} :
+    never
+
+export class MatchComputedProperty<Type extends MatchComputedPropertyType> {
+
+    private constructor(
+        public type: Type,
+        public data: MatchComputedPropertyData<Type>
+    ) {}
+
+    static geographicDistance(pointA: {lat: number|string, lon: number|string}, pointB: {lat: number|string, lon: number|string}) {
+        return new MatchComputedProperty(MatchComputedPropertyType.GEOGRAPHIC_DISTANCE, {pointA, pointB})
     }
 }
 

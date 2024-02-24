@@ -49,15 +49,8 @@ function _match(value: unknown, match: unknown) {
 
 	for (const matchEntry of matchOrs) {
 		let isMatch = true;
-		// is comparator object
-		if (typeof matchEntry === "object" && Object.keys(matchEntry).some(key => comparatorKeys.includes(key as any))) {
-			if (!compare(value, matchEntry)) {
-				isMatch = false;
-				break;
-			}
-		}
 		// nested object
-		else if (value && typeof value == "object") {
+		if (value && typeof value == "object") {
 			// identical object
 			if (value === matchEntry) isMatch = true;
 			// nested match
@@ -82,80 +75,3 @@ function _match(value: unknown, match: unknown) {
 	// no match found
 	return false;
 }
-
-
-function compare(value: unknown, comparatorObj: Partial<Record<typeof comparatorKeys[number], unknown>>) {
-	let isMatch = true;
-	for (const [comparator, val] of Object.entries(comparatorObj)) {
-		// special comparison keys
-		if (comparator === "=") {
-			if (value != val) {
-				isMatch = false;
-				break;
-			}
-			else continue;
-		}
-		else if (comparator === "!=") {
-			if (value == val) {
-				isMatch = false;
-				break;
-			}
-			else continue;
-		}
-		else if (comparator === ">") {
-			if ((value as any) <= (val as any)) {
-				isMatch = false;
-				break;
-			}
-			else continue;
-		}
-		else if (comparator === ">=") {
-			if ((value as any) < (val as any)) {
-				isMatch = false;
-				break;
-			}
-			else continue;
-		}
-		else if (comparator === "<") {
-			if ((value as any) >= (val as any)) {
-				isMatch = false;
-				break;
-			}
-			else continue;
-		}
-		else if (comparator === "<=") {
-			if ((value as any) > (val as any)) {
-				isMatch = false;
-				break;
-			}
-			else continue;
-		}
-	}
-	
-	return isMatch;
-}
-
-
-
-// match(users, [{
-// 	name: "John",
-// 	age: [1,2,3],
-// 	address: {
-// 		email: "x@t"
-// 	}
-// }, {name: "yxyx"}])
-
-/*
-SELECT _ptr_id
-
-FROM __datex_items
-JOIN Person ON __datex_items._ptr_id = Person._ptr_id
-JOIN Occupation ON Occupation._ptr_id = Person.occupation
-
-WHERE `key` LIKE "dxset::$D505B7E7C20Ex4E0749C88DE8EB%"
-AND `first_name` LIKE "S%"
-AND Occupation.degree = "Diplom (FH)"
-AND Occupation.degree = "Diplom (FH)"
-AND Occupation.degree = "Diplom (FH)"
-AND Occupation.degree = "Diplom (FH)"
-*/

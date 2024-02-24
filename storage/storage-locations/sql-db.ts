@@ -18,9 +18,10 @@ import { TypedArray } from "../../utils/global_values.ts";
 import { MessageLogger } from "../../utils/message_logger.ts";
 import { Join } from "https://deno.land/x/sql_builder@v1.9.2/join.ts";
 import { LazyPointer } from "../../runtime/lazy-pointer.ts";
-import { MatchOptions, MatchCondition, MatchConditionType } from "../storage.ts";
+import { MatchOptions, MatchCondition, MatchConditionType, MatchComputedProperty, MatchComputedPropertyType} from "../storage.ts";
 import { MatchResult } from "../storage.ts";
 import { Time } from "../../types/time.ts";
+import { Order } from "https://deno.land/x/sql_builder@v1.9.2/order.ts";
 
 const logger = new Logger("SQL Storage");
 
@@ -143,7 +144,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 
 	}
 
-	async #query<row=object>(query_string:string, query_params?:any[], returnRawResult: true): Promise<{rows:row[], result:ExecuteResult}>
+	async #query<row=object>(query_string:string, query_params:any[]|undefined, returnRawResult: true): Promise<{rows:row[], result:ExecuteResult}>
 	async #query<row=object>(query_string:string, query_params?:any[]): Promise<row[]>
 	async #query<row=object>(query_string:string, query_params?:any[], returnRawResult?: boolean): Promise<row[]|{rows:row[], result:ExecuteResult}> {
 		// prevent infinite recursion if calling query from within init()
@@ -224,9 +225,13 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 	 * @returns 
 	 */
 	async #getTableForType(type: Datex.Type) {
-
 		// type does not have a template, use raw pointer table
 		if (!type.template) return null
+
+		// already has a table
+		const tableName = this.#typeToTableName(type);
+		if (this.#tableTypes.has(tableName)) return tableName;
+
 
 		const existingTable = (await this.#queryFirst<{table_name: string}|undefined>(
 			new Query()
@@ -253,7 +258,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			if (!type) {
 				logger.error("No type found for table " + table);
 			}
-			this.#tableTypes.set(table, type ? Datex.Type.get(type.type) : null)
+			else this.#tableTypes.set(table, Datex.Type.get(type.type));
 		}
 
 		return this.#tableTypes.get(table)
@@ -263,10 +268,11 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 	 * Returns the table name for a given type.
 	 * Converts UpperCamelCase to snake_case and pluralizes the name.
 	 * Does not validate if the table exists
+	 * Throws if the type is not templated
 	 */
 	#typeToTableName(type: Datex.Type) {
 		if (!type.template) throw new Error("Cannot create table for non-templated type " + type)
-		const snakeCaseName = type.name.replace(/([A-Z])/g, "_$1").toLowerCase().slice(1);
+		const snakeCaseName = type.name.replace(/([A-Z])/g, "_$1").toLowerCase().slice(1).replace(/__+/g, '_');
 		const snakeCasePlural = snakeCaseName + (snakeCaseName.endsWith("s") ? "es" : "s");
 		return type.namespace=="ext" ? snakeCasePlural : `${type.namespace}_${snakeCasePlural}`;
 	}
@@ -528,12 +534,8 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 
 		// const foreignPointerPlaceholders = await Promise.all(foreignPointerPlaceholderPromises)
 
-		console.log("foreignPointerPlaceholders", foreignPointerPlaceholders)
-
 		const objectString = Datex.Runtime.valueToDatexStringExperimental(object, false, false)
 			.replace(/"\u0001(\d+)"/g, (_, index) => foreignPointerPlaceholders[parseInt(index)]||"error: no placeholder")
-
-		console.log("objectString", objectString)
 
 		return `${type.toString()} ${objectString}`
 	}
@@ -610,7 +612,8 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			const valPtr = Datex.Pointer.pointerifyValue(val);
 
 			if (typeof val == "string") data.value_text = val
-			else if (typeof val == "number") data.value_integer = val
+			else if (typeof val == "number") data.value_decimal = val
+			else if (typeof val == "bigint") data.value_boolean = val
 			else if (typeof val == "boolean") data.value_boolean = val
 			else if (val instanceof Date) data.value_time = val
 			else if (valPtr instanceof Pointer) {
@@ -648,33 +651,90 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 
 	async matchQuery<T extends object, Options extends MatchOptions>(itemPrefix: string, valueType: Datex.Type<T>, match: Datex.MatchInput<T>, options: Options): Promise<MatchResult<T, Options>> {
 	  
+		const joins = new Map<string, Join>()
+		const collectedTableTypes = new Set<Type>([valueType])
+		const collectedIdentifiers = new Set<string>()
 		const builder = new Query()
 			.table(this.#metaTables.items.name)
-			// .select(this.#pointerMysqlColumnName)
-			.select(`SQL_CALC_FOUND_ROWS ${this.#typeToTableName(valueType)}.${this.#pointerMysqlColumnName} as ptrId`)
-			.where(Where.like("key", itemPrefix + "%"))
+			.where(Where.like(this.#metaTables.items.name + ".key", itemPrefix + "%"))
 			.join(
 				Join.left(this.#typeToTableName(valueType)).on(`${this.#metaTables.items.name}.${this.#pointerMysqlColumnName}`, `${this.#typeToTableName(valueType)}.${this.#pointerMysqlColumnName}`)
 			)
+		const where = this.buildQueryConditions(builder, match, joins, collectedTableTypes, collectedIdentifiers, valueType, undefined, undefined, options.computedProperties)
+		let query = "error";
 
-		// limit, do limit later if options.returnPointerIds
-		if (options && (options.limit !== undefined && isFinite(options.limit) && !options.returnPointerIds)) {
-			builder.limit(options.offset ?? 0, options.limit)
+		const rootTableName = this.#typeToTableName(valueType);
+
+		// computed properties - nested select
+		if (options.computedProperties) {
+			const select = [...collectedIdentifiers, this.#pointerMysqlColumnName].map(identifier => {
+				if (identifier.includes("__")) {
+					return `${this.getTableProperty(identifier)} as ${identifier}`
+				}
+				else return rootTableName + '.' + identifier;
+			});
+
+			for (const [name, value] of Object.entries(options.computedProperties)) {
+				if (value.type == MatchComputedPropertyType.GEOGRAPHIC_DISTANCE) {
+					const {pointA, pointB} = value.data;
+					const mockObject = {}
+					for (const property of [pointA.lat, pointA.lon, pointB.lat, pointB.lon]) {
+						// is property, not literal position
+						if (typeof property == "string") {
+							let object:Record<string,any> = mockObject;
+							let lastParent:Record<string,any> = mockObject;
+							let lastProperty: string|undefined
+							for (const part of property.split(".")) {
+								if (!object[part]) object[part] = {};
+								lastParent = object;
+								lastProperty = part;
+								object = object[part];
+							}
+							if (lastParent && lastProperty!=undefined) lastParent[lastProperty] = null;
+						}
+					}
+					// get correct joins
+					this.buildQueryConditions(builder, mockObject, joins, collectedTableTypes, new Set<string>(), valueType)
+
+					select.push(
+						`ST_Distance_Sphere(point(${
+							typeof pointA.lon == "string" ? this.formatProperty(pointA.lon) : pointA.lon
+						},${
+							typeof pointA.lat == "string" ? this.formatProperty(pointA.lat) : pointA.lat
+						}), point(${
+							typeof pointB.lon == "string" ? this.formatProperty(pointB.lon) : pointB.lon
+						},${
+							typeof pointB.lat == "string" ? this.formatProperty(pointB.lat) : pointB.lat
+						})) as ${name}`
+					)
+				}
+			}
+			builder.select(...select);
+			joins.forEach(join => builder.join(join));
+
+			const outerBuilder = new Query()
+				.select(`DISTINCT SQL_CALC_FOUND_ROWS ${this.#pointerMysqlColumnName} as ptrId`)
+				.table('__placeholder__');
+
+			this.appendBuilderConditions(outerBuilder, options, where)
+			// nested select
+			query = outerBuilder.build().replace('`__placeholder__`', `(${builder.build()}) as _inner_res`)
 		}
-			
-		const joins = new Map<string, Join>()
-		const collectedTableTypes = new Set<Type>([valueType])
-		const where = this.buildQueryConditions(builder, match, joins, collectedTableTypes, valueType)
 
-		if (where) builder.where(where);
-		joins.forEach(join => builder.join(join));
-		
+		// no computed properties
+		else {
+			builder.select(`DISTINCT SQL_CALC_FOUND_ROWS ${this.#typeToTableName(valueType)}.${this.#pointerMysqlColumnName} as ptrId`);
+			this.appendBuilderConditions(builder, options, where)
+			joins.forEach(join => builder.join(join));
+			query = builder.build();
+		}
+
 		// make sure all tables are created
 		for (const type of collectedTableTypes) {
 			await this.#getTableForType(type)
 		}
 
-		const ptrIds = (await this.#query<{ptrId:string}>(builder.build())).map(({ptrId}) => ptrId)
+		const ptrIds = (await this.#query<{ptrId:string}>(query)).map(({ptrId}) => ptrId)
 		const limitedPtrIds = options.returnPointerIds ? 
 			// offset and limit manually after query
 			ptrIds.slice(options.offset ?? 0, options.limit ? (options.offset ?? 0) + options.limit : undefined) : 
@@ -683,7 +743,6 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 
 		// TODO: atomic operations for multiple queries
 		const {foundRows} = await this.#queryFirst<{foundRows: number}>("SELECT FOUND_ROWS() as foundRows") ?? {foundRows: -1}
-		console.log("foundRows", foundRows)
 
 		const result = new Set((await Promise.all(limitedPtrIds.map(ptrId => Pointer.load(ptrId)))).filter(ptr => {
 			if (ptr instanceof LazyPointer) {
@@ -705,11 +764,41 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		}
 	}
 
-	private buildQueryConditions(builder: Query, match: unknown, joins: Map<string, Join>, collectedTableTypes:Set<Type>, valueType:Type, namespacedKey?: string, previousKey?: string): Where|undefined {
+	private appendBuilderConditions(builder: Query, options: MatchOptions, where?: Where) {
+		// limit, do limit later if options.returnPointerIds
+		if (options && (options.limit !== undefined && isFinite(options.limit) && !options.returnPointerIds)) {
+			builder.limit(options.offset ?? 0, options.limit)
+		}
+		// sort
+		if (options.sortBy) {
+			builder.order(Order.by(this.formatProperty(options.sortBy))[options.sortDesc ? "desc" : "asc"])
+		}
+		if (where) builder.where(where);
+	}
+
+	/**
+	 * replace all .s with __s, except the last one
+	 */
+	private formatProperty(prop: string) {
+		// 
+		return prop.replace(/\.(?=.*[.].*)/g, '__')
+	}
+
+	/**
+	 * replace last __ with .
+	 */
+	private getTableProperty(prop: string) {
+		return prop.replace(/__(?!.*__.*)/, '.')
+	}
+
+	private buildQueryConditions(builder: Query, match: unknown, joins: Map<string, Join>, collectedTableTypes:Set<Type>, collectedIdentifiers:Set<string>, valueType:Type, namespacedKey?: string, previousKey?: string, computedProperties?: Record<string, MatchComputedProperty<Datex.MatchComputedPropertyType>>): Where|undefined {
 
 		const matchOrs = match instanceof Array ? match : [match]
-		const entryIdentifier = previousKey ? previousKey + '.' + namespacedKey : namespacedKey // address.street
+		let entryIdentifier = previousKey ? previousKey + '.' + namespacedKey : namespacedKey // address.street
+		const underscoreIdentifier = entryIdentifier?.replaceAll(".", "__")
 
+		let where: Where|undefined;
+		let insertedConditionForIdentifier = true; // only set to false if recursing
 		let isPrimitiveArray = true;
 
 		for (const or of matchOrs) {
@@ -719,11 +808,18 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			}
 		}
 
+		const rememberEntryIdentifier = computedProperties && entryIdentifier && !(entryIdentifier in computedProperties);
+		
+		// rename entry identifier
+		if (rememberEntryIdentifier && entryIdentifier) {
+			entryIdentifier = underscoreIdentifier
+		}
+
 		// only primitive array, use IN selector
 		if (isPrimitiveArray) {
 			if (!namespacedKey) throw new Error("missing namespacedKey");
-			if (matchOrs.length == 1) return Where.eq(entryIdentifier!, matchOrs[0])
-			else return Where.in(entryIdentifier!, matchOrs)
+			if (matchOrs.length == 1) where = Where.eq(entryIdentifier!, matchOrs[0])
+			else where = Where.in(entryIdentifier!, matchOrs)
 		}
 
 		else {
@@ -764,6 +860,50 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 						const condition = or as MatchCondition<MatchConditionType.NOT_EQUAL, unknown>
 						wheresOr.push(Where.ne(entryIdentifier!, condition.data))
 					}
+					else if (or.type == MatchConditionType.CONTAINS) {
+						insertedConditionForIdentifier = false;
+						const condition = or as MatchCondition<MatchConditionType.CONTAINS, unknown[]>
+						const propertyType = valueType.template[namespacedKey];
+						const tableAName = this.#typeToTableName(valueType) + '.' + namespacedKey // User.address
+						
+						if (propertyType.base_type == Type.std.Set) {
+							joins.set(
+								namespacedKey, 
+								Join
+									.left(`${this.#metaTables.sets.name}`, namespacedKey)
+									.on(`${namespacedKey}.${this.#pointerMysqlColumnName}`, tableAName))
+							;
+							const values = [...condition.data];
+							// group values by type
+							const valuesByType = Map.groupBy(values, v => v instanceof Date ? "time" : typeof v);
+							for (const [type, vals] of valuesByType) {
+								const columnName = {
+									string: "value_text",
+									number: "value_decimal",
+									bigint: "value_integer",
+									boolean: "value_boolean",
+									function: "value_dxb",
+									time: "value_time",
+									object: "value_dxb",
+									symbol: "value_dxb",
+									undefined: "value_dxb",
+								}[type];
+
+								if (columnName) {
+									const identifier = rememberEntryIdentifier ? `${namespacedKey}__${columnName}` : `${namespacedKey}.${columnName}`
+									if (rememberEntryIdentifier) collectedIdentifiers.add(identifier)
+
+									if (vals.length == 1) wheresOr.push(Where.eq(identifier, vals[0]))
+									else wheresOr.push(Where.in(identifier, vals))
+								}
+								else {
+									throw new Error("Unsupported type for MatchConditionType.CONTAINS: " + type);
+								}
+							}
+							
+						}
+						else throw new Error("Unsupported type for MatchConditionType.CONTAINS: " + or.type);
+					}
 					else {
 						throw new Error("Unsupported match condition type " + or.type)
 					}
@@ -776,38 +916,61 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 					if (ptr instanceof Pointer) {
 						if (!namespacedKey) throw new Error("missing namespacedKey");
 						wheresOr.push(Where.eq(entryIdentifier!, ptr.id))
-						continue;
 					}
 	
-					// only enter after first recursion
-					if (namespacedKey) {
-						collectedTableTypes.add(valueType);
-						collectedTableTypes.add(valueType.template[namespacedKey]);
+					else {
+						insertedConditionForIdentifier = false;
 
-						const tableAName = this.#typeToTableName(valueType) + '.' + namespacedKey // User.address
-						const tableBName = this.#typeToTableName(valueType.template[namespacedKey]); // Address
-						const tableBIdentifier = namespacedKey + '.' + this.#pointerMysqlColumnName
-						// Join Adddreess on address._ptr_id = User.address
-						joins.set(namespacedKey, Join.left(`${tableBName}`, namespacedKey).on(tableBIdentifier, tableAName));
-						valueType = valueType.template[namespacedKey];
-					}
+						// only enter after first recursion
+						if (namespacedKey) {
 
-					const whereAnds:Where[] = []
-					for (const [key, value] of Object.entries(or)) {
-						// const nestedKey = namespacedKey ? namespacedKey + "." + key : key; 
-						const condition = this.buildQueryConditions(builder, value, joins, collectedTableTypes, valueType, key, namespacedKey);
-						if (condition) whereAnds.push(condition)
-					}
-					if (whereAnds.length > 1) wheresOr.push(Where.and(...whereAnds))
-					else if (whereAnds.length) wheresOr.push(whereAnds[0])
+							const propertyType = valueType.template[namespacedKey];
+							if (!propertyType) throw new Error("Property '" + namespacedKey + "' does not exist in type " + valueType);
+							if (propertyType.is_primitive) throw new Error("Tried to match primitive type " + propertyType + " against an object (" + entryIdentifier?.replaceAll("__",".")??namespacedKey + ")")
+		
+							collectedTableTypes.add(valueType);
+							collectedTableTypes.add(propertyType);
+
+							const tableAName = rememberEntryIdentifier ? this.getTableProperty(entryIdentifier!) : entryIdentifier!// this.#typeToTableName(valueType) + '.' + namespacedKey // User.address
+							const tableBName = this.#typeToTableName(propertyType); // Address
+							const tableBIdentifier = underscoreIdentifier + '.' + this.#pointerMysqlColumnName
+							// Join Adddreess on address._ptr_id = User.address
+							joins.set(
+								underscoreIdentifier!, 
+								Join
+									.left(`${tableBName}`, underscoreIdentifier)
+									.on(tableBIdentifier, tableAName)
+							);
+							valueType = valueType.template[namespacedKey];
+						}
+
+						const whereAnds:Where[] = []
+						for (const [key, value] of Object.entries(or)) {
+							
+							// make sure the key exists in the type
+							if (!valueType.template[key] && !(computedProperties && key in computedProperties)) throw new Error("Property '" + key + "' does not exist in type " + valueType);
+
+							const condition = this.buildQueryConditions(builder, value, joins, collectedTableTypes, collectedIdentifiers, valueType, key, underscoreIdentifier, computedProperties);
+							if (condition) whereAnds.push(condition)
+						}
+						if (whereAnds.length > 1) wheresOr.push(Where.and(...whereAnds))
+						else if (whereAnds.length) wheresOr.push(whereAnds[0])
+					}				
 				}
 				else {
 					if (!namespacedKey) throw new Error("missing namespacedKey");
 					wheresOr.push(Where.eq(entryIdentifier!, or))
 				}
 			}
-			if (wheresOr.length) return Where.or(...wheresOr)
+			if (wheresOr.length) where = Where.or(...wheresOr)
 		}
+
+
+		if (rememberEntryIdentifier && insertedConditionForIdentifier && entryIdentifier) {
+			collectedIdentifiers.add(entryIdentifier);
+		}
+
+		return where;
 
 	}
 
@@ -967,22 +1130,24 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 
 		// is set pointer
 		else if (table == this.#metaTables.sets.name) {
-			const values = await this.#query<{value_text:string, value_integer:number, value_boolean:boolean, value_time:Date, value_pointer:string, value_dxb:string}>(
+			const values = await this.#query<{value_text:string, value_integer:number, value_decimal:number, value_boolean:boolean, value_time:Date, value_pointer:string, value_dxb:string}>(
 				new Query()
 					.table(this.#metaTables.sets.name)
-					.select("value_text", "value_integer", "value_boolean", "value_time", "value_pointer", "value_dxb")
+					.select("value_text", "value_integer", "value_decimal", "value_boolean", "value_time", "value_pointer", "value_dxb")
 					.where(Where.eq(this.#pointerMysqlColumnName, pointerId))
 					.where(Where.ne("hash", ""))
 					.build()
 			)
+
 			const result = new Set()
-			for (const {value_text, value_integer, value_boolean, value_time, value_pointer, value_dxb} of values) {
-				if (value_text !== undefined) result.add(value_text)
-				else if (value_integer !== undefined) result.add(value_integer)
-				else if (value_boolean !== undefined) result.add(value_boolean)
-				else if (value_time !== undefined) result.add(value_time)
-				else if (value_pointer !== undefined) result.add(await Pointer.load(value_pointer))
-				else if (value_dxb !== undefined) result.add(await Runtime.decodeValue(this.#stringToBinary(value_dxb)))
+			for (const {value_text, value_integer, value_decimal, value_boolean, value_time, value_pointer, value_dxb} of values) {
+				if (value_text != undefined) result.add(value_text)
+				else if (value_integer != undefined) result.add(BigInt(value_integer))
+				else if (value_decimal != undefined) result.add(value_decimal)
+				else if (value_boolean != undefined) result.add(value_boolean)
+				else if (value_time != undefined) result.add(value_time)
+				else if (value_pointer != undefined) result.add(await Pointer.load(value_pointer))
+				else if (value_dxb != undefined) result.add(await Runtime.decodeValue(this.#stringToBinary(value_dxb)))
 			}
 			return result;
 		}
