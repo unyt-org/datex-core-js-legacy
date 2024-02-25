@@ -247,10 +247,11 @@ export function template(...args:any[]): any {
     return handleDecoratorArgs(args, Decorators.template);
 }
 
-export function property(name:string|number):any
-export function property(target: any, name?: string, method?:any):any
+// export function property(name:string|number):any
+export function property(type:string|Type|Class):any
+export function property(target: any, name: string, method?:any):any
 export function property(...args:any[]): any {
-    return handleDecoratorArgs(args, Decorators.property);
+    return handleDecoratorArgs(args, Decorators.property, args[0] && typeof args[0] == "function");
 }
 
 export function jsdoc(target: any, name?: string, method?:any):any

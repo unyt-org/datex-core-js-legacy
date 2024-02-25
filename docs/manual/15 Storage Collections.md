@@ -1,14 +1,17 @@
 # Storage Collections
-DATEX allows the usage of native Set and Map objects. Those types are stored in RAM and may impact performance when it's data is getting to large.
-For this reason DATEX provides special storage collections that allow the handling of massive amounts of data more efficiently.
 
-The API is similar to the native JavaScript collections with the major difference that their instance methods are asynchronous.
-To get the size of the collection it is recommended to use the asynchronous `getSize` method.
+The native `Set` and `Map` objects can be used with DATEX cross-network and as persistent values, 
+but because their entries are only stored in RAM, they are not ideal for large amounts of data.
+
+For this reason, DATEX provides special collection types (`StorageMap`/`StorageSet`) that handle large amounts of data more efficiently by outsourcing entries to a pointer storage location instead of keeping everything in RAM.
+
+The API is similar to `Set`/`Map` with the major difference that the instance methods are asynchronous.
 
 > [!NOTE]
-> The storage collections are not stored persistently by default. To store persistent data refer to [Eternal Pointers](./05%20Eternal%20Pointers.md).
+> Storage collections are not stored persistently by default as their name might imply. To store storage collections persistently, use [Eternal Pointers](./05%20Eternal%20Pointers.md).
 
-## StorageSet
+## StorageSets
+
 ```ts
 import "datex-core-legacy/types/storage-set.ts";
 const mySet = new StorageSet<number>();
@@ -22,7 +25,8 @@ await mySet.getSize(); // Returns the size of the StorageSet (1)
 await mySet.clear(); // Clear StorageSet
 ```
 
-## StorageMap
+## StorageMaps
+
 ```ts
 import "datex-core-legacy/types/storage-map.ts";
 const myMap = new StorageMap<string, number>();
@@ -34,4 +38,25 @@ for await (const [key, value] of myMap) { // Iterate over entries
 
 await mySet.getSize(); // Returns the size of the StorageMap (1)
 await myMap.clear(); // Clear StorageMap
+```
+
+
+## Pattern Matching
+
+Entries of a `StorageSet` can be efficiently queried by using the builtin pattern matcher.
+For supported storage locations, the pattern matching is directly performed in storage and non-matching entries are never loaded into RAM.
+
+### Selecting by property
+
+The easiest way to match entries in a storage set is to provide a required property:
+
+```ts
+@sync class User {
+    @property(string) declare name: string
+    @property(number) declare age: number
+}
+
+const users = new StorageSet<User>();
+// get all users with age == 18
+const usersAge18 = await users.match(User, {age: 18});
 ```

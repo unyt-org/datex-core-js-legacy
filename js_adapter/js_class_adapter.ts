@@ -320,8 +320,14 @@ export class Decorators {
         if (kind != "field" && kind != "getter" && kind != "setter" && kind != "method") logger.error("Invalid use of @property decorator");
 
         else {
-            if (is_static) setMetadata(Decorators.STATIC_PROPERTY, params?.[0] ?? name)
-            else setMetadata(Decorators.PROPERTY, params?.[0] ?? name)
+            if (is_static) setMetadata(Decorators.STATIC_PROPERTY, name)
+            else setMetadata(Decorators.PROPERTY, name)
+
+            // type
+            if (params?.[0]) {
+                const type = normalizeType(params[0]);
+                setMetadata(Decorators.FORCE_TYPE, type)
+            }
         }
 
     }
