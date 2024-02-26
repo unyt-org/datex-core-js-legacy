@@ -18,7 +18,7 @@ import { TypedArray } from "../../utils/global_values.ts";
 import { MessageLogger } from "../../utils/message_logger.ts";
 import { Join } from "https://deno.land/x/sql_builder@v1.9.2/join.ts";
 import { LazyPointer } from "../../runtime/lazy-pointer.ts";
-import { MatchOptions, MatchCondition, MatchConditionType, MatchComputedProperty, MatchComputedPropertyType} from "../storage.ts";
+import { MatchOptions, MatchCondition, MatchConditionType, ComputedProperty, ComputedPropertyType} from "../storage.ts";
 import { MatchResult } from "../storage.ts";
 import { Time } from "../../types/time.ts";
 import { Order } from "https://deno.land/x/sql_builder@v1.9.2/order.ts";
@@ -675,27 +675,15 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			});
 
 			for (const [name, value] of Object.entries(options.computedProperties)) {
-				if (value.type == MatchComputedPropertyType.GEOGRAPHIC_DISTANCE) {
-					const {pointA, pointB} = value.data;
-					const mockObject = {}
-					for (const property of [pointA.lat, pointA.lon, pointB.lat, pointB.lon]) {
-						// is property, not literal position
-						if (typeof property == "string") {
-							let object:Record<string,any> = mockObject;
-							let lastParent:Record<string,any> = mockObject;
-							let lastProperty: string|undefined
-							for (const part of property.split(".")) {
-								if (!object[part]) object[part] = {};
-								lastParent = object;
-								lastProperty = part;
-								object = object[part];
-							}
-							if (lastParent && lastProperty!=undefined) lastParent[lastProperty] = null;
-						}
-					}
-					// get correct joins
-					this.buildQueryConditions(builder, mockObject, joins, collectedTableTypes, new Set<string>(), valueType)
+				if (value.type == ComputedPropertyType.GEOGRAPHIC_DISTANCE) {
+					const computedProperty = value as ComputedProperty<ComputedPropertyType.GEOGRAPHIC_DISTANCE>
+					const {pointA, pointB} = computedProperty.data;
 
+					this.addPropertyJoins(
+						[pointA.lat, pointA.lon, pointB.lat, pointB.lon].filter(v => typeof v == "string") as string[], 
+						builder, joins, valueType, collectedTableTypes
+					)
+					
 					select.push(
 						`ST_Distance_Sphere(point(${
 							typeof pointA.lon == "string" ? this.formatProperty(pointA.lon) : pointA.lon
@@ -707,6 +695,20 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 							typeof pointB.lat == "string" ? this.formatProperty(pointB.lat) : pointB.lat
 						})) as ${name}`
 					)
+				}
+				else if (value.type == ComputedPropertyType.SUM) {
+					const computedProperty = value as ComputedProperty<ComputedPropertyType.SUM>
+					this.addPropertyJoins(
+						computedProperty.data.filter(v => typeof v == "string") as string[], 
+						builder, joins, valueType, collectedTableTypes
+					)
+					select.push(`SUM(${computedProperty.data.map(p => {
+						if (typeof p == "string") return this.formatProperty(p)
+						else return p
+					})}) as ${name}`)
+				}
+				else {
+					throw new Error("Unsupported computed property type " + value.type)
 				}
 			}
 			builder.select(...select);
@@ -742,7 +744,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			ptrIds	
 
 		// TODO: atomic operations for multiple queries
-		const {foundRows} = await this.#queryFirst<{foundRows: number}>("SELECT FOUND_ROWS() as foundRows") ?? {foundRows: -1}
+		const {foundRows} = (options?.returnAdvanced ? await this.#queryFirst<{foundRows: number}>("SELECT FOUND_ROWS() as foundRows") : null) ?? {foundRows: -1}
 
 		const result = new Set((await Promise.all(limitedPtrIds.map(ptrId => Pointer.load(ptrId)))).filter(ptr => {
 			if (ptr instanceof LazyPointer) {
@@ -762,6 +764,24 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		else {
 			return result as MatchResult<T, Options>;
 		}
+	}
+
+	private addPropertyJoins(properties: string[], builder: Query, joins: Map<string, Join>, valueType: Type, collectedTableTypes: Set<Type>) {
+		const mockObject = {}
+		for (const property of properties) {
+			let object:Record<string,any> = mockObject;
+			let lastParent:Record<string,any> = mockObject;
+			let lastProperty: string|undefined
+			for (const part of property.split(".")) {
+				if (!object[part]) object[part] = {};
+				lastParent = object;
+				lastProperty = part;
+				object = object[part];
+			}
+			if (lastParent && lastProperty!=undefined) lastParent[lastProperty] = null;
+		}
+		// get correct joins
+		this.buildQueryConditions(builder, mockObject, joins, collectedTableTypes, new Set<string>(), valueType)
 	}
 
 	private appendBuilderConditions(builder: Query, options: MatchOptions, where?: Where) {
@@ -791,7 +811,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		return prop.replace(/__(?!.*__.*)/, '.')
 	}
 
-	private buildQueryConditions(builder: Query, match: unknown, joins: Map<string, Join>, collectedTableTypes:Set<Type>, collectedIdentifiers:Set<string>, valueType:Type, namespacedKey?: string, previousKey?: string, computedProperties?: Record<string, MatchComputedProperty<Datex.MatchComputedPropertyType>>): Where|undefined {
+	private buildQueryConditions(builder: Query, match: unknown, joins: Map<string, Join>, collectedTableTypes:Set<Type>, collectedIdentifiers:Set<string>, valueType:Type, namespacedKey?: string, previousKey?: string, computedProperties?: Record<string, ComputedProperty<Datex.ComputedPropertyType>>): Where|undefined {
 
 		const matchOrs = match instanceof Array ? match : [match]
 		let entryIdentifier = previousKey ? previousKey + '.' + namespacedKey : namespacedKey // address.street
