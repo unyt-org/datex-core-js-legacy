@@ -95,7 +95,7 @@ export type MatchOptions<T = unknown> = {
     /**
      * Custom computed properties for match query
      */
-    computedProperties?: Record<string, MatchComputedProperty<MatchComputedPropertyType>>
+    computedProperties?: Record<string, ComputedProperty<ComputedPropertyType>>
 }
 
 export type MatchResult<T, Options extends MatchOptions> = Options["returnAdvanced"] extends true ?
@@ -151,29 +151,48 @@ export class MatchCondition<Type extends MatchConditionType, V> {
         return new MatchCondition(MatchConditionType.GREATER_THAN, value)
     }
 
+    static lessOrEqual<V>(value: V) {
+        return new MatchCondition(MatchConditionType.LESS_OR_EQUAL, value)
+    }
+
+    static greaterOrEqual<V>(value: V) {
+        return new MatchCondition(MatchConditionType.GREATER_OR_EQUAL, value)
+    }
+
+    static notEqual<V>(value: V) {
+        return new MatchCondition(MatchConditionType.NOT_EQUAL, value)
+    }
+
     static contains<V>(...values: V[]) {
         return new MatchCondition(MatchConditionType.CONTAINS, new Set(values))
     }
 }
 
-export enum MatchComputedPropertyType {
-    GEOGRAPHIC_DISTANCE = "GEOGRAPHIC_DISTANCE"
+export enum ComputedPropertyType {
+    GEOGRAPHIC_DISTANCE = "GEOGRAPHIC_DISTANCE",
+    SUM = "SUM",
 }
 
-export type MatchComputedPropertyData<Type extends MatchComputedPropertyType> =
-    Type extends MatchComputedPropertyType.GEOGRAPHIC_DISTANCE ?
+export type ComputedPropertyData<Type extends ComputedPropertyType> =
+    Type extends ComputedPropertyType.GEOGRAPHIC_DISTANCE ?
         {pointA: {lat: number|string, lon: number|string}, pointB: {lat: number|string, lon: number|string}} :
+    Type extends ComputedPropertyType.SUM ?
+        (number|string)[] :
     never
 
-export class MatchComputedProperty<Type extends MatchComputedPropertyType> {
+export class ComputedProperty<Type extends ComputedPropertyType> {
 
     private constructor(
         public type: Type,
-        public data: MatchComputedPropertyData<Type>
+        public data: ComputedPropertyData<Type>
     ) {}
 
     static geographicDistance(pointA: {lat: number|string, lon: number|string}, pointB: {lat: number|string, lon: number|string}) {
-        return new MatchComputedProperty(MatchComputedPropertyType.GEOGRAPHIC_DISTANCE, {pointA, pointB})
+        return new ComputedProperty(ComputedPropertyType.GEOGRAPHIC_DISTANCE, {pointA, pointB})
+    }
+
+    static sum(...values: (number|string)[]) {
+        return new ComputedProperty(ComputedPropertyType.SUM, values)
     }
 }
 
