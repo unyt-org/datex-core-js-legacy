@@ -1,7 +1,7 @@
 # Storage Collections
 
 The native `Set` and `Map` objects can be used with DATEX cross-network and as persistent values, 
-but because their entries are only stored in RAM, they are not ideal for large amounts of data.
+but because their entries are completely stored in RAM, they are not ideal for large amounts of data.
 
 For this reason, DATEX provides special collection types (`StorageMap`/`StorageSet`) that handle large amounts of data more efficiently by outsourcing entries to a pointer storage location instead of keeping everything in RAM.
 
