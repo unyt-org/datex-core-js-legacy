@@ -43,6 +43,7 @@ export type endpoints = Endpoint|Disjunction<Endpoint>
 
 export class Target implements ValueConsumer {
 
+	// TODO: remove entry when Endpoint WeakRef was garbage collected
 	protected static targets = new Map<string, WeakRef<Endpoint>>();   // target string -> target element
 	static readonly prefix:target_prefix = "@"
 	static readonly type:BinaryCode

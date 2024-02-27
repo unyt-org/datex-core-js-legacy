@@ -1,5 +1,7 @@
+import { dc } from "../js_adapter/js_class_adapter.ts";
 import type { ObjectRef } from "../runtime/pointers.ts";
 import { Runtime } from "../runtime/runtime.ts";
+import { Class } from "../utils/global_types.ts";
 import { sha256 } from "../utils/sha256.ts";
 import { Type } from "./type.ts";
 
@@ -19,7 +21,12 @@ type collapseType<Def extends StructuralTypeDefIn> = {
 			)
 }
 
-export type inferType<DXType extends Type> = DXType extends Type<infer Def> ? Def : never;
+export type inferType<DXTypeOrClass extends Type|Class> = 
+	DXTypeOrClass extends Type<infer Def> ? 
+		ObjectRef<Def> : 
+	DXTypeOrClass extends Class ? 
+		InstanceType<DXTypeOrClass> : 
+	never;
 
 /**
  * Define a structural type without a class or prototype.
@@ -57,10 +64,17 @@ export type inferType<DXType extends Type> = DXType extends Type<infer Def> ? De
  * ```
  */
 
-
-export function struct<Def extends StructuralTypeDefIn>(def: Def): Type<collapseType<Def>> & ((val: collapseType<Def>)=>ObjectRef<collapseType<Def>>) {
+export function struct<T extends Record<string, any> & Class>(classDefinition: T): dc<T>
+export function struct<Def extends StructuralTypeDefIn>(def: Def): Type<collapseType<Def>> & ((val: collapseType<Def>)=>ObjectRef<collapseType<Def>>)
+export function struct(def: StructuralTypeDefIn|Class): any {
 	// create unique type name from template hash
 
+	// is class definition
+	if (typeof def == "function") {
+		throw new Error("todo struct class")
+	}
+
+	// is struct definition
 	if (!def || typeof def !== "object") throw new Error("Struct definition must of type object");
 
 	const template:StructuralTypeDef = {};

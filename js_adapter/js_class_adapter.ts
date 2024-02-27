@@ -16,7 +16,6 @@ import { Runtime, StaticScope } from "../runtime/runtime.ts";
 
 import { Logger } from "../utils/logger.ts";
 import { Endpoint, endpoint_name, IdEndpoint, LOCAL_ENDPOINT, Target, target_clause } from "../types/addressing.ts";
-import { context_kind, context_meta_getter, context_meta_setter, context_name } from "./legacy_decorators.ts";
 import { Type } from "../types/type.ts";
 import { getProxyFunction, getProxyStaticValue, ObjectRef, Pointer, UpdateScheduler } from "../runtime/pointers.ts";
 import { Error as DatexError, ValueError } from "../types/errors.ts";
@@ -127,6 +126,19 @@ export class Decorators {
     static REPLICATOR    = Symbol("REPLICATOR");
     static DESTRUCTOR    = Symbol("DESTRUCTOR");
 
+
+    private static setMetadata(context:DecoratorContext, key:string|symbol, value:unknown) {
+        if (!context.metadata[key]) context.metadata[key] = {};
+        const data = context.metadata[key] as {public?:Record<string|symbol,any>, constructor?:any}
+        if (context.kind == "class") {
+            data.constructor = value;
+        }
+        else {
+            if (!data.public) data.public = {};
+            data.public[context.name] = value;
+        }  
+    }
+
     /** @expose(allow?:filter): make a method in a static scope available to be called by others */
     static public(value:any, name:context_name, kind:context_kind, is_static:boolean, is_private:boolean, setMetadata:context_meta_setter, getMetadata:context_meta_getter, params:[target_clause?] = []) {
         
@@ -166,34 +178,23 @@ export class Decorators {
     }
 
     /** @endpoint(endpoint?:string|Datex.Endpoint, namespace?:string): declare a class as a #public property */
-    static endpoint(value:any, name:context_name, kind:context_kind, is_static:boolean, is_private:boolean, setMetadata:context_meta_setter, getMetadata:context_meta_getter, params:[(target_clause|endpoint_name)?, string?] = []) {
-        
-            // invalid decorator call
-            if (!is_static && kind != "class") logger.error("Cannot use @endpoint for non-static field '" + name!.toString() +"'");
-    
-            // handle decorator
-            else {
-
-                // target endpoint
-                if (params[0]) {
-                    Decorators.addMetaFilter(
-                        params[0], 
-                        setMetadata, getMetadata, Decorators.SEND_FILTER
-                    )
-                }
-                else {
-                    setMetadata(Decorators.SEND_FILTER, true); // indicate to always use local endpoint (expose)
-                }
-              
-                // custom namespace name
-                setMetadata(Decorators.NAMESPACE, params[1] ?? value?.name)
-    
-                // class @endpoint
-                if (kind == "class") registerPublicStaticClass(value);
-
-                else logger.error("@endpoint can only be used for classes");
-            }
+    static endpoint(endpoint:target_clause|endpoint_name, scope_name:string|undefined, value: Class, context: ClassDecoratorContext) {
+        // target endpoint
+        if (endpoint) {
+            Decorators.addMetaFilter(
+                endpoint, 
+                context,
+                Decorators.SEND_FILTER
+            )
         }
+        else {
+            this.setMetadata(context, Decorators.SEND_FILTER, true) // indicate to always use local endpoint (expose)
+        }
+
+        // custom namespace name
+        this.setMetadata(context, Decorators.NAMESPACE, scope_name ?? value?.name);
+        registerPublicStaticClass(value, context.metadata);
+    }
 
     /** @root_extension: root extends this static scope in every executed DATEX scope (all static scope members become variables) */
     static default(value:any, name:context_name, kind:context_kind, is_static:boolean, is_private:boolean, setMetadata:context_meta_setter, getMetadata:context_meta_getter, params:undefined) {
@@ -316,31 +317,29 @@ export class Decorators {
 
 
     /** @property: add a field as a template property */
-    static property(value:any, name:context_name, kind:context_kind, is_static:boolean, is_private:boolean, setMetadata:context_meta_setter, getMetadata:context_meta_getter, params:[string|number]) {
-        if (kind != "field" && kind != "getter" && kind != "setter" && kind != "method") logger.error("Invalid use of @property decorator");
+    static property<T>(type:string|Type<T>|Class<T>, context: ClassFieldDecoratorContext|ClassGetterDecoratorContext|ClassMethodDecoratorContext) {
 
+        if (context.static) {
+            this.setMetadata(context, Decorators.STATIC_PROPERTY, context.name)
+        }
         else {
-            if (is_static) setMetadata(Decorators.STATIC_PROPERTY, name)
-            else setMetadata(Decorators.PROPERTY, name)
-
-            // type
-            if (params?.[0]) {
-                const type = normalizeType(params[0]);
-                setMetadata(Decorators.FORCE_TYPE, type)
-            }
+            this.setMetadata(context, Decorators.PROPERTY, context.name)
         }
 
+        // type
+        if (type) {
+            const normalizedType = normalizeType(type);
+            this.setMetadata(context, Decorators.FORCE_TYPE, normalizedType)
+        }
     }
 
+
      /** @assert: add type assertion function */
-     static assert(value:any, name:context_name, kind:context_kind, is_static:boolean, is_private:boolean, setMetadata:context_meta_setter, getMetadata:context_meta_getter, params:[((value:any)=>boolean)?] = []) {
-        if (kind != "field" && kind != "getter" && kind != "setter" && kind != "method") logger.error("Invalid use of @assert decorator");
+    static assert<T>(assertion: (val:T) => boolean|string|undefined, context: ClassFieldDecoratorContext) {
+        if (context.static) logger.error("Cannot use @assert with static fields");
         else {
-            if (typeof params[0] !== "function") logger.error("Invalid @assert decorator value, must be a function");
-            else {
-                const assertionType = new Conjunction(Assertion.get(undefined, params[0], false));
-                setMetadata(Decorators.FORCE_TYPE, assertionType)
-            }
+            const assertionType = new Conjunction(Assertion.get(undefined, assertion, false));
+            this.setMetadata(context, Decorators.FORCE_TYPE, assertionType)
         }
     }
 
@@ -404,44 +403,32 @@ export class Decorators {
     }
 
     /** @sync: sync class/property */
-    static sync(value:any, name:context_name, kind:context_kind, is_static:boolean, is_private:boolean, setMetadata:context_meta_setter, getMetadata:context_meta_getter, params:[(string|Type)?] = []) {
+    static sync(type: string|Type, value: Class, context: ClassDecoratorContext) {
         
-        // invalid decorator call
-        if (is_static) logger.error("Cannot use @sync for static field '" + name.toString() +"'");
-        if (is_static) logger.error("Cannot use @sync for static field '" + name.toString() +"'");
+        this.setMetadata(context, Decorators.IS_SYNC, true)
 
-        // handle decorator
-        else {
-            setMetadata(Decorators.IS_SYNC, true)
+        const originalClass = value;
 
-            // is auto sync class -> create class proxy (like in template)
-            if (kind == "class") {
-                //initPropertyTypeAssigner();
+        let normalizedType: Type;
 
-                const original_class = value;
-                let type: Type;
-    
-                // get template type
-                if (typeof params[0] == "string" || params[0] instanceof Type) {
-                    type = normalizeType(params[0], false, "ext");
-                }
-                else if (original_class[METADATA]?.[Decorators.FORCE_TYPE]?.constructor) type = original_class[METADATA]?.[Decorators.FORCE_TYPE]?.constructor
-                else type = Type.get("ext", original_class.name.replace(/^_/, '')); // remove leading _ from type name
-
-                let callerFile:string|undefined;
-
-                if (client_type == "deno" && type.namespace !== "std") {
-                    callerFile = getCallerInfo()?.[2]?.file ?? undefined;
-                    if (!callerFile) {
-                        logger.error("Could not determine JS module URL for type '" + type + "'")
-                    }
-                }
-                
-                // return new templated class
-                return createTemplateClass(original_class, type, true, true, callerFile);
-            }
-          
+        // get template type
+        if (typeof type == "string" || type instanceof Type) {
+            normalizedType = normalizeType(type, false, "ext");
         }
+        else if (originalClass[METADATA]?.[Decorators.FORCE_TYPE]?.constructor) normalizedType = originalClass[METADATA]?.[Decorators.FORCE_TYPE]?.constructor
+        else normalizedType = Type.get("ext", originalClass.name.replace(/^_/, '')); // remove leading _ from type name
+
+        let callerFile:string|undefined;
+
+        if (client_type == "deno" && normalizedType.namespace !== "std") {
+            callerFile = getCallerInfo()?.[2]?.file ?? undefined;
+            if (!callerFile) {
+                logger.error("Could not determine JS module URL for type '" + normalizedType + "'")
+            }
+        }
+        
+        // return new templated class
+        return createTemplateClass(originalClass, normalizedType, true, true, callerFile, context.metadata);
     }
 
     /** @sealed: sealed class/property */
@@ -560,14 +547,9 @@ export class Decorators {
 
     // handle ALLOW_FILTER for classes, methods and fields
     // adds filter
-    private static addMetaFilter(new_filter:target_clause|endpoint_name, setMetadata:context_meta_setter, getMetadata:context_meta_getter, filter_symbol:symbol){
-        // // create filter if not existing
-        // let filter:Filter = getMetadata(filter_symbol)
-        // if (!filter) {filter = new Filter(); setMetadata(filter_symbol, filter)}
-        // filter.appendFilter(new_filter);
-
-        if (typeof new_filter == "string") setMetadata(filter_symbol, Target.get(new_filter))
-        else setMetadata(filter_symbol, new_filter)
+    private static addMetaFilter(new_filter:target_clause|endpoint_name, context: DecoratorContext, filter_symbol:symbol){
+        if (typeof new_filter == "string") this.setMetadata(context, filter_symbol, Target.get(new_filter))
+        else this.setMetadata(context, filter_symbol, new_filter)
     }
 }
 
@@ -608,54 +590,54 @@ function normalizeType(type:Type|string|Class, allowTypeParams = true, defaultNa
 const initialized_static_scope_classes = new Map<Function,StaticScope>();
 
 
-const registered_static_classess = new Set<Class>();
-function registerPublicStaticClass(original_class:Class){
-    registered_static_classess.add(original_class);
+const registered_static_classes = new Set<Class>();
+function registerPublicStaticClass(publicClass:Class, metadata?:Record<string,any>){
+    registered_static_classes.add(publicClass);
 
-    // if endpoint already loaded, init class
-    initPublicStaticClasses()
+    // init class (if endpoint already loaded)
+    initPublicStaticClass(publicClass, metadata)
 }
 
 type class_data = {name:string, static_scope:StaticScope, properties: string[], metadata:any}
 
-export function initPublicStaticClasses(){
+export function initPublicStaticClasses(){    
+    for (const reg_class of registered_static_classes) {
+        initPublicStaticClass(reg_class)
+    }
+}
+
+function initPublicStaticClass(publicClass: Class, metadata?:Record<string,any>) {
     if (!Runtime.endpoint || Runtime.endpoint === LOCAL_ENDPOINT) return;
+    if (initialized_static_scope_classes.has(publicClass)) return;
+
+    metadata ??= (<any>publicClass)[METADATA];
+    if (!metadata) throw new Error(`Missing metadata for class ${publicClass.name}`)
+    let targets = metadata[Decorators.SEND_FILTER]?.constructor;
+    if (targets == true) targets = Runtime.endpoint; // use own endpoint per default
+
+    let data:any;
     
-    for (const reg_class of registered_static_classess) {
-
-        if (initialized_static_scope_classes.has(reg_class)) continue; // already initialized
-
-        const metadata = (<any>reg_class)[METADATA];
-        let targets = metadata[Decorators.SEND_FILTER]?.constructor;
-        if (targets == true) targets = Runtime.endpoint; // use own endpoint per default
-
-        let data:any;
-
-        // expose if current endpoint matches class endpoint
-        if (Logical.matches(Runtime.endpoint, targets, Target)) {
-            data ??= getStaticClassData(reg_class);
-            if (!data) throw new Error("Could not get data for static class")
-            exposeStaticClass(reg_class, data);
-        }
-
-        // also enable remote access if not exactly and only the current endpoint
-        if (Runtime.endpoint !== targets) {
-            data ??= getStaticClassData(reg_class, false);
-            if (!data) throw new Error("Could not get data for static class")
-            remoteStaticClass(reg_class, data, targets)
-        }
-
-        
-        DatexObject.seal(data.static_scope);
-        initialized_static_scope_classes.set(reg_class, data.static_scope);
+    // expose if current endpoint matches class endpoint
+    if (Logical.matches(Runtime.endpoint, targets, Target)) {
+        data ??= getStaticClassData(publicClass, true, metadata);
+        if (!data) throw new Error("Could not get data for static class")
+        exposeStaticClass(publicClass, data);
     }
 
+    // also enable remote access if not exactly and only the current endpoint
+    if (Runtime.endpoint !== targets) {
+        data ??= getStaticClassData(publicClass, false, metadata);
+        if (!data) throw new Error("Could not get data for static class")
+        remoteStaticClass(publicClass, data, targets)
+    }
+
+    
+    DatexObject.seal(data.static_scope);
+    initialized_static_scope_classes.set(publicClass, data.static_scope);
 }
 
 
 function exposeStaticClass(original_class:Class, data:class_data) {
-
-    // console.log("expose class", data, data.metadata[Decorators.STATIC_PROPERTY]);
 
     const exposed_public = data.metadata[Decorators.STATIC_PROPERTY]?.public;
     const exposed_private = data.metadata[Decorators.STATIC_PROPERTY]?.private;
@@ -789,8 +771,8 @@ function remoteStaticClass(original_class:Class, data:class_data, targets:target
 }
 
 
-function getStaticClassData(original_class:Class, staticScope = true) {
-    const metadata = (<any>original_class)[METADATA];
+function getStaticClassData(original_class:Class, staticScope = true, metadata?:Record<string,any>) {
+    metadata ??= (<any>original_class)[METADATA];
     if (!metadata) return;
     const static_scope_name = typeof metadata[Decorators.NAMESPACE]?.constructor == 'string' ? metadata[Decorators.NAMESPACE]?.constructor : original_class.name;
     const static_properties = Object.getOwnPropertyNames(original_class)
@@ -1058,9 +1040,9 @@ function _old_publicStaticClass(original_class:Class) {
 
 const templated_classes = new Map<Function, Function>() // original class, templated class
 
-export function createTemplateClass(original_class:{ new(...args: any[]): any; }, type:Type, sync = true, add_js_interface = true, callerFile?:string){
+export function createTemplateClass(original_class:{ new(...args: any[]): any; }, type:Type, sync = true, add_js_interface = true, callerFile?:string, metadata?:Record<string,any>){
 
-    if (templated_classes.has(original_class)) return templated_classes.get(original_class);
+    if (templated_classes.has(original_class)) return templated_classes.get(original_class)!;
 
     original_class[DX_TYPE] = type;
 
@@ -1077,19 +1059,20 @@ export function createTemplateClass(original_class:{ new(...args: any[]): any; }
         type.jsTypeDefModule = callerFile;
     }
 
+    metadata ??= original_class.prototype[METADATA];
 
     // set constructor, replicator, destructor
-    const constructor_name = Object.keys(original_class.prototype[METADATA]?.[Decorators.CONSTRUCTOR]?.public??{})[0]
-    const replicator_name = Object.keys(original_class.prototype[METADATA]?.[Decorators.REPLICATOR]?.public??{})[0]
-    const destructor_name = Object.keys(original_class.prototype[METADATA]?.[Decorators.DESTRUCTOR]?.public??{})[0]
+    const constructor_name = original_class.prototype['construct'] ? 'construct' : null; // Object.keys(metadata?.[Decorators.CONSTRUCTOR]?.public??{})[0]
+    const replicator_name = original_class.prototype['construct'] ? 'replicate' : null; // Object.keys(metadata?.[Decorators.REPLICATOR]?.public??{})[0]
+    const destructor_name = Object.keys(metadata?.[Decorators.DESTRUCTOR]?.public??{})[0]
 
     if (constructor_name) type.setConstructor(original_class.prototype[constructor_name]);
     if (replicator_name) type.setReplicator(original_class.prototype[replicator_name]);
     if (destructor_name) type.setDestructor(original_class.prototype[destructor_name]);
 
     // set template
-    const property_types = original_class.prototype[METADATA]?.[Decorators.FORCE_TYPE]?.public;
-    const allow_filters = original_class.prototype[METADATA]?.[Decorators.ALLOW_FILTER]?.public;
+    const property_types = metadata?.[Decorators.FORCE_TYPE]?.public;
+    const allow_filters = metadata?.[Decorators.ALLOW_FILTER]?.public;
 
     const template = {};
     template[DX_PERMISSIONS] = {}
@@ -1109,7 +1092,7 @@ export function createTemplateClass(original_class:{ new(...args: any[]): any; }
 
 
     // iterate over all properties TODO different dx_name?
-    for (const [name, dx_name] of Object.entries(original_class.prototype[METADATA]?.[Decorators.PROPERTY]?.public??{})) {
+    for (const [name, dx_name] of Object.entries(metadata?.[Decorators.PROPERTY]?.public??{})) {
         let metadataConstructor = MetadataReflect.getMetadata && MetadataReflect.getMetadata("design:type", original_class.prototype, name);
         // if type is Object -> std:Any
         if (metadataConstructor == Object) metadataConstructor = null;
@@ -1125,7 +1108,7 @@ export function createTemplateClass(original_class:{ new(...args: any[]): any; }
     _old_publicStaticClass(original_class);
 
     // create shadow class extending the actual class
-    const sync_auto_cast_class = proxyClass(original_class, type, original_class[METADATA]?.[Decorators.IS_SYNC]?.constructor ?? sync)
+    const sync_auto_cast_class = proxyClass(original_class, type, metadata?.[Decorators.IS_SYNC]?.constructor ?? sync)
     
     // only for debugging / dev console TODO remove
     globalThis[sync_auto_cast_class.name] = sync_auto_cast_class;
@@ -1134,27 +1117,6 @@ export function createTemplateClass(original_class:{ new(...args: any[]): any; }
 
     return sync_auto_cast_class;
 }
-
-// TODO each
-// if (is_each) {
-
-//     // call _e 
-
-//     const static_scope_name = original_class[METADATA]?.[Decorators.SCOPE_NAME]?.constructor ?? original_class.name
-//     let filter:DatexFilter; // contains all endpoints that have the pointer
-
-//     Object.defineProperty(instance, p, {value: async function(...args:any[]) {
-//         if (!filter) {
-//             let ptr = DatexPointer.getByValue(this);
-//             if (!(ptr instanceof DatexPointer)) throw new DatexError("called @each method on non-pointer");
-//             filter = DatexFilter.OR(await ptr.getSubscribersFilter(), ptr.origin);
-//         }
-//         console.log("all endpoints filter: " + filter);
-      
-//         return DatexRuntime.datexOut([`--static.${static_scope_name}._e.${p} ?`, [new DatexTuple(this, ...args)], {to:filter, sign:true}], filter);
-//     }})
-// }
-
 
 // Reflect metadata / decorator metadata, get parameters & types if available
 function getMethodParams(target:Function, method_name:string, meta_param_index?:number):Tuple{
@@ -1221,50 +1183,26 @@ function normalizeFunctionParams(params: string) {
 }
 
 
-// let _assigner_init = false;
-// function initPropertyTypeAssigner(){
-//     if (_assigner_init) return;
-//     _assigner_init = true;
-//     // TODO just a workaround, handle PropertyTypeAssigner different (currently nodejs error!! DatexPointer not yet defined)
-//     Pointer.setPropertyTypeAssigner(<any>{getMethodMetaParamIndex:getMetaParamIndex, getMethodParams:getMethodParams})
-// }
-//Pointer.setPropertyTypeAssigner(<any>{getMethodMetaParamIndex:getMetaParamIndex, getMethodParams:getMethodParams})
-
 DatexFunction.setMethodParamsSource(getMethodParams)
 DatexFunction.setMethodMetaIndexSource(getMetaParamIndex)
-
-/** @meta: mark meta parameter in a datex method with @meta */
-// export function meta(target: Object, propertyKey: string | symbol, parameterIndex: number) {
-//     Reflect.defineMetadata(
-//         "unyt:meta",
-//         parameterIndex,
-//         target,
-//         propertyKey
-//     );
-// }
 
 
 // new version for implemented feature functions / attributes: call datex_advanced() on the class (ideally usa as a decorator, currently not supported by ts)
 
-interface DatexClass<T extends (new (...args: unknown[]) => unknown) = (new (...args: unknown[]) => unknown), Construct = InstanceType<T>["construct"]> {
+export interface DatexClass<T extends (new (...args: unknown[]) => unknown) = (new (...args: unknown[]) => unknown), Construct = InstanceType<T>["construct" & keyof InstanceType<T>]> {
 
     new(...args: Construct extends (...args: any) => any ? Parameters<Construct> : ConstructorParameters<T>): datexClassType<T>;
 
-    // special functions
-    on_result: (call: (data:any, meta:{station_id:number, station_bundle:number[]})=>any) => dc<T>;
-    options: (options:any)=>T;
-
-    // decorator equivalents
-    to: (target:target_clause) => dc<T>;
-    no_result: () => dc<T>;
-
-    // @sync objects
-    is_origin?: boolean;
-    origin_id?: number;
-    room_id?: number;
 }
 
-type dc<T extends Record<string,any>&{new (...args:unknown[]):unknown}> = DatexClass<T> & T & ((struct:InstanceType<T>) => datexClassType<T>);
+export type MethodKeys<T> = {
+    [K in keyof T]: T[K] extends (...args: any) => any  ? K : never;
+}[keyof T];
+
+export type dc<T extends Record<string,any>&{new (...args:unknown[]):unknown}, OT extends {new (...args:unknown[]):unknown} = ObjectRef<T>> = 
+    DatexClass<OT> & 
+    Pick<OT, keyof OT> & 
+    ((struct:Omit<InstanceType<OT>, MethodKeys<InstanceType<T>>>) => datexClassType<OT>);
 
 /**
  * Workaround to enable correct @sync class typing, until new decorators support it.

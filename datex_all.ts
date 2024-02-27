@@ -4,7 +4,7 @@ export * from "./runtime/runtime.ts";
 
 // js_adapter
 export * from "./js_adapter/js_class_adapter.ts";
-export * from "./js_adapter/legacy_decorators.ts";
+export * from "./js_adapter/decorators.ts";
 
 // utils
 export type * from "./utils/global_types.ts";

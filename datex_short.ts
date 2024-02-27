@@ -1,10 +1,10 @@
 
 // shortcut functions
 // import { Datex } from "./datex.ts";
-import { baseURL, Runtime, PrecompiledDXB, Type, Pointer, Ref, PointerProperty, primitive, any_class, Target, IdEndpoint, TransformFunctionInputs, AsyncTransformFunction, TransformFunction, Markdown, MinimalJSRef, RefOrValue, PartialRefOrValueObject, datex_meta, ObjectWithDatexValues, Compiler, endpoint_by_endpoint_name, endpoint_name, Storage, compiler_scope, datex_scope, DatexResponse, target_clause, ValueError, logger, Class, getUnknownMeta, Endpoint, INSERT_MARK, CollapsedValueAdvanced, CollapsedValue, SmartTransformFunction, compiler_options, activePlugins, METADATA, handleDecoratorArgs, RefOrValueObject, PointerPropertyParent, InferredPointerProperty, RefLike } from "./datex_all.ts";
+import { baseURL, Runtime, PrecompiledDXB, Type, Pointer, Ref, PointerProperty, primitive, Target, IdEndpoint, Markdown, MinimalJSRef, RefOrValue, PartialRefOrValueObject, datex_meta, ObjectWithDatexValues, Compiler, endpoint_by_endpoint_name, endpoint_name, Storage, compiler_scope, datex_scope, DatexResponse, target_clause, ValueError, logger, Class, getUnknownMeta, Endpoint, INSERT_MARK, CollapsedValueAdvanced, CollapsedValue, SmartTransformFunction, compiler_options, activePlugins, METADATA, handleDecoratorArgs, RefOrValueObject, PointerPropertyParent, InferredPointerProperty, RefLike, dc } from "./datex_all.ts";
 
 /** make decorators global */
-import { assert as _assert, property as _property, sync as _sync, endpoint as _endpoint, template as _template, jsdoc as _jsdoc} from "./datex_all.ts";
+import { assert as _assert, property as _property, struct as _struct, endpoint as _endpoint, sync as _sync} from "./datex_all.ts";
 import { effect as _effect, always as _always, reactiveFn as _reactiveFn, asyncAlways as _asyncAlways, toggle as _toggle, map as _map, equals as _equals, selectProperty as _selectProperty, not as _not } from "./functions.ts";
 export * from "./functions.ts";
 import { NOT_EXISTING, DX_SLOTS, SLOT_GET, SLOT_SET } from "./runtime/constants.ts";
@@ -22,10 +22,13 @@ declare global {
 	const property: typeof _property;
     const assert: typeof _assert;
 
-    const jsdoc: typeof _jsdoc;
-	const sync: typeof _sync;
+	const struct: typeof _struct;
 	const endpoint: typeof _endpoint;
     const always: typeof _always;
+    /**
+     * @deprecated Use struct(class {...}) instead;
+     */
+    const sync: typeof _sync;
     const asyncAlways: typeof _asyncAlways;
     const reactiveFn: typeof _reactiveFn;
     const toggle: typeof _toggle;
@@ -53,13 +56,11 @@ globalThis.property = _property;
 globalThis.assert = _assert;
 
 // @ts-ignore global
-globalThis.sync = _sync;
+globalThis.struct = _struct;
 // @ts-ignore global
 globalThis.endpoint = _endpoint;
-// // @ts-ignore global
-// globalThis.template = _template;
 // @ts-ignore global
-globalThis.jsdoc = _jsdoc;
+globalThis.sync = _sync;
 
 // can be used instead of import(), calls a DATEX get instruction, works for urls, endpoint, ...
 export async function get<T=unknown>(dx:string|URL|Endpoint, assert_type?:Type<T> | Class<T> | string, context_location?:URL|string, plugins?:string[]):Promise<T> {
