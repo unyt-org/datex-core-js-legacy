@@ -201,7 +201,7 @@ export type datex_scope = {
     closed?: boolean // is scope completely closed?
 }
 
-export type Class<T=any> = (new (...args: any[]) => T) | (abstract new (...args: any[]) => T); // type for a JS class
+export type Class<T=any> = (new (...args: any[]) => T); // type for a JS class
 
 export type compile_info = [datex:string|PrecompiledDXB, data?:any[], options?:compiler_options, add_header?:boolean, is_child_scope_block?:boolean, extract_pointers?:boolean, save_precompiled?:PrecompiledDXB, max_block_size?:number];
 

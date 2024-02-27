@@ -4,6 +4,7 @@ import { Runtime } from "../runtime/runtime.ts";
 import { Class } from "../utils/global_types.ts";
 import { sha256 } from "../utils/sha256.ts";
 import { Type } from "./type.ts";
+import { Decorators } from "../js_adapter/js_class_adapter.ts";
 
 type StructuralTypeDefIn = {
 	[key: string]: Type|(new () => unknown)|StructuralTypeDefIn
@@ -65,13 +66,19 @@ export type inferType<DXTypeOrClass extends Type|Class> =
  */
 
 export function struct<T extends Record<string, any> & Class>(classDefinition: T): dc<T>
+export function struct<T extends Record<string, any> & Class>(type: string, classDefinition: T): dc<T>
+export function struct<Def extends StructuralTypeDefIn>(typeName: string, def: Def): Type<collapseType<Def>> & ((val: collapseType<Def>)=>ObjectRef<collapseType<Def>>)
 export function struct<Def extends StructuralTypeDefIn>(def: Def): Type<collapseType<Def>> & ((val: collapseType<Def>)=>ObjectRef<collapseType<Def>>)
-export function struct(def: StructuralTypeDefIn|Class): any {
+export function struct(defOrTypeName: StructuralTypeDefIn|Class|string, def?: StructuralTypeDefIn|Class): any {
 	// create unique type name from template hash
+
+	const hasType = typeof defOrTypeName == "string";
+	const typeName = hasType ? defOrTypeName : undefined;
+	def = hasType ? def : defOrTypeName;
 
 	// is class definition
 	if (typeof def == "function") {
-		throw new Error("todo struct class")
+		return Decorators.sync(typeName, def);
 	}
 
 	// is struct definition
@@ -98,7 +105,7 @@ export function struct(def: StructuralTypeDefIn|Class): any {
 		}
 	}
 
-	const hash = sha256(Runtime.valueToDatexStringExperimental(template))
+	const hash = typeName ?? sha256(Runtime.valueToDatexStringExperimental(template))
 	const type = new Type("struct", hash).setTemplate(template);
 	type.proxify_children = true;
 	return type as any

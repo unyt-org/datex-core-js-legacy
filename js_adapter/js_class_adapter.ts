@@ -127,8 +127,8 @@ export class Decorators {
     static DESTRUCTOR    = Symbol("DESTRUCTOR");
 
 
-    private static setMetadata(context:DecoratorContext, key:string|symbol, value:unknown) {
-        if (!context.metadata[key]) context.metadata[key] = {};
+    public static setMetadata(context:DecoratorContext, key:string|symbol, value:unknown) {
+        if (!context.metadata[key]) context.metadata[key] = {}
         const data = context.metadata[key] as {public?:Record<string|symbol,any>, constructor?:any}
         if (context.kind == "class") {
             data.constructor = value;
@@ -403,9 +403,11 @@ export class Decorators {
     }
 
     /** @sync: sync class/property */
-    static sync(type: string|Type, value: Class, context: ClassDecoratorContext) {
+    static sync(type: string|Type|undefined, value: Class, context?: ClassDecoratorContext) {
         
-        this.setMetadata(context, Decorators.IS_SYNC, true)
+        if (context) {
+            this.setMetadata(context ?? {kind: "class", metadata:(value as any)[METADATA]}, Decorators.IS_SYNC, true)
+        }
 
         const originalClass = value;
 
@@ -415,7 +417,10 @@ export class Decorators {
         if (typeof type == "string" || type instanceof Type) {
             normalizedType = normalizeType(type, false, "ext");
         }
-        else if (originalClass[METADATA]?.[Decorators.FORCE_TYPE]?.constructor) normalizedType = originalClass[METADATA]?.[Decorators.FORCE_TYPE]?.constructor
+        else if (
+            originalClass[METADATA]?.[Decorators.FORCE_TYPE] && 
+            Object.hasOwn(originalClass[METADATA]?.[Decorators.FORCE_TYPE], 'constructor')
+        ) normalizedType = originalClass[METADATA]?.[Decorators.FORCE_TYPE]?.constructor
         else normalizedType = Type.get("ext", originalClass.name.replace(/^_/, '')); // remove leading _ from type name
 
         let callerFile:string|undefined;
@@ -428,7 +433,7 @@ export class Decorators {
         }
         
         // return new templated class
-        return createTemplateClass(originalClass, normalizedType, true, true, callerFile, context.metadata);
+        return createTemplateClass(originalClass, normalizedType, true, true, callerFile, context?.metadata);
     }
 
     /** @sealed: sealed class/property */
@@ -986,7 +991,7 @@ function _old_publicStaticClass(original_class:Class) {
     // each methods
     
     //const each_private = original_class.prototype[METADATA]?.[Decorators.IS_EACH]?.private;
-    const each_public  = original_class.prototype[METADATA]?.[Decorators.IS_EACH]?.public;
+    const each_public = original_class[METADATA]?.[Decorators.IS_EACH]?.public;
 
     let each_scope: any;
     
@@ -1040,7 +1045,7 @@ function _old_publicStaticClass(original_class:Class) {
 
 const templated_classes = new Map<Function, Function>() // original class, templated class
 
-export function createTemplateClass(original_class:{ new(...args: any[]): any; }, type:Type, sync = true, add_js_interface = true, callerFile?:string, metadata?:Record<string,any>){
+export function createTemplateClass(original_class: Class, type:Type, sync = true, add_js_interface = true, callerFile?:string, metadata?:Record<string,any>){
 
     if (templated_classes.has(original_class)) return templated_classes.get(original_class)!;
 
@@ -1059,12 +1064,12 @@ export function createTemplateClass(original_class:{ new(...args: any[]): any; }
         type.jsTypeDefModule = callerFile;
     }
 
-    metadata ??= original_class.prototype[METADATA];
+    metadata ??= original_class[METADATA];
 
     // set constructor, replicator, destructor
     const constructor_name = original_class.prototype['construct'] ? 'construct' : null; // Object.keys(metadata?.[Decorators.CONSTRUCTOR]?.public??{})[0]
-    const replicator_name = original_class.prototype['construct'] ? 'replicate' : null; // Object.keys(metadata?.[Decorators.REPLICATOR]?.public??{})[0]
-    const destructor_name = Object.keys(metadata?.[Decorators.DESTRUCTOR]?.public??{})[0]
+    const replicator_name = original_class.prototype['replicate'] ? 'replicate' : null; // Object.keys(metadata?.[Decorators.REPLICATOR]?.public??{})[0]
+    const destructor_name = original_class.prototype['destruct'] ? 'destruct' : null; // Object.keys(metadata?.[Decorators.DESTRUCTOR]?.public??{})[0]
 
     if (constructor_name) type.setConstructor(original_class.prototype[constructor_name]);
     if (replicator_name) type.setReplicator(original_class.prototype[replicator_name]);
@@ -1201,7 +1206,9 @@ export type MethodKeys<T> = {
 
 export type dc<T extends Record<string,any>&{new (...args:unknown[]):unknown}, OT extends {new (...args:unknown[]):unknown} = ObjectRef<T>> = 
     DatexClass<OT> & 
-    Pick<OT, keyof OT> & 
+    OT &
+    // TODO: required instead of OT to disable default constructor, but leads to problems with typing
+    // Pick<OT, keyof OT> & 
     ((struct:Omit<InstanceType<OT>, MethodKeys<InstanceType<T>>>) => datexClassType<OT>);
 
 /**
