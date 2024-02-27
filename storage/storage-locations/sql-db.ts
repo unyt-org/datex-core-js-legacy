@@ -86,12 +86,15 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 	} satisfies Record<string, TableDefinition>;
 
 	// cached table columns
-	#tableColumns = new Map<string, Map<string, {foreignPtr:boolean, type:string}>>()
+	#tableColumns = new Map<string, Map<string, {foreignPtr:boolean, foreignTable?:string, type:string}>>()
 	// cached table -> type mapping
 	#tableTypes = new Map<string, Datex.Type>()
 
 	#existingItemsCache = new Set<string>()
 	#existingPointersCache = new Set<string>()
+
+	// remember tables for pointers that still need to be loaded
+	#pointerTables = new Map<string, string>()
 
     constructor(options:dbOptions, private log?:(...args:unknown[])=>void) {
 		super()
@@ -275,7 +278,9 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		if (!type.template) throw new Error("Cannot create table for non-templated type " + type)
 		const snakeCaseName = type.name.replace(/([A-Z])/g, "_$1").toLowerCase().slice(1).replace(/__+/g, '_');
 		const snakeCasePlural = snakeCaseName + (snakeCaseName.endsWith("s") ? "es" : "s");
-		return type.namespace=="ext" ? snakeCasePlural : `${type.namespace}_${snakeCasePlural}`;
+		const name = type.namespace=="ext"||type.namespace=="struct" ? snakeCasePlural : `${type.namespace}_${snakeCasePlural}`;
+		if (name.length > 64) throw new Error("Type name too long: " + type);
+		else return name;
 	}
 
 	#typeToString(type: Datex.Type) {
@@ -385,7 +390,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 
 	async #getTableColumns(tableName: string) {
 		if (!this.#tableColumns.has(tableName)) {
-			const columnData = new Map<string, {foreignPtr: boolean, type: string}>()
+			const columnData = new Map<string, {foreignPtr: boolean, foreignTable?: string, type: string}>()
 			const columns = await this.#query<{COLUMN_NAME:string, COLUMN_KEY:string, DATA_TYPE:string}>(
 				new Query()
 					.table("information_schema.columns")
@@ -395,9 +400,22 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 					.build()
 			)
 
+			const constraints = (await this.#query<{COLUMN_NAME:string, REFERENCED_TABLE_NAME:string}>(
+				new Query()
+					.table("information_schema.key_column_usage")
+					.select("COLUMN_NAME", "REFERENCED_TABLE_NAME")
+					.where(Where.eq("table_schema", this.#options.db))
+					.where(Where.eq("table_name", tableName))
+					.build()
+			));
+			const columnTables = new Map<string, string>()
+			for (const {COLUMN_NAME, REFERENCED_TABLE_NAME} of constraints) {
+				columnTables.set(COLUMN_NAME, REFERENCED_TABLE_NAME)
+			}
+
 			for (const col of columns) {
 				if (col.COLUMN_NAME == this.#pointerMysqlColumnName) continue;
-				columnData.set(col.COLUMN_NAME, {foreignPtr: col.COLUMN_KEY == "MUL", type: col.DATA_TYPE})
+				columnData.set(col.COLUMN_NAME, {foreignPtr: columnTables.has(col.COLUMN_NAME), foreignTable: columnTables.get(col.COLUMN_NAME), type: col.DATA_TYPE})
 			}
 
 			this.#tableColumns.set(tableName, columnData)
@@ -540,26 +558,55 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		return `${type.toString()} ${objectString}`
 	}
 
+	#templateMultiQueries = new Map<string, {pointers:Set<string>, result: Promise<Record<string,unknown>[]>}>()
+
 	async #getTemplatedPointerObject(pointerId: string, table?: string) {
 		table = table ?? await this.#getPointerTable(pointerId);
 		if (!table) {
 			logger.error("No table found for pointer " + pointerId);
 			return null;
 		}
-		const object = await this.#queryFirst<Record<string,unknown>>(
-			new Query()
-				.table(table)
-				.select("*")
-				.where(Where.eq(this.#pointerMysqlColumnName, pointerId))
-				.build()
-		)
-		if (!object) return null;
-		const type = await this.#getTypeForTable(table);
-		if (!type) {
-			logger.error("No type found for table " + table);
-			return null;
+
+		let result: Promise<Record<string,unknown>[]>;
+
+		if (this.#templateMultiQueries.has(table)) {
+			const multiQuery = this.#templateMultiQueries.get(table)!
+			multiQuery.pointers.add(pointerId)
+			result = multiQuery.result;
 		}
-		return object;
+		else {
+			const pointers = new Set<string>([pointerId])
+			result = (async () => {
+				await sleep(200);
+				this.#templateMultiQueries.delete(table)
+				return this.#query<Record<string,unknown>>(
+					new Query()
+						.table(table)
+						.select("*", this.#pointerMysqlColumnName)
+						.where(Where.in(this.#pointerMysqlColumnName, Array.from(pointers)))
+						.build()
+				)
+			})()
+			this.#templateMultiQueries.set(table, {pointers, result})
+		}
+
+		return (await result).
+			find(obj => obj[this.#pointerMysqlColumnName] == pointerId);
+
+		// const object = await this.#queryFirst<Record<string,unknown>>(
+		// 	new Query()
+		// 		.table(table)
+		// 		.select("*")
+		// 		.where(Where.eq(this.#pointerMysqlColumnName, pointerId))
+		// 		.build()
+		// )
+		// if (!object) return null;
+		// const type = await this.#getTypeForTable(table);
+		// if (!type) {
+		// 	logger.error("No type found for table " + table);
+		// 	return null;
+		// }
+		// return object;
 	}
 
 	async #getTemplatedPointerValueDXB(pointerId: string, table?: string) {
@@ -570,6 +617,11 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 	}
 
 	async #getPointerTable(pointerId: string) {
+		if (this.#pointerTables.has(pointerId)) {
+			const table = this.#pointerTables.get(pointerId);
+			this.#pointerTables.delete(pointerId);
+			return table;
+		}
 		return (await this.#queryFirst<{table_name:string}>(
 			new Query()
 				.table(this.#metaTables.pointerMapping.name)
@@ -651,6 +703,9 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 
 	async matchQuery<T extends object, Options extends MatchOptions>(itemPrefix: string, valueType: Datex.Type<T>, match: Datex.MatchInput<T>, options: Options): Promise<MatchResult<T, Options>> {
 	  
+		// measure total query time
+		const start = Date.now();
+
 		const joins = new Map<string, Join>()
 		const collectedTableTypes = new Set<Type>([valueType])
 		const collectedIdentifiers = new Set<string>()
@@ -746,6 +801,13 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		// TODO: atomic operations for multiple queries
 		const {foundRows} = (options?.returnAdvanced ? await this.#queryFirst<{foundRows: number}>("SELECT FOUND_ROWS() as foundRows") : null) ?? {foundRows: -1}
 
+		// remember pointer table
+		for (const ptrId of ptrIds) {
+			this.#pointerTables.set(ptrId, rootTableName)
+		}
+
+		const loadStart = Date.now();
+
 		const result = new Set((await Promise.all(limitedPtrIds.map(ptrId => Pointer.load(ptrId)))).filter(ptr => {
 			if (ptr instanceof LazyPointer) {
 				logger.warn("Cannot return lazy pointer from match query (" + ptr.id + ")");
@@ -753,6 +815,9 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			}
 			return true;
 		}).map(ptr => (ptr as Pointer).val as T))
+
+		console.log("load time", (Date.now() - loadStart) + "ms")
+		console.log("total query time", (Date.now() - start) + "ms")
 
 		if (options?.returnAdvanced) {
 			return {
@@ -1145,6 +1210,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 					.where(Where.eq(this.#pointerMysqlColumnName, pointerId))
 					.build()
 			))?.value;
+			if (value) this.#existingPointersCache.add(pointerId);
 			return value ? Runtime.decodeValue(this.#stringToBinary(value), outer_serialized) : NOT_EXISTING;
 		}
 
@@ -1169,6 +1235,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 				else if (value_pointer != undefined) result.add(await Pointer.load(value_pointer))
 				else if (value_dxb != undefined) result.add(await Runtime.decodeValue(this.#stringToBinary(value_dxb)))
 			}
+			this.#existingPointersCache.add(pointerId);
 			return result;
 		}
 
@@ -1185,31 +1252,41 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			// resolve foreign pointers
 			const columns = await this.#getTableColumns(table);
 			if (!columns) throw new Error("No columns found for table " + table)
-			for (const [colName, {foreignPtr, type}] of columns.entries()) {
-				
-				// custom conversions:
-				// convert blob strings to ArrayBuffer
-				if (type == "blob" && typeof object[colName] == "string") {
-					object[colName] = this.#stringToBinary(object[colName] as string)
-				}
-				// convert Date ot Time
-				else if (object[colName] instanceof Date) {
-					object[colName] = new Time(object[colName] as Date)
-				}
-				
-				// is an object type with a template
-				if (foreignPtr) {
-					if (typeof object[colName] == "string") {
-						object[colName] = await Pointer.load(object[colName] as string);
-					}
-					// else property is null/undefined
-				}
-				// is blob, assume it is a DXB value
-				else if (type == "blob") {
-					object[colName] = await Runtime.decodeValue(object[colName] as ArrayBuffer, true);
-				}
-			}
+
+			await Promise.all(
+				[...columns.entries()]
+					.map(([colName, {foreignPtr, foreignTable, type}]) => this.assignPointerProperty(object, colName, type, foreignPtr, foreignTable))
+			)
+
+
+			this.#existingPointersCache.add(pointerId);
 			return type.cast(object, undefined, undefined, false);
+		}
+	}
+
+	private async assignPointerProperty(object:Record<string,unknown>, colName:string, type:string, foreignPtr:boolean, foreignTable?:string) {
+		// custom conversions:
+		// convert blob strings to ArrayBuffer
+		if (type == "blob" && typeof object[colName] == "string") {
+			object[colName] = this.#stringToBinary(object[colName] as string)
+		}
+		// convert Date ot Time
+		else if (object[colName] instanceof Date) {
+			object[colName] = new Time(object[colName] as Date)
+		}
+		
+		// is an object type with a template
+		if (foreignPtr) {
+			if (typeof object[colName] == "string") {
+				const ptrId = object[colName] as string;
+				if (foreignTable) this.#pointerTables.set(ptrId, foreignTable)
+				object[colName] = await Pointer.load(ptrId);
+			}
+			// else property is null/undefined
+		}
+		// is blob, assume it is a DXB value
+		else if (type == "blob") {
+			object[colName] = await Runtime.decodeValue(object[colName] as ArrayBuffer, true);
 		}
 	}
 
