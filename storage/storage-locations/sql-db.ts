@@ -95,6 +95,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 
 	// remember tables for pointers that still need to be loaded
 	#pointerTables = new Map<string, string>()
+	#templateMultiQueries = new Map<string, {pointers:Set<string>, result: Promise<Record<string,unknown>[]>}>()
 
     constructor(options:dbOptions, private log?:(...args:unknown[])=>void) {
 		super()
@@ -558,7 +559,6 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		return `${type.toString()} ${objectString}`
 	}
 
-	#templateMultiQueries = new Map<string, {pointers:Set<string>, result: Promise<Record<string,unknown>[]>}>()
 
 	async #getTemplatedPointerObject(pointerId: string, table?: string) {
 		table = table ?? await this.#getPointerTable(pointerId);
@@ -592,21 +592,6 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 
 		return (await result).
 			find(obj => obj[this.#pointerMysqlColumnName] == pointerId);
-
-		// const object = await this.#queryFirst<Record<string,unknown>>(
-		// 	new Query()
-		// 		.table(table)
-		// 		.select("*")
-		// 		.where(Where.eq(this.#pointerMysqlColumnName, pointerId))
-		// 		.build()
-		// )
-		// if (!object) return null;
-		// const type = await this.#getTypeForTable(table);
-		// if (!type) {
-		// 	logger.error("No type found for table " + table);
-		// 	return null;
-		// }
-		// return object;
 	}
 
 	async #getTemplatedPointerValueDXB(pointerId: string, table?: string) {
