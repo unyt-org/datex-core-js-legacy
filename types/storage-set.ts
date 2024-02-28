@@ -249,5 +249,4 @@ export class StorageSet<V> extends StorageWeakSet<V> {
 	match<Options extends MatchOptions, T extends V & object>(valueType:Class<T>|Type<T>, matchInput: MatchInput<T>, options?: Options): Promise<MatchResult<T, Options>> {
 		return match(this as unknown as StorageSet<T>, valueType, matchInput, options)
 	}
-
 }

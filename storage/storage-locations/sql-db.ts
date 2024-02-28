@@ -22,6 +22,9 @@ import { MatchOptions, MatchCondition, MatchConditionType, ComputedProperty, Com
 import { MatchResult } from "../storage.ts";
 import { Time } from "../../types/time.ts";
 import { Order } from "https://deno.land/x/sql_builder@v1.9.2/order.ts";
+import { configLogger } from "https://deno.land/x/mysql@v2.12.1/src/logger.ts";
+
+configLogger({level: "WARNING"})
 
 const logger = new Logger("SQL Storage");
 
@@ -92,6 +95,8 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 
 	#existingItemsCache = new Set<string>()
 	#existingPointersCache = new Set<string>()
+	#tableCreationTasks = new Map<Type, Promise<string>>()
+	#tableColumnTasks = new Map<string, Promise<Map<string, {foreignPtr:boolean, foreignTable?:string, type:string}>>>()
 
 	// remember tables for pointers that still need to be loaded
 	#pointerTables = new Map<string, string>()
@@ -103,8 +108,8 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
     }
 	async #connect(){
 		if (this.#connected) return;
-        this.#sqlClient = await new Client().connect(this.#options);
-		this.log?.("Connected to SQL database " + this.#options.db + " on " + this.#options.hostname + ":" + this.#options.port)
+        this.#sqlClient = await new Client().connect({poolSize: 30, ...this.#options});
+		logger.info("Using SQL database " + this.#options.db + " on " + this.#options.hostname + ":" + this.#options.port + " as storage location")
         this.#connected = true;
     }
 
@@ -143,10 +148,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		}
 
 		// truncate meta tables
-		for (const table of Object.values(this.#metaTables)) {
-			await this.#query<{table_name:string}>(`TRUNCATE TABLE ${table.name};`)
-		}
-
+		await Promise.all(Object.values(this.#metaTables).map(table => this.#query(`TRUNCATE TABLE ${table.name};`)))
 	}
 
 	async #query<row=object>(query_string:string, query_params:any[]|undefined, returnRawResult: true): Promise<{rows:row[], result:ExecuteResult}>
@@ -168,7 +170,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			}
 		}
 		
-        console.warn("QUERY: " + query_string, query_params)
+        // console.log("QUERY: " + query_string, query_params)
 
 		if (typeof query_string != "string") {console.error("invalid query:", query_string); throw new Error("invalid query")}
         if (!query_string) throw new Error("empty query");
@@ -204,13 +206,17 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 				.build()
 		)
 		if (!exists) {
-			await this.#createTable(definition);
+			await this.#createTableFromDefinition(definition);
 			return true;
 		}
 		return false;
 	}
 
-	async #createTable(definition: TableDefinition) {
+
+	/**
+	 * Creates a new table
+	 */
+	async #createTableFromDefinition(definition: TableDefinition) {
 		const compositePrimaryKeyColumns = definition.columns.filter(col => col[2]?.includes("PRIMARY KEY"));
 		if (compositePrimaryKeyColumns.length > 1) {
 			for (const col of compositePrimaryKeyColumns) {
@@ -219,9 +225,12 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		}
 		const primaryKeyDefinition = compositePrimaryKeyColumns.length > 1 ? `, PRIMARY KEY (${compositePrimaryKeyColumns.map(col => `\`${col[0]}\``).join(', ')})` : '';
 
+		// create
 		await this.#queryFirst(`CREATE TABLE ?? (${definition.columns.map(col => 
 			`\`${col[0]}\` ${col[1]} ${col[2]??''}`
 			).join(', ')}${definition.constraints?.length ? ',' + definition.constraints.join(',') : ''}${primaryKeyDefinition});`, [definition.name])
+		// load column definitions
+		await this.#getTableColumns(definition.name);	
 	}
 
 	/**
@@ -298,14 +307,25 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 	}
 
 	async #createTableForType(type: Datex.Type) {
+
+		// already creating table
+		if (this.#tableCreationTasks.has(type)) {
+			return this.#tableCreationTasks.get(type);
+		}
+
+		const {promise, resolve} = Promise.withResolvers<string>();
+		this.#tableCreationTasks.set(type, promise);
+
 		const columns:ColumnDefinition[] = [
 			[this.#pointerMysqlColumnName, this.#pointerMysqlType, 'PRIMARY KEY INVISIBLE DEFAULT "0"']
 		]
 		const constraints: ConstraintsDefinition[] = []
 
-		this.log?.("Creating table for type " + type)
-
 		for (const [propName, propType] of Object.entries(type.template as {[key:string]:Datex.Type})) {
+
+			// invalid prop name for now: starting/ending with _
+			if (propName.startsWith("_") || propName.endsWith("_")) throw new Error("Invalid property name: " + propName + " (Property names cannot start or end with an underscore)");
+
 			let mysqlType: mysql_data_type|undefined
 			
 			if (propType.base_type == Datex.Type.std.text && typeof propType.parameters?.[0] == "number") {
@@ -323,7 +343,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 
 				// is a primitive type -> assume no pointer, just store as dxb inline
 				if (propType == Type.std.Any || propType.is_primitive || propType.is_js_pseudo_primitive ) {
-					logger.warn("Cannot map primitive type " + propType + " to a SQL table, falling back to raw DXB")
+					logger.warn("Cannot map type " + propType + " to a SQL table, falling back to raw DXB")
 					columns.push([propName, "blob"])
 				}
 				else {
@@ -357,7 +377,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		const name = this.#typeToTableName(type);
 
 		// create table
-		await this.#createTable({
+		await this.#createTableFromDefinition({
 			name,
 			columns,
 			constraints
@@ -374,6 +394,12 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 				.build()
 		)
 
+		// remember table type mapping
+		this.#tableTypes.set(name, type);
+
+		// resolve promise
+		resolve(name);
+		this.#tableCreationTasks.delete(type);
 
 		return name;
 	}
@@ -390,7 +416,12 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 	}
 
 	async #getTableColumns(tableName: string) {
+
 		if (!this.#tableColumns.has(tableName)) {
+			if (this.#tableColumnTasks.has(tableName)) return this.#tableColumnTasks.get(tableName)!;
+			const {promise, resolve} = Promise.withResolvers<Map<string, {foreignPtr:boolean, foreignTable?:string, type:string}>>();
+			this.#tableColumnTasks.set(tableName, promise);
+
 			const columnData = new Map<string, {foreignPtr: boolean, foreignTable?: string, type: string}>()
 			const columns = await this.#query<{COLUMN_NAME:string, COLUMN_KEY:string, DATA_TYPE:string}>(
 				new Query()
@@ -420,7 +451,11 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			}
 
 			this.#tableColumns.set(tableName, columnData)
+
+			resolve(this.#tableColumns.get(tableName)!);
+			this.#tableColumnTasks.delete(tableName);
 		}
+
 		return this.#tableColumns.get(tableName)!;
 	}
 
@@ -462,7 +497,6 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			}
 			else insertData[name] = value;
 		}
-		// this.log("cols", insertData)
 
 		// replace if entry already exists
 
@@ -526,6 +560,10 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			if (type == "blob" && typeof object[colName] == "string") {
 				object[colName] = this.#stringToBinary(object[colName] as string)
 			}
+			// convert Date ot Time
+			else if (object[colName] instanceof Date) {
+				object[colName] = new Time(object[colName] as Date)
+			}
 
 			// is an object type with a template
 			if (foreignPtr) {
@@ -577,7 +615,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		else {
 			const pointers = new Set<string>([pointerId])
 			result = (async () => {
-				await sleep(200);
+				await sleep(50);
 				this.#templateMultiQueries.delete(table)
 				return this.#query<Record<string,unknown>>(
 					new Query()
@@ -706,7 +744,19 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		const rootTableName = this.#typeToTableName(valueType);
 
 		// computed properties - nested select
-		if (options.computedProperties) {
+		if (options.computedProperties || options.returnRaw) {
+
+			// add property joins for returnRaw
+			if (options.returnRaw) {
+				this.addPropertyJoins(
+					options.returnRaw, 
+					builder, joins, valueType, collectedTableTypes
+				)
+				for (const property of options.returnRaw) {
+					collectedIdentifiers.add(property.replaceAll(".", "__"))
+				}
+			}
+
 			const select = [...collectedIdentifiers, this.#pointerMysqlColumnName].map(identifier => {
 				if (identifier.includes("__")) {
 					return `${this.getTableProperty(identifier)} as ${identifier}`
@@ -714,7 +764,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 				else return rootTableName + '.' + identifier;
 			});
 
-			for (const [name, value] of Object.entries(options.computedProperties)) {
+			for (const [name, value] of Object.entries(options.computedProperties??{})) {
 				if (value.type == ComputedPropertyType.GEOGRAPHIC_DISTANCE) {
 					const computedProperty = value as ComputedProperty<ComputedPropertyType.GEOGRAPHIC_DISTANCE>
 					const {pointA, pointB} = computedProperty.data;
@@ -755,7 +805,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			joins.forEach(join => builder.join(join));
 
 			const outerBuilder = new Query()
-				.select(`DISTINCT SQL_CALC_FOUND_ROWS ${this.#pointerMysqlColumnName} as ptrId`)
+				.select(options.returnRaw ? `*` :`DISTINCT SQL_CALC_FOUND_ROWS ${this.#pointerMysqlColumnName} as ptrId`)
 				.table('__placeholder__');
 
 			this.appendBuilderConditions(outerBuilder, options, where)
@@ -776,7 +826,8 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			await this.#getTableForType(type)
 		}
 
-		const ptrIds = (await this.#query<{ptrId:string}>(query)).map(({ptrId}) => ptrId)
+		const queryResult = await this.#query<{ptrId:string}>(query);
+		const ptrIds = queryResult.map(({ptrId}) => ptrId)
 		const limitedPtrIds = options.returnPointerIds ? 
 			// offset and limit manually after query
 			ptrIds.slice(options.offset ?? 0, options.limit ? (options.offset ?? 0) + options.limit : undefined) : 
@@ -793,7 +844,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 
 		const loadStart = Date.now();
 
-		const result = new Set((await Promise.all(limitedPtrIds.map(ptrId => Pointer.load(ptrId)))).filter(ptr => {
+		const result = options.returnRaw ? null : new Set((await Promise.all(limitedPtrIds.map(ptrId => Pointer.load(ptrId)))).filter(ptr => {
 			if (ptr instanceof LazyPointer) {
 				logger.warn("Cannot return lazy pointer from match query (" + ptr.id + ")");
 				return false;
@@ -804,15 +855,51 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		console.log("load time", (Date.now() - loadStart) + "ms")
 		console.log("total query time", (Date.now() - start) + "ms")
 
+		const matches = options.returnRaw ? 
+			await Promise.all(queryResult.map(async entry => (this.mergeNestedObjects(await Promise.all(Object.entries(entry).map(
+				([key, value]) => this.collapseNestedObjectEntry(key, value, rootTableName)
+			)))))) :
+			result;
+
 		if (options?.returnAdvanced) {
 			return {
-				matches: result,
+				matches: matches,
 				total: foundRows,
 				...options?.returnPointerIds ? {pointerIds: new Set(ptrIds)} : {}
 			} as MatchResult<T, Options>;
 		}
 		else {
-			return result as MatchResult<T, Options>;
+			return matches as MatchResult<T, Options>;
+		}
+	}
+
+	private mergeNestedObjects(insertObjects: Record<string, any>[], existingObject:Record<string, any> = {}): Record<string, any> {
+		for (const insertObject of insertObjects) {
+			for (const [key, value] of Object.entries(insertObject)) {
+				if (key in existingObject && typeof value == "object" && value !== null) {
+					this.mergeNestedObjects([value], existingObject[key])
+				}
+				else existingObject[key] = value;
+			}
+		}
+		return existingObject;
+	}
+
+	private async collapseNestedObjectEntry(key: string, value: unknown, tableName: string): Promise<{[key: string]: unknown}> {
+		const tableDefinition = await this.#getTableColumns(tableName);
+		if (key.includes("__")) {
+			const [firstKey, ...rest] = key.split("__");
+			const subTable = tableDefinition?.get(firstKey)?.foreignTable;
+			if (!subTable) throw new Error("No foreign table found for key " + firstKey);
+			return {[firstKey]: await this.collapseNestedObjectEntry(rest.join("__"), value, subTable)}
+		}
+		else {
+			// buffer
+			if (tableDefinition?.get(key)?.type == "blob" && typeof value == "string") {
+				value = await Runtime.decodeValue(this.#stringToBinary(value))
+			}
+
+			return {[key]: value}
 		}
 	}
 
@@ -1242,7 +1329,6 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 				[...columns.entries()]
 					.map(([colName, {foreignPtr, foreignTable, type}]) => this.assignPointerProperty(object, colName, type, foreignPtr, foreignTable))
 			)
-
 
 			this.#existingPointersCache.add(pointerId);
 			return type.cast(object, undefined, undefined, false);

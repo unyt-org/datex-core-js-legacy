@@ -1,7 +1,7 @@
 import { StorageSet } from "../types/storage_set.ts";
 import { Type } from "../types/type.ts";
 import type { Class } from "./global_types.ts";
-import { MatchInput, MatchResult, MatchOptions, Storage, comparatorKeys } from "../storage/storage.ts";
+import { MatchInput, MatchResult, MatchOptions, Storage } from "../storage/storage.ts";
 
 export type { MatchInput, MatchOptions, MatchResult } from "../storage/storage.ts";
 
@@ -25,6 +25,7 @@ export async function match<T extends object, Options extends MatchOptions>(inpu
 	}
 
 	// fallback: match by iterating over all entries
+	// TODO: implement full match query support
 
 	for await (const input of inputSet) {
 		// ors
@@ -41,7 +42,7 @@ export async function match<T extends object, Options extends MatchOptions>(inpu
 		}
 		
 	}
-	return found;
+	return found as MatchResult<T, Options>;
 }
 
 function _match(value: unknown, match: unknown) {

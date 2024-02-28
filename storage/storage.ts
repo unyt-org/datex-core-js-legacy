@@ -89,6 +89,11 @@ export type MatchOptions<T = unknown> = {
      */
     returnAdvanced?: boolean,
     /**
+     * Provide a list of properties that should be returned as raw values. If provided, only the raw properties are returned
+     * and pointers are not loaded
+     */
+    returnRaw?: string[]
+    /**
      * Return pointer ids of matched items
      */
     returnPointerIds?: boolean,
