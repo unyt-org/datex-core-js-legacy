@@ -97,6 +97,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 	#existingPointersCache = new Set<string>()
 	#tableCreationTasks = new Map<Type, Promise<string>>()
 	#tableColumnTasks = new Map<string, Promise<Map<string, {foreignPtr:boolean, foreignTable?:string, type:string}>>>()
+	#tableLoadingTasks = new Map<Type, Promise<string|undefined>>()
 
 	// remember tables for pointers that still need to be loaded
 	#pointerTables = new Map<string, string>()
@@ -170,7 +171,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			}
 		}
 		
-        // console.log("QUERY: " + query_string, query_params)
+        console.log("QUERY: " + query_string, query_params)
 
 		if (typeof query_string != "string") {console.error("invalid query:", query_string); throw new Error("invalid query")}
         if (!query_string) throw new Error("empty query");
@@ -226,7 +227,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		const primaryKeyDefinition = compositePrimaryKeyColumns.length > 1 ? `, PRIMARY KEY (${compositePrimaryKeyColumns.map(col => `\`${col[0]}\``).join(', ')})` : '';
 
 		// create
-		await this.#queryFirst(`CREATE TABLE ?? (${definition.columns.map(col => 
+		await this.#queryFirst(`CREATE TABLE IF NOT EXISTS ?? (${definition.columns.map(col => 
 			`\`${col[0]}\` ${col[1]} ${col[2]??''}`
 			).join(', ')}${definition.constraints?.length ? ',' + definition.constraints.join(',') : ''}${primaryKeyDefinition});`, [definition.name])
 		// load column definitions
@@ -242,6 +243,14 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		// type does not have a template, use raw pointer table
 		if (!type.template) return null
 
+		// already creating table
+		if (this.#tableLoadingTasks.has(type)) {
+			return this.#tableLoadingTasks.get(type);
+		}
+
+		const {promise, resolve} = Promise.withResolvers<string|undefined>();
+		this.#tableLoadingTasks.set(type, promise);
+
 		// already has a table
 		const tableName = this.#typeToTableName(type);
 		if (this.#tableTypes.has(tableName)) return tableName;
@@ -254,10 +263,11 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 				.where(Where.eq("type", this.#typeToString(type)))
 				.build()
 		))?.table_name;
-		if (!existingTable) {
-			return this.#createTableForType(type)
-		}
-		else return existingTable
+
+		const table = existingTable ?? await this.#createTableForType(type);
+		resolve(table);
+		this.#tableLoadingTasks.delete(type);
+		return table;
 	}
 
 	async #getTypeForTable(table: string) {
