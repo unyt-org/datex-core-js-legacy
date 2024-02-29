@@ -171,7 +171,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			}
 		}
 		
-        console.log("QUERY: " + query_string, query_params)
+        // console.log("QUERY: " + query_string, query_params)
 
 		if (typeof query_string != "string") {console.error("invalid query:", query_string); throw new Error("invalid query")}
         if (!query_string) throw new Error("empty query");
