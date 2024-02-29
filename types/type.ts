@@ -327,10 +327,10 @@ export class Type<T = any> extends ExtensibleFunction {
         })
     }
 
-    public newJSInstance(is_constructor = true, args:any[]|undefined, propertyInitializer:{[INIT_PROPS]:(instance:any)=>void}) {
+    public newJSInstance(is_constructor = true, args?:any[], propertyInitializer?:{[INIT_PROPS]:(instance:any)=>void}) {
         // create new instance - TODO 'this' as last constructor argument still required?
         Type.#current_constructor = this.interface_config?.class;
-        const instance = <T> (this.interface_config?.class ? Reflect.construct(Type.#current_constructor, is_constructor?[...args]:[propertyInitializer]) : {[DX_TYPE]: this});
+        const instance = <T> (this.interface_config?.class ? Reflect.construct(Type.#current_constructor, is_constructor?[...args]:(propertyInitializer ? [propertyInitializer] : [])) : {[DX_TYPE]: this});
         Type.#current_constructor = null;
         return instance;
     }
