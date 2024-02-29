@@ -1539,9 +1539,9 @@ export class Storage {
 
     }
 
-    private static removeTrailingSemicolon(str:string) {
+    public static removeTrailingSemicolon(str:string) {
         // replace ; and reset sequences with nothing
-        return str.replace(/;\x1b\[0m$/g, "")
+        return str.replace(/;(\x1b\[0m)?$/g, "")
     }
 
     public static async getSnapshot(options: StorageSnapshotOptions = {internalItems: false, expandStorageMapsAndSets: true}) {

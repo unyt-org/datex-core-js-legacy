@@ -493,7 +493,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			}
 			// is raw dxb value (exception for blob <->A rrayBuffer, TODO: better solution, can lead to issues)
 			else if (type == "blob" && !(value instanceof ArrayBuffer || value instanceof TypedArray)) {
-				insertData[name] = Compiler.encodeValue(value, dependencies, true, false, true);
+				insertData[name] = Compiler.encodeValue(value, dependencies, true, false, false);
 			}
 			else insertData[name] = value;
 		}
@@ -511,7 +511,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 	/**
 	 * Update a pointer in the database, pointer type must be templated
 	 */
-	async #updatePointer(pointer: Datex.Pointer, keys:string[]) {
+	async #updatePointer(pointer: Datex.Pointer, keys:string[], dependencies?: Set<Pointer>) {
 		const table = await this.#getTableForType(pointer.type);
 		if (!table) throw new Error("Cannot store pointer of type " + pointer.type + " in a custom table")
 		const columns = await this.#getTableColumns(table);
@@ -525,7 +525,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 					(
 						(column?.type == "blob" && !(pointer.val[key] instanceof ArrayBuffer || pointer.val[key] instanceof TypedArray)) ?
 							// raw dxb value
-							Compiler.encodeValue(pointer.val[key], new Set<Pointer>(), true, false, true) : 
+							Compiler.encodeValue(pointer.val[key], dependencies, true, false, false) : 
 							// normal value
 							pointer.val[key]
 					)
@@ -560,9 +560,14 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			if (type == "blob" && typeof object[colName] == "string") {
 				object[colName] = this.#stringToBinary(object[colName] as string)
 			}
-			// convert Date ot Time
+			// convert Date to Time
 			else if (object[colName] instanceof Date) {
 				object[colName] = new Time(object[colName] as Date)
+			}
+
+			// convert to boolean
+			else if (typeof object[colName] == "number" && (type == "tinyint" || type == "boolean")) {
+				object[colName] = Boolean(object[colName])
 			}
 
 			// is an object type with a template
@@ -576,23 +581,22 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			}
 			// is blob, assume it is a DXB value
 			else if (type == "blob") {
-				object[colName] = `\u0001${foreignPointerPlaceholders.length}`
 				try {
 					// TODO: fix decompiling
-					foreignPointerPlaceholders.push(MessageLogger.decompile(object[colName] as ArrayBuffer, false, false, false)||"void")
+					foreignPointerPlaceholders.push(Storage.removeTrailingSemicolon(MessageLogger.decompile(object[colName] as ArrayBuffer, false, false, false)||"'error'"))
 				}
 				catch (e) {
 					console.error("error decompiling", object[colName], e)
 					foreignPointerPlaceholders.push("'error'")
 				}
-
+				object[colName] = `\u0001${foreignPointerPlaceholders.length-1}`
 			}
 		}
 
 		// const foreignPointerPlaceholders = await Promise.all(foreignPointerPlaceholderPromises)
 
 		const objectString = Datex.Runtime.valueToDatexStringExperimental(object, false, false)
-			.replace(/"\u0001(\d+)"/g, (_, index) => foreignPointerPlaceholders[parseInt(index)]||"error: no placeholder")
+			.replace(/"\u0001(\d+)"/g, (_, index) => foreignPointerPlaceholders[parseInt(index)]||"'error: no placeholder'")
 
 		return `${type.toString()} ${objectString}`
 	}
@@ -615,7 +619,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		else {
 			const pointers = new Set<string>([pointerId])
 			result = (async () => {
-				await sleep(50);
+				await sleep(30);
 				this.#templateMultiQueries.delete(table)
 				return this.#query<Record<string,unknown>>(
 					new Query()
@@ -628,8 +632,10 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			this.#templateMultiQueries.set(table, {pointers, result})
 		}
 
-		return (await result).
-			find(obj => obj[this.#pointerMysqlColumnName] == pointerId);
+		const res = (await result)
+			.find(obj => obj[this.#pointerMysqlColumnName] == pointerId)
+		if (res) delete res[this.#pointerMysqlColumnName];
+		return res;
 	}
 
 	async #getTemplatedPointerValueDXB(pointerId: string, table?: string) {
@@ -695,7 +701,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 				data.value_pointer = valPtr.id
 				dependencies.add(valPtr);
 			}
-			else data.value_dxb = Compiler.encodeValue(val, dependencies, true, false, true)
+			else data.value_dxb = this.#binaryToString(Compiler.encodeValue(val, dependencies, true, false, false))
 			entries.push(data)
 		}
 		builder.insert(entries);
@@ -1248,7 +1254,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 					}
 				}
 				await Promise.all(promises)
-				await this.#updatePointer(pointer, [partialUpdateKey])
+				await this.#updatePointer(pointer, [partialUpdateKey], dependencies)
 				return dependencies;
 			}
 		}
@@ -1302,7 +1308,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 				if (value_text != undefined) result.add(value_text)
 				else if (value_integer != undefined) result.add(BigInt(value_integer))
 				else if (value_decimal != undefined) result.add(value_decimal)
-				else if (value_boolean != undefined) result.add(value_boolean)
+				else if (value_boolean != undefined) result.add(Boolean(value_boolean))
 				else if (value_time != undefined) result.add(value_time)
 				else if (value_pointer != undefined) result.add(await Pointer.load(value_pointer))
 				else if (value_dxb != undefined) result.add(await Runtime.decodeValue(this.#stringToBinary(value_dxb)))
@@ -1344,6 +1350,11 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		// convert Date ot Time
 		else if (object[colName] instanceof Date) {
 			object[colName] = new Time(object[colName] as Date)
+		}
+
+		// convert to boolean
+		else if (typeof object[colName] == "number" && (type == "tinyint" || type == "boolean")) {
+			object[colName] = Boolean(object[colName])
 		}
 		
 		// is an object type with a template
