@@ -243,6 +243,11 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		// type does not have a template, use raw pointer table
 		if (!type.template) return null
 
+		// already has a table
+		const tableName = this.#typeToTableName(type);
+		if (this.#tableTypes.has(tableName)) return tableName;
+		
+
 		// already creating table
 		if (this.#tableLoadingTasks.has(type)) {
 			return this.#tableLoadingTasks.get(type);
@@ -250,11 +255,6 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 
 		const {promise, resolve} = Promise.withResolvers<string|undefined>();
 		this.#tableLoadingTasks.set(type, promise);
-
-		// already has a table
-		const tableName = this.#typeToTableName(type);
-		if (this.#tableTypes.has(tableName)) return tableName;
-
 
 		const existingTable = (await this.#queryFirst<{table_name: string}|undefined>(
 			new Query()
