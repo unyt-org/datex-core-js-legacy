@@ -2766,6 +2766,10 @@ export class Pointer<T = any> extends Ref<T> {
     #transform_scope?:Scope;
     get transform_scope() {return this.#transform_scope}
 
+    #smart_transform_method?: (...args:any[])=>any
+    get smart_transform_method() {return this.#smart_transform_method}
+    set smart_transform_method(method: (...args:any[])=>any) {this.#smart_transform_method = method}
+
     #force_transform = false; // if true, the pointer transform function is always sent via DATEX
     set force_local_transform(force_transform: boolean) {this.#force_transform = force_transform}
     get force_local_transform() {return this.#force_transform}
@@ -2846,6 +2850,7 @@ export class Pointer<T = any> extends Ref<T> {
 
     protected smartTransform<R>(transform:SmartTransformFunction<T&R>, persistent_datex_transform?:string, forceLive = false, ignoreReturnValue = false, options?:SmartTransformOptions): Pointer<R> {
         if (persistent_datex_transform) this.setDatexTransform(persistent_datex_transform) // TODO: only workaround
+        this.#smart_transform_method = transform;
 
         const state: TransformState = {
             isLive: false,

@@ -13,7 +13,7 @@
 import { Logger } from "../utils/logger.ts";
 const logger = new Logger("datex compiler");
 
-import { ReadableStream, Runtime, StaticScope} from "../runtime/runtime.ts";
+import { ReadableStream, Runtime } from "../runtime/runtime.ts";
 import { Endpoint, IdEndpoint, Target, WildcardTarget, Institution, Person, BROADCAST, target_clause, endpoints, LOCAL_ENDPOINT } from "../types/addressing.ts";
 import { Pointer, PointerProperty, Ref } from "../runtime/pointers.ts";
 import { CompilerError, RuntimeError, Error as DatexError, ValueError } from "../types/errors.ts";
@@ -2860,12 +2860,32 @@ export class Compiler {
                 // handle pointers with transform (always ...)
  
                 // only if not ignore_first_collapse or, if ignore_first_collapse and keep_first_transform is enabled
-                if (!SCOPE.options.no_create_pointers && value instanceof Pointer && value.transform_scope && (value.force_local_transform || !skip_first_collapse || SCOPE.options.keep_first_transform)) {
-                    SCOPE.options._first_insert_done = true; // set to true before next insert
+                if (!SCOPE.options.no_create_pointers && value instanceof Pointer && (value.force_local_transform || !skip_first_collapse || SCOPE.options.keep_first_transform)) {
+                    
+                    if (value.transform_scope) {
+                        SCOPE.options._first_insert_done = true; // set to true before next insert
+                        Compiler.builder.insert_transform_scope(SCOPE, value.transform_scope);
+                        return;
+                    }
 
-                    Compiler.builder.insert_transform_scope(SCOPE, value.transform_scope);
-                
-                    return;
+                    else if (value.smart_transform_method) {
+                        console.warn("DATEX serialization of JS transforms is not yet supported: ", value.smart_transform_method.toString())
+                        // TODO:
+                        // const isTransferableFn = value.smart_transform_method instanceof JSTransferableFunction;
+                        // const transferableFn = isTransferableFn ? value.smart_transform_method as unknown as JSTransferableFunction : JSTransferableFunction.create(value.smart_transform_method);
+                        // if (!isTransferableFn) transferableFn.source = `() => always(${transferableFn.source})`;
+
+                        // value.smart_transform_method = transferableFn;
+                        // Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+2, SCOPE);
+                        // SCOPE.uint8[SCOPE.b_index++] = BinaryCode.SUBSCOPE_START;
+                        // SCOPE.uint8[SCOPE.b_index++] = BinaryCode.CREATE_POINTER;
+                        // Compiler.builder.insert(transferableFn, SCOPE, is_root, parents, unassigned_children);
+                        // Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+2, SCOPE);
+                        // SCOPE.uint8[SCOPE.b_index++] = BinaryCode.SUBSCOPE_END;
+                        // SCOPE.uint8[SCOPE.b_index++] = BinaryCode.VOID;
+                        // return;
+                    }
+                    
                 }
 
                 // indirect reference pointer
