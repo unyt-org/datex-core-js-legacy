@@ -540,14 +540,26 @@ export class Storage {
         return Number(localStorage.getItem(this.meta_prefix+'__saved__' + location.name) ?? 0);
     }
 
-    static #dirty_locations = new Set<StorageLocation>()
-
     // handle dirty states for async storage operations:
+    static #dirty_locations = new Map<StorageLocation, number>()
 
     // called when a full backup to this storage location was made
     public static setDirty(location:StorageLocation, dirty = true) {
-        if (dirty) this.#dirty_locations.add(location);
-        else this.#dirty_locations.delete(location);
+        // update counter
+        if (dirty) {
+            const currentCount = this.#dirty_locations.get(location)??0;
+            this.#dirty_locations.set(location, currentCount + 1);
+        }
+        else {
+            if (!this.#dirty_locations.has(location)) logger.warn("Invalid dirty state reset for location '"+location.name + "', dirty state was not set");
+            else {
+                const newCount = this.#dirty_locations.get(location)! - 1;
+                if (newCount <= 0) {
+                    this.#dirty_locations.delete(location);
+                }
+                else this.#dirty_locations.set(location, newCount);
+            }
+        }
     }
 
     static #dirty = false;
@@ -561,7 +573,7 @@ export class Storage {
      */
     private static saveDirtyState(){
         if (this.#exit_without_save) return; // currently exiting
-        for (const location of this.#dirty_locations) {
+        for (const [location] of this.#dirty_locations) {
             localStorage.setItem(this.meta_prefix+'__dirty__' + location.name, new Date().getTime().toString());
         }
     }
@@ -761,10 +773,10 @@ export class Storage {
      * @param location storage location
      */
     private static async saveDependencyPointersAsync(dependencies: Set<Pointer>, listen_for_changes = true, location: AsyncStorageLocation) {
-        for (const ptr of dependencies) {
+        await Promise.all([...dependencies].map(async ptr=>{
             // add if not yet in storage
             if (!await location.hasPointer(ptr.id)) await this.setPointer(ptr, listen_for_changes, location)
-        }
+        }));
     }
 
 
@@ -859,7 +871,7 @@ export class Storage {
         if (this.#primary_location != undefined && this.isInDirtyState(this.#primary_location) && this.#trusted_location != undefined && this.#trusted_location!=this.#primary_location) {
             await this.copyStorage(this.#trusted_location, this.#primary_location)
             logger.warn `restored dirty state of ${this.#primary_location.name} from trusted location ${this.#trusted_location.name}`
-            this.setDirty(this.#primary_location, false) // remove from dirty set
+            if (this.#dirty_locations.has(this.#primary_location)) this.setDirty(this.#primary_location, false) // remove from dirty set
             this.clearDirtyState(this.#primary_location) // remove from localstorage
             this.#dirty = false;
             // primary location is now trusted, update
