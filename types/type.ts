@@ -42,7 +42,7 @@ export class Type<T = any> extends ExtensibleFunction {
     // should be serialized, but is not a complex type (per default, only complex types are serialized)
     static serializable_not_complex_types = ["buffer"]
     // values that are represented js objects but have a single instance per value, handle like normal js primitives
-    static pseudo_js_primitives = ["Type", "endpoint", "target", "url"]
+    static pseudo_js_primitives = ["Type", "endpoint", "target", "url", "RegExp"]
 
 
     public static types = new Map<string, Type>();   // type name -> type
@@ -392,7 +392,7 @@ export class Type<T = any> extends ExtensibleFunction {
 
         this.is_primitive = namespace=="std" && Type.primitive_types.includes(this.name);
         this.is_complex   = namespace!="std" || !Type.fundamental_types.includes(this.name);
-        this.is_js_pseudo_primitive = namespace=="std" && Type.pseudo_js_primitives.includes(this.name);
+        this.is_js_pseudo_primitive = (namespace=="std"||namespace=="js") && Type.pseudo_js_primitives.includes(this.name);
         this.has_compact_rep = namespace=="std" && (this.is_primitive || Type.compact_rep_types.includes(this.name));
         this.serializable_not_complex = Type.serializable_not_complex_types.includes(this.name);
 
@@ -815,7 +815,8 @@ export class Type<T = any> extends ExtensibleFunction {
             if (typeof value == "bigint") return <Type<T>>Type.std.integer;
             if (typeof value == "number") return <Type<T>>Type.std.decimal;
             if (typeof value == "boolean") return <Type<T>>Type.std.boolean;
-            if (typeof value == "symbol") return Type.js.Symbol;
+            if (typeof value == "symbol") return Type.js.Symbol as unknown as Type<T>;
+            if (value instanceof RegExp) return Type.js.RegExp as unknown as Type<T>;
 
             if (value instanceof ArrayBuffer || value instanceof TypedArray) return <Type<T>>Type.std.buffer;
             if (value instanceof Tuple) return <Type<T>>Type.std.Tuple;
@@ -889,6 +890,7 @@ export class Type<T = any> extends ExtensibleFunction {
             if (_forClass == Number || Number.isPrototypeOf(_forClass)) return <Type<T>>Type.std.decimal;
             if (_forClass == globalThis.Boolean || globalThis.Boolean.isPrototypeOf(_forClass)) return <Type<T>>Type.std.boolean;
             if (_forClass == Symbol || Symbol.isPrototypeOf(_forClass)) return <Type<T>>Type.js.Symbol;
+            if (_forClass == RegExp || RegExp.isPrototypeOf(_forClass)) return Type.js.RegExp as unknown as Type<T>;
             if (_forClass == WeakRef || WeakRef.isPrototypeOf(_forClass)) return <Type<T>>Type.std.WeakRef;
 
             if (_forClass == ArrayBuffer || TypedArray.isPrototypeOf(_forClass)) return <Type<T>>Type.std.buffer;
@@ -949,7 +951,8 @@ export class Type<T = any> extends ExtensibleFunction {
     static js = {
         NativeObject: Type.get<object>("js:Object"), // special object type for non-plain objects (objects with prototype) - no automatic children pointer initialization
         TransferableFunction: Type.get<JSTransferableFunction>("js:Function"),
-        Symbol: Type.get<symbol>("js:Symbol")
+        Symbol: Type.get<symbol>("js:Symbol"),
+        RegExp: Type.get<RegExp>("js:RegExp")
     }
 
     /**
@@ -1026,7 +1029,7 @@ export class Type<T = any> extends ExtensibleFunction {
         Assertion:  Type.get<Assertion>("std:Assertion"),
         Iterator: Type.get<Iterator<any>>("std:Iterator"),
 
-        MatchCondition: Type.get<MatchCondition>("std:MatchCondition"),
+        MatchCondition: Type.get<MatchCondition<any,any>>("std:MatchCondition"),
 
         StorageMap: Type.get<StorageMap<unknown, unknown>>("std:StorageMap"),
         StorageWeakMap: Type.get<StorageWeakMap<unknown, unknown>>("std:StorageWeakMap"),

@@ -2267,7 +2267,7 @@ export class Runtime {
         let new_value:any = UNKNOWN_TYPE;
 
         // only handle std namespace / js:Object / js:Symbol
-        if (type.namespace == "std" || type == Type.js.NativeObject || type == Type.js.Symbol) {
+        if (type.namespace == "std" || type == Type.js.NativeObject || type == Type.js.Symbol || type == Type.js.RegExp) {
             const uncollapsed_old_value = old_value
             if (old_value instanceof Pointer) old_value = old_value.val;
 
@@ -2351,6 +2351,18 @@ export class Runtime {
                 case Type.js.Symbol: {
                     if (old_value === VOID) new_value = Symbol();
                     else if (typeof old_value == "string") new_value = Symbol(old_value);
+                    else new_value = INVALID;
+                    break;
+                }
+                case Type.js.RegExp: {
+                    if (typeof old_value == "string") new_value = new RegExp(old_value);
+                    else if (old_value instanceof Tuple) {
+                        const array = old_value.toArray() as [string, string?];
+                        new_value = new RegExp(...array);
+                    }
+                    else if (old_value instanceof Array) {
+                        new_value = new RegExp(...old_value as [string, string?]);
+                    }
                     else new_value = INVALID;
                     break;
                 }
@@ -2689,6 +2701,9 @@ export class Runtime {
         
         // symbol
         if (typeof value == "symbol") return value.toString().slice(7,-1) || undefined
+
+        // regex
+        if (value instanceof RegExp) return value.flags ? new Tuple([value.source, value.flags]) : value.source;
 
         // weakref
         if (value instanceof WeakRef) {
