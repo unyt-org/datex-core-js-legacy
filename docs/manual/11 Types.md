@@ -60,9 +60,9 @@ Datex.Type.std.Any === any
 | **DocumentFragment**           | Partial <sup>2)</sup> | std:htmlfragment | No               | DocumentFragment mutations are currently not synchronized                                 |
 
 
-<sup>1)</sup> Primitive JS values are immutable and cannot be synchronized on their own, but when wrapped in a Ref.
-<sup>2)</sup> [UIX-DOM](https://github.com/unyt-org/uix-dom) required
-<sup>3)</sup> The corresponding object values of primitive values (e.g. `new Number()` for `number`) are not supported
+<sup>1)</sup> Primitive JS values are immutable and cannot be synchronized on their own, but when wrapped in a Ref.<br>
+<sup>2)</sup> [UIX-DOM](https://github.com/unyt-org/uix-dom) required<br>
+<sup>3)</sup> The corresponding object values of primitive values (e.g. `new Number()` for `number`) are not supported<br>
 
 ## Special JS types
 
