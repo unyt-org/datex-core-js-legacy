@@ -4,7 +4,7 @@ The DATEX Runtime comes with its own type system which can be mapped to JavaScri
 DATEX types can be access via `Datex.Type`.
 
 ## Std types 
-The `Datex.Type.std` namespace contains all the builtin (*std*) DATEX types, e.g.:
+The `Datex.Type.std` namespace contains all the builtin (*std*) DATEX types that can be accessed as runtime values, e.g.:
 ```ts
 // primitive types
 Datex.Type.std.text
@@ -30,13 +30,13 @@ Datex.Type.std.Any === any
 ## Supported built-in JS and Web types
 | **JS Type**                    | **Support** | **DATEX Type** | **Synchronizable** | **Limitations**                                                                           |
 |:-------------------------------|:------------|:---------------|:-------------------|:------------------------------------------------------------------------------------------|
-| **string**                     | Full        | std:text       | 1)                 | 3)                                                                                        |
-| **number**                     | Full        | std:decimal    | 1)                 | 3)                                                                                        |
-| **bigint**                     | Full        | std:integer    | 1)                 | 3)                                                                                        |
-| **boolean**                    | Full        | std:boolean    | 1)                 | 3)                                                                                        |
-| **null**                       | Full        | std:null       | 1)                 | -                                                                                         |
-| **undefined**                  | Full        | std:void       | 1)                 | -                                                                                         |
-| **symbol**                     | Partial     | js:Symbol      | 1)                 | Registered and well-known symbols are not yet supported                                   |
+| **string**                     | Full        | std:text       | Yes 1)             | 3)                                                                                        |
+| **number**                     | Full        | std:decimal    | Yes 1)             | 3)                                                                                        |
+| **bigint**                     | Full        | std:integer    | Yes 1)             | 3)                                                                                        |
+| **boolean**                    | Full        | std:boolean    | Yes 1)             | 3)                                                                                        |
+| **null**                       | Full        | std:null       | Yes 1)             | -                                                                                         |
+| **undefined**                  | Full        | std:void       | Yes 1)             | -                                                                                         |
+| **symbol**                     | Partial     | js:Symbol      | Yes 1)             | Registered and well-known symbols are not yet supported                                   |
 | **Object (without prototype)** | Full        | std:Object     | Yes                | Objects with prototypes other than `Object.prototype` or `null` are mapped to `js:Object` |
 | **Object**                     | Sufficient  | js:Object      | Yes                | No synchronisation for nested objects per default                                         |
 | **Array**                      | Full        | std:Array      | Yes                | -                                                                                         |
