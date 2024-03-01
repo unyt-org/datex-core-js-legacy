@@ -5,6 +5,8 @@ import { Class } from "../utils/global_types.ts";
 import { sha256 } from "../utils/sha256.ts";
 import { Type } from "./type.ts";
 import { Decorators } from "../js_adapter/js_class_adapter.ts";
+import { getCallerFile } from "../utils/caller_metadata.ts";
+import { client_type } from "../utils/constants.ts";
 
 type StructuralTypeDefIn = {
 	[key: string]: Type|(new () => unknown)|StructuralTypeDefIn
@@ -72,13 +74,15 @@ export function struct<Def extends StructuralTypeDefIn>(def: Def): Type<collapse
 export function struct(defOrTypeName: StructuralTypeDefIn|Class|string, def?: StructuralTypeDefIn|Class): any {
 	// create unique type name from template hash
 
+	const callerFile = client_type == "deno" ? getCallerFile() : undefined;
+
 	const hasType = typeof defOrTypeName == "string";
 	const typeName = hasType ? defOrTypeName : undefined;
 	def = hasType ? def : defOrTypeName;
 
 	// is class definition
 	if (typeof def == "function") {
-		return Decorators.sync(typeName, def);
+		return Decorators.sync(typeName, def, undefined, callerFile);
 	}
 
 	// is struct definition
@@ -107,6 +111,8 @@ export function struct(defOrTypeName: StructuralTypeDefIn|Class|string, def?: St
 
 	const hash = typeName ?? sha256(Runtime.valueToDatexStringExperimental(template))
 	const type = new Type("struct", hash).setTemplate(template);
+
+	if (callerFile) type.jsTypeDefModule = callerFile;
 	type.proxify_children = true;
 	return type as any
 }

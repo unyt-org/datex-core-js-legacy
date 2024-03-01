@@ -381,7 +381,7 @@ export class Type<T = any> extends ExtensibleFunction {
 
     // never call the constructor directly!! should be private
     constructor(namespace?:string, name?:string, variation?:string, parameters?:any[]) {
-        super(namespace && namespace != "std" ? (val:any) => this.cast(val) : undefined)
+        super(namespace && namespace != "std" ? (val:any) => this.cast(val, undefined, undefined, true) : undefined)
         if (name) this.name = name;
         if (namespace) this.namespace = namespace;
         if (variation) this.variation = variation;

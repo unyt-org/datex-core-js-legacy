@@ -271,7 +271,7 @@ export class Decorators {
 
 
     /** @sync: sync class/property */
-    static sync(type: string|Type|undefined, value: Class, context?: ClassDecoratorContext) {
+    static sync(type: string|Type|undefined, value: Class, context?: ClassDecoratorContext, callerFile?:string) {
         
         if (context) {
             this.setMetadata(context ?? {kind: "class", metadata:(value as any)[METADATA]}, Decorators.IS_SYNC, true)
@@ -291,10 +291,8 @@ export class Decorators {
         ) normalizedType = originalClass[METADATA]?.[Decorators.FORCE_TYPE]?.constructor
         else normalizedType = Type.get("ext", originalClass.name.replace(/^_/, '')); // remove leading _ from type name
 
-        let callerFile:string|undefined;
-
-        if (client_type == "deno" && normalizedType.namespace !== "std") {
-            callerFile = getCallerInfo()?.[2]?.file ?? undefined;
+        if (!callerFile && client_type == "deno" && normalizedType.namespace !== "std") {
+            callerFile = getCallerInfo()?.[3]?.file ?? undefined;
             if (!callerFile) {
                 logger.error("Could not determine JS module URL for type '" + normalizedType + "'")
             }
