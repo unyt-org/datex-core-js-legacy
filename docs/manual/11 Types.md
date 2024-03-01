@@ -27,6 +27,43 @@ Datex.Type.std.boolean === boolean
 Datex.Type.std.Any === any
 ```
 
+## Supported built-in JS and Web types
+| **JS Type**                    | **Support** | **DATEX Type** | **Synchronizable** | **Limitations**                                                                           |
+|--------------------------------|-------------|----------------|--------------------|-------------------------------------------------------------------------------------------|
+| **string**                     | Full        | std:text       | 1)                 | 3)                                                                                        |
+| **number**                     | Full        | std:decimal    | 1)                 | 3)                                                                                        |
+| **bigint**                     | Full        | std:integer    | 1)                 | 3)                                                                                        |
+| **boolean**                    | Full        | std:boolean    | 1)                 | 3)                                                                                        |
+| **null**                       | Full        | std:null       | 1)                 | 3)                                                                                        |
+| **undefined**                  | Full        | std:void       | 1)                 | 3)                                                                                        |
+| **symbol**                     | Partial     | js:Symbol      | 1)                 | Registered and well-known symbols are not yet supported                                   |
+| **Object (without prototype)** | Full        | std:Object     | Yes                | Objects with prototypes other than `Object.prototype` or `null` are mapped to `js:Object` |
+| **Object**                     | Sufficient  | js:Object      | Yes                | No synchronisation for nested objects per default                                         |
+| **Array**                      | Full        | std:Array      | Yes                | -                                                                                         |
+| **Set**                        | Full        | std:Set        | Yes                | -                                                                                         |
+| **Map**                        | Full        | std:Map        | Yes                | -                                                                                         |
+| **WeakSet**                    | None        | -              | -                  | Cannot be implemented because `WeakSet` internals are not accessible. Alternative: `StorageWeakSet` |
+| **WeakMap**                    | None        | -              | -                  | Cannot be implemented because `WeakMap` internals are not accessible. Alternative: `StorageWeakMap` |
+| **Function**                   | Sufficient  | std:Function   | No (Immutable)     | Functions always return a Promise, even if they are synchronous                           |
+| **AsyncFunction**              | Sufficient  | std:Function   | No (Immutable)     | -                                                                                         |
+| **GeneratorFunction**          | None        | -              | -                  | -                                                                                         |
+| **ArrayBuffer**                | Partial     | std:buffer     | No                 | ArrayBuffer mutations are currently not synchronized                                      |
+| **URL**                        | Partial     | std:url        | No                 | URL mutations are currently not synchronized                                              |
+| **Date**                       | Partial     | std:time       | No                 | `Date` objects are currently asymetrically mapped to DATEX `Time` objects                 |
+| **RegExp**                     | Partial     | js:RegExp      | No (Immutable)     | RegExp values wrapped in a Ref are currently not synchronized                             |
+| **WeakRef**                    | Full        | std:WeakRef    | No (Immutable)     | -                                                                                         |
+| **Error**                      | Partial     | std:Error      | No                 | Error subclasses are not correctly mapped                                                 |
+| **HTMLElement**                | Partial 2)  | std:html       | No                 | HTML element mutations are currently not synchronized                                     |
+| **SVGElement**                 | Partial 2)  | std:svg        | No                 | SVG element mutations are currently not synchronized                                      |
+| **MathMLElement**              | Partial 2)  | std:mathml     | No                 | MathML element mutations are currently not synchronized                                   |
+| **Document**                   | Partial 2)  | std:htmldocument | No               | Document mutations are currently not synchronized                                         |
+| **DocumentFragment**           | Partial 2)  | std:htmlfragment | No               | DocumentFragment mutations are currently not synchronized                                 |
+
+
+1) Primitive JS values are immutable and cannot be synchronized on their own, but when wrapped in a Ref.
+2) [UIX-DOM](https://github.com/unyt-org/uix-dom) required
+3) The corresponding object values of primitive values (e.g. `new Number()` for `number`) are not supported
+
 ## Special JS types
 
 Most builtin JavaScript types, like Map, Set or Array have equivalent types in the DATEX std library.
@@ -141,6 +178,6 @@ A struct definition accepts strings a keys and `Datex.Type`s,
 JavaScript classes or other struct definitions as values.
 
 
-## Mapping JS classes to DATEX types
+## Mapping your own JS classes to DATEX types
 
 Check out the chapter [11 Classes](./11%20Classes.md) for more information.
