@@ -791,18 +791,18 @@ type _Proxy$<T>         = _Proxy$Function<T> &
     T extends Array<infer V> ? 
     // array
     {
-        [key: number]: RefLikeOut<V>, 
+        [key: number]: RefLike<V>, 
         map<U>(callbackfn: (value: MaybeObjectRef<V>, index: number, array: V[]) => U, thisArg?: any): Pointer<U[]>
     }
     : 
     (
         T extends Map<infer K, infer V> ? 
         {
-            get(key: K): RefLikeOut<V>
+            get(key: K): RefLike<V>
         }
 
          // normal object
-        : {readonly [K in keyof T]: RefLikeOut<T[K]>} // always map properties to pointer property references
+        : {readonly [K in keyof T]: RefLike<T[K]>} // always map properties to pointer property references
     )
    
 type _PropertyProxy$<T> = _Proxy$Function<T> & 

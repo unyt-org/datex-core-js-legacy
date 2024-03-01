@@ -5355,7 +5355,7 @@ export class Runtime {
             persistent_vars: persistent_memory ? Object.keys(persistent_memory): [],
 
             execution_permission: header?.executable, // allow execution?
-            impersonation_permission: Runtime.endpoint.equals(header?.sender), // at the moment: only allow endpoint to impersonate itself
+            impersonation_permission: Runtime.endpoint?.equals(header?.sender), // at the moment: only allow endpoint to impersonate itself
     
             inner_scope: null, // has to be copied from sub_scopes[0]
         
@@ -5409,7 +5409,7 @@ export class Runtime {
         scope.header = header;
 
         scope.execution_permission = header?.executable // allow execution?
-        scope.impersonation_permission = Runtime.endpoint.equals(header?.sender) // at the moment: only allow endpoint to impersonate itself
+        scope.impersonation_permission = Runtime.endpoint?.equals(header?.sender) // at the moment: only allow endpoint to impersonate itself
 
         // enter outer scope ?
         if (scope.sub_scopes.length == 0) {
