@@ -105,6 +105,7 @@ RuntimePerformance.marker("module loading time", "modules_loaded", "runtime_star
 // TODO reader for node.js
 const ReadableStreamDefaultReader = globalThis.ReadableStreamDefaultReader ?? class {};
 
+const EXPOSE = Symbol("EXPOSE");
 
 export class StaticScope {
 
@@ -115,11 +116,15 @@ export class StaticScope {
     public static readonly DOCS: unique symbol = Symbol("docs");
 
     // return a scope with a given name, if it already exists
-    public static get(name?:string):StaticScope {
-        return this.scopes.get(name) || new StaticScope(name);
+    public static get(name?:string, expose = true): StaticScope {
+        if (!expose) return new StaticScope(name, false);
+        else return this.scopes.get(name) || new StaticScope(name);
     }
 
-    private constructor(name?:string){
+    [EXPOSE]: boolean
+
+    private constructor(name?:string, expose = true){
+        this[EXPOSE] = expose;
         const proxy = <this> Pointer.proxifyValue(this, false, undefined, false);
         DatexObject.setWritePermission(<Record<string | symbol, unknown>>proxy, undefined); // make readonly
         
@@ -143,9 +148,9 @@ export class StaticScope {
 
     // update/set the name of this static scope
     set name(name:string){
-        if (this[StaticScope.NAME]) StaticScope.scopes.delete(this[StaticScope.NAME]);
+        if (this[StaticScope.NAME] && this[EXPOSE]) StaticScope.scopes.delete(this[StaticScope.NAME]);
         this[StaticScope.NAME] = name;
-        StaticScope.scopes.set(this[StaticScope.NAME], this);
+        if (this[EXPOSE]) StaticScope.scopes.set(this[StaticScope.NAME], this);
         if (this[StaticScope.NAME] == "std") StaticScope.STD = this;
     }
 

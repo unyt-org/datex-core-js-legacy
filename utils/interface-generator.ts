@@ -230,7 +230,6 @@ function getClassTSCode(name:string, interf: interf, no_pointer = false) {
 	const meta_is_sync = metadata[Datex.Decorators.IS_SYNC]?.constructor;
 	const meta_is_sealed = metadata[Datex.Decorators.IS_SEALED]?.constructor;
     const meta_timeout = metadata[Datex.Decorators.TIMEOUT]?.public;
-    const meta_meta_index = metadata[Datex.Decorators.META_INDEX]?.public;
 
 	let fields = "";
 
