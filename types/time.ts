@@ -68,8 +68,6 @@ export class Time extends Date {
 
 		if (time.hasBaseUnit('s')) {
 			this.setTime(this.getTime()+(time.value*1000))
-			console.log(this.getTime(), time.value*1000, this.getTime()+(time.value*1000))
-
 		}
 		else if (time.hasBaseUnit('Cmo')) {
 			this.setMonth(this.getMonth()+time.value);
