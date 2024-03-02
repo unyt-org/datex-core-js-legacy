@@ -259,7 +259,7 @@ export class Type<T = any> extends ExtensibleFunction {
         return Runtime.castValue(this, VOID, context, context_location, origin);
     }
 
-    static #current_constructor:globalThis.Function;
+    static #current_constructor:globalThis.Function|null;
 
     public static isConstructing(value:object) {
         return value.constructor == this.#current_constructor;
@@ -329,7 +329,7 @@ export class Type<T = any> extends ExtensibleFunction {
 
     public newJSInstance(is_constructor = true, args?:any[], propertyInitializer?:{[INIT_PROPS]:(instance:any)=>void}) {
         // create new instance - TODO 'this' as last constructor argument still required?
-        Type.#current_constructor = this.interface_config?.class;
+        Type.#current_constructor = this.interface_config?.class??null;
         const instance = <T> (this.interface_config?.class ? Reflect.construct(Type.#current_constructor, is_constructor?[...args]:(propertyInitializer ? [propertyInitializer] : [])) : {[DX_TYPE]: this});
         Type.#current_constructor = null;
         return instance;
