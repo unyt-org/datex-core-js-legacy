@@ -802,7 +802,7 @@ type _Proxy$<T>         = _Proxy$Function<T> &
         }
 
          // normal object
-        : {readonly [K in keyof T]: RefLike<T[K]>} // always map properties to pointer property references
+        : {[K in keyof T]: RefLike<T[K]>} // always map properties to pointer property references
     )
    
 type _PropertyProxy$<T> = _Proxy$Function<T> & 

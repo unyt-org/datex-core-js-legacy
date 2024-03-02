@@ -880,7 +880,7 @@ export class Type<T = any> extends ExtensibleFunction {
         if (_forClass == Negation) return <Type<T>>Type.std.Negation;
 
 
-        let custom_type = JSInterface.getClassDatexType(_forClass);
+        const custom_type = JSInterface.getClassDatexType(_forClass);
 
         if (!custom_type) {
 

@@ -148,18 +148,6 @@ export class Decorators {
         }
     }
 
-    /** @meta(index?:number): declare index of meta parameter (before method), or inline parameter decorator */
-    static meta(value:any, name:context_name, kind:context_kind, is_static:boolean, is_private:boolean, setMetadata:context_meta_setter, getMetadata:context_meta_getter, params:[string?] = []) {
-
-        if (kind == "method") {
-            setMetadata(Decorators.META_INDEX, params[0] ?? -1);
-        } 
-
-        // invalid decorator call
-        else logger.error("@meta can only be used for methods");
-    }
-    
-
     /** @sign(sign?:boolean): sign outgoing DATEX requests (default:true) */
     static sign(value:any, name:context_name, kind:context_kind, is_static:boolean, is_private:boolean, setMetadata:context_meta_setter, getMetadata:context_meta_getter, params:[boolean?] = []) {
         setMetadata(Decorators.SIGN, params[0])

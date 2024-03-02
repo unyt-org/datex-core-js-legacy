@@ -67,6 +67,7 @@ export function endpoint(value: Class|target_clause|endpoint_name, context?: Cla
 	})
 }
 
+
 /**
  * Sets a class as the entrypoint for the current endpoint
  */
