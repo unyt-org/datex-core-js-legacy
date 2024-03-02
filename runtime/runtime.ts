@@ -625,12 +625,12 @@ export class Runtime {
             }
 
             // js module import
-            if (!raw && (url_string.endsWith("js") || url_string.endsWith("ts") || url_string.endsWith("tsx") || url_string.endsWith("jsx"))) {
+            if (!raw && (url_string.endsWith(".js") || url_string.endsWith(".ts") || url_string.endsWith(".tsx") || url_string.endsWith(".jsx"))) {
                 doFetch = false; // no body fetch required, can directly import() module
                 overrideContentType = "application/javascript"
             }
             // potential js module as dxb/dx: fetch headers first and check content type
-            else if (!raw && potentialDatexAsJsModule && (url_string.endsWith("dx")  || url_string.endsWith("dxb"))) {
+            else if (!raw && potentialDatexAsJsModule && (url_string.endsWith(".dx")  || url_string.endsWith(".dxb"))) {
                 try {
                     response = await fetch(url, {method: 'HEAD', cache: 'no-store'});
                     const type = response.headers.get('content-type');
