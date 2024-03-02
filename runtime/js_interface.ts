@@ -1,6 +1,6 @@
 import { Type } from "../types/type.ts";
 import { Endpoint } from "../types/addressing.ts";
-import { fundamental } from "../types/abstract_types.ts";
+import type { fundamental } from "../types/abstract_types.ts";
 import type { Class } from "../utils/global_types.ts";
 import { Pointer } from "./pointers.ts";
 import { INVALID, NOT_EXISTING } from "./constants.ts";
@@ -292,13 +292,13 @@ export class JSInterface {
     }
 
     // js class -> <Type>
-    static getClassDatexType(class_constructor:Class):Type {
+    static getClassDatexType(class_constructor:Class):Type|undefined {
         let config:js_interface_configuration;
 
         // get directly from class
-        if (config = this.configurations_by_class.get(class_constructor)) return config.__type;
+        if ((config = this.configurations_by_class.get(class_constructor))) return config.__type;
         // get from prototype of class
-        if (config = this.configurations_by_class.get(Object.getPrototypeOf(class_constructor))) return config.__type;
+        if ((config = this.configurations_by_class.get(Object.getPrototypeOf(class_constructor)))) return config.__type;
 
         // check full prototype chain (should not happen normally, unnessary to loop through every time)
         // for (let [_class, config] of this.configurations_by_class) {

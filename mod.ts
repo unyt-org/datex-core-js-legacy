@@ -18,7 +18,7 @@
 import * as Datex from "./datex_all.ts";
 
 export {Datex};
-export * from "./js_adapter/legacy_decorators.ts";
+export * from "./js_adapter/decorators.ts";
 export * from "./datex_short.ts";
 
 export {init} from "./init.ts";

@@ -15,16 +15,14 @@
 import { Runtime, StaticScope } from "../runtime/runtime.ts";
 
 import { Logger } from "../utils/logger.ts";
-import { Endpoint, endpoint_name, IdEndpoint, LOCAL_ENDPOINT, Target, target_clause } from "../types/addressing.ts";
-import { context_kind, context_meta_getter, context_meta_setter, context_name } from "./legacy_decorators.ts";
+import { endpoint_name, LOCAL_ENDPOINT, Target, target_clause } from "../types/addressing.ts";
 import { Type } from "../types/type.ts";
 import { getProxyFunction, getProxyStaticValue, ObjectRef, Pointer, UpdateScheduler } from "../runtime/pointers.ts";
-import { Error as DatexError, ValueError } from "../types/errors.ts";
 import { Function as DatexFunction } from "../types/function.ts";
 import { DatexObject } from "../types/object.ts";
 import { Tuple } from "../types/tuple.ts";
-import { DX_PERMISSIONS, DX_TYPE, DX_ROOT, INIT_PROPS, DX_EXTERNAL_SCOPE_NAME, DX_EXTERNAL_FUNCTION_NAME } from "../runtime/constants.ts";
-import { type Class } from "../utils/global_types.ts";
+import { DX_PERMISSIONS, DX_TYPE, DX_ROOT, INIT_PROPS, DX_EXTERNAL_SCOPE_NAME, DX_EXTERNAL_FUNCTION_NAME, DX_TIMEOUT } from "../runtime/constants.ts";
+import type { Class } from "../utils/global_types.ts";
 import { Conjunction, Disjunction, Logical } from "../types/logic.ts";
 import { client_type } from "../utils/constants.ts";
 import { Assertion } from "../types/assertion.ts";
@@ -49,38 +47,6 @@ export function instance<T>(fromClassOrType:{new(...params:any[]):T}|Type<T>, pr
     if (fromClassOrType instanceof Type) return fromClassOrType.cast(properties);
     else return Type.getClassDatexType(fromClassOrType).cast(properties)
 }
-
-
-/**
- * List of decorators
- *    
- *      @meta: mark method parameter that should contain meta data about the datex request / declare index of 'meta' parameter in method
- *      @docs: add docs to a static scope class / pseudo class
- *      
- *      @allow: define which endpoints have access to a class / method / property
- *      @to: define which on endpoints a method should be called / from which endpoint a property should be fetched
- * 
- *      @no_result: don't wait for result
- * 
- * Static:
- *      @scope(name?:string): declare a class as a static scope, or add a static scope to a static property/method
- *      @root_extension: root extends this static scope in every executed DATEX scope (all static scope members become variables)
- *      @root_variable: static scope becomes a root variable in every executed DATEX scope (scope name is variable name)
- *      
- *      @remote: get a variable from a remote static scope or call a method in a remote static scope
- *      @expose: make a method/variable in a static scope available to others
- * 
- * Sync:
- *      @sync: make a class syncable, or sync a property/method
- *      @sealed: make a sync class sealed, or seal individual properties/methods    
- *      @anonymous: force prevent creating a pointer reference for an object, always transmit serialized
- * 
- *      @constructor: called after constructor, if instance is newly generated
- *      @generator: called after @constructor, if instance is newly generated
- *      @replicator: called after @constructor, if instance is a clone
- *      @destructor: called when pointer is garbage collected, or triggers garbage collection
- */
-
 
 
 // handles all decorators
@@ -123,121 +89,50 @@ export class Decorators {
     static FROM_TYPE     = Symbol("FROM_TYPE");
 
 
-    static CONSTRUCTOR   = Symbol("CONSTRUCTOR");
-    static REPLICATOR    = Symbol("REPLICATOR");
-    static DESTRUCTOR    = Symbol("DESTRUCTOR");
-
-    /** @expose(allow?:filter): make a method in a static scope available to be called by others */
-    static public(value:any, name:context_name, kind:context_kind, is_static:boolean, is_private:boolean, setMetadata:context_meta_setter, getMetadata:context_meta_getter, params:[target_clause?] = []) {
-        
-        // invalid decorator call
-        if (kind != "method" && kind != "field") logger.error("Cannot use @expose for value '" + name.toString() +"'");
-        else if (!is_static) logger.error("Cannot use @expose for non-static field '" + name.toString() +"'");
-
-        // handle decorator
-        else {
-            setMetadata(Decorators.IS_EXPOSED, true)
-            if (params.length) Decorators.addMetaFilter(
-                params[0], 
-                setMetadata, getMetadata, Decorators.ALLOW_FILTER
-            )
+    public static setMetadata(context:DecoratorContext, key:string|symbol, value:unknown) {
+        if (!context.metadata[key]) context.metadata[key] = {}
+        const data = context.metadata[key] as {public?:Record<string|symbol,any>, constructor?:any}
+        if (context.kind == "class") {
+            data.constructor = value;
         }
+        else {
+            if (!data.public) data.public = {};
+            data.public[context.name] = value;
+        }  
     }
 
-    /** @namespace(name?:string): declare a class as a #public property */
-    static namespace(value:any, name:context_name, kind:context_kind, is_static:boolean, is_private:boolean, setMetadata:context_meta_setter, getMetadata:context_meta_getter, params:[string?] = []) {
-        
-        // invalid decorator call
-        if (!is_static && kind != "class") logger.error("Cannot use @scope for non-static field '" + name!.toString() +"'");
-
-        // handle decorator
-        else {
-            setMetadata(Decorators.NAMESPACE, params[0] ?? value?.name)
-
-            // class @namespace
-            if (kind == "class") _old_publicStaticClass(value);
-
-            // @namespace for static field -> @remote + @expose
-            else {
-                setMetadata(Decorators.IS_REMOTE, true)
-                setMetadata(Decorators.IS_EXPOSED, true)
-            }
-        }
-    }
 
     /** @endpoint(endpoint?:string|Datex.Endpoint, namespace?:string): declare a class as a #public property */
-    static endpoint(value:any, name:context_name, kind:context_kind, is_static:boolean, is_private:boolean, setMetadata:context_meta_setter, getMetadata:context_meta_getter, params:[(target_clause|endpoint_name)?, string?] = []) {
-        
-            // invalid decorator call
-            if (!is_static && kind != "class") logger.error("Cannot use @endpoint for non-static field '" + name!.toString() +"'");
-    
-            // handle decorator
-            else {
-
-                // target endpoint
-                if (params[0]) {
-                    Decorators.addMetaFilter(
-                        params[0], 
-                        setMetadata, getMetadata, Decorators.SEND_FILTER
-                    )
-                }
-                else {
-                    setMetadata(Decorators.SEND_FILTER, true); // indicate to always use local endpoint (expose)
-                }
-              
-                // custom namespace name
-                setMetadata(Decorators.NAMESPACE, params[1] ?? value?.name)
-    
-                // class @endpoint
-                if (kind == "class") registerPublicStaticClass(value);
-
-                else logger.error("@endpoint can only be used for classes");
-            }
-        }
-
-    /** @root_extension: root extends this static scope in every executed DATEX scope (all static scope members become variables) */
-    static default(value:any, name:context_name, kind:context_kind, is_static:boolean, is_private:boolean, setMetadata:context_meta_setter, getMetadata:context_meta_getter, params:undefined) {
-        
-        // invalid decorator call
-        if (!is_static && kind != "class") logger.error("Cannot use @root_extension for non-static field '" + name.toString() +"'");
-
-        // handle decorator
-        else {
-            setMetadata(Decorators.DEFAULT, true)
-
-            if (kind == "class") _old_publicStaticClass(value);
-        }
-    }
-
-    /** @root_variable: static scope becomes a root variable in every executed DATEX scope (scope name is variable name) */
-    static default_property(value:any, name:context_name, kind:context_kind, is_static:boolean, is_private:boolean, setMetadata:context_meta_setter, getMetadata:context_meta_getter, params:undefined) {
-    
-        // invalid decorator call
-        if (!is_static && kind != "class") logger.error("Cannot use @root_variable for non-static field '" + name.toString() +"'");
-
-        // handle decorator
-        else {
-            setMetadata(Decorators.DEFAULT_PROPERTY, true)
-
-            if (kind == "class") _old_publicStaticClass(value);
-        }
-    }
-
-    /** @remote(from?:filter): get a variable from a static scope or call a function */
-    static remote(value:any, name:context_name, kind:context_kind, is_static:boolean, is_private:boolean, setMetadata:context_meta_setter, getMetadata:context_meta_getter, params:[target_clause?] = []) {
-        
-        // invalid decorator call
-        if (kind == "class") logger.error("Cannot use @remote for a class");
-        else if (!is_static) logger.error("Cannot use @remote for non-static field '" + name.toString() +"'");
-
-        // handle decorator
-        else {
-            setMetadata(Decorators.IS_REMOTE, true)
-            if (params.length) Decorators.addMetaFilter(
-                params[0], 
-                setMetadata, getMetadata, Decorators.SEND_FILTER
+    static endpoint(endpoint:target_clause|endpoint_name, scope_name:string|undefined, value: Class, context: ClassDecoratorContext) {
+        // target endpoint
+        if (endpoint) {
+            Decorators.addMetaFilter(
+                endpoint, 
+                context,
+                Decorators.SEND_FILTER
             )
         }
+        else {
+            this.setMetadata(context, Decorators.SEND_FILTER, true) // indicate to always use local endpoint (expose)
+        }
+
+        // custom namespace name
+        this.setMetadata(context, Decorators.NAMESPACE, scope_name ?? value.name);
+        registerPublicStaticClass(value, 'public', context.metadata);
+    }
+
+    /** @entrypoint is set as endpoint entrypoint */
+    static entrypoint(value:Class, context: ClassDecoratorContext) {
+        this.setMetadata(context, Decorators.SEND_FILTER, true) // indicate to always use local endpoint (expose)
+        this.setMetadata(context, Decorators.NAMESPACE, value.name);
+        registerPublicStaticClass(value, 'entrypoint', context.metadata);
+    }
+
+    /** @entrypointProperty is set as a property of the endpoint entrypoint */
+    static entrypointProperty(value:Class, context: ClassDecoratorContext) {
+        this.setMetadata(context, Decorators.SEND_FILTER, true) // indicate to always use local endpoint (expose)
+        this.setMetadata(context, Decorators.NAMESPACE, value.name);
+        registerPublicStaticClass(value, 'entrypointProperty', context.metadata);
     }
 
 
@@ -252,18 +147,6 @@ export class Decorators {
             setMetadata(Decorators.DOCS, params[0])
         }
     }
-
-    /** @meta(index?:number): declare index of meta parameter (before method), or inline parameter decorator */
-    static meta(value:any, name:context_name, kind:context_kind, is_static:boolean, is_private:boolean, setMetadata:context_meta_setter, getMetadata:context_meta_getter, params:[string?] = []) {
-
-        if (kind == "method") {
-            setMetadata(Decorators.META_INDEX, params[0] ?? -1);
-        } 
-
-        // invalid decorator call
-        else logger.error("@meta can only be used for methods");
-    }
-    
 
     /** @sign(sign?:boolean): sign outgoing DATEX requests (default:true) */
     static sign(value:any, name:context_name, kind:context_kind, is_static:boolean, is_private:boolean, setMetadata:context_meta_setter, getMetadata:context_meta_getter, params:[boolean?] = []) {
@@ -281,9 +164,9 @@ export class Decorators {
     }
 
     /** @timeout(msecs?:number): DATEX request timeout */
-    static timeout(value:any, name:context_name, kind:context_kind, is_static:boolean, is_private:boolean, setMetadata:context_meta_setter, getMetadata:context_meta_getter, params:[number?] = []) {
-        if (params[0] && params[0] > 2**31) throw new Error("@timeout: timeout too big (max value is 2^31), use Infinity if you want to disable the timeout")
-        setMetadata(Decorators.TIMEOUT, params[0])
+    static timeout(timeMs:number, context:ClassMethodDecoratorContext) {
+        if (isFinite(timeMs) && timeMs > 2**31) throw new Error("@timeout: timeout too big (max value is 2^31), use Infinity if you want to disable the timeout")
+        this.setMetadata(context, Decorators.TIMEOUT, timeMs)
     }
 
     /** @allow(allow:filter): Allowed endpoints for class/method/field */
@@ -316,25 +199,29 @@ export class Decorators {
 
 
     /** @property: add a field as a template property */
-    static property(value:any, name:context_name, kind:context_kind, is_static:boolean, is_private:boolean, setMetadata:context_meta_setter, getMetadata:context_meta_getter, params:[string|number]) {
-        if (kind != "field" && kind != "getter" && kind != "setter" && kind != "method") logger.error("Invalid use of @property decorator");
+    static property<T>(type:string|Type<T>|Class<T>, context: ClassFieldDecoratorContext|ClassGetterDecoratorContext|ClassMethodDecoratorContext) {
 
+        if (context.static) {
+            this.setMetadata(context, Decorators.STATIC_PROPERTY, context.name)
+        }
         else {
-            if (is_static) setMetadata(Decorators.STATIC_PROPERTY, params?.[0] ?? name)
-            else setMetadata(Decorators.PROPERTY, params?.[0] ?? name)
+            this.setMetadata(context, Decorators.PROPERTY, context.name)
         }
 
+        // type
+        if (type) {
+            const normalizedType = normalizeType(type);
+            this.setMetadata(context, Decorators.FORCE_TYPE, normalizedType)
+        }
     }
 
+
      /** @assert: add type assertion function */
-     static assert(value:any, name:context_name, kind:context_kind, is_static:boolean, is_private:boolean, setMetadata:context_meta_setter, getMetadata:context_meta_getter, params:[((value:any)=>boolean)?] = []) {
-        if (kind != "field" && kind != "getter" && kind != "setter" && kind != "method") logger.error("Invalid use of @assert decorator");
+    static assert<T>(assertion: (val:T) => boolean|string|undefined, context: ClassFieldDecoratorContext) {
+        if (context.static) logger.error("Cannot use @assert with static fields");
         else {
-            if (typeof params[0] !== "function") logger.error("Invalid @assert decorator value, must be a function");
-            else {
-                const assertionType = new Conjunction(Assertion.get(undefined, params[0], false));
-                setMetadata(Decorators.FORCE_TYPE, assertionType)
-            }
+            const assertionType = new Conjunction(Assertion.get(undefined, assertion, false));
+            this.setMetadata(context, Decorators.FORCE_TYPE, assertionType)
         }
     }
 
@@ -371,135 +258,38 @@ export class Decorators {
     }
 
 
-    /** 
-     * @deprecated use \@sync
-     */
-    static template(value:any, name:context_name, kind:context_kind, is_static:boolean, is_private:boolean, setMetadata:context_meta_setter, getMetadata:context_meta_getter, params:[(string|Type)?] = []) {
-        if (kind != "class") logger.error("@template can only be used as a class decorator");
-
-        else {
-            //initPropertyTypeAssigner();
-
-            const original_class = value;
-            let type: Type;
-
-            // get template type
-            if (typeof params[0] == "string" || params[0] instanceof Type) {
-                type = normalizeType(params[0], false, "ext");
-            }
-            else if (original_class[METADATA]?.[Decorators.FORCE_TYPE]?.constructor) type = original_class[METADATA]?.[Decorators.FORCE_TYPE]?.constructor
-            else type = Type.get("ext", original_class.name.replace(/^_/, '')); // remove leading _ from type name
-
-
-            // return new templated class
-            return createTemplateClass(original_class, type);
-        }
-
-    }
-
     /** @sync: sync class/property */
-    static sync(value:any, name:context_name, kind:context_kind, is_static:boolean, is_private:boolean, setMetadata:context_meta_setter, getMetadata:context_meta_getter, params:[(string|Type)?] = []) {
+    static sync(type: string|Type|undefined, value: Class, context?: ClassDecoratorContext, callerFile?:string) {
         
-        // invalid decorator call
-        if (is_static) logger.error("Cannot use @sync for static field '" + name.toString() +"'");
-        if (is_static) logger.error("Cannot use @sync for static field '" + name.toString() +"'");
+        if (context) {
+            this.setMetadata(context ?? {kind: "class", metadata:(value as any)[METADATA]}, Decorators.IS_SYNC, true)
+        }
 
-        // handle decorator
-        else {
-            setMetadata(Decorators.IS_SYNC, true)
+        const originalClass = value;
 
-            // is auto sync class -> create class proxy (like in template)
-            if (kind == "class") {
-                //initPropertyTypeAssigner();
+        let normalizedType: Type;
 
-                const original_class = value;
-                let type: Type;
-    
-                // get template type
-                if (typeof params[0] == "string" || params[0] instanceof Type) {
-                    type = normalizeType(params[0], false, "ext");
-                }
-                else if (original_class[METADATA]?.[Decorators.FORCE_TYPE]?.constructor) type = original_class[METADATA]?.[Decorators.FORCE_TYPE]?.constructor
-                else type = Type.get("ext", original_class.name.replace(/^_/, '')); // remove leading _ from type name
+        // get template type
+        if (typeof type == "string" || type instanceof Type) {
+            normalizedType = normalizeType(type, false, "ext");
+        }
+        else if (
+            originalClass[METADATA]?.[Decorators.FORCE_TYPE] && 
+            Object.hasOwn(originalClass[METADATA]?.[Decorators.FORCE_TYPE], 'constructor')
+        ) normalizedType = originalClass[METADATA]?.[Decorators.FORCE_TYPE]?.constructor
+        else normalizedType = Type.get("ext", originalClass.name.replace(/^_/, '')); // remove leading _ from type name
 
-                let callerFile:string|undefined;
-
-                if (client_type == "deno" && type.namespace !== "std") {
-                    callerFile = getCallerInfo()?.[2]?.file ?? undefined;
-                    if (!callerFile) {
-                        logger.error("Could not determine JS module URL for type '" + type + "'")
-                    }
-                }
-                
-                // return new templated class
-                return createTemplateClass(original_class, type, true, true, callerFile);
+        if (!callerFile && client_type == "deno" && normalizedType.namespace !== "std") {
+            callerFile = getCallerInfo()?.[3]?.file ?? undefined;
+            if (!callerFile) {
+                logger.error("Could not determine JS module URL for type '" + normalizedType + "'")
             }
-          
         }
-    }
-
-    /** @sealed: sealed class/property */
-    static sealed(value:any, name:context_name, kind:context_kind, is_static:boolean, is_private:boolean, setMetadata:context_meta_setter, getMetadata:context_meta_getter, params:undefined) {
         
-        // invalid decorator call
-        if (is_static) logger.error("Cannot use @sealed for static field '" + name.toString() +"'");
-
-        // handle decorator
-        else {
-            setMetadata(Decorators.IS_SEALED, true)
-        }
+        // return new templated class
+        return createTemplateClass(originalClass, normalizedType, true, true, callerFile, context?.metadata);
     }
 
-    /** @anonymous: anonymous class/property */
-    static anonymous(value:any, name:context_name, kind:context_kind, is_static:boolean, is_private:boolean, setMetadata:context_meta_setter, getMetadata:context_meta_getter, params:undefined) {
-        
-        // invalid decorator call
-        if (is_static) logger.error("Cannot use @anonymous for static field '" + name.toString() +"'");
-
-        // handle decorator
-        else {
-            setMetadata(Decorators.IS_ANONYMOUS, true)
-        }
-    }
-
-
-    /** @observe(handler:Function): listen to value changes */
-    static observe(value:any, name:context_name, kind:context_kind, is_static:boolean, is_private:boolean, setMetadata:context_meta_setter, getMetadata:context_meta_getter, params:[Function?] = []) {
-        setMetadata(Decorators.OBSERVER, params[0])
-    }
-
-
-
-    /** @anonymize: serialize return values (no pointers), only the first layer */
-    static anonymize(value:any, name:context_name, kind:context_kind, is_static:boolean, is_private:boolean, setMetadata:context_meta_setter, getMetadata:context_meta_getter, params:undefined) {
-        
-        // invalid decorator call
-        if (kind == "class") logger.error("Cannot use @anonymize for classes");
-
-        // handle decorator
-        else {
-            setMetadata(Decorators.ANONYMIZE, true)
-        }
-    }
-
-
-    /** @type(type:string|DatexType)/ (namespace:name)
-     * sync class with type */
-    static type(value:any, name:context_name, kind:context_kind, is_static:boolean, is_private:boolean, setMetadata:context_meta_setter, getMetadata:context_meta_getter, params:[(string|Type)] = []) {
-        const type = normalizeType(params[0]);
-        setMetadata(Decorators.FORCE_TYPE, type)
-    }
-
-    /** @from(type:string|DatexType): sync class from type */
-    static from(value:any, name:context_name, kind:context_kind, is_static:boolean, is_private:boolean, setMetadata:context_meta_setter, getMetadata:context_meta_getter, params:[(string|Type)?] = []) {
-        // invalid decorator call
-        if (kind !== "class") logger.error("Can use @from only for classes");
-
-        // handle decorator
-        else {
-            setMetadata(Decorators.FROM_TYPE, params[0])
-        }
-    }
 
     /** @update(interval:number|scheduler:DatexUpdateScheduler): set update interval / scheduler */
     static update(value:any, name:context_name, kind:context_kind, is_static:boolean, is_private:boolean, setMetadata:context_meta_setter, getMetadata:context_meta_getter, params:[(number|UpdateScheduler)?] = []) {
@@ -508,60 +298,11 @@ export class Decorators {
         else setMetadata(Decorators.SCHEDULER, new UpdateScheduler(params[0]));
     }
 
-
-
-    /** @constructor: called after constructor if newly generateds */
-    static ["constructor"](value:any, name:context_name, kind:context_kind, is_static:boolean, is_private:boolean, setMetadata:context_meta_setter, getMetadata:context_meta_getter, params:undefined) {
-        
-        // invalid decorator call
-        if (is_static) logger.error("Cannot use @constructor for static field '" + name.toString() +"'");
-        else if (kind != "method") logger.error("Cannot only use @constructor for methods");
-
-        // handle decorator
-        else {
-            setMetadata(Decorators.CONSTRUCTOR, true)
-        }
-    }
-
-
-    
-    /** @replicator: called after constructor if cloned */
-    static replicator(value:any, name:context_name, kind:context_kind, is_static:boolean, is_private:boolean, setMetadata:context_meta_setter, getMetadata:context_meta_getter, params:undefined) {
-    
-        // invalid decorator call
-        if (is_static) logger.error("Cannot use @replicator for static field '" + name.toString() +"'");
-        else if (kind != "method") logger.error("Cannot only use @replicator for methods");
-
-        // handle decorator
-        else {
-            setMetadata(Decorators.REPLICATOR, true)
-        }
-    }
-    
-    /** @destructor: called after constructor if cloned */
-    static destructor(value:any, name:context_name, kind:context_kind, is_static:boolean, is_private:boolean, setMetadata:context_meta_setter, getMetadata:context_meta_getter, params:undefined) {
-
-        // invalid decorator call
-        if (is_static) logger.error("Cannot use @destructor for static field '" + name.toString() +"'");
-        else if (kind != "method") logger.error("Cannot only use @destructor for methods");
-
-        // handle decorator
-        else {
-            setMetadata(Decorators.DESTRUCTOR, true)
-        }
-    }
-
-
     // handle ALLOW_FILTER for classes, methods and fields
     // adds filter
-    private static addMetaFilter(new_filter:target_clause|endpoint_name, setMetadata:context_meta_setter, getMetadata:context_meta_getter, filter_symbol:symbol){
-        // // create filter if not existing
-        // let filter:Filter = getMetadata(filter_symbol)
-        // if (!filter) {filter = new Filter(); setMetadata(filter_symbol, filter)}
-        // filter.appendFilter(new_filter);
-
-        if (typeof new_filter == "string") setMetadata(filter_symbol, Target.get(new_filter))
-        else setMetadata(filter_symbol, new_filter)
+    private static addMetaFilter(new_filter:target_clause|endpoint_name, context: DecoratorContext, filter_symbol:symbol){
+        if (typeof new_filter == "string") this.setMetadata(context, filter_symbol, Target.get(new_filter))
+        else this.setMetadata(context, filter_symbol, new_filter)
     }
 }
 
@@ -571,7 +312,7 @@ export class Decorators {
  * @param allowTypeParams 
  * @returns 
  */
-function normalizeType(type:Type|string, allowTypeParams = true, defaultNamespace = "std") {
+function normalizeType(type:Type|string|Class, allowTypeParams = true, defaultNamespace = "std") {
     if (typeof type == "string") {
         // extract type name and parameters
         const [typeName, paramsString] = type.replace(/^\</,'').replace(/\>$/,'').match(/^((?:[\w-]+\:)?[\w-]*)(?:\((.*)\))?$/)?.slice(1) ?? [];
@@ -587,64 +328,87 @@ function normalizeType(type:Type|string, allowTypeParams = true, defaultNamespac
         if (!allowTypeParams && type.parameters?.length) throw new Error(`Type parameters not allowed (${type})`);
         return type
     }
+    else if (typeof type == "function") {
+        const classType = Type.getClassDatexType(type)
+        if (!classType) throw new Error("Could not get a DATEX type for class " + type.name + ". Only @sync classes can be used as types");
+        return classType
+    }
     else {
         console.error("invalid type",type)
         throw new Error("Invalid type")
     }
 }
 
-
-const initialized_static_scope_classes = new Map<Function,StaticScope>();
-
-
-const registered_static_classess = new Set<Class>();
-function registerPublicStaticClass(original_class:Class){
-    registered_static_classess.add(original_class);
-
-    // if endpoint already loaded, init class
-    initPublicStaticClasses()
-}
-
 type class_data = {name:string, static_scope:StaticScope, properties: string[], metadata:any}
 
-export function initPublicStaticClasses(){
+const PROPERTY_COLLECTION = Symbol("PROPERTY_COLLECTION");
+const registeredClasses = new Map<Function,class_data>();
+const pendingClassRegistrations = new Map<Class, Set<'public'|'entrypoint'|'entrypointProperty'>>().setAutoDefault(Set);
+
+function registerPublicStaticClass(publicClass:Class, type:'public'|'entrypoint'|'entrypointProperty', metadata?:Record<string,any>){
+    pendingClassRegistrations.getAuto(publicClass).add(type);
+    initPublicStaticClass(publicClass, type, metadata)
+}
+
+export function initPublicStaticClasses(){    
+    for (const [reg_class, types] of [...pendingClassRegistrations]) {
+        for (const type of [...types]) {
+            initPublicStaticClass(reg_class, type)
+        }
+    }
+    pendingClassRegistrations.clear();
+}
+
+function initPublicStaticClass(publicClass: Class, type: 'public'|'entrypoint'|'entrypointProperty', metadata?:Record<string|symbol,any>) {
     if (!Runtime.endpoint || Runtime.endpoint === LOCAL_ENDPOINT) return;
+
+    metadata ??= (<any>publicClass)[METADATA];
+    if (!metadata) throw new Error(`Missing metadata for class ${publicClass.name}`)
+    let targets = metadata[Decorators.SEND_FILTER]?.constructor;
+    if (targets == true) targets = Runtime.endpoint; // use own endpoint per default
+
+    let data = registeredClasses.get(publicClass);
     
-    for (const reg_class of registered_static_classess) {
-
-        if (initialized_static_scope_classes.has(reg_class)) continue; // already initialized
-
-        const metadata = (<any>reg_class)[METADATA];
-        let targets = metadata[Decorators.SEND_FILTER]?.constructor;
-        if (targets == true) targets = Runtime.endpoint; // use own endpoint per default
-
-        let data:any;
-
-        // expose if current endpoint matches class endpoint
-        if (Logical.matches(Runtime.endpoint, targets, Target)) {
-            data ??= getStaticClassData(reg_class);
-            if (!data) throw new Error("Could not get data for static class")
-            exposeStaticClass(reg_class, data);
-        }
-
-        // also enable remote access if not exactly and only the current endpoint
-        if (Runtime.endpoint !== targets) {
-            data ??= getStaticClassData(reg_class, false);
-            if (!data) throw new Error("Could not get data for static class")
-            remoteStaticClass(reg_class, data, targets)
-        }
-
-        
-        DatexObject.seal(data.static_scope);
-        initialized_static_scope_classes.set(reg_class, data.static_scope);
+    // expose if current endpoint matches class endpoint
+    if (Logical.matches(Runtime.endpoint, targets, Target)) {
+        data ??= getStaticClassData(publicClass, true, type == 'public', metadata);
+        if (!data) throw new Error("Could not get data for static class")
+        exposeStaticClass(publicClass, data);
     }
 
+    // also enable remote access if not exactly and only the current endpoint
+    if (Runtime.endpoint !== targets) {
+        data ??= getStaticClassData(publicClass, false, false, metadata);
+        if (!data) throw new Error("Could not get data for static class")
+        remoteStaticClass(publicClass, data, targets)
+    }
+
+    // set method timeouts
+    for (const [method_name, timeout] of Object.entries(metadata[Decorators.TIMEOUT]?.public??{})) {
+        const method = (publicClass as any)[method_name];
+        if (method) method[DX_TIMEOUT] = timeout
+    }
+
+    // set entrypoint
+    if (type == 'entrypoint') {
+        data ??= getStaticClassData(publicClass, true, false, metadata);
+        if (Runtime.endpoint_entrypoint) logger.error("Existing entrypoint was overridden with @entrypoint class " + publicClass.name);
+        Runtime.endpoint_entrypoint = data.static_scope;
+    }
+    else if (type == 'entrypointProperty') {
+        data ??= getStaticClassData(publicClass, true, false, metadata);
+        if (Runtime.endpoint_entrypoint == undefined) Runtime.endpoint_entrypoint = {[PROPERTY_COLLECTION]:true}
+        if (typeof Runtime.endpoint_entrypoint !== "object" || !Runtime.endpoint_entrypoint[PROPERTY_COLLECTION]) logger.error("Cannot set endpoint property " + publicClass.name + ". The entrypoint is already set to another value.");
+        Runtime.endpoint_entrypoint[publicClass.name] = data.static_scope;
+    }
+    
+    // DatexObject.seal(data.static_scope);
+    registeredClasses.set(publicClass, data);
+    pendingClassRegistrations.get(publicClass)!.delete(type);
 }
 
 
 function exposeStaticClass(original_class:Class, data:class_data) {
-
-    // console.log("expose class", data, data.metadata[Decorators.STATIC_PROPERTY]);
 
     const exposed_public = data.metadata[Decorators.STATIC_PROPERTY]?.public;
     const exposed_private = data.metadata[Decorators.STATIC_PROPERTY]?.private;
@@ -721,7 +485,6 @@ function remoteStaticClass(original_class:Class, data:class_data, targets:target
     const timeout_public = data.metadata[Decorators.TIMEOUT]?.public;
     const timeout_private = data.metadata[Decorators.TIMEOUT]?.private;
 
-
     // prototype for all options objects of static proxy methods (Contains the dynamic_filter)
     let options_prototype: {[key:string]:any} = {};
 
@@ -730,7 +493,7 @@ function remoteStaticClass(original_class:Class, data:class_data, targets:target
     Object.defineProperty(original_class, 'to', {
         value: function(...targets:(Target|endpoint_name)[]){
             options_prototype.dynamic_filter = new Disjunction<Target>(); 
-            for (let target of targets) {
+            for (const target of targets) {
                 if (typeof target == "string") options_prototype.dynamic_filter.add(Target.get(target))
                 else options_prototype.dynamic_filter.add(target)
             }
@@ -778,15 +541,15 @@ function remoteStaticClass(original_class:Class, data:class_data, targets:target
 }
 
 
-function getStaticClassData(original_class:Class, staticScope = true) {
-    const metadata = (<any>original_class)[METADATA];
+function getStaticClassData(original_class:Class, staticScope = true, expose = true, metadata?:Record<string,any>) {
+    metadata ??= (<any>original_class)[METADATA];
     if (!metadata) return;
     const static_scope_name = typeof metadata[Decorators.NAMESPACE]?.constructor == 'string' ? metadata[Decorators.NAMESPACE]?.constructor : original_class.name;
     const static_properties = Object.getOwnPropertyNames(original_class)
 
     return {
         metadata,
-        static_scope: staticScope ? new StaticScope(static_scope_name) : null,
+        static_scope: staticScope ? StaticScope.get(static_scope_name, expose) : null,
         name: static_scope_name,
         properties: static_properties
     }
@@ -794,262 +557,11 @@ function getStaticClassData(original_class:Class, staticScope = true) {
 
 
 
-function _old_publicStaticClass(original_class:Class) {
-
-    // already initialized
-    if (initialized_static_scope_classes.has(original_class)) {
-
-        // is default property
-        if (original_class[METADATA]?.[Decorators.DEFAULT_PROPERTY]?.constructor) {
-            const static_scope = initialized_static_scope_classes.get(original_class);
-            if (!Runtime.endpoint_entrypoint || typeof Runtime.endpoint_entrypoint != "object") Runtime.endpoint_entrypoint = {};
-            Runtime.endpoint_entrypoint[static_scope.name] = static_scope
-        }
-        // is default value
-        if (original_class[METADATA]?.[Decorators.DEFAULT]?.constructor) {
-            const static_scope = initialized_static_scope_classes.get(original_class);
-            Runtime.endpoint_entrypoint = static_scope;
-        }
-
-
-        return;
-    }
-
-
-    let static_properties = Object.getOwnPropertyNames(original_class)
-
-    const metadata = original_class[METADATA];
-    if (!metadata) return;
-
-    // prototype for all options objects of static proxy methods (Contains the dynamic_filter)
-    let options_prototype: {[key:string]:any} = {};
-
-    const static_scope_name = typeof metadata[Decorators.NAMESPACE]?.constructor == 'string' ? metadata[Decorators.NAMESPACE]?.constructor : original_class.name;
-    let static_scope:StaticScope;
-
-    // add builtin methods
-    
-    Object.defineProperty(original_class, 'to', {
-        value: function(...targets:(Target|endpoint_name)[]){
-            options_prototype.dynamic_filter = new Disjunction<Target>(); 
-            for (let target of targets) {
-                if (typeof target == "string") options_prototype.dynamic_filter.add(Target.get(target))
-                else options_prototype.dynamic_filter.add(target)
-            }
-            return this;
-        },
-        configurable: false,
-        enumerable: false,
-        writable: false
-    });
-    /*
-    target.list = async function (...filters:ft[]|[Datex.filter]) {
-        if (!DATEX_CLASS_ENDPOINTS.has(this)) return false;
-        DATEX_CLASS_ENDPOINTS.get(this).dynamic_filter.appenddatex_filter(...filters)
-        return (await DATEX_CLASS_ENDPOINTS.get(this).__sendHandler("::list"))?.data || new Set();
-    }
-    target.on_result = function(call: (data:datex_res, meta:{station_id:number, station_bundle:number[]})=>any){
-        if (!DATEX_CLASS_ENDPOINTS.has(this)) return this;
-        DATEX_CLASS_ENDPOINTS.get(this).current_dynamic_callback = call;
-        return this;
-    }
-    target.no_result = function() {
-        if (!DATEX_CLASS_ENDPOINTS.has(this)) return this;
-        DATEX_CLASS_ENDPOINTS.get(this).current_no_result = true;
-        return this;
-    }
-
-    target.ping = async function(...filters:ft[]|[Datex.filter]){
-        if (!DATEX_CLASS_ENDPOINTS.has(this)) return false;
-        return new Promise(resolve=>{
-            DATEX_CLASS_ENDPOINTS.get(this).dynamic_filter.appenddatex_filter(...filters)
-            let pings = {}
-            let start_time = new Date().getTime();
-            DATEX_CLASS_ENDPOINTS.get(this).current_dynamic_callback = (data, meta) => {
-                pings[meta.station_id] = (new Date().getTime() - start_time) + "ms";
-                if (Object.keys(pings).length == meta.station_bundle.length) resolve(pings);
-            }
-            setTimeout(()=>resolve(pings), 10000);
-            DATEX_CLASS_ENDPOINTS.get(this).__sendHandler("::ping")
-        })
-    }
-
-    target.self = function(){
-        if (!DATEX_CLASS_ENDPOINTS.has(this)) return false;
-        DATEX_CLASS_ENDPOINTS.get(this).dynamic_self = true;
-    }
-    target.encrypt =  function(encrypt=true){
-        if(DATEX_CLASS_ENDPOINTS.has(this)) DATEX_CLASS_ENDPOINTS.get(this).current_encrypt = encrypt;
-        return this;
-    }
-    */
-
-    let class_send_filter:target_clause = metadata[Decorators.SEND_FILTER]?.constructor
-    // @ts-ignore
-    if (class_send_filter == Object) class_send_filter = undefined;
-    let class_allow_filter:target_clause = metadata[Decorators.ALLOW_FILTER]?.constructor
-    // @ts-ignore
-    if (class_allow_filter == Object) class_allow_filter = undefined;
-
-    // per-property metadata
-    const exposed_public = metadata[Decorators.IS_EXPOSED]?.public;
-    const exposed_private = metadata[Decorators.IS_EXPOSED]?.private;
-
-    const remote_public = metadata[Decorators.IS_REMOTE]?.public;
-    const remote_private = metadata[Decorators.IS_REMOTE]?.private;
-    const timeout_public = metadata[Decorators.TIMEOUT]?.public;
-    const timeout_private = metadata[Decorators.TIMEOUT]?.private;
-    const send_filter = metadata[Decorators.SEND_FILTER]?.public;
-
-
-    for (const name of static_properties) {
-
-        const current_value = original_class[name];
-        
-        // expose
-        if ((exposed_public?.hasOwnProperty(name) && exposed_public[name]) || (exposed_private?.hasOwnProperty(name) && exposed_private[name])) {
-            
-            if (!static_scope) static_scope = StaticScope.get(static_scope_name)
-
-            // function
-            if (typeof current_value == "function")  {
-                // set allowed endpoints for this method
-                //static_scope.setAllowedEndpointsForProperty(name, this.method_a_filters.get(name))
-        
-                const dx_function = Pointer.proxifyValue(DatexFunction.createFromJSFunction(current_value, original_class, name), true, undefined, false, true) ; // generate <Function>
-
-                // public function
-                const ptr = Pointer.pointerifyValue(dx_function);
-                if (ptr instanceof Pointer) ptr.grantPublicAccess(true);
-
-                static_scope.setVariable(name, dx_function); // add <Function> to static scope
-            }
-
-            // field
-            else {
-                // set static value (datexified)
-                const setProxifiedValue = (val:any) => {
-                    static_scope.setVariable(name, Pointer.proxifyValue(val, true, undefined, false, true))
-                    // public function
-                    const ptr = Pointer.proxifyValue(val);
-                    if (ptr instanceof Pointer) ptr.grantPublicAccess(true);
-                };
-                setProxifiedValue(current_value);
-
-                /*** handle new value assignments to this property: **/
-
-                // similar to addObjProxy in DatexRuntime / DatexPointer
-                const property_descriptor = Object.getOwnPropertyDescriptor(original_class, name);
-
-                // add original getters/setters to static_scope if they exist
-                if (property_descriptor?.set || property_descriptor?.get) {
-                    Object.defineProperty(static_scope, name, {
-                        set: val => { 
-                            property_descriptor.set?.call(original_class,val);
-                        },
-                        get: () => { 
-                            return property_descriptor.get?.call(original_class);
-                        }
-                    });
-                }
-
-                // new getter + setter
-                Object.defineProperty(original_class, name, {
-                    get:()=>static_scope.getVariable(name),
-                    set:(val)=>setProxifiedValue(val)
-                });
-            }
-        }
-
-        // remote
-
-        if ((remote_public?.hasOwnProperty(name) && remote_public[name]) || (remote_private?.hasOwnProperty(name) && remote_private[name])) {
-            
-            const timeout = timeout_public?.[name]??timeout_private?.[name];
-            const filter = new Conjunction(class_send_filter, send_filter?.[name]); 
-
-            // function
-            if (typeof current_value == "function")  {      
-                const options = Object.create(options_prototype);
-                Object.assign(options, {filter, sign:true, scope_name:static_scope_name, timeout});
-                const proxy_fn = getProxyFunction(name, options);
-                Object.defineProperty(original_class, name, {value:proxy_fn})
-            }
-
-            // field
-            else {
-                const options = Object.create(options_prototype);
-                Object.assign(options, {filter, sign:true, scope_name:static_scope_name, timeout});
-                const proxy_fn = getProxyStaticValue(name, options);
-                Object.defineProperty(original_class, name, {
-                    get: proxy_fn // set proxy function for getting static value
-                });
-            }
-        }
-
-    }
-
-
-    // each methods
-    
-    //const each_private = original_class.prototype[METADATA]?.[Decorators.IS_EACH]?.private;
-    const each_public  = original_class.prototype[METADATA]?.[Decorators.IS_EACH]?.public;
-
-    let each_scope: any;
-    
-    for (let [name, is_each] of Object.entries(each_public??{})) {
-        if (!is_each) continue;
-
-        if (!static_scope) static_scope = StaticScope.get(static_scope_name)
-
-        // add _e to current static scope
-        if (!each_scope) {
-            each_scope = {};
-            static_scope.setVariable("_e", each_scope); // add <Function> to static scope
-        }
-
-        let method:Function = original_class.prototype[name];
-        let type = Type.getClassDatexType(original_class);
-
-        if (typeof method != "function") throw new DatexError("@each can only be used with functions")
- 
-
-
-        /****** expose _e */
-        // let meta_index = getMetaParamIndex(original_class.prototype, name);
-        // if (typeof meta_index == "number") meta_index ++; // shift meta_index (insert 'this' before)
-        
-        let proxy_method = function(_this:any, ...args:any[]) {
-            if (!(_this instanceof original_class)) {
-                console.warn(_this, args);
-                throw new ValueError("Invalid argument 'this': type should be " + type)
-            }
-            return method.call(_this, ...args)
-        };
-        // add '<type> this' as first argument
-        //params?.unshift([type, "this"])
-
-        let dx_function = Pointer.proxifyValue(DatexFunction.createFromJSFunction(proxy_method, original_class, name), true, undefined, false, true) ; // generate <Function>
-
-        each_scope[name] = dx_function // add <Function> to static scope
-
-    }
-
-
-    // finally seal the static scope
-    if (static_scope) {
-        DatexObject.seal(static_scope);
-        initialized_static_scope_classes.set(original_class, static_scope);
-    }
-}
-
-
-
 const templated_classes = new Map<Function, Function>() // original class, templated class
 
-export function createTemplateClass(original_class:{ new(...args: any[]): any; }, type:Type, sync = true, add_js_interface = true, callerFile?:string){
+export function createTemplateClass(original_class: Class, type:Type, sync = true, add_js_interface = true, callerFile?:string, metadata?:Record<string,any>){
 
-    if (templated_classes.has(original_class)) return templated_classes.get(original_class);
+    if (templated_classes.has(original_class)) return templated_classes.get(original_class)!;
 
     original_class[DX_TYPE] = type;
 
@@ -1066,19 +578,20 @@ export function createTemplateClass(original_class:{ new(...args: any[]): any; }
         type.jsTypeDefModule = callerFile;
     }
 
+    metadata ??= original_class[METADATA];
 
     // set constructor, replicator, destructor
-    const constructor_name = Object.keys(original_class.prototype[METADATA]?.[Decorators.CONSTRUCTOR]?.public??{})[0]
-    const replicator_name = Object.keys(original_class.prototype[METADATA]?.[Decorators.REPLICATOR]?.public??{})[0]
-    const destructor_name = Object.keys(original_class.prototype[METADATA]?.[Decorators.DESTRUCTOR]?.public??{})[0]
+    const constructor_name = original_class.prototype['construct'] ? 'construct' : null; // Object.keys(metadata?.[Decorators.CONSTRUCTOR]?.public??{})[0]
+    const replicator_name = original_class.prototype['replicate'] ? 'replicate' : null; // Object.keys(metadata?.[Decorators.REPLICATOR]?.public??{})[0]
+    const destructor_name = original_class.prototype['destruct'] ? 'destruct' : null; // Object.keys(metadata?.[Decorators.DESTRUCTOR]?.public??{})[0]
 
     if (constructor_name) type.setConstructor(original_class.prototype[constructor_name]);
     if (replicator_name) type.setReplicator(original_class.prototype[replicator_name]);
     if (destructor_name) type.setDestructor(original_class.prototype[destructor_name]);
 
     // set template
-    const property_types = original_class.prototype[METADATA]?.[Decorators.FORCE_TYPE]?.public;
-    const allow_filters = original_class.prototype[METADATA]?.[Decorators.ALLOW_FILTER]?.public;
+    const property_types = metadata?.[Decorators.FORCE_TYPE]?.public;
+    const allow_filters = metadata?.[Decorators.ALLOW_FILTER]?.public;
 
     const template = {};
     template[DX_PERMISSIONS] = {}
@@ -1098,7 +611,7 @@ export function createTemplateClass(original_class:{ new(...args: any[]): any; }
 
 
     // iterate over all properties TODO different dx_name?
-    for (const [name, dx_name] of Object.entries(original_class.prototype[METADATA]?.[Decorators.PROPERTY]?.public??{})) {
+    for (const [name, dx_name] of Object.entries(metadata?.[Decorators.PROPERTY]?.public??{})) {
         let metadataConstructor = MetadataReflect.getMetadata && MetadataReflect.getMetadata("design:type", original_class.prototype, name);
         // if type is Object -> std:Any
         if (metadataConstructor == Object) metadataConstructor = null;
@@ -1109,12 +622,8 @@ export function createTemplateClass(original_class:{ new(...args: any[]): any; }
 
     type.setTemplate(template)
 
-
-    // has static scope methods?
-    _old_publicStaticClass(original_class);
-
     // create shadow class extending the actual class
-    const sync_auto_cast_class = proxyClass(original_class, type, original_class[METADATA]?.[Decorators.IS_SYNC]?.constructor ?? sync)
+    const sync_auto_cast_class = proxyClass(original_class, type, metadata?.[Decorators.IS_SYNC]?.constructor ?? sync)
     
     // only for debugging / dev console TODO remove
     globalThis[sync_auto_cast_class.name] = sync_auto_cast_class;
@@ -1123,27 +632,6 @@ export function createTemplateClass(original_class:{ new(...args: any[]): any; }
 
     return sync_auto_cast_class;
 }
-
-// TODO each
-// if (is_each) {
-
-//     // call _e 
-
-//     const static_scope_name = original_class[METADATA]?.[Decorators.SCOPE_NAME]?.constructor ?? original_class.name
-//     let filter:DatexFilter; // contains all endpoints that have the pointer
-
-//     Object.defineProperty(instance, p, {value: async function(...args:any[]) {
-//         if (!filter) {
-//             let ptr = DatexPointer.getByValue(this);
-//             if (!(ptr instanceof DatexPointer)) throw new DatexError("called @each method on non-pointer");
-//             filter = DatexFilter.OR(await ptr.getSubscribersFilter(), ptr.origin);
-//         }
-//         console.log("all endpoints filter: " + filter);
-      
-//         return DatexRuntime.datexOut([`--static.${static_scope_name}._e.${p} ?`, [new DatexTuple(this, ...args)], {to:filter, sign:true}], filter);
-//     }})
-// }
-
 
 // Reflect metadata / decorator metadata, get parameters & types if available
 function getMethodParams(target:Function, method_name:string, meta_param_index?:number):Tuple{
@@ -1210,50 +698,28 @@ function normalizeFunctionParams(params: string) {
 }
 
 
-// let _assigner_init = false;
-// function initPropertyTypeAssigner(){
-//     if (_assigner_init) return;
-//     _assigner_init = true;
-//     // TODO just a workaround, handle PropertyTypeAssigner different (currently nodejs error!! DatexPointer not yet defined)
-//     Pointer.setPropertyTypeAssigner(<any>{getMethodMetaParamIndex:getMetaParamIndex, getMethodParams:getMethodParams})
-// }
-//Pointer.setPropertyTypeAssigner(<any>{getMethodMetaParamIndex:getMetaParamIndex, getMethodParams:getMethodParams})
-
 DatexFunction.setMethodParamsSource(getMethodParams)
 DatexFunction.setMethodMetaIndexSource(getMetaParamIndex)
-
-/** @meta: mark meta parameter in a datex method with @meta */
-// export function meta(target: Object, propertyKey: string | symbol, parameterIndex: number) {
-//     Reflect.defineMetadata(
-//         "unyt:meta",
-//         parameterIndex,
-//         target,
-//         propertyKey
-//     );
-// }
 
 
 // new version for implemented feature functions / attributes: call datex_advanced() on the class (ideally usa as a decorator, currently not supported by ts)
 
-interface DatexClass<T extends (new (...args: unknown[]) => unknown) = (new (...args: unknown[]) => unknown), Construct = InstanceType<T>["construct"]> {
+export interface DatexClass<T extends (new (...args: unknown[]) => unknown) = (new (...args: unknown[]) => unknown), Construct = InstanceType<T>["construct" & keyof InstanceType<T>]> {
 
     new(...args: Construct extends (...args: any) => any ? Parameters<Construct> : ConstructorParameters<T>): datexClassType<T>;
 
-    // special functions
-    on_result: (call: (data:any, meta:{station_id:number, station_bundle:number[]})=>any) => dc<T>;
-    options: (options:any)=>T;
-
-    // decorator equivalents
-    to: (target:target_clause) => dc<T>;
-    no_result: () => dc<T>;
-
-    // @sync objects
-    is_origin?: boolean;
-    origin_id?: number;
-    room_id?: number;
 }
 
-type dc<T extends Record<string,any>&{new (...args:unknown[]):unknown}> = DatexClass<T> & T & ((struct:InstanceType<T>) => datexClassType<T>);
+export type MethodKeys<T> = {
+    [K in keyof T]: T[K] extends (...args: any) => any  ? K : never;
+}[keyof T];
+
+export type dc<T extends Record<string,any>&{new (...args:unknown[]):unknown}, OT extends {new (...args:unknown[]):unknown} = ObjectRef<T>> = 
+    DatexClass<OT> & 
+    OT &
+    // TODO: required instead of OT to disable default constructor, but leads to problems with typing
+    // Pick<OT, keyof OT> & 
+    ((struct:Omit<InstanceType<OT>, MethodKeys<InstanceType<T>>>) => datexClassType<OT>);
 
 /**
  * Workaround to enable correct @sync class typing, until new decorators support it.

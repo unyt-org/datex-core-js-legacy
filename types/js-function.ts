@@ -49,14 +49,14 @@ export class JSTransferableFunction extends ExtensibleFunction {
 	}
 
 
-	call(...args:any[]) {
+	handleCall(...args:any[]) {
 		return this.#fn(...args)
 	}
 
 	// waits until all lazy dependencies are resolved and then calls the function
 	async callLazy() {
 		await this.lazyResolved;
-		return this.call()
+		return this.handleCall()
 	}
 
 	public get hasUnresolvedLazyDependencies() {

@@ -4,10 +4,10 @@ export * from "./runtime/runtime.ts";
 
 // js_adapter
 export * from "./js_adapter/js_class_adapter.ts";
-export * from "./js_adapter/legacy_decorators.ts";
+export * from "./js_adapter/decorators.ts";
 
 // utils
-export * from "./utils/global_types.ts";
+export type * from "./utils/global_types.ts";
 export * from "./utils/global_values.ts";
 export * from "./utils/logger.ts";
 export * from "./utils/observers.ts";
@@ -42,7 +42,7 @@ export * from "./runtime/cache_path.ts";
 export * from "./storage/storage.ts";
 
 // types
-export * from "./types/abstract_types.ts";
+export type * from "./types/abstract_types.ts";
 export * from "./types/addressing.ts";
 export * from "./types/assertion.ts";
 export * from "./types/logic.ts";

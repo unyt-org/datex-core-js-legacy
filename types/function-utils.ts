@@ -60,7 +60,7 @@ declare global {
 
 function getUsedVars(fn: (...args:unknown[])=>unknown) {
     const source = fn.toString();
-    const usedVarsSource = source.match(/^(?:(?:[\w\s*])+\(.*\)\s*{|\(.*\)\s*=>\s*{?|.*\s*=>\s*{?)\s*use\s*\(([\s\S]*?)\)/)?.[1]
+    const usedVarsSource = source.match(/^(?:(?:[\w\s*])+\(.*?\)\s*{|\(.*?\)\s*=>\s*{?|.*?\s*=>\s*{?)\s*use\s*\(([\s\S]*?)\)/)?.[1]
     if (!usedVarsSource) return {};
 
     const usedVars = usedVarsSource.split(",").map(v=>v.trim()).filter(v=>!!v)
@@ -121,6 +121,7 @@ export function getSourceWithoutUsingDeclaration(fn: (...args:unknown[])=>unknow
         if (fnSource.startsWith("async")) fnSource = fnSource.replace("async", "async function") 
 		else fnSource = "function " + fnSource
 	}
+
     return fnSource
         .replace(/(?<=(?:(?:[\w\s*])+\(.*\)\s*{|\(.*\)\s*=>\s*{?|.*\s*=>\s*{?)\s*)(use\s*\((?:[\s\S]*?)\))/, 'true /*$1*/')
 }
@@ -132,7 +133,7 @@ const isNormalFunction = (fnSrc:string) => {
 	return !!fnSrc.match(/^(async\s+)?function(\(| |\*)/)
 }
 const isArrowFunction = (fnSrc:string) => {
-	return !!fnSrc.match(/^(async\s+)?\([^)]*\)\s*=>/)
+	return !!fnSrc.match(/^(async\s+)?(\([^)]*\)|\w+)\s*=>/)
 }
 
 const isNativeFunction = (fnSrc:string) => {

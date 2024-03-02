@@ -3,8 +3,12 @@
 import { Compiler } from "../compiler/compiler.ts";
 import { DX_PTR } from "../runtime/constants.ts";
 import { Pointer } from "../runtime/pointers.ts";
-import { Storage } from "../storage/storage.ts";
+import { MatchResult, Storage } from "../storage/storage.ts";
 import { Logger } from "../utils/logger.ts";
+import { MatchInput, match } from "../utils/match.ts";
+import type { Class } from "../utils/global_types.ts";
+import { MatchOptions } from "../utils/match.ts";
+import { Type } from "./type.ts";
 
 const logger = new Logger("StorageSet");
 
@@ -17,7 +21,28 @@ const logger = new Logger("StorageSet");
  */
 export class StorageWeakSet<V> {
 
+	/**
+	 * Time in milliseconds after which a value is removed from the in-memory cache
+	 * Default: 5min
+	 */
+	cacheTimeout = 5 * 60 * 1000;
+
+	/**
+	 * If true, non-pointer objects are allowed as 
+	 * values in the map (default)
+	 * Otherwise, object values are automatically proxified
+	 * when added to the map.
+	 */
+	allowNonPointerObjectValues = false;
+
 	#prefix?: string;
+
+	#_pointer?: Pointer;
+	get #pointer() {
+		if (!this.#_pointer) this.#_pointer = Pointer.getByValue(this);
+		if (!this.#_pointer) throw new Error(this.constructor.name + " not bound to a pointer")
+		return this.#_pointer;
+	}
 
 	constructor(){
 		Pointer.proxifyValue(this)
@@ -29,7 +54,7 @@ export class StorageWeakSet<V> {
 		return set;
 	}
 
-	protected get _prefix() {
+	get _prefix() {
 		if (!this.#prefix) this.#prefix = 'dxset::'+(this as any)[DX_PTR].idString()+'.';
 		return this.#prefix;
 	}
@@ -41,6 +66,10 @@ export class StorageWeakSet<V> {
 		return this;
 	}
 	protected _add(storage_key:string, value:V|null) {
+		// proxify value
+		if (!this.allowNonPointerObjectValues) {
+			value = this.#pointer.proxifyChild("", value);
+		}
 		this.activateCacheTimeout(storage_key);
 		return Storage.setItem(storage_key, value);
 	}
@@ -63,9 +92,8 @@ export class StorageWeakSet<V> {
 
 	protected activateCacheTimeout(storage_key:string){
 		setTimeout(()=>{
-			logger.debug("removing item from cache: " + storage_key);
 			Storage.cache.delete(storage_key)
-		}, 60_000);
+		}, this.cacheTimeout);
 	}
 
 	protected async getStorageKey(value: V) {
@@ -91,11 +119,6 @@ export class StorageWeakSet<V> {
  */
 export class StorageSet<V> extends StorageWeakSet<V> {
 
-	#size_key?: string
-	protected get _size_key() {
-		if (!this.#size_key) this.#size_key = 'dxset.size::'+(this as any)[DX_PTR].idString()+'.';
-		return this.#size_key;
-	}
 
 	#size?: number;
 
@@ -116,27 +139,20 @@ export class StorageSet<V> extends StorageWeakSet<V> {
 	 * Sets this.#size to the correct value determined from storage.
 	 */
 	async #determineSizeFromStorage() {
-		const cachedSize = await Storage.getItem(this._size_key);
 		const calculatedSize = await Storage.getItemCountStartingWith(this._prefix);
-		if (cachedSize !== calculatedSize) {
-			if (cachedSize != undefined)
-				logger.warn(`Size mismatch for StorageSet (${(this as any)[DX_PTR].idString()}) detected. Setting size to ${calculatedSize}`)
-			await this.#updateSize(calculatedSize);
-		}
-		else this.#size = calculatedSize;
+		this.#updateSize(calculatedSize);
 	}
 
-	async #updateSize(newSize: number) {
+	#updateSize(newSize: number) {
 		this.#size = newSize;
-		await Storage.setItem(this._size_key, newSize);
 	}
 
 	async #incrementSize() {
-		await this.#updateSize(await this.getSize() + 1);
+		this.#updateSize(await this.getSize() + 1);
 	}
 	
 	async #decrementSize() {
-		await this.#updateSize(await this.getSize() - 1);
+		this.#updateSize(await this.getSize() - 1);
 	}
 
 
@@ -230,4 +246,7 @@ export class StorageSet<V> extends StorageWeakSet<V> {
 		}
 	}
 
+	match<Options extends MatchOptions, T extends V & object>(valueType:Class<T>|Type<T>, matchInput: MatchInput<T>, options?: Options): Promise<MatchResult<T, Options>> {
+		return match(this as unknown as StorageSet<T>, valueType, matchInput, options)
+	}
 }

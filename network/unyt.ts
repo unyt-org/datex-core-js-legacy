@@ -127,7 +127,7 @@ export class Unyt {
         content += `${ESCAPE_SEQUENCES.UNYT_GREY}© ${new Date().getFullYear().toString()} unyt.org`
 
         logger.plain `#image(70,'unyt')${console_theme == "dark" ? this.logo_dark : this.logo_light}
-Connected to the Supranet via ${info.node} ${info.interface ? `(${info.interface.interfaceProperties?.type}${info.interface.interfaceProperties?.name?` to ${ESCAPE_SEQUENCES.UNYT_GREY}${info.interface.interfaceProperties?.name}`:''}${ESCAPE_SEQUENCES.WHITE})` : ''} 
+Connected to the Supranet via ${ESCAPE_SEQUENCES.BOLD}${info.node?.toString()}${ESCAPE_SEQUENCES.RESET} ${info.interface ? `(${info.interface.interfaceProperties?.type}${info.interface.interfaceProperties?.name?` to ${ESCAPE_SEQUENCES.UNYT_GREY}${info.interface.interfaceProperties?.name}`:''}${ESCAPE_SEQUENCES.WHITE})` : ''} 
 
 ${content}
 `
@@ -140,14 +140,14 @@ ${content}
         try {
             const alias = await endpoint?.getAlias();
             if (alias) {
-                return `${alias} (${Runtime.valueToDatexStringExperimental(endpoint,false,true)}${ESCAPE_SEQUENCES.COLOR_DEFAULT})`
+                return `${ESCAPE_SEQUENCES.BOLD}${alias} (${endpoint}${ESCAPE_SEQUENCES.COLOR_DEFAULT})`
             }
         }
         catch {
             // ignore
         }
         // @@2134565, @endpoint
-        return Runtime.valueToDatexStringExperimental(endpoint,false,true);
+        return ESCAPE_SEQUENCES.BOLD + endpoint.toString() + ESCAPE_SEQUENCES.RESET;
     }
 
 

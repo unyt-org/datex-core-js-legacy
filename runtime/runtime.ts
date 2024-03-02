@@ -32,7 +32,7 @@ import { BROADCAST, Endpoint, endpoints, IdEndpoint, LOCAL_ENDPOINT, Target, tar
 import { RuntimePerformance } from "./performance_measure.ts";
 import { NetworkError, PermissionError, PointerError, RuntimeError, SecurityError, ValueError, Error as DatexError, CompilerError, TypeError, SyntaxError, AssertionError } from "../types/errors.ts";
 import { Function as DatexFunction } from "../types/function.ts";
-import { Storage } from "../storage/storage.ts";
+import { MatchCondition, Storage } from "../storage/storage.ts";
 import { Observers } from "../utils/observers.ts";
 import { BinaryCode } from "../compiler/binary_codes.ts";
 import type { ExecConditions, trace, compile_info, datex_meta, datex_scope, dxb_header, routing_info } from "../utils/global_types.ts";
@@ -52,7 +52,7 @@ import { JSInterface } from "./js_interface.ts";
 import { Stream } from "../types/stream.ts";
 import { Quantity } from "../types/quantity.ts";
 import { Scope } from "../types/scope.ts";
-import { fundamental } from "../types/abstract_types.ts";
+import type { fundamental } from "../types/abstract_types.ts";
 import { IterationFunction as IteratorFunction, Iterator, RangeIterator } from "../types/iterator.ts";
 import { Assertion } from "../types/assertion.ts";
 import { Deferred } from "../types/deferred.ts";
@@ -105,6 +105,7 @@ RuntimePerformance.marker("module loading time", "modules_loaded", "runtime_star
 // TODO reader for node.js
 const ReadableStreamDefaultReader = globalThis.ReadableStreamDefaultReader ?? class {};
 
+const EXPOSE = Symbol("EXPOSE");
 
 export class StaticScope {
 
@@ -115,11 +116,15 @@ export class StaticScope {
     public static readonly DOCS: unique symbol = Symbol("docs");
 
     // return a scope with a given name, if it already exists
-    public static get(name?:string):StaticScope {
-        return this.scopes.get(name) || new StaticScope(name);
+    public static get(name?:string, expose = true): StaticScope {
+        if (!expose) return new StaticScope(name, false);
+        else return this.scopes.get(name) || new StaticScope(name);
     }
 
-    private constructor(name?:string){
+    [EXPOSE]: boolean
+
+    private constructor(name?:string, expose = true){
+        this[EXPOSE] = expose;
         const proxy = <this> Pointer.proxifyValue(this, false, undefined, false);
         DatexObject.setWritePermission(<Record<string | symbol, unknown>>proxy, undefined); // make readonly
         
@@ -143,9 +148,9 @@ export class StaticScope {
 
     // update/set the name of this static scope
     set name(name:string){
-        if (this[StaticScope.NAME]) StaticScope.scopes.delete(this[StaticScope.NAME]);
+        if (this[StaticScope.NAME] && this[EXPOSE]) StaticScope.scopes.delete(this[StaticScope.NAME]);
         this[StaticScope.NAME] = name;
-        StaticScope.scopes.set(this[StaticScope.NAME], this);
+        if (this[EXPOSE]) StaticScope.scopes.set(this[StaticScope.NAME], this);
         if (this[StaticScope.NAME] == "std") StaticScope.STD = this;
     }
 
@@ -585,9 +590,9 @@ export class Runtime {
     }
 
     // get content of https://, file://, ...
-    public static async getURLContent<T=unknown, RAW extends boolean = false>(url_string:string, raw?:RAW, cached?:boolean):Promise<RAW extends false ? T : [data:unknown, type?:string]>
-    public static async getURLContent<T=unknown, RAW extends boolean = false>(url:URL, raw?:RAW, cached?:boolean):Promise<RAW extends false ? T : [data:unknown, type?:string]>
-    public static async getURLContent<T=unknown, RAW extends boolean = false>(url_string:string|URL, raw:RAW=false, cached = false):Promise<RAW extends false ? T : [data:unknown, type?:string]> {
+    public static async getURLContent<T=unknown, RAW extends boolean = false>(url_string:string, raw?:RAW, cached?:boolean, potentialDatexAsJsModule?: boolean):Promise<RAW extends false ? T : [data:unknown, type?:string]>
+    public static async getURLContent<T=unknown, RAW extends boolean = false>(url:URL, raw?:RAW, cached?:boolean, potentialDatexAsJsModule?:boolean):Promise<RAW extends false ? T : [data:unknown, type?:string]>
+    public static async getURLContent<T=unknown, RAW extends boolean = false>(url_string:string|URL, raw:RAW=false, cached = false, potentialDatexAsJsModule = true):Promise<RAW extends false ? T : [data:unknown, type?:string]> {
 
         if (url_string.toString().startsWith("route:") && window.location?.origin) url_string = new URL(url_string.toString().replace("route:", ""), window.location.origin)
 
@@ -609,11 +614,23 @@ export class Runtime {
 
         if (url.protocol == "https:" || url.protocol == "http:" || url.protocol == "blob:") {
             let response:Response|undefined = undefined;
+            let overrideContentType: string|undefined;
 
             let doFetch = true;
 
-            // possible js module import: fetch headers first and check content type:
-            if (!raw && (url_string.endsWith("js") || url_string.endsWith("ts") || url_string.endsWith("tsx") || url_string.endsWith("jsx") || url_string.endsWith("dx")  || url_string.endsWith("dxb"))) {
+
+            // exceptions to force potentialDatexAsJsModule (definitely dx files)
+            if (url_string.endsWith("/.dxb") || url_string.endsWith("/.dx") || url_string == "https://unyt.cc/nodes.dx") {
+                potentialDatexAsJsModule = false;
+            }
+
+            // js module import
+            if (!raw && (url_string.endsWith(".js") || url_string.endsWith(".ts") || url_string.endsWith(".tsx") || url_string.endsWith(".jsx"))) {
+                doFetch = false; // no body fetch required, can directly import() module
+                overrideContentType = "application/javascript"
+            }
+            // potential js module as dxb/dx: fetch headers first and check content type
+            else if (!raw && potentialDatexAsJsModule && (url_string.endsWith(".dx")  || url_string.endsWith(".dxb"))) {
                 try {
                     response = await fetch(url, {method: 'HEAD', cache: 'no-store'});
                     const type = response.headers.get('content-type');
@@ -641,33 +658,33 @@ export class Runtime {
                 }
             }
             
-            const type = response.headers.get('content-type');
+            const type = overrideContentType ?? response?.headers.get('content-type');
 
             if (type == "application/datex" || type == "text/dxb" || url_string.endsWith(".dxb")) {
-                const content = await response.arrayBuffer();
+                const content = await response!.arrayBuffer();
                 if (raw) result = [content, type];
                 else result = await this.executeDXBLocally(content, url);
             }
             else if (type?.startsWith("text/datex") || url_string.endsWith(".dx")) {
-                const content = await response.text()
+                const content = await response!.text()
                 if (raw) result = [content, type];
                 else result = await this.executeDatexLocally(content, undefined, undefined, url);
             }
             else if (type?.startsWith("application/json5") || url_string.endsWith(".json5")) {
-                const content = await response.text();
+                const content = await response!.text();
                 if (raw) result = [content, type];
                 else result = await Runtime.datexOut([content, [], {sign:false, encrypt:false, type:ProtocolDataType.DATA}]);
             }
             else if (type?.startsWith("application/json") || type?.endsWith("+json")) {
-                if (raw) result = [await response.text(), type]; 
-                else result = await response.json()
+                if (raw) result = [await response!.text(), type]; 
+                else result = await response!.json()
             }
             else if (type?.startsWith("text/javascript") || type?.startsWith("application/javascript")) {
-                if (raw) result = [await response.text(), type]; 
+                if (raw) result = [await response!.text(), type]; 
                 else result = await import(url_string)
             }
             else {
-                const content = await response.arrayBuffer()
+                const content = await response!.arrayBuffer()
                 if (raw) result = [content, type];
                 else {
                     if (!type) throw Error("Cannot infer type from URL content");
@@ -1263,6 +1280,15 @@ export class Runtime {
     }
 
     /**
+     * Removes all active datex scopes for an endpoint
+     */
+    public static clearEndpointScopes(endpoint: Endpoint) {
+        const removeCount = this.active_datex_scopes.get(endpoint)?.size;
+        this.active_datex_scopes.delete(endpoint);
+        if (removeCount) logger.debug("removed " + removeCount + " datex scopes for " + endpoint);
+    }
+
+    /**
      * Creates default static scopes
      * + other async initializations
      * @param endpoint initial local endpoint
@@ -1816,6 +1842,7 @@ export class Runtime {
                     header.sender.setOnline(false)
                     Pointer.clearEndpointSubscriptions(header.sender)
                     Pointer.clearEndpointPermissions(header.sender)
+                    this.clearEndpointScopes(header.sender);
                 }
                 else {
                     logger.error("ignoring unsigned GOODBYE message")
@@ -2015,7 +2042,7 @@ export class Runtime {
                     // save persistent memory
                     if (scope.persistent_vars) {
                         const identifier = scope.context_location.toString()
-                        for (let name of scope.persistent_vars) Runtime.saveScopeMemoryValue(identifier, name, scope.internal_vars[name]);
+                        for (const name of scope.persistent_vars) Runtime.saveScopeMemoryValue(identifier, name, scope.internal_vars[name]);
                     }
 
                     // cleanup
@@ -2245,7 +2272,7 @@ export class Runtime {
         let new_value:any = UNKNOWN_TYPE;
 
         // only handle std namespace / js:Object / js:Symbol
-        if (type.namespace == "std" || type == Type.js.NativeObject || type == Type.js.Symbol) {
+        if (type.namespace == "std" || type == Type.js.NativeObject || type == Type.js.Symbol || type == Type.js.RegExp) {
             const uncollapsed_old_value = old_value
             if (old_value instanceof Pointer) old_value = old_value.val;
 
@@ -2329,6 +2356,18 @@ export class Runtime {
                 case Type.js.Symbol: {
                     if (old_value === VOID) new_value = Symbol();
                     else if (typeof old_value == "string") new_value = Symbol(old_value);
+                    else new_value = INVALID;
+                    break;
+                }
+                case Type.js.RegExp: {
+                    if (typeof old_value == "string") new_value = new RegExp(old_value);
+                    else if (old_value instanceof Tuple) {
+                        const array = old_value.toArray() as [string, string?];
+                        new_value = new RegExp(...array);
+                    }
+                    else if (old_value instanceof Array) {
+                        new_value = new RegExp(...old_value as [string, string?]);
+                    }
                     else new_value = INVALID;
                     break;
                 }
@@ -2668,6 +2707,9 @@ export class Runtime {
         // symbol
         if (typeof value == "symbol") return value.toString().slice(7,-1) || undefined
 
+        // regex
+        if (value instanceof RegExp) return value.flags ? new Tuple([value.source, value.flags]) : value.source;
+
         // weakref
         if (value instanceof WeakRef) {
             const deref = value.deref();
@@ -2828,8 +2870,8 @@ export class Runtime {
             const compiled = new Uint8Array(Compiler.encodeValue(value, undefined, false, deep_clone, collapse_value, false, true, false, true));
             return wasm_decompile(compiled, formatted, colorized, resolve_slots).replace(/\r\n$/, '');
         } catch (e) {
-            console.log(e);
-            return "/* ERROR: Decompiler Error */";
+            console.debug(e);
+            return this.valueToDatexString(value, formatted)
         }
         // return Decompiler.decompile(Compiler.encodeValue(value, undefined, false, deep_clone, collapse_value), true, formatted, formatted, false);
     }
@@ -5318,7 +5360,7 @@ export class Runtime {
             persistent_vars: persistent_memory ? Object.keys(persistent_memory): [],
 
             execution_permission: header?.executable, // allow execution?
-            impersonation_permission: Runtime.endpoint.equals(header?.sender), // at the moment: only allow endpoint to impersonate itself
+            impersonation_permission: Runtime.endpoint?.equals(header?.sender), // at the moment: only allow endpoint to impersonate itself
     
             inner_scope: null, // has to be copied from sub_scopes[0]
         
@@ -5372,7 +5414,7 @@ export class Runtime {
         scope.header = header;
 
         scope.execution_permission = header?.executable // allow execution?
-        scope.impersonation_permission = Runtime.endpoint.equals(header?.sender) // at the moment: only allow endpoint to impersonate itself
+        scope.impersonation_permission = Runtime.endpoint?.equals(header?.sender) // at the moment: only allow endpoint to impersonate itself
 
         // enter outer scope ?
         if (scope.sub_scopes.length == 0) {
@@ -7208,7 +7250,8 @@ RuntimePerformance.createMeasureGroup("compile time", [
 
 // automatically sync newly added pointers if they are in the storage
 Pointer.onPointerAdded(async (pointer)=>{
-    if (await Storage.hasPointer(pointer)) {
+    // assume that already synced if createdInContext and stored in storage
+    if (!pointer.createdInContext && await Storage.hasPointer(pointer)) {
         Storage.syncPointer(pointer);
     }
 })
@@ -7350,6 +7393,14 @@ Type.std.time.setJSInterface({
 
 })
 
+Type.std.MatchCondition.setJSInterface({
+    class: MatchCondition,
+    visible_children: new Set([
+        "type",
+        "data"
+    ])
+})
+
 
 Type.get<JSTransferableFunction>("js:Function").setJSInterface({
 
@@ -7363,8 +7414,8 @@ Type.get<JSTransferableFunction>("js:Function").setJSInterface({
     },
 
     apply_value(parent, args = []) {
-        if (args instanceof Tuple) return parent.call(...args.toArray())
-        else return parent.call(args)
+        if (args instanceof Tuple) return parent.handleCall(...args.toArray())
+        else return parent.handleCall(args)
     },
 
 });

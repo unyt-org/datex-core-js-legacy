@@ -27,23 +27,23 @@ Datex.Storage.addLocation(sqlStorage, {
 })
 
 @sync class Position {
-	@property declare x: number
-	@property declare y: number
+	@property x!: number
+	@property y!: number
 }
 
 @sync
 class Player {
-	@property declare name: string
+	@property name!: string
 	@property @type('text(20)') declare username: string
 
-	@property declare color: bigint
-	@property declare pos: Position
+	@property color!: bigint
+	@property pos!: Position
 }
 
 @sync
 class ScoreboardEntry {
-	@property declare player: Player
-	@property declare score: number
+	@property player!: Player
+	@property score!: number
 }
 
 

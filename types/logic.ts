@@ -155,7 +155,9 @@ export class Logical<T> extends Set<T> {
 		// wrong atomic type at runtime
 		// guard for: against is T
 		if (!(against instanceof atomic_class)) {
-			throw new RuntimeError(`Invalid match check: atomic value has wrong type (expected ${Type.getClassDatexType(atomic_class)}, found ${Type.ofValue(against)})`);
+			console.error(`Invalid match check: atomic value has wrong type (expected ${Type.getClassDatexType(atomic_class)}, found ${Type.ofValue(against)})`)
+			// throw new RuntimeError(`Invalid match check: atomic value has wrong type (expected ${Type.getClassDatexType(atomic_class)}, found ${Type.ofValue(against)})`);
+			return true;
 		}
 
 		// match

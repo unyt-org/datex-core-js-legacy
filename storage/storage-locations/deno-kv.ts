@@ -7,7 +7,7 @@ import { AsyncStorageLocation } from "../storage.ts";
 import { ptr_cache_path } from "../../runtime/cache_path.ts";
 import { client_type } from "../../utils/constants.ts";
 import { normalizePath } from "../../utils/normalize-path.ts";
-import { ExecConditions } from "../../utils/global_types.ts";
+import type { ExecConditions } from "../../utils/global_types.ts";
 
 const denoKvDir = new URL("./deno-kv/", ptr_cache_path);
 // @ts-ignore global Deno

@@ -11,7 +11,7 @@ import { BinaryCode } from "../compiler/binary_codes.ts";
 import { JSInterface } from "./js_interface.ts";
 import { Stream } from "../types/stream.ts";
 import { Tuple } from "../types/tuple.ts";
-import { primitive } from "../types/abstract_types.ts";
+import type { primitive } from "../types/abstract_types.ts";
 import { Function as DatexFunction } from "../types/function.ts";
 import { Quantity } from "../types/quantity.ts";
 import { buffer2hex, hex2buffer } from "../utils/utils.ts";
@@ -29,8 +29,8 @@ import { IterableWeakMap } from "../utils/iterable-weak-map.ts";
 import { LazyPointer } from "./lazy-pointer.ts";
 import { ReactiveArrayMethods } from "../types/reactive-methods/array.ts";
 import { Assertion } from "../types/assertion.ts";
-import { StorageSet } from "../types/storage-set.ts";
 import { Storage } from "../storage/storage.ts";
+import { client_type } from "../utils/constants.ts";
 
 export type observe_handler<K=any, V extends RefLike = any> = (value:V extends RefLike<infer T> ? T : V, key?:K, type?:Ref.UPDATE_TYPE, transform?:boolean, is_child_update?:boolean, previous?: any, atomic_id?:symbol)=>void|boolean
 export type observe_options = {types?:Ref.UPDATE_TYPE[], ignore_transforms?:boolean, recursive?:boolean}
@@ -574,7 +574,9 @@ export class PointerProperty<T=any> extends Ref<T> {
 
     #leak_js_properties: boolean
 
-    public pointer?: Pointer;
+    private _strongRef?: any // strong reference to own pointer to prevent garbage collection
+
+    public readonly pointer?: Pointer;
     private lazy_pointer?: LazyPointer<unknown>;
 
     private constructor(pointer: Pointer|LazyPointer<unknown>|undefined, public key: any, leak_js_properties = false) {
@@ -594,11 +596,15 @@ export class PointerProperty<T=any> extends Ref<T> {
     }
 
     private setPointer(ptr: Pointer) {
+        // @ts-ignore private
         this.pointer = ptr;
-        this.pointer.is_persistent = true; // TODO: make unpersistent when pointer property deleted
+
+        this._strongRef = ptr.val;
+
         if (!PointerProperty.synced_pairs.has(ptr)) PointerProperty.synced_pairs.set(ptr, new Map());
-        PointerProperty.synced_pairs.get(ptr)!.set(this.key, this); // save in map
+        PointerProperty.synced_pairs.get(ptr)!.set(this.key, new WeakRef(this)); // save in map
     }
+
 
     /**
      * Called when the bound lazy pointer is loaded.
@@ -610,7 +616,7 @@ export class PointerProperty<T=any> extends Ref<T> {
         else callback(this, this);
     }
 
-    private static synced_pairs = new WeakMap<Pointer, Map<any, PointerProperty>>()
+    private static synced_pairs = new WeakMap<Pointer, Map<unknown, WeakRef<PointerProperty>>>()
 
     // TODO: use InferredPointerProperty (does not collapse)
     /**
@@ -627,7 +633,14 @@ export class PointerProperty<T=any> extends Ref<T> {
 
         if (pointer instanceof Pointer) {
             if (!this.synced_pairs.has(pointer)) this.synced_pairs.set(pointer, new Map());
-            if (this.synced_pairs.get(pointer)!.has(key)) return this.synced_pairs.get(pointer)!.get(key)!; 
+            if (this.synced_pairs.get(pointer)!.has(key)) {
+                const weakRef = this.synced_pairs.get(pointer)!.get(key);
+                const pointerProperty = weakRef.deref();
+                if (pointerProperty) return pointerProperty;
+                else {
+                    this.synced_pairs.get(pointer)!.delete(key);
+                }
+            }
         }
 
         return new PointerProperty(pointer, key, leak_js_properties);
@@ -778,18 +791,18 @@ type _Proxy$<T>         = _Proxy$Function<T> &
     T extends Array<infer V> ? 
     // array
     {
-        [key: number]: RefLikeOut<V>, 
+        [key: number]: RefLike<V>, 
         map<U>(callbackfn: (value: MaybeObjectRef<V>, index: number, array: V[]) => U, thisArg?: any): Pointer<U[]>
     }
     : 
     (
         T extends Map<infer K, infer V> ? 
         {
-            get(key: K): RefLikeOut<V>
+            get(key: K): RefLike<V>
         }
 
          // normal object
-        : {readonly [K in keyof T]: RefLikeOut<T[K]>} // always map properties to pointer property references
+        : {[K in keyof T]: RefLike<T[K]>} // always map properties to pointer property references
     )
    
 type _PropertyProxy$<T> = _Proxy$Function<T> & 
@@ -1285,6 +1298,18 @@ export class Pointer<T = any> extends Ref<T> {
     }
     public static get is_local() {return this.#is_local}
 
+    #createdInContext = true;
+    /**
+     * Indicates if the pointer was created in the current context
+     * or fetched (from storage or network)
+     */
+    public get createdInContext() {
+        return this.#createdInContext;
+    }
+    public set createdInContext(fetched: boolean) {
+        this.#createdInContext = fetched;
+    }
+
     /** 21 bytes address: 1 byte address type () 18/16 byte origin id - 2/4 byte origin instance - 4 bytes timestamp - 1 byte counter*/
     /**
      * Endpoint id types:
@@ -1462,6 +1487,9 @@ export class Pointer<T = any> extends Ref<T> {
 
         // get value if pointer value not yet loaded
         if (!pointer.#loaded) {
+
+            // was not created new in current context
+            pointer.createdInContext = false;
             
             // first try loading from storage
             let stored:any = NOT_EXISTING;
@@ -2710,7 +2738,8 @@ export class Pointer<T = any> extends Ref<T> {
         // potential storage pointer initialized
         Storage.providePointer(this);
 
-        if (this.isStored) {
+        // only in frontend, disabled for backend (TODO)
+        if (this.isStored && client_type == "browser") {
             // get subsriber caches
             Storage.getPointerSubscriberCache(this.id).then(cache => {
                 if (cache) {
@@ -2736,6 +2765,10 @@ export class Pointer<T = any> extends Ref<T> {
 
     #transform_scope?:Scope;
     get transform_scope() {return this.#transform_scope}
+
+    #smart_transform_method?: (...args:any[])=>any
+    get smart_transform_method() {return this.#smart_transform_method}
+    set smart_transform_method(method: (...args:any[])=>any) {this.#smart_transform_method = method}
 
     #force_transform = false; // if true, the pointer transform function is always sent via DATEX
     set force_local_transform(force_transform: boolean) {this.#force_transform = force_transform}
@@ -2817,6 +2850,7 @@ export class Pointer<T = any> extends Ref<T> {
 
     protected smartTransform<R>(transform:SmartTransformFunction<T&R>, persistent_datex_transform?:string, forceLive = false, ignoreReturnValue = false, options?:SmartTransformOptions): Pointer<R> {
         if (persistent_datex_transform) this.setDatexTransform(persistent_datex_transform) // TODO: only workaround
+        this.#smart_transform_method = transform;
 
         const state: TransformState = {
             isLive: false,
@@ -3276,8 +3310,9 @@ export class Pointer<T = any> extends Ref<T> {
         // already subscribed
         if (this.subscribers.has(subscriber)) return;
 
-        // also store in subscriber cache
-        if (this.isStored) {
+        // also store in subscriber cache - only in frontend 
+        // (TODO: required for backend? currently disabled because backend is not stopped frequently, only leads to overhead)
+        if (this.isStored && client_type == "browser") {
             if (this.#subscriberCache) this.#subscriberCache.add(subscriber)
             else {
                 Storage.requestSubscriberCache(this.id).then(cache => {
@@ -3381,6 +3416,8 @@ export class Pointer<T = any> extends Ref<T> {
             if (!(await endpoint.isOnline())) {
                 this.clearEndpointSubscriptions(endpoint);
                 this.clearEndpointPermissions(endpoint)
+                // TODO: this should ideally directly be handleded by the runtime
+                Runtime.clearEndpointScopes(endpoint);
             }
         }
     }
@@ -3460,8 +3497,8 @@ export class Pointer<T = any> extends Ref<T> {
     }
 
     // proxify a (child) value, use the pointer context
-    private proxifyChild(name:string, value:unknown) {
-        if (NOT_EXISTING && !this.shadow_object) throw new Error("Cannot proxify child of non-object value");
+    proxifyChild(name:string, value:unknown) {
+        if (value === NOT_EXISTING && !this.shadow_object) throw new Error("Cannot proxify child of non-object value");
         let child = value === NOT_EXISTING ? this.shadow_object![name] : value;
         
         // special native function -> <Function> conversion;
@@ -4381,7 +4418,9 @@ export class Pointer<T = any> extends Ref<T> {
         // key specific observers
         if (key!=undefined) {
             for (const [o, options] of this.change_observers.get(key)||[]) {
-                if ((!options?.types || options.types.includes(type)) && !(is_transform && options?.ignore_transforms) && (!is_child_update || !options || options.recursive)) promises.push(o(value, key, type, is_transform, is_child_update, previous, atomic_id)); 
+                if ((!options?.types || options.types.includes(type)) && !(is_transform && options?.ignore_transforms) && (!is_child_update || !options || options.recursive)) {
+                    promises.push(o(value, key, type, is_transform, is_child_update, previous, atomic_id)); 
+                }
             }
             // bound observers
             for (const [object, entries] of this.bound_change_observers.entries()) {

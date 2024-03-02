@@ -4,9 +4,6 @@ import { Compiler } from "../compiler/compiler.ts";
 import { DX_PTR } from "../runtime/constants.ts";
 import { Pointer } from "../runtime/pointers.ts";
 import { Storage } from "../storage/storage.ts";
-import { Logger } from "../utils/logger.ts";
-
-const logger = new Logger("StorageMap");
 
 
 /**
@@ -20,10 +17,31 @@ export class StorageWeakMap<K,V> {
 
 	#prefix?: string;
 
+	/**
+	 * Time in milliseconds after which a value is removed from the in-memory cache
+	 * Default: 5min
+	 */
+	cacheTimeout = 5 * 60 * 1000;
+
+	/**
+	 * If true, non-pointer objects are allowed as 
+	 * values in the map (default)
+	 * Otherwise, object values are automatically proxified
+	 * when added to the map.
+	 */
+	allowNonPointerObjectValues = false;
+
+
 	constructor(){
 		Pointer.proxifyValue(this)
 	}
 
+	#_pointer?: Pointer;
+	get #pointer() {
+		if (!this.#_pointer) this.#_pointer = Pointer.getByValue(this);
+		if (!this.#_pointer) throw new Error(this.constructor.name + " not bound to a pointer")
+		return this.#_pointer;
+	}
 
 	static async from<K,V>(entries: readonly (readonly [K, V])[]){
 		const map = $$(new StorageWeakMap<K,V>());
@@ -66,16 +84,20 @@ export class StorageWeakMap<K,V> {
 		const storage_key = await this.getStorageKey(key);
 		return this._set(storage_key, value);
 	}
-	protected _set(storage_key:string, value:V) {
+	protected async _set(storage_key:string, value:V) {
+		// proxify value
+		if (!this.allowNonPointerObjectValues) {
+			value = this.#pointer.proxifyChild("", value);
+		}
 		this.activateCacheTimeout(storage_key);
-		return Storage.setItem(storage_key, value)
+		await Storage.setItem(storage_key, value)
+		return this;
 	}
 
 	protected activateCacheTimeout(storage_key:string){
 		setTimeout(()=>{
-			logger.debug("removing item from cache: " + storage_key);
 			Storage.cache.delete(storage_key)
-		}, 60_000);
+		}, this.cacheTimeout);
 	}
 
 	protected async getStorageKey(key: K) {
@@ -108,14 +130,51 @@ export class StorageMap<K,V> extends StorageWeakMap<K,V> {
 
 	#key_prefix = 'key.'
 
-	override async set(key: K, value: V): Promise<boolean> {
+	#size?: number;
+
+	get size() {
+		if (this.#size == undefined) throw new Error("size not yet available. use getSize() instead");
+		return this.#size;
+	}
+
+	async getSize() {
+		if (this.#size != undefined) return this.#size;
+		else {
+			await this.#determineSizeFromStorage(); 
+			return this.#size!
+		}
+	}
+
+	/**
+	 * Sets this.#size to the correct value determined from storage.
+	 */
+	async #determineSizeFromStorage() {
+		const calculatedSize = await Storage.getItemCountStartingWith(this._prefix);
+		this.#updateSize(calculatedSize);
+	}
+
+	#updateSize(newSize: number) {
+		this.#size = newSize;
+	}
+
+	async #incrementSize() {
+		this.#updateSize(await this.getSize() + 1);
+	}
+	
+	async #decrementSize() {
+		this.#updateSize(await this.getSize() - 1);
+	}
+
+	override async set(key: K, value: V): Promise<this> {
 		const storage_key = await this.getStorageKey(key);
 		const storage_item_key = this.#key_prefix + storage_key;
 		// store value
 		await this._set(storage_key, value);
 		// store key
 		this.activateCacheTimeout(storage_item_key);
-		return Storage.setItem(storage_item_key, key)
+		const alreadyExisted = await Storage.setItem(storage_item_key, key);
+		if (!alreadyExisted) await this.#incrementSize();
+		return this;
 	}
 
 	override async delete(key: K) {
@@ -124,7 +183,9 @@ export class StorageMap<K,V> extends StorageWeakMap<K,V> {
 		// delete value
 		await this._delete(storage_key);
 		// delete key
-		return Storage.removeItem(storage_item_key)
+		const existed = await Storage.removeItem(storage_item_key)
+		if (existed) await this.#decrementSize();
+		return existed;
 	}
 
 	/**

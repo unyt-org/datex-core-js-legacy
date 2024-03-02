@@ -1,7 +1,7 @@
 import { Pointer, Ref } from "../runtime/pointers.ts";
 import { Runtime } from "../runtime/runtime.ts";
 import { logger } from "../utils/global_values.ts";
-import { StreamConsumer, ValueConsumer } from "./abstract_types.ts";
+import type { StreamConsumer, ValueConsumer } from "./abstract_types.ts";
 import { BROADCAST, Endpoint, endpoint_name, LOCAL_ENDPOINT, target_clause } from "./addressing.ts";
 import { Markdown } from "./markdown.ts";
 import { Scope } from "./scope.ts";
@@ -11,7 +11,7 @@ import { Compiler } from "../compiler/compiler.ts";
 import { Stream } from "./stream.ts"
 import { PermissionError, RuntimeError, TypeError, ValueError } from "./errors.ts";
 import { ProtocolDataType } from "../compiler/protocol_types.ts";
-import { DX_EXTERNAL_FUNCTION_NAME, DX_EXTERNAL_SCOPE_NAME, VOID } from "../runtime/constants.ts";
+import { DX_EXTERNAL_FUNCTION_NAME, DX_EXTERNAL_SCOPE_NAME, DX_TIMEOUT, VOID } from "../runtime/constants.ts";
 import { Type, type_clause } from "./type.ts";
 import { callWithMetadata, callWithMetadataAsync, getMeta } from "../utils/caller_metadata.ts";
 import { Datex } from "../mod.ts";
@@ -511,7 +511,14 @@ function to (this:Function, receivers:Receiver) {
         apply: (target, _thisArg, argArray:unknown[]) => {
             const externalScopeName = target[DX_EXTERNAL_SCOPE_NAME];
             const externalFunctionName = target[DX_EXTERNAL_FUNCTION_NAME];
-            return datex(`#public.?.? ?`, [externalScopeName, externalFunctionName, new Tuple(argArray)], receivers as target_clause)
+            const timeout = target[DX_TIMEOUT];
+            return datex(
+                `#public.?.? ?`, 
+                [externalScopeName, externalFunctionName, new Tuple(argArray)], 
+                receivers as target_clause,
+                undefined, undefined, undefined, undefined,
+                timeout
+            )
         }
     })
 }

@@ -1,6 +1,6 @@
 import { BinaryCode } from "../compiler/binary_codes.ts";
 import { Pointer } from "../runtime/pointers.ts";
-import { ValueConsumer } from "./abstract_types.ts";
+import type { ValueConsumer } from "./abstract_types.ts";
 import { ValueError } from "./errors.ts";
 import { Compiler, ProtocolDataTypesMap } from "../compiler/compiler.ts";
 import type { datex_scope, dxb_header, trace } from "../utils/global_types.ts";
@@ -43,6 +43,7 @@ export type endpoints = Endpoint|Disjunction<Endpoint>
 
 export class Target implements ValueConsumer {
 
+	// TODO: remove entry when Endpoint WeakRef was garbage collected
 	protected static targets = new Map<string, WeakRef<Endpoint>>();   // target string -> target element
 	static readonly prefix:target_prefix = "@"
 	static readonly type:BinaryCode

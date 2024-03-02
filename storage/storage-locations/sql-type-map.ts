@@ -56,6 +56,8 @@ export const datex_type_mysql_map = new Map<Datex.Type, mysql_data_type>([
 
     [Datex.Type.std.text, 'text'],
 
+    [Datex.Type.std.boolean, 'boolean'],
+
     // ['smallint', Datex.Type.std.integer],
     // ['mediumint', Datex.Type.std.integer],
     // ['tinyint', Datex.Type.std.integer],
