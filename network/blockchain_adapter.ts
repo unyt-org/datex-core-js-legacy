@@ -66,11 +66,11 @@ export type BCData<T extends BCEntryType> =
 
 
 @sync export class BCEntry<T extends BCEntryType = BCEntryType> {
-	@property declare index: entry_index
-	@property declare type:T
-	@property declare data:BCData<T>
-	@property declare creator?:Endpoint
-	@property declare signature?:ArrayBuffer
+	@property index!: entry_index
+	@property type!:T
+	@property data!:BCData<T>
+	@property creator?:Endpoint
+	@property signature?:ArrayBuffer
 
 	constructor(data?: {
 		index: entry_index,

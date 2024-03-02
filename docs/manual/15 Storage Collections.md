@@ -60,9 +60,9 @@ import { StorageSet } from "datex-core-legacy/types/storage-set.ts";
 import { Time } from "unyt_core/datex_all.ts";
 
 @sync class User {
-    @property(string) declare name: string
-    @property(number) declare age: number
-    @property(Time) declare created: Time
+    @property(string) name!: string
+    @property(number) age!: number
+    @property(Time) created!: Time
 }
 
 const users = new StorageSet<User>();
@@ -181,13 +181,13 @@ Example:
 import { ComputedProperty } from "datex-core-legacy/storage/storage.ts";
 
 @sync class Location {
-    @property(number) declare lat: number
-    @property(number) declare lon: number
+    @property(number) lat!: number
+    @property(number) lon!: number
 }
 
 @sync class User {
-    @property(string) declare name: string
-    @property(Location) declare location: Location
+    @property(string) name!: string
+    @property(Location) location!: Location
 }
 
 
@@ -226,8 +226,8 @@ Calculates the sum of multiple properties or literal values
 Example:
 ```ts
 @sync class TodoItem {
-    @property(number) declare completedTaskCount: number
-    @property(number) declare openTaskCount: number
+    @property(number) completedTaskCount!: number
+    @property(number) openTaskCount!: number
 }
 const todoItems = new StorageSet<TodoItem>()
 
