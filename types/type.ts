@@ -347,7 +347,7 @@ export class Type<T = any> extends ExtensibleFunction {
                     // workaround create new transferable function with correct "this" context
                     instance[key] = $$(JSTransferableFunction.recreate(val.source, {...val.deps, 'this':instance}));
                 }
-                else if (typeof val == "function") instance[key] = val.bind(instance);
+                else if (typeof val == "function" && typeof val.bind == "function") instance[key] = val.bind(instance);
                 else instance[key] = val;
             }
         }

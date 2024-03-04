@@ -428,6 +428,9 @@ export class Function<T extends (...args: any) => any = (...args: any) => any> e
 
         const required_param_nr = this.params.size;
 
+        // is datex function
+        if (this.body) return this.fn.call(context, meta, ...params);
+
         // no meta index, still crop the params to the required size if possible
         // injects meta to stack trace, can be accessed via Datex.getMeta()
         const call = <CallableFunction&(typeof callWithMetadata)> (this.is_async ? callWithMetadataAsync : callWithMetadata);

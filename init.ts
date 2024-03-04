@@ -34,10 +34,16 @@ if (client_type == "deno") {
 	}); 
 }
 
+
+let initialized = false;
+
 /**
  * Runtime init (sets ENV, storage, endpoint, ...)
  */
 export async function init() {
+
+	if (initialized) return;
+	initialized = true;
 
 	// register DatexStorage as pointer source
 	registerStorageAsPointerSource();

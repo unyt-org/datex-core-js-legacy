@@ -5658,6 +5658,7 @@ export class Runtime {
 
                     // get var 
                     else {
+                        
                         let val:any;
                         // read special internal variables
                         if (name == "result")           val = SCOPE.result;
