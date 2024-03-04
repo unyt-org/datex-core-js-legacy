@@ -90,6 +90,7 @@ export class Decorators {
 
 
     public static setMetadata(context:DecoratorContext, key:string|symbol, value:unknown) {
+        // TODO: handle nested inheritance: if metadata has prototype but no own properties, inherit nested
         if (!context.metadata[key]) context.metadata[key] = {}
         const data = context.metadata[key] as {public?:Record<string|symbol,any>, constructor?:any}
         if (context.kind == "class") {
@@ -766,7 +767,7 @@ export function proxyClass<T extends { new(...args: any[]): any;}>(original_clas
             }
         },
         apply(target,_thisArg,argArray) {
-            return  Pointer.createOrGet(instance(target, argArray[0])).js_value
+            return Pointer.createOrGet(instance(target, argArray[0])).js_value
         },
         getPrototypeOf(target) {
             return original_class

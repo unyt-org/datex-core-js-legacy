@@ -2788,6 +2788,7 @@ export class Pointer<T = any> extends Ref<T> {
         if (initialValue === VOID) throw new ValueError("initial tranform value cannot be void");
         this.setVal(initialValue, true, true);
         
+
         if (transform instanceof Scope) this.#transform_scope = transform; // store transform scope
         else if (persistent_datex_transform) {
             await this.setDatexTransform(persistent_datex_transform) // TODO: only workaround

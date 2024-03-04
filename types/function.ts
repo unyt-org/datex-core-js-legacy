@@ -65,8 +65,6 @@ export class Function<T extends (...args: any) => any = (...args: any) => any> e
 
     is_async = true;
 
-    meta_index?: number
-
     datex_timeout?: number
 
     about?:Markdown
@@ -101,8 +99,7 @@ export class Function<T extends (...args: any) => any = (...args: any) => any> e
         location:Endpoint = Runtime.endpoint, 
         allowed_callers?:target_clause, 
         anonymize_result=false,
-        params?:Tuple<Type>,
-        meta_index?:number
+        params?:Tuple<Type>
     ):Function<(...args:Parameters<T>)=>ReturnType<T>> & Callable<Parameters<T>, ReturnType<T>> {
        
         if (ntarget.name.startsWith("bound ")) {
@@ -119,10 +116,10 @@ export class Function<T extends (...args: any) => any = (...args: any) => any> e
         if (ntarget instanceof Function) return ntarget;
         
         // auto detect params and meta index
-        if (params == null && meta_index == null) {
-            [meta_index, params] = this.getFunctionParamsAndMetaIndex(ntarget, context, key_in_parent)
+        if (params == null ) {
+            params = this.getFunctionParamsAndMetaIndex(ntarget, context, key_in_parent)[1]
         }
-        return <Function<(...args:Parameters<T>)=>ReturnType<T>> & Callable<Parameters<T>, ReturnType<T>>> new Function<(...args:Parameters<T>)=>ReturnType<T>>(undefined, ntarget, context, location, allowed_callers, anonymize_result, params, meta_index);
+        return <Function<(...args:Parameters<T>)=>ReturnType<T>> & Callable<Parameters<T>, ReturnType<T>>> new Function<(...args:Parameters<T>)=>ReturnType<T>>(undefined, ntarget, context, location, allowed_callers, anonymize_result, params);
     }
 
 
@@ -138,10 +135,9 @@ export class Function<T extends (...args: any) => any = (...args: any) => any> e
         return new Function(scope, undefined, context, location, allowed_callers, anonymize_result, params);
     }
 
-    private constructor(body?:Scope, ntarget?:T, context?:object|Pointer, location:Endpoint = Runtime.endpoint, allowed_callers?:target_clause, anonymize_result=false, params?:Tuple, meta_index?:number) {
+    private constructor(body?:Scope, ntarget?:T, context?:object|Pointer, location:Endpoint = Runtime.endpoint, allowed_callers?:target_clause, anonymize_result=false, params?:Tuple) {
         super((...args:any[]) => this.handleApply(new Tuple(args)));
         
-        this.meta_index = meta_index;
         this.params = params??new Tuple();
         this.params_keys = [...this.params.named.keys()];
 
@@ -151,7 +147,6 @@ export class Function<T extends (...args: any) => any = (...args: any) => any> e
 
         // execute DATEX code
         if (body instanceof Scope) {
-            this.meta_index = 0;
             const ctx = context instanceof Pointer ? context.val : context;
             this.fn = (meta, ...args:any[])=>body.execute(meta.sender, ctx, args); // execute DATEX code
         }
@@ -375,7 +370,7 @@ export class Function<T extends (...args: any) => any = (...args: any) => any> e
         // record
         if (value instanceof Tuple) {
             params = [];
-            for (let [key, val] of value.entries()) {
+            for (const [key, val] of value.entries()) {
                 // normal number index
                 if (!isNaN(Number(key.toString()))) {
                     if (Number(key.toString()) < 0) logger.warn(Datex.Pointer.getByValue(this)?.idString() + ": Invalid function arguments: '" + key + "'");
@@ -406,10 +401,12 @@ export class Function<T extends (...args: any) => any = (...args: any) => any> e
         }
 
 
+        let isSpread = false; // has argument with ..., unlimited args size
         // argument type checking
         if (this.params) {
             let i = 0;
             for (const [name, required_type] of this.params.entries()) {
+                if (typeof name == "string" && name.startsWith("...")) isSpread = true;
 
                 const actual_type = Type.ofValue(params[i]);
 
@@ -433,34 +430,11 @@ export class Function<T extends (...args: any) => any = (...args: any) => any> e
 
         // no meta index, still crop the params to the required size if possible
         // injects meta to stack trace, can be accessed via Datex.getMeta()
-        if (this.meta_index==undefined) {
-            const call = <CallableFunction&(typeof callWithMetadata)> (this.is_async ? callWithMetadataAsync : callWithMetadata);
-            if (this.unknown_params || params.length<=required_param_nr) {
-                return call(meta, this.fn, params, context) // this.fn.call(context, ...params); 
-            }
-            else return call(meta, this.fn, params.slice(0,required_param_nr), context);// this.fn.call(context, ...params.slice(0,required_param_nr));
+        const call = <CallableFunction&(typeof callWithMetadata)> (this.is_async ? callWithMetadataAsync : callWithMetadata);
+        if (this.unknown_params || isSpread || params.length<=required_param_nr) {
+            return call(meta, this.fn, params, context) // this.fn.call(context, ...params); 
         }
-        // inject meta information at given index when calling the function
-        else if (this.meta_index==-1) {
-            // crop params to required size
-            if (this.unknown_params || params.length==required_param_nr) return this.fn.call(context, ...params, meta);
-            else if (params.length>required_param_nr) return this.fn.call(context, ...params.slice(0,required_param_nr), meta);
-            else return this.fn.call(context, ...params, ...Array(required_param_nr-params.length), meta);
-        }
-        // add meta index at the beginning
-        else if (this.meta_index==0) return this.fn.call(context, meta, ...params);
-        // insert meta index inbetween
-        else if (this.meta_index > 0) {
-            const p1 = params.slice(0,this.meta_index);
-            const p2 = params.slice(this.meta_index);
-            // is the size of p1 right?
-            if (p1.length == this.meta_index) return this.fn.call(context, ...p1, meta, ...p2);
-            // p1 too short (p2 is empty in this case)
-            else return this.fn.call(context, ...p1, ...Array(this.meta_index-p1.length), meta);
-        }
-        else {
-            throw new RuntimeError("Invalid index for the meta parameter", SCOPE);
-        }
+        else return call(meta, this.fn, params.slice(0,required_param_nr), context);// this.fn.call(context, ...params.slice(0,required_param_nr));
     }
 
 

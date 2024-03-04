@@ -22,7 +22,7 @@ import type { Iterator } from "./iterator.ts";
 import {StorageMap, StorageWeakMap} from "./storage-map.ts"
 import {StorageSet, StorageWeakSet} from "./storage-set.ts"
 import { ExtensibleFunction } from "./function-utils.ts";
-import type { JSTransferableFunction } from "./js-function.ts";
+import { JSTransferableFunction } from "./js-function.ts";
 import type { MatchCondition } from "../storage/storage.ts";
 
 export type inferDatexType<T extends Type> = T extends Type<infer JST> ? JST : any;
@@ -169,7 +169,7 @@ export class Type<T = any> extends ExtensibleFunction {
     // maps DATEX template type representation to corresponding typescript types
     public setTemplate<NT extends Object>(template: NT):Type<Partial<({ [key in keyof NT]: (NT[key] extends Type<infer TT> ? TT : any ) })>>
     public setTemplate(template: object) {
-        DatexObject.freeze(template);
+        // DatexObject.freeze(template);
         this.#template = <any>template;
         this.#visible_children = new Set(Object.keys(this.#template));
         // add extended types from template
@@ -198,6 +198,7 @@ export class Type<T = any> extends ExtensibleFunction {
             // @ts-ignore this.#template is always a Tuple
             const required_type = this.#template[key];
 
+ 
             // check if can set property (has setter of value)
             const desc = Object.getOwnPropertyDescriptor(assign_to_object, key);
             if (desc && !desc.writable) {
@@ -315,14 +316,14 @@ export class Type<T = any> extends ExtensibleFunction {
     }
 
     /** returns an object with a [INIT_PROPS] function that can be passed to newJSInstance() or called manually */
-    public getPropertyInitializer(value:any) {
+    public getPropertyInitializer(value:any, strict = true) {
         const initialized = {i:false};
         // property initializer - sets existing property for pointer object (is passed as first constructor argument when reconstructing)
         return Object.freeze({
             [INIT_PROPS]: (instance:any)=>{
                 if (initialized.i) return; 
                 initialized.i=true; 
-                this.initProperties(instance, value)
+                this.initProperties(instance, value, strict)
             }
         })
     }
@@ -335,13 +336,20 @@ export class Type<T = any> extends ExtensibleFunction {
         return instance;
     }
 
-    public initProperties(instance:any, value:any) {
+    public initProperties(instance:any, value:any, strict = true) {
         if (!value) return;
         // initialize with template
-        if (this.#template) this.createFromTemplate(value, instance)
+        if (strict && this.#template) this.createFromTemplate(value, instance)
         // just copy all properties if no template found
         else {
-            Object.assign(instance, value);
+            for (const [key, val] of Object.entries(value)) {
+                if (val instanceof JSTransferableFunction) {
+                    // workaround create new transferable function with correct "this" context
+                    instance[key] = $$(JSTransferableFunction.recreate(val.source, {...val.deps, 'this':instance}));
+                }
+                else if (typeof val == "function") instance[key] = val.bind(instance);
+                else instance[key] = val;
+            }
         }
     }
 
@@ -354,8 +362,16 @@ export class Type<T = any> extends ExtensibleFunction {
         }
 
         // call custom DATEX constructor or replicator
-        if (is_constructor && this.#constructor_fn) this.#constructor_fn.apply(instance, args);
-        else if (!is_constructor && this.#replicator_fn) this.#replicator_fn.apply(instance, args);
+        if (is_constructor && this.#constructor_fn) {
+            const res = this.#constructor_fn.apply(instance, args)
+            // catch promise rejections (not awaited)
+            if (res instanceof Promise) res.catch(e=>{console.error(e)})
+        }
+        else if (!is_constructor && this.#replicator_fn) {
+            const res = this.#replicator_fn.apply(instance, args);
+            // catch promise rejections (not awaited)
+            if (res instanceof Promise) res.catch(e=>{console.error(e)})
+        }
         
         return instance;
     }

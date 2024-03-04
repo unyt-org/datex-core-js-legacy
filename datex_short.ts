@@ -4,7 +4,7 @@
 import { baseURL, Runtime, PrecompiledDXB, Type, Pointer, Ref, PointerProperty, primitive, Target, IdEndpoint, Markdown, MinimalJSRef, RefOrValue, PartialRefOrValueObject, datex_meta, ObjectWithDatexValues, Compiler, endpoint_by_endpoint_name, endpoint_name, Storage, compiler_scope, datex_scope, DatexResponse, target_clause, ValueError, logger, Class, getUnknownMeta, Endpoint, INSERT_MARK, CollapsedValueAdvanced, CollapsedValue, SmartTransformFunction, compiler_options, activePlugins, METADATA, handleDecoratorArgs, RefOrValueObject, PointerPropertyParent, InferredPointerProperty, RefLike, dc } from "./datex_all.ts";
 
 /** make decorators global */
-import { assert as _assert, timeout as _timeout, entrypoint as _entrypoint, entrypointProperty as _entrypointProperty, property as _property, struct as _struct, endpoint as _endpoint, sync as _sync} from "./datex_all.ts";
+import { assert as _assert, timeout as _timeout, entrypoint as _entrypoint, ref as _ref, entrypointProperty as _entrypointProperty, property as _property, struct as _struct, endpoint as _endpoint, sync as _sync, allow as _allow} from "./datex_all.ts";
 import { effect as _effect, always as _always, reactiveFn as _reactiveFn, asyncAlways as _asyncAlways, toggle as _toggle, map as _map, equals as _equals, selectProperty as _selectProperty, not as _not } from "./functions.ts";
 export * from "./functions.ts";
 import { NOT_EXISTING, DX_SLOTS, SLOT_GET, SLOT_SET } from "./runtime/constants.ts";
@@ -20,7 +20,10 @@ export {instance} from "./js_adapter/js_class_adapter.ts";
 
 declare global {
 	const property: typeof _property;
+    const ref: typeof _ref;
     const assert: typeof _assert;
+    const allow: typeof _allow;
+
 
 	const struct: typeof _struct;
 	const endpoint: typeof _endpoint;
@@ -56,7 +59,11 @@ declare global {
 // @ts-ignore global
 globalThis.property = _property;
 // @ts-ignore global
+globalThis.ref = _ref;
+// @ts-ignore global
 globalThis.assert = _assert;
+// @ts-ignore global
+globalThis.allow = _allow;
 
 // @ts-ignore global
 globalThis.struct = _struct;

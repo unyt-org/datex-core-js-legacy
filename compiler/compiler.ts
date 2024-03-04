@@ -202,7 +202,7 @@ export type compiler_scope = {
 
     max_block_size?: number, // max size of each block, if not Infinity (default), dxb might be split into multiple blocks
 
-    internal_var_index: number // count up for every new internal variable
+    internal_var_index: [number] // count up for every new internal variable
     internal_vars: WeakMap<Record<string, unknown>, number> // save variables for values with an internal variable
     internal_primitive_vars: WeakMap<Record<string, unknown>, number> // save variables for primitive values with an internal variable
 
@@ -1345,7 +1345,7 @@ export class Compiler {
             // get value from dynamic index
             if (index instanceof Array) index = index[0];
             
-            const var_number = SCOPE.internal_var_index++;
+            const var_number = SCOPE.internal_var_index[0]++;
             const add_scope_global = !SCOPE.assignment_end_indices.has(index); // only add if not already an assignment before
             const gap = Uint16Array.BYTES_PER_ELEMENT + 2 + (add_scope_global?1:0);
 
@@ -2801,7 +2801,7 @@ export class Compiler {
 
             // handle <Stream> and ReadableStream, if streaming (<<)
             if ((value instanceof Stream || value instanceof ReadableStream) && SCOPE.uint8[SCOPE.b_index-1] == BinaryCode.STREAM) return Compiler.builder.handleStream(value, SCOPE); 
- 
+
             // same value already inserted -> refer to the value with an internal variable
             if (add_insert_index && SCOPE.inserted_values?.has(value)) {
                 // get variable for the already-existing value
@@ -5757,7 +5757,7 @@ export class Compiler {
 
             b_index: 0,
 
-            internal_var_index: 0,
+            internal_var_index: options.parent_scope?.internal_var_index ?? [0],
             internal_vars: new WeakMap(),
             internal_primitive_vars: new Map(),
 
@@ -5877,7 +5877,7 @@ export class Compiler {
 
             b_index: 0,
 
-            internal_var_index: 0,
+            internal_var_index: options.parent_scope?.internal_var_index ?? [0],
             internal_vars: new WeakMap(),
             internal_primitive_vars: new Map(),
 
