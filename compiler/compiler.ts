@@ -48,6 +48,8 @@ import { VolatileMap } from "../utils/volatile-map.ts";
 // await wasm_init();
 // wasm_init_runtime();
 
+let WebRTCInterface: undefined|typeof import("../network/communication-interfaces/webrtc-interface.ts").WebRTCInterface;
+
 export const activePlugins:string[] = [];
 
 // for actions on variables, pointers, ...
@@ -2513,7 +2515,7 @@ export class Compiler {
                 Compiler.builder.insertVariable(SCOPE, assignment[0], ACTION_TYPE.GET, undefined, BinaryCode.INTERNAL_VAR); // parent
                 Compiler.builder.handleRequiredBufferSize(SCOPE.b_index, SCOPE);
                 SCOPE.uint8[SCOPE.b_index++] = BinaryCode.CHILD_SET;
-                Compiler.builder.insert(assignment[1], SCOPE, true, undefined, undefined, false);  // insert key (don't save insert index for key value)
+                Compiler.builder.insert(assignment[1], SCOPE, true, undefined, undefined, false, false);  // insert key (don't save insert index for key value)
                 Compiler.builder.insertVariable(SCOPE, assignment[2], ACTION_TYPE.GET, undefined, BinaryCode.INTERNAL_VAR); // value
             }
             Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+1, SCOPE);
@@ -2831,6 +2833,12 @@ export class Compiler {
  
             // exception for functions: convert to Datex.Function & create Pointer reference (proxifyValue required!)
             if (value instanceof Function && !(value instanceof DatexFunction) && !(value instanceof JSTransferableFunction)) value = Pointer.proxifyValue(DatexFunction.createFromJSFunction(value));
+
+            // excpetion for MediaStream: always register as WebRTC mediastream when transmitting
+            if (globalThis.MediaStream && value instanceof MediaStream) {
+                if (!WebRTCInterface) throw new Error("Cannot bind MediaStream to WebRTCInterface (not yet initialized)")
+                WebRTCInterface.registerMediaStream(value);
+            }
 
             // exception for Date: convert to Time (TODO: different approach?)
             if (value instanceof Date && !(value instanceof Time)) {
@@ -3172,7 +3180,7 @@ export class Compiler {
 
                 // special exception: insert raw datex script (dxb Scope can be inserted normally (synchronous))
                 if (d instanceof DatexResponse && !(d.datex instanceof Scope)) await Compiler.builder.compilerInsert(SCOPE, d);
-                else Compiler.builder.insert(d, SCOPE);
+                else Compiler.builder.insert(d, SCOPE, undefined, undefined, undefined, undefined, false); // disable replace optimization for now to prevent invalid replacement, e.g. for path properties
             }
             isEffectiveValue = true;
         }
@@ -5159,6 +5167,10 @@ export class Compiler {
 
     // compile loop
     static async compileLoop(SCOPE:compiler_scope):Promise<ArrayBuffer|ReadableStream<ArrayBuffer>>  {
+
+        // make sure WebRTC interface is loaded
+        ({ WebRTCInterface } = await import("../network/communication-interfaces/webrtc-interface.ts"));
+
 
         const body_compile_measure = RuntimePerformance.enabled ? RuntimePerformance.startMeasure("compile time", "body") : undefined;
 

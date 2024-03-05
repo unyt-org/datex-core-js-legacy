@@ -833,6 +833,7 @@ export class Type<T = any> extends ExtensibleFunction {
             if (typeof value == "boolean") return <Type<T>>Type.std.boolean;
             if (typeof value == "symbol") return Type.js.Symbol as unknown as Type<T>;
             if (value instanceof RegExp) return Type.js.RegExp as unknown as Type<T>;
+            if (globalThis.MediaStream && value instanceof MediaStream) return Type.js.MediaStream as unknown as Type<T>;
 
             if (value instanceof ArrayBuffer || value instanceof TypedArray) return <Type<T>>Type.std.buffer;
             if (value instanceof Tuple) return <Type<T>>Type.std.Tuple;
@@ -907,6 +908,7 @@ export class Type<T = any> extends ExtensibleFunction {
             if (_forClass == globalThis.Boolean || globalThis.Boolean.isPrototypeOf(_forClass)) return <Type<T>>Type.std.boolean;
             if (_forClass == Symbol || Symbol.isPrototypeOf(_forClass)) return <Type<T>>Type.js.Symbol;
             if (_forClass == RegExp || RegExp.isPrototypeOf(_forClass)) return Type.js.RegExp as unknown as Type<T>;
+            if (globalThis.MediaStream && _forClass == MediaStream) return Type.js.MediaStream as unknown as Type<T>;
             if (_forClass == WeakRef || WeakRef.isPrototypeOf(_forClass)) return <Type<T>>Type.std.WeakRef;
 
             if (_forClass == ArrayBuffer || TypedArray.isPrototypeOf(_forClass)) return <Type<T>>Type.std.buffer;
@@ -968,7 +970,8 @@ export class Type<T = any> extends ExtensibleFunction {
         NativeObject: Type.get<object>("js:Object"), // special object type for non-plain objects (objects with prototype) - no automatic children pointer initialization
         TransferableFunction: Type.get<JSTransferableFunction>("js:Function"),
         Symbol: Type.get<symbol>("js:Symbol"),
-        RegExp: Type.get<RegExp>("js:RegExp")
+        RegExp: Type.get<RegExp>("js:RegExp"),
+        MediaStream: Type.get<MediaStream>("js:MediaStream")
     }
 
     /**

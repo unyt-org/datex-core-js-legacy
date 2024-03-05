@@ -1406,6 +1406,15 @@ export class Pointer<T = any> extends Ref<T> {
         return this.pointer_label_map.has(label)
     }
 
+    /**
+     * returns the pointer of a value if bound to a pointer, otherwise null
+     */
+    public static getId(value:unknown) {
+        const pointer = this.pointerifyValue(value);
+        if (pointer instanceof Pointer) return pointer.id;
+        else return null
+    }
+
     // get pointer by id, only returns pointer if pointer already exists
     static get(id:Uint8Array|string):Pointer|undefined {
         id = Pointer.normalizePointerId(id);
@@ -2260,7 +2269,14 @@ export class Pointer<T = any> extends Ref<T> {
             
             this.finalizeSubscribe(override_endpoint, keep_pointer_origin)
 
-            if (!this.#loaded) return this.setValue(pointer_value); // set value
+            if (!this.#loaded) {
+                // special case: intercept MediaStream
+                if (globalThis.MediaStream && pointer_value instanceof MediaStream) {
+                    const {WebRTCInterface} = await import("../network/communication-interfaces/webrtc-interface.ts")
+                    return this.setValue(await WebRTCInterface.getMediaStream(this.id) as any);
+                }
+                else return this.setValue(pointer_value); // set value
+            }
             else return this;
         }
         
@@ -3619,7 +3635,7 @@ export class Pointer<T = any> extends Ref<T> {
         }
 
         // fake primitives TODO: dynamic mime types
-        if (obj instanceof Quantity || obj instanceof Time || obj instanceof Type || obj instanceof URL  || obj instanceof Target || obj instanceof Blob || (globalThis.HTMLImageElement && obj instanceof HTMLImageElement)) {
+        if (obj instanceof Quantity || obj instanceof Time || obj instanceof Type || obj instanceof URL  || obj instanceof Target || obj instanceof Blob || (globalThis.MediaStream && obj instanceof MediaStream) || (globalThis.HTMLImageElement && obj instanceof HTMLImageElement)) {
             return obj;
         }
 

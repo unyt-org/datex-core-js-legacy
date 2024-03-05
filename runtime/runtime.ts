@@ -2272,7 +2272,7 @@ export class Runtime {
         let new_value:any = UNKNOWN_TYPE;
 
         // only handle std namespace / js:Object / js:Symbol
-        if (type.namespace == "std" || type == Type.js.NativeObject || type == Type.js.Symbol || type == Type.js.RegExp) {
+        if (type.namespace == "std" || type == Type.js.NativeObject || type == Type.js.Symbol || type == Type.js.RegExp || type == Type.js.MediaStream) {
             const uncollapsed_old_value = old_value
             if (old_value instanceof Pointer) old_value = old_value.val;
 
@@ -2367,6 +2367,18 @@ export class Runtime {
                     }
                     else if (old_value instanceof Array) {
                         new_value = new RegExp(...old_value as [string, string?]);
+                    }
+                    else new_value = INVALID;
+                    break;
+                }
+                case Type.js.MediaStream: {
+                    if (!globalThis.MediaStream) throw new Error("MediaStreams are not supported on this endpoint")
+                    if (old_value === VOID || typeof old_value == "object") {
+                        if (assigningPtrId) {
+                            const {WebRTCInterface} = await import("../network/communication-interfaces/webrtc-interface.ts")
+                            new_value = await WebRTCInterface.getMediaStream(assigningPtrId)
+                        } 
+                        else new_value = new MediaStream();
                     }
                     else new_value = INVALID;
                     break;
@@ -2709,6 +2721,8 @@ export class Runtime {
 
         // regex
         if (value instanceof RegExp) return value.flags ? new Tuple([value.source, value.flags]) : value.source;
+
+        if (globalThis.MediaStream && value instanceof MediaStream) return {};
 
         // weakref
         if (value instanceof WeakRef) {
@@ -3266,7 +3280,7 @@ export class Runtime {
                                 }
                                 // subscribe for updates at pointer origin
                                 else {
-                                    ptr.subscribeForPointerUpdates();
+                                    await ptr.subscribeForPointerUpdates();
                                 }
                                 
                             }
