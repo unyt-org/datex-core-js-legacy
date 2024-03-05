@@ -27,6 +27,7 @@ import { Conjunction, Disjunction, Logical } from "../types/logic.ts";
 import { client_type } from "../utils/constants.ts";
 import { Assertion } from "../types/assertion.ts";
 import { getCallerInfo } from "../utils/caller_metadata.ts";
+import { createFunctionWithDependencyInjectionsResolveLazyPointers } from "../types/function-utils.ts";
 
 const { Reflect: MetadataReflect } = client_type == 'deno' ? await import("https://deno.land/x/reflect_metadata@v0.1.12/mod.ts") : {Reflect};
 
@@ -90,7 +91,16 @@ export class Decorators {
 
 
     public static setMetadata(context:DecoratorContext, key:string|symbol, value:unknown) {
-        // TODO: handle nested inheritance: if metadata has prototype but no own properties, inherit nested
+        // handle inheritance for nested object: if metadata has prototype but no own properties, inherit nested
+        if (Object.getPrototypeOf(context.metadata) && !Object.getOwnPropertyNames(context.metadata).length && !Object.getOwnPropertySymbols(context.metadata).length) {
+            const proto = Object.getPrototypeOf(context.metadata);
+            for (const key of [...Object.getOwnPropertyNames(proto), ...Object.getOwnPropertySymbols(proto)]) {
+                context.metadata[key] = {};
+                if (proto[key]?.public) (context.metadata[key] as any).public = Object.create(proto[key].public);
+                if (proto[key]?.constructor)(context.metadata[key] as any).constructor = proto[key].constructor;
+            }
+        }
+
         if (!context.metadata[key]) context.metadata[key] = {}
         const data = context.metadata[key] as {public?:Record<string|symbol,any>, constructor?:any}
         if (context.kind == "class") {
