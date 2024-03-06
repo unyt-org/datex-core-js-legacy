@@ -143,7 +143,36 @@ export type datex_variables_scope = { [key: string]: any } & { // all available 
     __encrypted: boolean,
 }
 
-export type datex_meta = {encrypted?:boolean, signed?:boolean, sender:Endpoint, timestamp:Date, type:ProtocolDataType, local?:boolean};
+export type datex_meta = {
+    /**
+     * indicates if the datex block initiating the function call was encrypted
+     */
+    encrypted?:boolean, 
+    /**
+     * indicates if the datex block initiating the function call was signed
+     */
+    signed?:boolean, 
+    /**
+     * @deprecated use caller instead
+     */
+    sender:Endpoint,
+    /**
+     * the endpoint that initiated the function call
+     */
+    caller: Endpoint,
+    /**
+     * the time when the function call was initiated on the caller
+     */
+    timestamp:Date, 
+    /**
+     * the type of the datex block initiating the function call
+     */
+    type:ProtocolDataType, 
+    /**
+     * indicates if the function was called from the local endpoint
+     */
+    local?:boolean
+};
 
 export type trace = {
     endpoint: Endpoint, 

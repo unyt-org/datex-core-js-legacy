@@ -5397,6 +5397,7 @@ export class Runtime {
         Object.defineProperty(scope.meta, 'encrypted', {value: header?.encrypted, writable: false, enumerable:true});
         Object.defineProperty(scope.meta, 'signed', {value: header?.signed, writable: false, enumerable:true});
         Object.defineProperty(scope.meta, 'sender', {value: header?.sender, writable: false, enumerable:true});
+        Object.defineProperty(scope.meta, 'caller', {value: header?.sender, writable: false, enumerable:true});
         Object.defineProperty(scope.meta, 'timestamp', {value: header?.timestamp, writable: false, enumerable:true});
         Object.defineProperty(scope.meta, 'type', {value: header?.type, writable: false, enumerable:true});
 

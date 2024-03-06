@@ -6,17 +6,17 @@ import { BROADCAST, Endpoint, endpoint_name, LOCAL_ENDPOINT, target_clause } fro
 import { Markdown } from "./markdown.ts";
 import { Scope } from "./scope.ts";
 import { Tuple } from "./tuple.ts";
-import type { datex_scope, compile_info, datex_meta } from "../utils/global_types.ts";
+import type { datex_scope, compile_info } from "../utils/global_types.ts";
 import { Compiler } from "../compiler/compiler.ts";
 import { Stream } from "./stream.ts"
 import { PermissionError, RuntimeError, TypeError, ValueError } from "./errors.ts";
 import { ProtocolDataType } from "../compiler/protocol_types.ts";
 import { DX_EXTERNAL_FUNCTION_NAME, DX_EXTERNAL_SCOPE_NAME, DX_TIMEOUT, VOID } from "../runtime/constants.ts";
 import { Type, type_clause } from "./type.ts";
-import { callWithMetadata, callWithMetadataAsync, getMeta } from "../utils/caller_metadata.ts";
+import { callWithMetadata, callWithMetadataAsync } from "../utils/caller_metadata.ts";
 import { Datex } from "../mod.ts";
 import { Callable, ExtensibleFunction, getDeclaredExternalVariables, getDeclaredExternalVariablesAsync, getSourceWithoutUsingDeclaration } from "./function-utils.ts";
-import { Conjunction, Disjunction, Target } from "../datex_all.ts";
+import { Conjunction, Disjunction, Target, datex_meta } from "../datex_all.ts";
 
 
 
@@ -24,9 +24,10 @@ import { Conjunction, Disjunction, Target } from "../datex_all.ts";
  * inject meta info to stack trace
  */
 
-export function getDefaultLocalMeta(){
+export function getDefaultLocalMeta(): datex_meta {
     return Object.seal({
         sender: Runtime.endpoint,
+        caller: Runtime.endpoint,
         timestamp: new Date(),
         signed: true,
         encrypted: false,
@@ -35,9 +36,10 @@ export function getDefaultLocalMeta(){
     })
 }
 
-export function getUnknownMeta(){
+export function getUnknownMeta(): datex_meta {
     return Object.seal({
         sender: BROADCAST,
+        caller: BROADCAST,
         timestamp: new Date(),
         signed: false,
         encrypted: false,
