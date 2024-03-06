@@ -52,6 +52,7 @@ Datex.Type.std.Any === any
 | **Date**                       | Partial               | std:time       | No                 | `Date` objects are currently asymetrically mapped to DATEX `Time` objects                 |
 | **RegExp**                     | Partial               | js:RegExp      | No (Immutable)     | RegExp values wrapped in a Ref are currently not synchronized                             |
 | **WeakRef**                    | Full                  | std:WeakRef    | No (Immutable)     | -                                                                                         |
+| **MediaStream**                | Partial               | js:MediaStream | Yes                | MediaStreams are only supported in browsers that provide a [WebRTC API](https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API) |
 | **Error**                      | Partial               | std:Error      | No                 | Error subclasses are not correctly mapped                                                 |
 | **HTMLElement**                | Partial <sup>2)</sup> | std:html       | No                 | HTML element mutations are currently not synchronized                                     |
 | **SVGElement**                 | Partial <sup>2)</sup> | std:svg        | No                 | SVG element mutations are currently not synchronized                                      |
@@ -114,6 +115,12 @@ The property values of a `js:Object` are never automatically bound to pointers w
 ### js:Symbol
 
 DATEX has no native symbol type. JavaScript symbols are mapped to `js:Symbol` values.
+
+### js:MediaStream
+
+This type mapping allows sharing `MediaStream` objects with audio/video tracks between browser endpoints.
+Backend (Deno) endpoints are not yet supported due to missing support for WebRTC. 
+
 
 ## Structs
 
