@@ -3,11 +3,20 @@
  */
 export class IterableWeakSet<T extends WeakKey> extends Set {
 
+	// additional internal WeakSet for faster lookups
+	#weakSet = new WeakSet<T>()
+
 	add(value: T): this {
+		// already added
+		if (this.#weakSet.has(value)) return this;
+		this.#weakSet.add(value);
 		return super.add(new WeakRef(value));
 	}
 
 	delete(value: T): boolean {
+		if (!this.#weakSet.has(value)) return false;
+		this.#weakSet.delete(value);
+		
 		const deleting = new Set<WeakRef<T>>()
 		try {
 			for (const valRef of super.values() as Iterable<WeakRef<T>>) {
@@ -29,10 +38,7 @@ export class IterableWeakSet<T extends WeakKey> extends Set {
 	}
 
 	has(value: T): boolean {
-		for (const val of this.values()) {
-			if (val === value) return true;
-		}
-		return false;
+		return this.#weakSet.has(value);
 	}
 
 	*values(): IterableIterator<T> {
@@ -50,6 +56,11 @@ export class IterableWeakSet<T extends WeakKey> extends Set {
 		finally {
 			for (const valRef of deleting) super.delete(valRef);
 		}
+	}
+
+	clear() {
+		this.#weakSet = new WeakSet()
+		super.clear()
 	}
 
 	keys(): IterableIterator<T> {
