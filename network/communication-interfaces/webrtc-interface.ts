@@ -1,7 +1,7 @@
+import { logger } from "../../datex_all.ts";
 import { Pointer } from "../../runtime/pointers.ts";
 import { Endpoint } from "../../types/addressing.ts";
 import { PermissionError } from "../../types/errors.ts";
-import { IterableWeakMap } from "../../utils/iterable-weak-map.ts";
 import { communicationHub } from "../communication-hub.ts";
 import { CommunicationInterface, CommunicationInterfaceSocket, InterfaceDirection, InterfaceProperties } from "../communication-interface.ts";
 
@@ -10,12 +10,10 @@ import { CommunicationInterface, CommunicationInterfaceSocket, InterfaceDirectio
     /**
      * signaling: offer|accept
      */
-    @property static async negotiation(data: RTCSessionDescriptionInit) {
+    @property static negotiation(data: RTCSessionDescriptionInit) {
         if (!datex.meta.signed) throw new PermissionError("unauthorized");
-        console.log("offer/accept from " + datex.meta!.sender, data)
-
-        if (data.type == "offer") WebRTCInterface.handleOffer(datex.meta.sender, data);
-        else if (data.type == "answer") WebRTCInterface.handleAnswer(datex.meta.sender, data);
+        if (data.type == "offer") WebRTCInterface.handleOffer(datex.meta.caller, data);
+        else if (data.type == "answer") WebRTCInterface.handleAnswer(datex.meta.caller, data);
         else throw new Error("Unsupported session description type: " + data.type);
     }
 
@@ -24,7 +22,7 @@ import { CommunicationInterface, CommunicationInterfaceSocket, InterfaceDirectio
      */
     @property static candidate(data: RTCIceCandidateInit) {
         if (!datex.meta.signed) throw new PermissionError("unauthorized");
-        WebRTCInterface.handleCandidate(datex.meta.sender, data);
+        WebRTCInterface.handleCandidate(datex.meta.caller, data);
     }
 
     /**
@@ -32,7 +30,7 @@ import { CommunicationInterface, CommunicationInterfaceSocket, InterfaceDirectio
      */
     @property static requestMediaStream(ptrId: string) {
         if (!datex.meta.signed) throw new PermissionError("unauthorized");
-        return WebRTCInterface.requestMediaStream(datex.meta.sender, ptrId);
+        return WebRTCInterface.requestMediaStream(datex.meta.caller, ptrId);
     }
 }
 
@@ -98,12 +96,11 @@ export class WebRTCInterface extends CommunicationInterface {
         this.properties.name = this.#endpoint.toString();
     }
 
-    async connect() {
+    connect() {
 
         WebRTCInterface.connectingInterfaces.set(this.#endpoint, this);
 
         const {promise, resolve} = Promise.withResolvers<boolean>()
-
 
         // try to establish a WebRTC connection, exchange keys first
         this.#connection = new RTCPeerConnection({
@@ -134,9 +131,8 @@ export class WebRTCInterface extends CommunicationInterface {
         // received data channel 
         this.#connection.ondatachannel = (event) => {
 
-            this.logger.success("received data channel");
+            this.logger.debug("received WebRTC data channel");
             const dataChannelIn = event.channel
-            console.log(dataChannelIn, dataChannelOut)
 
             this.#socket = new WebRTCInterfaceSocket(dataChannelIn, dataChannelOut);
             this.#socket.endpoint = this.#endpoint;
@@ -146,19 +142,17 @@ export class WebRTCInterface extends CommunicationInterface {
                 WebRTCInterface.connectingInterfaces.delete(this.#endpoint);
                 WebRTCInterface.connectedInterfaces.set(this.#endpoint, this);
             }
-            console.log("CONNECTED!!")
             resolve(true);
         };
     
         // received track
         this.#connection.ontrack = (event) => {
-            console.log("received track", event.track);
+            console.debug("received track", event.track);
             this.#resolveTrackReceivedPromise(event.track);
             this.generateTrackReceivedPromise()
         }
 
-        this.#connection.onnegotiationneeded = async (event) => {
-            console.log("negotiation needed");
+        this.#connection.onnegotiationneeded = async () => {
             try {
                 await this.#connection!.setLocalDescription();
                 WebRTCSignaling.negotiation.to(this.#endpoint)(this.#connection!.localDescription!.toJSON())
@@ -170,7 +164,6 @@ export class WebRTCInterface extends CommunicationInterface {
 
         // handle initial offer
         if (this.#sessionInit) {
-            console.log("accepting a WebRTC connection request ...");
             this.handleOffer(this.#sessionInit);
         }
 
@@ -192,8 +185,6 @@ export class WebRTCInterface extends CommunicationInterface {
             // throw if no new track was added (would lead to infinite loop)
             if (previousCount == tracks.length) throw new Error("Track promise was resolved, but no new track added to connection");
             previousCount = tracks.length;
-
-            console.log("not enough tracks collected, waiting for more...");
             await this.#trackReceivedPromise
         }
         const mediaStream = new MediaStream();
@@ -240,15 +231,15 @@ export class WebRTCInterface extends CommunicationInterface {
 
     static async getMediaStream(ptrId: string) {
         const pointerOrigin = Pointer.getOriginFromPointerId(ptrId);
-        console.log("requesting mediastream for " + ptrId + ", origin " + pointerOrigin)
+        console.debug("requesting mediastream for " + ptrId + ", origin " + pointerOrigin)
         if (!this.connectedInterfaces.has(pointerOrigin)) await communicationHub.addInterface(new WebRTCInterface(pointerOrigin));
         const interf = this.connectedInterfaces.get(pointerOrigin)!;
         if (!interf.#connection) throw new Error("No WebRTC connection could be established to get media stream");
 
         const tracksCount = await WebRTCSignaling.requestMediaStream.to(pointerOrigin)(ptrId);
-        console.log("collecting tracks "+ tracksCount,interf)
+        console.debug("collecting "+tracksCount+" tracks")
         const mediaStream = await interf.collectMediaStreamTracks(tracksCount);
-        console.log("mediastream",mediaStream)
+        console.debug("mediastream",mediaStream)
         return mediaStream;
     }
 
@@ -308,7 +299,8 @@ export class WebRTCInterface extends CommunicationInterface {
         }
         // create new interface
         else {
-            await communicationHub.addInterface(new WebRTCInterface(datex.meta.sender, data));
+            logger.info("Received WebRTC offer from " + endpoint + ", creating new interface...")
+            await communicationHub.addInterface(new WebRTCInterface(endpoint, data));
         }
     }
 
@@ -325,7 +317,7 @@ export class WebRTCInterface extends CommunicationInterface {
         const mediaStream = this.registeredMediaStreams.get(ptrId)?.deref();
         if (!mediaStream) throw new Error("MediaStream $" + ptrId + " not found");
         
-        console.log(endpoint + " requested mediastream", mediaStream)
+        console.debug(endpoint + " requested mediastream $" + ptrId)
         const tracks = mediaStream.getTracks();
         for (const track of tracks) {
             connection.addTrack(track, mediaStream);
@@ -334,5 +326,3 @@ export class WebRTCInterface extends CommunicationInterface {
     }
 
 }
-
-globalThis.WebRTCInterface=WebRTCInterface
