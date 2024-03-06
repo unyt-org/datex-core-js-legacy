@@ -16,6 +16,7 @@ import { Supranet } from "./supranet.ts";
 import { Endpoint } from "../types/addressing.ts";
 import { CommunicationInterfaceSocket } from "./communication-interface.ts";
 import { communicationHub } from "./communication-hub.ts";
+import { endpoint_config } from "../runtime/endpoint_config.ts";
 
 const logger = new Logger("unyt");
 
@@ -24,6 +25,7 @@ Supranet.onConnect = ()=>{
     Unyt.endpoint_info.node = communicationHub.defaultSocket?.endpoint,
     Unyt.endpoint_info.interface = communicationHub.defaultSocket;
     Unyt.endpoint_info.datex_version = Runtime.VERSION;
+    Unyt.using_http_over_datex = endpoint_config.usingHTTPoverDATEX
 
     Unyt.logEndpointInfo(); 
 }
@@ -53,6 +55,8 @@ export class Unyt {
 
     static endpoint_info:EndpointInfo = {}
 
+    static using_http_over_datex = false;
+
     static setAppInfo(app_info:AppInfo) {
         this.endpoint_info.app = app_info;
     }
@@ -77,7 +81,17 @@ export class Unyt {
         // const urlEndpoint = (client_type == "browser" ? info.app?.backend : info.endpoint);
         // const endpointURLs = urlEndpoint ? [this.formatEndpointURL(urlEndpoint)] : [];
         // if (info.app?.domains) endpointURLs.unshift(...info.app.domains.map(d=>'https://'+d))
-        return info.app?.dynamicData?.domains ? info.app.dynamicData.domains.map(d=>'https://'+d) : [];
+        const domains = info.app?.dynamicData?.domains ? info.app.dynamicData.domains.map(d=>'https://'+d.toLowerCase()) : [];
+
+        // remove own domain
+        const ownDomain = globalThis.location?.origin.toLowerCase();
+        if (ownDomain && domains.includes(ownDomain)) {
+            domains.splice(domains.indexOf(ownDomain),1);
+        }
+        // add own domain to the front
+        domains.unshift(ownDomain + (this.using_http_over_datex?ESCAPE_SEQUENCES.UNYT_CYAN+' (HTTP-over-DATEX)'+ESCAPE_SEQUENCES.RESET:''));
+
+        return domains;
     }
 
     /**
@@ -122,7 +136,7 @@ export class Unyt {
         else if (info.datex_version) content += `${ESCAPE_SEQUENCES.UNYT_GREY}DATEX VERSION${ESCAPE_SEQUENCES.COLOR_DEFAULT} ${info.datex_version.replaceAll('\n','')}\n`
         content += `\n`
 
-        if (info.app?.stage == "Development" && info.app.backend) content += `Worbench Access for this App: https://workbench.unyt.org/\?e=${info.app.backend.toString()}\n`
+        // if (info.app?.stage == "dev" && info.app.backend) content += `Worbench Access for this App: https://workbench.unyt.org/\?e=${info.app.backend.toString()}\n`
 
         content += `${ESCAPE_SEQUENCES.UNYT_GREY}© ${new Date().getFullYear().toString()} unyt.org`
 
