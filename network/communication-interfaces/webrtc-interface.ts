@@ -130,7 +130,6 @@ export class WebRTCInterface extends CommunicationInterface {
 
         // received data channel 
         this.#connection.ondatachannel = (event) => {
-
             this.logger.debug("received WebRTC data channel");
             const dataChannelIn = event.channel
 
@@ -147,7 +146,6 @@ export class WebRTCInterface extends CommunicationInterface {
     
         // received track
         this.#connection.ontrack = (event) => {
-            console.debug("received track", event.track);
             this.#resolveTrackReceivedPromise(event.track);
             this.generateTrackReceivedPromise()
         }
@@ -231,15 +229,14 @@ export class WebRTCInterface extends CommunicationInterface {
 
     static async getMediaStream(ptrId: string) {
         const pointerOrigin = Pointer.getOriginFromPointerId(ptrId);
-        console.debug("requesting mediastream for " + ptrId + ", origin " + pointerOrigin)
+        console.debug("requesting mediastream $" + ptrId + ", origin " + pointerOrigin)
         if (!this.connectedInterfaces.has(pointerOrigin)) await communicationHub.addInterface(new WebRTCInterface(pointerOrigin));
         const interf = this.connectedInterfaces.get(pointerOrigin)!;
         if (!interf.#connection) throw new Error("No WebRTC connection could be established to get media stream");
 
         const tracksCount = await WebRTCSignaling.requestMediaStream.to(pointerOrigin)(ptrId);
-        console.debug("collecting "+tracksCount+" tracks")
         const mediaStream = await interf.collectMediaStreamTracks(tracksCount);
-        console.debug("mediastream",mediaStream)
+        console.debug("received mediastream",mediaStream)
         return mediaStream;
     }
 
