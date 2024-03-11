@@ -2,7 +2,7 @@
 create a custom DATEX JS Interface for a type with handlers 
  
 - serialize efficiently with the serialize function and de-serialize in the cast function
-- do not use @sync classes in combination with an additional js_interface_configuration!; 
+- do not use struct classes in combination with an additional js_interface_configuration!; 
 
 ## class **JSInterface**
 ### Properties

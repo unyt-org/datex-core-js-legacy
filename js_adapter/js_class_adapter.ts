@@ -726,10 +726,8 @@ export type MethodKeys<T> = {
 }[keyof T];
 
 export type dc<T extends Record<string,any>&{new (...args:unknown[]):unknown}, OT extends {new (...args:unknown[]):unknown} = ObjectRef<T>> = 
-    DatexClass<OT> & 
-    OT &
-    // TODO: required instead of OT to disable default constructor, but leads to problems with typing
-    // Pick<OT, keyof OT> & 
+    DatexClass<OT> &
+    Pick<OT, keyof OT> & 
     ((struct:Omit<InstanceType<OT>, MethodKeys<InstanceType<T>>>) => datexClassType<OT>);
 
 /**

@@ -49,7 +49,7 @@ Entries of a `StorageSet` can be efficiently queried by using the builtin patter
 For supported storage locations (e.g. sql storage), the pattern matching is directly performed in storage and non-matching entries are never loaded into RAM.
 
 > [!NOTE]
-> Pattern matching currently only works with @sync class objects.
+> Pattern matching currently only works with struct objects.
 
 ### Selecting by property
 
@@ -59,11 +59,12 @@ The easiest way to match entries in a storage set is to provide one or multiple 
 import { StorageSet } from "datex-core-legacy/types/storage-set.ts";
 import { Time } from "unyt_core/datex_all.ts";
 
-@sync class User {
-    @property(string) name!: string
-    @property(number) age!: number
-    @property(Time) created!: Time
-}
+const User = struct({
+    name: string,
+    age: nubmer,
+    created: Time
+})
+type User = inferType<typeof User>
 
 const users = new StorageSet<User>();
 
@@ -180,15 +181,18 @@ Example:
 ```ts
 import { ComputedProperty } from "datex-core-legacy/storage/storage.ts";
 
-@sync class Location {
-    @property(number) lat!: number
-    @property(number) lon!: number
-}
+const Location = struct({
+    lat: number,
+    lon: number
+});
+type Location = inferType<typeof Location>
 
-@sync class User {
-    @property(string) name!: string
-    @property(Location) location!: Location
-}
+
+const User = struct({
+    name: string,
+    location: Location
+})
+type User = inferType<typeof User>
 
 
 const myPosition = {lat: 70.48, lon: -21.96}
@@ -225,12 +229,13 @@ Calculates the sum of multiple properties or literal values
 
 Example:
 ```ts
-@sync class TodoItem {
-    @property(number) completedTaskCount!: number
-    @property(number) openTaskCount!: number
-}
-const todoItems = new StorageSet<TodoItem>()
+const TodoItem = struct({
+    completedTaskCount: number,
+    openTaskCount: number
+})
+type TodoItem = inferType<typeof TodoItem>
 
+const todoItems = new StorageSet<TodoItem>()
 
 // sum of completedTaskCount and openTaskCount for a given TodoItem
 const totalTaskCount = ComputedProperty.sum(

@@ -71,7 +71,7 @@ This guarantees that `eternal` can be used synchronously (without `await`).
 For the following usecases, the asynchronous `lazyEternal`/`lazyEternalVar` label should be used instead of `eternal`/`eternalVar`:
 
  * A value that consumes lots of memory and is only actually needed when certain conditions are met
- * A value that requires custom JavaScript bindings (e.g. a `@sync` class instance). JavaScript bindings cannnot be properly initialized at endpoint startup if the corresponding JavaScript class definition is not yet loaded.
+ * A value that requires custom JavaScript bindings (e.g. a `struct` class instance). JavaScript bindings cannnot be properly initialized at endpoint startup if the corresponding JavaScript class definition is not yet loaded.
 
 The `lazyEternal`/`lazyEternalVar` label can be used the same was as the `eternal` label, only requiring an additional `await`:
 

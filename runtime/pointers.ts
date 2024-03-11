@@ -828,11 +828,15 @@ export type ObjectRef<T> =
     T
     // TODO:
     // {[K in keyof T]: MaybeObjectRef<T[K]>}
-    & 
-    {
-        $:Proxy$<T> // reference to value (might generate pointer property, if no underlying pointer reference)
-        $$:PropertyProxy$<T> // always returns a pointer property reference
-    };
+    & (
+        // add $ and $$ properties if not already present
+        T extends {$: any, $$: any} ?
+            unknown: 
+            {
+                $:Proxy$<T> // reference to value (might generate pointer property, if no underlying pointer reference)
+                $$:PropertyProxy$<T> // always returns a pointer property reference
+            }
+    );
 
 export type MaybeObjectRef<T> = T extends primitive|Function ? T : ObjectRef<T>
 

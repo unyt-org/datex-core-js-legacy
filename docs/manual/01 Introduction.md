@@ -51,24 +51,26 @@ how pointers are synchronized between endpoints.
 
 ### Creating DATEX-compatible classes
 
-With the `@sync` decorator, a class can be bound to a new DATEX type.
+With the `struct` wrapper, a class can be bound to a new DATEX type.
 
 All instance properties decorated with `@property` are bound to the DATEX value and also visible when the value is shared between endpoints. 
 Per default, the properties are local and only available in the current JavaScript context.
 
 ```ts
-@sync class MyObject {
-  @property a = 10
-  @property b = 20
-  localProp = 4
-}
+const MyObject = struct(
+  class {
+    @property a = 10
+    @property b = 20
+    localProp = 4
+  }
+)
 
 const obj = new MyObject();
 ```
 
-Instances of a class marked with `@sync` are also automatically bound to a pointer when created (The value does not have to be explicitly wrapped in `$$()`).
+Instances of a class wrapped with `struct` are also automatically bound to a pointer when created (The value does not have to be explicitly wrapped in `$$()`).
 
-Read more about `@sync` classes [here](./11%20Classes.md).
+Read more about `struct` classes [here](./12%20Classes.md).
 
 ### Persistent data
 

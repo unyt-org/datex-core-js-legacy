@@ -291,7 +291,7 @@ export class Function<T extends (...args: any) => any = (...args: any) => any> e
             
             // run in scope, get result
             try {
-                const res = await Runtime.datexOut(compile_info, endpoint, undefined, true, undefined, undefined, false, this.datex_timeout);
+                const res = await Runtime.datexOut(compile_info, endpoint, undefined, true, undefined, undefined, false, this.datex_timeout??(this as any)[DX_TIMEOUT]);
                 return res;
             } catch (e) {
                 // error occured during scope execution => scope is broken, can no longer be used => create new scope

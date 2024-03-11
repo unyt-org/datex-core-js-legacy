@@ -2884,7 +2884,7 @@ export class Runtime {
             const compiled = new Uint8Array(Compiler.encodeValue(value, undefined, false, deep_clone, collapse_value, false, true, false, true));
             return wasm_decompile(compiled, formatted, colorized, resolve_slots).replace(/\r\n$/, '');
         } catch (e) {
-            console.debug(e);
+            // console.debug(e);
             return this.valueToDatexString(value, formatted)
         }
         // return Decompiler.decompile(Compiler.encodeValue(value, undefined, false, deep_clone, collapse_value), true, formatted, formatted, false);
