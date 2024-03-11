@@ -201,7 +201,6 @@ export class WebRTCInterface extends CommunicationInterface {
 
 
     async handleOffer(data: RTCSessionDescriptionInit) {
-        console.log("xx handle offer",data,this.#connection)
         await this.#connection!.setRemoteDescription(data);
         const answer = await this.#connection!.createAnswer();
         await this.#connection!.setLocalDescription(answer);
@@ -293,7 +292,6 @@ export class WebRTCInterface extends CommunicationInterface {
 
     static handleAnswer(endpoint: Endpoint, data: RTCSessionDescriptionInit) {
         const connection = this.getInterfaceConnection(endpoint, true, true);
-        console.log("xx handle answer from " + endpoint ,data,connection)
         if (connection) connection.setRemoteDescription(data);
     }
 
