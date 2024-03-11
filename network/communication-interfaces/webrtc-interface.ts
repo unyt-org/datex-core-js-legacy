@@ -102,9 +102,16 @@ export class WebRTCInterface extends CommunicationInterface {
 
         const {promise, resolve} = Promise.withResolvers<boolean>()
 
+        const stunServers = [
+            { urls: 'stun:195.201.173.190:3478' }
+        ]
+        const turnServers = [
+            {urls: 'turn:195.201.173.190:3478', username: '1525325424', credential: 'YuzkH/Th9BBaRj4ivR03PiCfr+E='} // TODO: get turn server credentials from server
+        ]
+
         // try to establish a WebRTC connection, exchange keys first
         this.#connection = new RTCPeerConnection({
-            iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+            iceServers: [...stunServers, ...turnServers]
         });
 
         const dataChannelOut = this.#connection.createDataChannel("datex", {protocol: "datex"});
@@ -194,6 +201,7 @@ export class WebRTCInterface extends CommunicationInterface {
 
 
     async handleOffer(data: RTCSessionDescriptionInit) {
+        console.log("xx handle offer",data,this.#connection)
         await this.#connection!.setRemoteDescription(data);
         const answer = await this.#connection!.createAnswer();
         await this.#connection!.setLocalDescription(answer);
@@ -285,6 +293,7 @@ export class WebRTCInterface extends CommunicationInterface {
 
     static handleAnswer(endpoint: Endpoint, data: RTCSessionDescriptionInit) {
         const connection = this.getInterfaceConnection(endpoint, true, true);
+        console.log("xx handle answer from " + endpoint ,data,connection)
         if (connection) connection.setRemoteDescription(data);
     }
 
