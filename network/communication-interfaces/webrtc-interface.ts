@@ -82,11 +82,14 @@ export class WebRTCInterface extends CommunicationInterface {
     #endpoint: Endpoint;
     #connection?: RTCPeerConnection;
 
+    #stunServers: RTCIceServer[]
+    #turnServers: RTCIceServer[]
+
     #resolveTrackReceivedPromise!: (track: MediaStreamTrack) => void;
     #trackReceivedPromise!: Promise<MediaStreamTrack>
 
 
-    constructor(endpoint: Endpoint, sesionInit?: RTCSessionDescriptionInit) {
+    constructor(endpoint: Endpoint, sesionInit?: RTCSessionDescriptionInit, stunServers?: RTCIceServer[], turnServers?: RTCIceServer[]) {
         if (WebRTCInterface.connectedInterfaces.has(endpoint)) throw new Error("A WebRTCInterface for " + endpoint + " already exists");
         super()
 
@@ -94,6 +97,8 @@ export class WebRTCInterface extends CommunicationInterface {
         this.#endpoint = endpoint;
         this.#sessionInit = sesionInit;
         this.properties.name = this.#endpoint.toString();
+        this.#stunServers = stunServers ?? [{urls: 'stun:195.201.173.190:3478'}];
+        this.#turnServers = turnServers ?? [{urls: 'turn:195.201.173.190:3478', username: '1525325424', credential: 'YuzkH/Th9BBaRj4ivR03PiCfr+E='}]; // TODO: get turn server credentials from server
     }
 
     connect() {
@@ -102,16 +107,9 @@ export class WebRTCInterface extends CommunicationInterface {
 
         const {promise, resolve} = Promise.withResolvers<boolean>()
 
-        const stunServers = [
-            { urls: 'stun:195.201.173.190:3478' }
-        ]
-        const turnServers = [
-            {urls: 'turn:195.201.173.190:3478', username: '1525325424', credential: 'YuzkH/Th9BBaRj4ivR03PiCfr+E='} // TODO: get turn server credentials from server
-        ]
-
         // try to establish a WebRTC connection, exchange keys first
         this.#connection = new RTCPeerConnection({
-            iceServers: [...stunServers, ...turnServers]
+            iceServers: [...this.#stunServers, ...this.#turnServers]
         });
 
         const dataChannelOut = this.#connection.createDataChannel("datex", {protocol: "datex"});
