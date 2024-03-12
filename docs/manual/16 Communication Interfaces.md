@@ -56,12 +56,14 @@ The negotiated session can either use a direct or an indirect connection via a [
 
 If the two clients are in the same network or if [NAT traversal](https://en.wikipedia.org/wiki/NAT_traversal) is possible using public ip addresses of the two clients,
 a direct connection can be established:
+
 ![](./assets/webrtc/webrtc-direct-connection.png)
 
 
 #### Indirect WebRTC connection
 
 As a fallback, WebRTC connections are relayed using a public TURN server.
+
 ![](./assets/webrtc/webrtc-turn-connection.png)
 
 
