@@ -1,34 +1,10 @@
 # Types
 
-The DATEX Runtime comes with its own type system which can be mapped to JavaScript types.
-DATEX types can be access via `Datex.Type`.
+The DATEX Runtime comes with its own type system which is mapped to JavaScript types.
+DATEX types can be accessed via `Datex.Type`.
 
-## Std types 
-The `Datex.Type.std` namespace contains all the builtin (*std*) DATEX types that can be accessed as runtime values, e.g.:
-```ts
-// primitive types
-Datex.Type.std.text
-Datex.Type.std.integer
-Datex.Type.std.integer_8
-Datex.Type.std.integer_64
-
-// complex types
-Datex.Type.std.Array
-Datex.Type.std.Array_8
-Datex.Type.std.Function
-```
-
-There also exist globally accessible short names for some of the types, matching their respective typescript names:
-```ts
-Datex.Type.std.text === string
-Datex.Type.std.decimal === number
-Datex.Type.std.integer === bigint
-Datex.Type.std.boolean === boolean
-Datex.Type.std.Any === any
-```
-
-## Supported built-in JS and Web types
-| **JS Type**                    | **Support**           | **DATEX Type**  | **Synchronizable** | **Limitations**                                                                           |
+## Supported built-in JavaScript and Web types
+| **JavaScript Type**            | **Support**           | **DATEX Type**  | **Synchronizable** | **Limitations**                                                                           |
 |:-------------------------------|:----------------------|:----------------|:-------------------|:------------------------------------------------------------------------------------------|
 | **string**                     | Full                  | `std:text`       | Yes <sup>1)</sup>  | <sup>3)</sup>                                                                             |
 | **number**                     | Full                  | `std:decimal`    | Yes <sup>1)</sup>  | <sup>3)</sup>                                                                             |
@@ -78,6 +54,30 @@ Datex.Type.std.Any === any
 <sup>1)</sup> Primitive JS values are immutable and cannot be synchronized on their own, but when wrapped in a Ref.<br>
 <sup>2)</sup> [UIX-DOM](https://github.com/unyt-org/uix-dom) required<br>
 <sup>3)</sup> The corresponding object values of primitive values (e.g. `new Number()` for `number`) are not supported<br>
+
+## Std types 
+The `Datex.Type.std` namespace contains all the builtin (*std*) DATEX types that can be accessed as runtime values, e.g.:
+```ts
+// primitive types
+Datex.Type.std.text
+Datex.Type.std.integer
+Datex.Type.std.integer_8
+Datex.Type.std.integer_64
+
+// complex types
+Datex.Type.std.Array
+Datex.Type.std.Array_8
+Datex.Type.std.Function
+```
+
+There also exist globally accessible short names for some of the types, matching their respective typescript names:
+```ts
+Datex.Type.std.text === string
+Datex.Type.std.decimal === number
+Datex.Type.std.integer === bigint
+Datex.Type.std.boolean === boolean
+Datex.Type.std.Any === any
+```
 
 ## Special JS types
 
