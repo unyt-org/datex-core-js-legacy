@@ -62,7 +62,7 @@ Datex.Type.std.Any === any
 | **Promise**                    | Full                  | js:Promise        | No (Immutable)  | -                                                                                         |
 | **URL**                        | Partial               | std:url        | No                 | URL mutations are currently not synchronized                                              |
 | **Date**                       | Partial               | std:time       | No                 | `Date` objects are currently asymetrically mapped to DATEX `Time` objects                 |
-| **Blob**                       | Full                  | std:*/*,       | No (Immutable)     | -                                                                                         |
+| **Blob**                       | Full                  | std:\*/\**,    | No (Immutable)     | -                                                                                         |
 | **File**                       | Full                  | js:File        | No (Immutable)     | -                                                                                         |
 | **RegExp**                     | Partial               | js:RegExp      | No (Immutable)     | RegExp values wrapped in a Ref are currently not synchronized                             |
 | **WeakRef**                    | Full                  | std:WeakRef    | No (Immutable)     | -                                                                                         |
