@@ -46,8 +46,8 @@ Datex.Type.std.Any === any
 | **WeakMap**                    | None                  | -                | -                  | Cannot be implemented because `WeakMap` internals are not accessible. Alternative: `StorageWeakMap` |
 | **Function**                   | Sufficient            | `std:Function`   | No (Immutable)     | Functions always return a Promise, even if they are synchronous                           |
 | **AsyncFunction**              | Sufficient            | `std:Function`   | No (Immutable)     | -                                                                                         |
-| **Generator**                  | Sufficient            | `js:AsyncGenerator` | -               | Generators are always mapped to AsyncGenerators                                           |
-| **AsyncGenerator**             | Full                  | `js:AsyncGenerator` | -               | -                                                                                         |
+| **Generator**                  | Sufficient            | `js:AsyncGenerator` | No (Immutable)  | Generators are always mapped to AsyncGenerators                                           |
+| **AsyncGenerator**             | Full                  | `js:AsyncGenerator` | No (Immutable)  | -                                                                                         |
 | **ArrayBuffer**                | Partial               | `std:buffer`     | No                 | ArrayBuffer mutations are currently not synchronized                                      |
 | **Uint8Array**                 | Partial               | `js:TypedArray/u8`  | No              | ArrayBuffer mutations are currently not synchronized                                      |
 | **Uint16Array**                | Partial               | `js:TypedArray/u16` | No              | ArrayBuffer mutations are currently not synchronized                                      |
