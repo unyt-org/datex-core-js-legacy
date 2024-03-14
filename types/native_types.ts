@@ -325,7 +325,6 @@ Type.js.AsyncGenerator.setJSInterface({
     }
 })
 
-
 Type.js.Promise.setJSInterface({
     class: Promise,
     
@@ -334,8 +333,22 @@ Type.js.Promise.setJSInterface({
 
     serialize: value => {
         return {
-            then: (onFulfilled:any, onRejected:any) => value.then(onFulfilled, onRejected),
-            catch: (onRejected:any) => value.catch(onRejected)
+            then: (onFulfilled:any, onRejected:any) => {
+                // fails if promise was serialized and js function was reconstructed locally
+                try {value}
+                catch {
+                    throw new Error("Promise cannot be restored - storing Promises persistently is not supported")
+                }
+                return value.then(onFulfilled, onRejected)
+            },
+            catch: (onRejected:any) => {
+                // fails if promise was serialized and js function was reconstructed locally 
+                try {value}
+                catch {
+                    throw new Error("Promise cannot be restored - storing Promises persistently is not supported")
+                }
+                return value.catch(onRejected)
+            }
         }
     },
 
