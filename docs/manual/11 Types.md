@@ -13,8 +13,8 @@ DATEX types can be accessed via `Datex.Type`.
 | **null**                       | Full                  | `std:null`       | Yes <sup>1)</sup>  | -                                                                                         |
 | **undefined**                  | Full                  | `std:void`       | Yes <sup>1)</sup>  | -                                                                                         |
 | **symbol**                     | Partial               | `js:Symbol`      | Yes <sup>1)</sup>  | Registered and well-known symbols are not yet supported                                   |
-| **Object (without prototype)** | Full                  | `std:Object`     | Yes                | Objects with prototypes other than `Object.prototype` or `null` are mapped to `js:Object` |
-| **Object**                     | Sufficient            | `js:Object`      | Yes                | No synchronisation for nested objects per default                                         |
+| **Object**                     | Full                  | `std:Object`     | Yes                | Objects with prototypes other than `Object.prototype` or `null` are mapped to `js:Object` |
+| **Object (with prototype)**    | Sufficient            | `js:Object`      | Yes                | No synchronisation for nested objects per default                                         |
 | **Array**                      | Full                  | `std:Array`      | Yes                | -                                                                                         |
 | **Set**                        | Full                  | `std:Set`        | Yes                | -                                                                                         |
 | **Map**                        | Full                  | `std:Map`        | Yes                | -                                                                                         |
@@ -38,7 +38,7 @@ DATEX types can be accessed via `Datex.Type`.
 | **Promise**                    | Full                  | `js:Promise`        | No (Immutable)  | -                                                                                         |
 | **URL**                        | Partial               | `std:url`        | No                 | URL mutations are currently not synchronized                                              |
 | **Date**                       | Partial               | `std:time`       | No                 | `Date` objects are currently asymetrically mapped to DATEX `Time` objects                 |
-| **Blob**                       | Full                  | `std:\*/\*,`     | No (Immutable)     | -                                                                                         |
+| **Blob**                       | Full                  | `std:*/*,`     | No (Immutable)     | -                                                                                         |
 | **File**                       | Full                  | `js:File`        | No (Immutable)     | -                                                                                         |
 | **RegExp**                     | Partial               | `js:RegExp`      | No (Immutable)     | RegExp values wrapped in a Ref are currently not synchronized                             |
 | **WeakRef**                    | Full                  | `std:WeakRef`    | No (Immutable)     | -                                                                                         |
