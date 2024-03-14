@@ -5171,6 +5171,12 @@ export class Compiler {
         // make sure WebRTC interface is loaded
         ({ WebRTCInterface } = await import("../network/communication-interfaces/webrtc-interface.ts"));
 
+        // cache inserted blob values
+        const promises = [];
+        for (const val of SCOPE.data??[]) {
+            if (val instanceof Blob) promises.push(Runtime.cacheValue(val));
+        }
+        if (promises.length) await Promise.all(promises);
 
         const body_compile_measure = RuntimePerformance.enabled ? RuntimePerformance.startMeasure("compile time", "body") : undefined;
 
@@ -5553,12 +5559,12 @@ export class Compiler {
 
     /** create a dxb file created from a DATEX Script string and convert to data url */
     static async datexScriptToDataURL(dx:string, type = ProtocolDataType.DATA):Promise<string> {
-        let dxb = <ArrayBuffer> await Compiler.compile(dx, [], {sign:false, encrypt: false, type})
+        const dxb = <ArrayBuffer> await Compiler.compile(dx, [], {sign:false, encrypt: false, type})
 
-        let blob = new Blob([dxb], {type: "text/dxb"}); // workaround to prevent download
+        const blob = new Blob([dxb], {type: "text/dxb"}); // workaround to prevent download
 
         return new Promise(resolve=>{
-            var a = new FileReader();
+            const a = new FileReader();
             a.onload = function(e) {resolve(<string>e.target.result);}
             a.readAsDataURL(blob);
         });
@@ -5566,9 +5572,9 @@ export class Compiler {
 
     /** create a dxb file created from a DATEX Script string and convert to object url */
     static async datexScriptToObjectURL(dx:string, type = ProtocolDataType.DATA):Promise<string> {
-        let dxb = <ArrayBuffer> await Compiler.compile(dx, [], {sign:false, encrypt: false, type})
+        const dxb = <ArrayBuffer> await Compiler.compile(dx, [], {sign:false, encrypt: false, type})
 
-        let blob = new Blob([dxb], {type: "text/dxb"}); // workaround to prevent download
+        const blob = new Blob([dxb], {type: "text/dxb"}); // workaround to prevent download
         return URL.createObjectURL(blob);
     }
 

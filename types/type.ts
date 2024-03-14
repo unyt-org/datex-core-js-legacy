@@ -256,6 +256,10 @@ export class Type<T = any> extends ExtensibleFunction {
 
         return <any>(assign_to_object instanceof DatexObject ? DatexObject.seal(assign_to_object) : assign_to_object);
     }
+
+    /**
+     * Result must be awaited and collapsed with Runtime.collapseValueCast
+     */
     public createDefaultValue(context?:any, origin:Endpoint = Runtime.endpoint, context_location?: URL): Promise<any>{
         return Runtime.castValue(this, VOID, context, context_location, origin);
     }
@@ -814,11 +818,11 @@ export class Type<T = any> extends ExtensibleFunction {
         if (value?.[DX_TYPE]) return value[DX_TYPE];
 
         // get type from pointer
-        let type:Type
-        if (type = Pointer.getByValue(value)?.type) return type;
+        let type:Type|undefined
+        if ((type = Pointer.getByValue(value)?.type)) return type;
 
         // get custom type
-        let custom_type = JSInterface.getValueDatexType(value);
+        const custom_type = JSInterface.getValueDatexType(value);
 
         if (!custom_type) {
             if (value === VOID) return Type.std.void;
@@ -835,12 +839,32 @@ export class Type<T = any> extends ExtensibleFunction {
             if (value instanceof RegExp) return Type.js.RegExp as unknown as Type<T>;
             if (globalThis.MediaStream && value instanceof MediaStream) return Type.js.MediaStream as unknown as Type<T>;
 
-            if (value instanceof ArrayBuffer || value instanceof TypedArray) return <Type<T>>Type.std.buffer;
+            if (value instanceof TypedArray) {
+                switch (value.constructor) {
+                    case Uint8Array: return Type.js.TypedArray.getVariation('u8') as unknown as Type<T>;
+                    case Uint16Array: return Type.js.TypedArray.getVariation('u16') as unknown as Type<T>;
+                    case Uint32Array: return Type.js.TypedArray.getVariation('u32') as unknown as Type<T>;
+                    case BigUint64Array: return Type.js.TypedArray.getVariation('u64') as unknown as Type<T>;
+                    case Int8Array: return Type.js.TypedArray.getVariation('i8') as unknown as Type<T>;
+                    case Int16Array: return Type.js.TypedArray.getVariation('i16') as unknown as Type<T>;
+                    case Int32Array: return Type.js.TypedArray.getVariation('i32') as unknown as Type<T>;
+                    case BigInt64Array: return Type.js.TypedArray.getVariation('i64') as unknown as Type<T>;
+                    case Float32Array: return Type.js.TypedArray.getVariation('f32') as unknown as Type<T>;
+                    case Float64Array: return Type.js.TypedArray.getVariation('f64') as unknown as Type<T>;
+                    default: throw new ValueError("Invalid TypedArray");
+                }
+            }
+            
+            if (value instanceof ArrayBuffer) return <Type<T>>Type.std.buffer;
             if (value instanceof Tuple) return <Type<T>>Type.std.Tuple;
             if (value instanceof Array) return <Type<T>>Type.std.Array;
 
+            if (value instanceof File) return Type.js.File as unknown as Type<T>;
+
             // mime types
-            if (value instanceof Blob) return Type.get("std", ...<[string, string]>value.type.split("/"))
+            if (value instanceof Blob) {
+                return Type.get("std", ...(value.type ? value.type.split("/") : ["application","octet-stream"]) as [string, string])
+            }
             if (Runtime.mime_type_classes.has(value.constructor)) return Type.get("std", ...<[string, string]>Runtime.mime_type_classes.get(value.constructor).split("/"))
 
             if (value instanceof SyntaxError) return Type.std.SyntaxError;
@@ -908,10 +932,27 @@ export class Type<T = any> extends ExtensibleFunction {
             if (_forClass == globalThis.Boolean || globalThis.Boolean.isPrototypeOf(_forClass)) return <Type<T>>Type.std.boolean;
             if (_forClass == Symbol || Symbol.isPrototypeOf(_forClass)) return <Type<T>>Type.js.Symbol;
             if (_forClass == RegExp || RegExp.isPrototypeOf(_forClass)) return Type.js.RegExp as unknown as Type<T>;
+            if (_forClass == File || File.isPrototypeOf(_forClass)) return Type.js.File as unknown as Type<T>;
             if (globalThis.MediaStream && _forClass == MediaStream) return Type.js.MediaStream as unknown as Type<T>;
             if (_forClass == WeakRef || WeakRef.isPrototypeOf(_forClass)) return <Type<T>>Type.std.WeakRef;
 
-            if (_forClass == ArrayBuffer || TypedArray.isPrototypeOf(_forClass)) return <Type<T>>Type.std.buffer;
+            if (TypedArray.isPrototypeOf(_forClass)) {
+                switch (_forClass) {
+                    case Uint8Array: return Type.js.TypedArray.getVariation('u8') as unknown as Type<T>;
+                    case Uint16Array: return Type.js.TypedArray.getVariation('u16') as unknown as Type<T>;
+                    case Uint32Array: return Type.js.TypedArray.getVariation('u32') as unknown as Type<T>;
+                    case BigUint64Array: return Type.js.TypedArray.getVariation('u64') as unknown as Type<T>;
+                    case Int8Array: return Type.js.TypedArray.getVariation('i8') as unknown as Type<T>;
+                    case Int16Array: return Type.js.TypedArray.getVariation('i16') as unknown as Type<T>;
+                    case Int32Array: return Type.js.TypedArray.getVariation('i32') as unknown as Type<T>;
+                    case BigInt64Array: return Type.js.TypedArray.getVariation('i64') as unknown as Type<T>;
+                    case Float32Array: return Type.js.TypedArray.getVariation('f32') as unknown as Type<T>;
+                    case Float64Array: return Type.js.TypedArray.getVariation('f64') as unknown as Type<T>;
+                    default: throw new ValueError("Invalid TypedArray");
+                }
+            }
+
+            if (_forClass == ArrayBuffer) return <Type<T>>Type.std.buffer;
             if (_forClass == Tuple || Tuple.isPrototypeOf(_forClass)) return <Type<T>>Type.std.Tuple;
             if (_forClass == Array || Array.isPrototypeOf(_forClass)) return <Type<T>>Type.std.Array;
 
@@ -971,7 +1012,11 @@ export class Type<T = any> extends ExtensibleFunction {
         TransferableFunction: Type.get<JSTransferableFunction>("js:Function"),
         Symbol: Type.get<symbol>("js:Symbol"),
         RegExp: Type.get<RegExp>("js:RegExp"),
-        MediaStream: Type.get<MediaStream>("js:MediaStream")
+        MediaStream: Type.get<MediaStream>("js:MediaStream"),
+        File: Type.get<File>("js:File"),
+        TypedArray: Type.get<TypedArray>("js:TypedArray"),
+        AsyncGenerator: Type.get<AsyncGenerator>("js:AsyncGenerator"),
+        Promise: Type.get<Promise<any>>("js:Promise")
     }
 
     /**

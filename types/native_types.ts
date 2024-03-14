@@ -3,7 +3,7 @@ import { ValueError } from "./errors.ts";
 import { Type } from "./type.ts";
 import { Pointer } from "../runtime/pointers.ts";
 import type { any_class } from "../utils/global_types.ts";
-import { INVALID, NOT_EXISTING } from "../runtime/constants.ts";
+import { DX_TIMEOUT, INVALID, NOT_EXISTING } from "../runtime/constants.ts";
 import { Tuple } from "./tuple.ts";
 
 import "../utils/auto_map.ts"
@@ -288,6 +288,72 @@ Type.std.Set.setJSInterface({
     keys: (parent:Set<any>) => [...parent],
     values: (parent:Set<any>) => [...parent],
 })
+
+
+const AsyncGenerator = Object.getPrototypeOf(Object.getPrototypeOf((async function*(){})()));
+const Generator = Object.getPrototypeOf(Object.getPrototypeOf((function*(){})()))
+
+Type.js.AsyncGenerator.setJSInterface({
+    no_instanceof: true,
+    class: AsyncGenerator,
+    detect_class: (val) => AsyncGenerator.isPrototypeOf(val) || Generator.isPrototypeOf(val),
+
+    is_normal_object: true,
+    proxify_children: true,
+
+    serialize: value => {
+        return {
+            next: (...args: []|[unknown]) => value.next(...args),
+            return: (v: any) => value.return(v),
+            throw: (v: any) => value.throw(v),
+        }
+    },
+
+
+    cast: value => {
+        if (value && value.next && value.return && value.throw) {
+            return async function*() {
+                let res = await value.next();
+                while (!res.done) {
+                    yield res.value;
+                    res = await value.next();
+                }
+                return value.return();
+            }()
+        }
+        else return INVALID;
+    }
+})
+
+
+Type.js.Promise.setJSInterface({
+    class: Promise,
+    
+    is_normal_object: true,
+    proxify_children: true,
+
+    serialize: value => {
+        return {
+            then: (onFulfilled:any, onRejected:any) => value.then(onFulfilled, onRejected),
+            catch: (onRejected:any) => value.catch(onRejected)
+        }
+    },
+
+
+    cast: value => {
+        if (value && value.then && value.catch) {
+            (value.then as any)[DX_TIMEOUT] = Infinity;
+            (value.catch as any)[DX_TIMEOUT] = Infinity;
+            return new Promise((resolve, reject) => {
+                value
+                    .then(resolve)
+                    .catch(reject);
+            })
+        }
+        else return INVALID;
+    }
+})
+
 
 // override set prototype to make sure all sets are sorted at runtime when calling [...set] (TODO is that good?)
 // const set_iterator = Set.prototype[Symbol.iterator];
