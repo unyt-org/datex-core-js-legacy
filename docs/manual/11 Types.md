@@ -117,7 +117,7 @@ In contrast to `std:Object`, `js:Object` is used for JavaScript object with a pr
 
 Examples for `std:Object`s:
  * A plain object like `{x: 1, y: new Set()}`
- * Object with `null` prototype `{__proto__: null, x: 1}`
+ * Object with `null` prototype (e.g. `{__proto__: null, x: 1}`)
 
 Examples for `js:Object`s:
  * A builtin object like `console`
@@ -138,7 +138,7 @@ Backend (Deno) endpoints are not yet supported due to missing support for WebRTC
 
 ## Structs
 
-The `struct` helper function allows you to define DATEX types with a
+The `struct` helper function allows you to define custom DATEX types with a
 fixed structure.
 All `struct` values are represented as plain objects in JavaScripts.
 They can take any DATEX compatible value as properties.
@@ -150,7 +150,7 @@ structs are more efficient than plain objects.
 **Usage**:
 
 ```ts
-import { struct } from "datex-core-legacy/types/struct.ts";
+import { struct, inferType } from "datex-core-legacy/types/struct.ts";
 
 // struct definition
 const MyStruct = struct({
