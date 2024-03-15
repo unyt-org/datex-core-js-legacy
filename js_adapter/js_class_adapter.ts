@@ -288,7 +288,10 @@ export class Decorators {
             originalClass[METADATA]?.[Decorators.FORCE_TYPE] && 
             Object.hasOwn(originalClass[METADATA]?.[Decorators.FORCE_TYPE], 'constructor')
         ) normalizedType = originalClass[METADATA]?.[Decorators.FORCE_TYPE]?.constructor
-        else normalizedType = Type.get("ext", originalClass.name.replace(/^_/, '')); // remove leading _ from type name
+        else {
+            if (!originalClass.name) throw new Error("Cannot create DATEX type mapping for an anonymous class")
+            normalizedType = Type.get("ext", originalClass.name.replace(/^_/, '')); // remove leading _ from type name
+        }
 
         if (!callerFile && client_type == "deno" && normalizedType.namespace !== "std") {
             callerFile = getCallerInfo()?.[3]?.file ?? undefined;

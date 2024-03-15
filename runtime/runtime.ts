@@ -2734,7 +2734,11 @@ export class Runtime {
     
     static async cacheValue(value:unknown){
         if (value instanceof Blob) {
-            (<Record<symbol,fundamental>><unknown>value)[DX_SERIALIZED] = await value.arrayBuffer();
+            if (!(value as any)[DX_SERIALIZED]) {
+                (value as any)[DX_SERIALIZED] = await value.arrayBuffer();
+                // remove serialized value cache after 1 minute
+                setTimeout(()=>{delete (value as any)[DX_SERIALIZED]}, 60_000);
+            }
         }
         else {
             throw new ValueError("Cannot cache value of type " + Type.ofValue(value));
