@@ -2751,7 +2751,10 @@ export class Runtime {
         let type:Type;
 
         // file (special handling of DX_SERIALIZED inherited from Blob)
-        if (value instanceof File) return {name: value.name, type: value.type, size: value.size, lastModified: value.lastModified, content: (value as any)[DX_SERIALIZED]};
+        if (value instanceof File) {
+            if (!(value as any)[DX_SERIALIZED]) throw new RuntimeError("Cannot serialize file without cached content");
+            return {name: value.name, type: value.type, size: value.size, lastModified: value.lastModified, content: (value as any)[DX_SERIALIZED]};
+        }
 
         // cached serialized (e.g. for mime types)
         if ((<Record<symbol,fundamental>>value)?.[DX_SERIALIZED]) return (<Record<symbol,fundamental>>value)[DX_SERIALIZED];

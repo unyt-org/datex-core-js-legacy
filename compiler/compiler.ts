@@ -5164,6 +5164,17 @@ export class Compiler {
         ) : SCOPE.buffer;
     }
 
+    /**
+     * Workaround: recursively cache all blob values in the iterable
+     */
+    static cacheValues(iterable: Iterable<unknown>, promises:Promise<void>[] = []): Promise<void>[] {
+        for (const val of iterable) {
+            if (val instanceof Blob) promises.push(Runtime.cacheValue(val));
+            else if (typeof val == "object" && (val as any)?.[Symbol.iterator]) this.cacheValues((val as any), promises);
+        }
+        return promises;
+    }
+
 
     // compile loop
     static async compileLoop(SCOPE:compiler_scope):Promise<ArrayBuffer|ReadableStream<ArrayBuffer>>  {
@@ -5172,10 +5183,7 @@ export class Compiler {
         ({ WebRTCInterface } = await import("../network/communication-interfaces/webrtc-interface.ts"));
 
         // cache inserted blob values
-        const promises = [];
-        for (const val of SCOPE.data??[]) {
-            if (val instanceof Blob) promises.push(Runtime.cacheValue(val));
-        }
+        const promises = SCOPE.data ? this.cacheValues(SCOPE.data) : [];
         if (promises.length) await Promise.all(promises);
 
         const body_compile_measure = RuntimePerformance.enabled ? RuntimePerformance.startMeasure("compile time", "body") : undefined;
