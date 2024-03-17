@@ -88,8 +88,9 @@ export class Unyt {
         if (ownDomain && domains.includes(ownDomain)) {
             domains.splice(domains.indexOf(ownDomain),1);
         }
+
         // add own domain to the front
-        domains.unshift(ownDomain + (this.using_http_over_datex?ESCAPE_SEQUENCES.UNYT_CYAN+' (HTTP-over-DATEX)'+ESCAPE_SEQUENCES.RESET:''));
+        if (ownDomain) domains.unshift(ownDomain + (this.using_http_over_datex?ESCAPE_SEQUENCES.UNYT_CYAN+' (HTTP-over-DATEX)'+ESCAPE_SEQUENCES.RESET:''));
 
         return domains;
     }
