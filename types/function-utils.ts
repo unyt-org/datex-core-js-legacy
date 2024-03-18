@@ -22,7 +22,7 @@ const EXTRACT_USED_VARS = Symbol("EXTRACT_USED_VARS")
  * ```
  * @param variables 
  */
-export function use(noDatex: 'no-datex', ...variables: unknown[]): true 
+export function use(noDatex: 'standalone', ...variables: unknown[]): true 
 /**
  * Used to declare all variables from the parent scope that are used inside the current function.
  * This is required for functions that are transferred to a different context or restored from eternal pointers.
@@ -66,7 +66,7 @@ function getUsedVars(fn: (...args:unknown[])=>unknown) {
     const usedVars = usedVarsSource.split(",").map(v=>v.trim()).filter(v=>!!v)
     const flags = []
     for (const usedVar of usedVars) {
-        if (usedVar == `"no-datex"` || usedVar == `'no-datex'`) flags.push("no-datex");
+        if (usedVar == `"standalone"` || usedVar == `'standalone'`) flags.push("standalone");
         else if (!usedVar.match(/^[a-zA-Z_$][0-9a-zA-Z_$\u0080-\uFFFF]*$/)) throw new RuntimeError("Unexpected identifier in 'use' declaration: '" + usedVar+ "' - only variable names are allowed.");
     }
     if (flags.length) usedVars.splice(0, flags.length); // remove flags

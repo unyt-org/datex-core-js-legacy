@@ -85,8 +85,8 @@ export class JSTransferableFunction extends ExtensibleFunction {
 	 * Important: use createAsync for async functions instead
 	 * @param fn 
 	 */
-	static create<T extends (...args:unknown[])=>unknown>(fn: T, options:JSTransferableFunctionOptions = {}): JSTransferableFunction & Callable<Parameters<T>, ReturnType<T>> {
-        const {vars, flags} = getDeclaredExternalVariables(fn);
+	static create<T extends (...args:unknown[])=>unknown>(fn: T, options:JSTransferableFunctionOptions = {}, useDeclaration?: {vars:{[k:string]:unknown}, flags?:string[]}): JSTransferableFunction & Callable<Parameters<T>, ReturnType<T>> {
+        const {vars, flags} = useDeclaration ?? getDeclaredExternalVariables(fn);
 		options.isLocal ??= true;
 		return this.#createTransferableFunction(getSourceWithoutUsingDeclaration(fn), vars, flags, options) as any;
 	}

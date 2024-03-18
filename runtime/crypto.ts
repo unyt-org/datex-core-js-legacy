@@ -332,7 +332,12 @@ export class Crypto {
                 // get endpoint public keys
                 // TODO: don't sign?, does not work when running as @+unyt2: await datex('#public.Blockchain.getEndpointPublicKeys(?)', [endpoint], Target.get('@+unyt2'), false)
                 try {
-                    exported_keys = await Runtime.Blockchain.getEndpointPublicKeys(endpoint);
+                    try {
+                        exported_keys = await Runtime.Blockchain!.getEndpointPublicKeys(endpoint);
+                    }
+                    catch {
+                        logger.debug("Blockchain request failed, trying network interface");
+                    }
                     if (!exported_keys) exported_keys = await NetworkUtils.get_keys(endpoint);
                     // if (exported_keys) await this.storeKeys(endpoint, exported_keys);
                     if (!exported_keys) {

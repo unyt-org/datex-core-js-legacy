@@ -1,6 +1,9 @@
 import { endpoint_name, target_clause } from "../datex_all.ts";
+import { Endpoint } from "../types/addressing.ts";
+import { PermissionError } from "../types/errors.ts";
+import { JSTransferableFunction } from "../types/js-function.ts";
 import type { Type } from "../types/type.ts";
-import type { Class } from "../utils/global_types.ts";
+import type { Class, datex_meta } from "../utils/global_types.ts";
 import { Decorators } from "./js_class_adapter.ts";
 
 
@@ -42,6 +45,19 @@ export function property(type: ((...args: any[])=>any)|undefined|string|Type|Cla
 	})
 }
 
+// TODO: experimental alias for @property:
+/**
+ * Binds a (static) class property to a DATEX ref
+ * @param type optional type for the ref, must match the declared TypeScript property type
+ */
+export function ref<T>(type: string|Type<T>|Class<T>): (value: ((...args: any[])=>any)|undefined, context: PropertyDecoratorContext<T>)=>void
+export function ref(value: ((...args: any[])=>any)|undefined, context: PropertyDecoratorContext): void
+export function ref(type: ((...args: any[])=>any)|undefined|string|Type|Class, context?: PropertyDecoratorContext) {
+    return handleClassFieldDecoratorWithOptionalArgs([type], context as ClassFieldDecoratorContext, ([type], context:PropertyDecoratorContext) => {
+		return Decorators.property(type as Type, context)
+	})
+}
+
 
 /**
  * Adds an assertion to a class field that is checked before the field is set
@@ -50,6 +66,25 @@ export function property(type: ((...args: any[])=>any)|undefined|string|Type|Cla
 export function assert<T>(assertion:(val:T)=>boolean|string|undefined): (value: undefined, context: ClassFieldDecoratorContext<unknown, T|undefined>)=>void {
 	return handleClassFieldDecoratorWithArgs([assertion], ([assertion], context) => {
 		return Decorators.assert(assertion, context)
+	})
+}
+
+export function allow<T extends (...args:any)=>any>(assertion:(meta: datex_meta) => boolean|Promise<boolean>): (value: T, context: ClassMethodDecoratorContext<unknown, T>) => T {
+	return handleClassMethodDecoratorWithArgs([assertion], ([assertion], fn, context) => {
+		// async
+		if (JSTransferableFunction.functionIsAsync(assertion as (...args:any)=>any)) {
+			return async function(this:any, ...args:any) {
+				if (!await assertion(datex.meta)) throw new PermissionError("Endpoint has no permission to call this function")
+				return fn.apply(this, args)
+			} as any
+		}
+		// sync
+		else {
+			return function(this:any, ...args:any) {
+				if (!assertion(datex.meta)) throw new PermissionError("Endpoint has no permission to call this function")
+				return fn.apply(this, args)
+			} as any
+		}
 	})
 }
 

@@ -202,7 +202,7 @@ export type compiler_scope = {
 
     max_block_size?: number, // max size of each block, if not Infinity (default), dxb might be split into multiple blocks
 
-    internal_var_index: number // count up for every new internal variable
+    internal_var_index: [number] // count up for every new internal variable
     internal_vars: WeakMap<Record<string, unknown>, number> // save variables for values with an internal variable
     internal_primitive_vars: WeakMap<Record<string, unknown>, number> // save variables for primitive values with an internal variable
 
@@ -1345,7 +1345,7 @@ export class Compiler {
             // get value from dynamic index
             if (index instanceof Array) index = index[0];
             
-            const var_number = SCOPE.internal_var_index++;
+            const var_number = SCOPE.internal_var_index[0]++;
             const add_scope_global = !SCOPE.assignment_end_indices.has(index); // only add if not already an assignment before
             const gap = Uint16Array.BYTES_PER_ELEMENT + 2 + (add_scope_global?1:0);
 
@@ -2754,7 +2754,7 @@ export class Compiler {
 
         // insert any value besides Maybes
 
-        insert: (value:any, SCOPE:compiler_scope, is_root=true, parents?:Set<any>, unassigned_children?:[number, any, number][], add_insert_index = true) => {
+        insert: (value:any, SCOPE:compiler_scope, is_root=true, parents?:Set<any>, unassigned_children?:[number, any, number][], replace_optimization = true, register_insert_index = true) => {
 
             if (value?.[DX_REPLACE]) value = value[DX_REPLACE];
 
@@ -2790,7 +2790,7 @@ export class Compiler {
                 if (typeof mapped == "number") {
                     Compiler.builder.insertVariable(SCOPE, undefined, ACTION_TYPE.GET, undefined, mapped);
                     SCOPE.uint8[SCOPE.b_index++] = BinaryCode.CHILD_GET_REF
-                    Compiler.builder.insert(value.key, SCOPE);
+                    Compiler.builder.insert(value.key, SCOPE, undefined, undefined, undefined, undefined, false);
                 }
                 else {
                     throw new Error("Invalid DX_BOUND_LOCAL_SLOT: " + v_name);
@@ -2801,9 +2801,9 @@ export class Compiler {
 
             // handle <Stream> and ReadableStream, if streaming (<<)
             if ((value instanceof Stream || value instanceof ReadableStream) && SCOPE.uint8[SCOPE.b_index-1] == BinaryCode.STREAM) return Compiler.builder.handleStream(value, SCOPE); 
- 
+
             // same value already inserted -> refer to the value with an internal variable
-            if (add_insert_index && SCOPE.inserted_values?.has(value)) {
+            if (replace_optimization && SCOPE.inserted_values?.has(value)) {
                 // get variable for the already-existing value
                 const value_index = SCOPE.inserted_values.get(value)!;
                 const existing_val_var = Compiler.builder.createInternalVariableAtIndex(value_index, SCOPE, value)
@@ -2817,7 +2817,8 @@ export class Compiler {
             const start_index = Compiler.builder.getDynamicIndex(SCOPE.b_index, SCOPE);
 
             // add original value to inserted values map (only if useful, exclude short values like boolean and null)
-            if (!indirectReferencePtr && !(SCOPE.options.no_duplicate_value_optimization && (typeof value == "bigint" || typeof value == "number" || typeof value == "string")) && value!==VOID && 
+            if (register_insert_index && !indirectReferencePtr && !(SCOPE.options.no_duplicate_value_optimization && 
+                (typeof value == "bigint" || typeof value == "number" || typeof value == "string")) && value!==VOID && 
                 value !==null && 
                 typeof value != "boolean" &&
                 !((typeof value == "bigint" || typeof value == "number") && value<=Compiler.MAX_INT_32 && value>=Compiler.MIN_INT_32)
@@ -2965,7 +2966,7 @@ export class Compiler {
                 _SCOPE.inner_scope.path_info_index = _SCOPE.b_index++;
                 _SCOPE.uint8[_SCOPE.inner_scope.path_info_index] = BinaryCode.CHILD_GET_REF;
                 // key
-                Compiler.builder.insert(value.key, <compiler_scope>_SCOPE); // TODO cast to compiler_scope might ignore uninitialized scope properties
+                Compiler.builder.insert(value.key, <compiler_scope>_SCOPE, undefined, undefined, undefined, undefined, false); // TODO cast to compiler_scope might ignore uninitialized scope properties
                 
                 // insert injected var if extract pointers
                 if (SCOPE.extract_pointers) {
@@ -5757,7 +5758,7 @@ export class Compiler {
 
             b_index: 0,
 
-            internal_var_index: 0,
+            internal_var_index: options.parent_scope?.internal_var_index ?? [0],
             internal_vars: new WeakMap(),
             internal_primitive_vars: new Map(),
 
@@ -5877,7 +5878,7 @@ export class Compiler {
 
             b_index: 0,
 
-            internal_var_index: 0,
+            internal_var_index: options.parent_scope?.internal_var_index ?? [0],
             internal_vars: new WeakMap(),
             internal_primitive_vars: new Map(),
 
