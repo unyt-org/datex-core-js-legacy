@@ -740,7 +740,7 @@ export class Runtime {
             }
             else {
                 if (!mime) throw Error("Cannot infer type from URL content - missing mime module");
-                const content = <Uint8Array>(await getFileContent(url, true, true));
+                const content = ((await getFileContent(url, true, true)) as Uint8Array).buffer;
                 const ext = url.toString().match(/\.[^./]*$/)?.[0].replace(".","");
                 if (!ext) throw Error("Cannot infer type from URL content (no extension)");
                 const mime_type = mime.getType(ext);
@@ -2312,6 +2312,7 @@ export class Runtime {
                     if (old_value === VOID) new_value = globalThis.String()
                     else if (old_value instanceof Markdown) new_value = old_value.toString();
                     else if (old_value instanceof ArrayBuffer) new_value = Runtime.utf8_decoder.decode(old_value); // cast to <text>
+                    else if (old_value instanceof TypedArray) new_value = Runtime.utf8_decoder.decode(old_value.buffer); // cast to <text>
                     else if (old_value instanceof Blob) new_value = await old_value.text()
                     else new_value = this.valueToDatexString(value, false, true); 
                     break;
