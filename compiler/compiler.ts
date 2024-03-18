@@ -27,7 +27,7 @@ import { BinaryCode } from "./binary_codes.ts";
 import { Scope } from "../types/scope.ts";
 import { ProtocolDataType } from "./protocol_types.ts";
 import { Quantity } from "../types/quantity.ts";
-import { EXTENDED_OBJECTS, INHERITED_PROPERTIES, VOID, SLOT_WRITE, SLOT_READ, SLOT_EXEC, NOT_EXISTING, SLOT_GET, SLOT_SET, DX_IGNORE, DX_BOUND_LOCAL_SLOT, DX_REPLACE } from "../runtime/constants.ts";
+import { EXTENDED_OBJECTS, INHERITED_PROPERTIES, VOID, SLOT_WRITE, SLOT_READ, SLOT_EXEC, NOT_EXISTING, SLOT_GET, SLOT_SET, DX_IGNORE, DX_BOUND_LOCAL_SLOT, DX_REPLACE, DX_PTR } from "../runtime/constants.ts";
 import { arrayBufferToBase64, base64ToArrayBuffer, buffer2hex, hex2buffer } from "../utils/utils.ts";
 import { RuntimePerformance } from "../runtime/performance_measure.ts";
 import { Conjunction, Disjunction, Logical, Negation } from "../types/logic.ts";
@@ -2909,6 +2909,10 @@ export class Compiler {
                 // add $$ operator, not if no_create_pointers enabled or skip_first_collapse
                 if (option_collapse && !SCOPE.options.no_create_pointers && !skip_first_collapse) SCOPE.uint8[SCOPE.b_index++] = BinaryCode.CREATE_POINTER;
             }
+
+            // temporary to find errors: throw if a cloned html element without a unique ptr id
+            if (globalThis.HTMLElement && value instanceof HTMLElement && value.hasAttribute("uix-ptr") && !(value as any)[DX_PTR]) console.error("Invalid cloned HTMLElement " + value.tagName + (value.hasAttribute("id")?"#"+value.getAttribute("id"):""));
+
 
             // first value was collapsed (if no_proxify == false, it was still collapsed because it's not a pointer reference)
             // if (SCOPE.options.collapse_first_inserted)  SCOPE.options.collapse_first_inserted = false; // reset

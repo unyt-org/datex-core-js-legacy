@@ -1393,11 +1393,11 @@ export class Pointer<T = any> extends Ref<T> {
 
     // returns the existing pointer for a value, or the value, if no pointer exists
     public static pointerifyValue(value:any):Pointer|any {
-        return value instanceof Pointer ? value : this.pointer_value_map.get(value) ?? value;
+        return value?.[DX_PTR] ?? (value instanceof Pointer ? value : this.pointer_value_map.get(value)) ?? value;
     }
     // returns pointer only if pointer exists
-    public static getByValue<T>(value:RefOrValue<T>):Pointer<T>|undefined{
-        return <Pointer<T>>this.pointer_value_map.get(Pointer.collapseValue(value));
+    public static getByValue<T>(value:RefOrValue<T>): Pointer<T>|undefined{
+        return (value?.[DX_PTR] ?? this.pointer_value_map.get(Pointer.collapseValue(value))) as Pointer<T>;
     }
 
     // returns pointer only if pointer exists
