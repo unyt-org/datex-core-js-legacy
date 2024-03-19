@@ -13,14 +13,42 @@ export class Stream<T = ArrayBuffer> implements StreamConsumer<T> {
     controller?: ReadableStreamDefaultController
 
     readable_stream: ReadableStream<T> 
+    #writable_stream?: WritableStream<T>
+
+    get writable_stream() {
+        if (!this.#writable_stream) {
+            this.#writable_stream = new WritableStream<T>({
+                write: (chunk) => {
+                    this.write(chunk);
+                }
+            });
+        }
+        return this.#writable_stream;
+    }
 
     constructor(readable_stream?:ReadableStream<T>) {
         this.readable_stream = readable_stream ?? new ReadableStream<T>({
             start: controller => {this.controller = controller}
         });
+        // immediately start stream out if readable_stream is given
+        if (readable_stream) this.#startStreamOut()
     }
 
     started_ptr_stream = false
+
+    #startStreamOut() {
+        const ptr = Pointer.createOrGet(this);
+        if (ptr instanceof Pointer) {
+            logger.info("Start stream out for " + ptr.idString());
+            setTimeout(() => {
+                ptr.startStreamOut(); // stream to all subscribers or origin, workaround: timeout to prevent stream init too early (TODO: fix)
+            }, 100)
+        }
+        else {
+            throw new Error("Could not bind stream to pointer.")
+        }
+        this.started_ptr_stream = true;
+    }
 
     write(chunk: T, scope?: datex_scope) {
 
@@ -28,12 +56,7 @@ export class Stream<T = ArrayBuffer> implements StreamConsumer<T> {
         // if (chunk instanceof TypedArray) chunk = (<any>chunk).buffer;
 
         if (!this.started_ptr_stream && !scope) {  // no scope -> assume called from JS, not DATEX
-            this.started_ptr_stream = true;
-            const ptr = Pointer.getByValue(this);
-            if (ptr instanceof Pointer) {
-                logger.info("Start stream out for " + ptr.idString());
-                ptr.startStreamOut(); // stream to all subscribers or origin
-            }
+            this.#startStreamOut()
         }
 
         try {
@@ -54,6 +77,17 @@ export class Stream<T = ArrayBuffer> implements StreamConsumer<T> {
         }
     }
 
+    async pipeTo(out_stream:WritableStream<T>) {
+        const reader = this.getReader();
+        const writer = out_stream.getWriter();
+        let next:ReadableStreamReadResult<T>;
+        while (true) {
+            next = await reader.read()
+            if (next.done) break;
+            writer.write(next.value);
+        }
+    }
+
     close() {
         this.controller?.close()
         this.controller = undefined;
@@ -66,4 +100,11 @@ export class Stream<T = ArrayBuffer> implements StreamConsumer<T> {
         return streams[0].getReader()
     }
 
+    values() {
+        return this.readable_stream.values()
+    }
+
+    get [Symbol.asyncIterator]() {
+        return this.readable_stream.values.bind(this.readable_stream)
+    }
 }

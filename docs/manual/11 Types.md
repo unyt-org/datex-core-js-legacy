@@ -22,8 +22,8 @@ DATEX types can be accessed via `Datex.Type`.
 | **WeakMap**                    | None                  | -                | -                  | Cannot be implemented because `WeakMap` internals are not accessible. Alternative: `StorageWeakMap` |
 | **Function**                   | Sufficient            | `std:Function`   | No (Immutable)     | Functions always return a Promise, even if they are synchronous                           |
 | **AsyncFunction**              | Sufficient            | `std:Function`   | No (Immutable)     | -                                                                                         |
-| **Generator**                  | Sufficient            | `js:AsyncGenerator` | No (Immutable)  | Generators are always mapped to AsyncGenerators                                           |
-| **AsyncGenerator**             | Full                  | `js:AsyncGenerator` | No (Immutable)  | -                                                                                         |
+| **Generator**                  | Sufficient            | `js:AsyncGenerator` | No (Immutable)  | Generators are always mapped to AsyncGenerators. Generators cannot be stored persistently |
+| **AsyncGenerator**             | Sufficient            | `js:AsyncGenerator` | No (Immutable)  | Generators cannot be stored persistently                                                  |
 | **ArrayBuffer**                | Partial               | `std:buffer`     | No                 | ArrayBuffer mutations are currently not synchronized                                      |
 | **Uint8Array**                 | Partial               | `js:TypedArray/u8`  | No              | ArrayBuffer mutations are currently not synchronized                                      |
 | **Uint16Array**                | Partial               | `js:TypedArray/u16` | No              | ArrayBuffer mutations are currently not synchronized                                      |
@@ -35,11 +35,13 @@ DATEX types can be accessed via `Datex.Type`.
 | **BigInt64Array**              | Partial               | `js:TypedArray/i64` | No              | ArrayBuffer mutations are currently not synchronized                                      |
 | **Float32Array**               | Partial               | `js:TypedArray/f32` | No              | ArrayBuffer mutations are currently not synchronized                                      |
 | **Float64Array**               | Partial               | `js:TypedArray/f64` | No              | ArrayBuffer mutations are currently not synchronized                                      |
-| **Promise**                    | Full                  | `js:Promise`        | No (Immutable)  | -                                                                                         |
+| **Promise**                    | Full                  | `js:Promise`        | No (Immutable)  | Promises cannot be stored persistently                                                    |
 | **URL**                        | Partial               | `std:url`        | No                 | URL mutations are currently not synchronized                                              |
 | **Date**                       | Partial               | `std:time`       | No                 | `Date` objects are currently asymetrically mapped to DATEX `Time` objects                 |
-| **Blob**                       | Full                  | `std:*/*,`     | No (Immutable)     | -                                                                                         |
+| **Blob**                       | Full                  | `std:*/*,`       | No (Immutable)     | -                                                                                         |
 | **File**                       | Full                  | `js:File`        | No (Immutable)     | -                                                                                         |
+| **ReadableStream**             | Full                  | `js:ReadableStream` | Yes             | -                                                                                         |
+| **WritableStream**             | Full                  | `js:WritableStream` | Yes             | -                                                                                         |
 | **RegExp**                     | Partial               | `js:RegExp`      | No (Immutable)     | RegExp values wrapped in a Ref are currently not synchronized                             |
 | **WeakRef**                    | Full                  | `std:WeakRef`    | No (Immutable)     | -                                                                                         |
 | **MediaStream**                | Partial               | `js:MediaStream` | Yes                | MediaStreams are only supported in browsers that provide a [WebRTC API](https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API) |

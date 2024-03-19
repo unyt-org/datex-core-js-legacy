@@ -2840,6 +2840,9 @@ export class Compiler {
                 WebRTCInterface.registerMediaStream(value);
             }
 
+            // streams: always create pointer binding
+            if (value instanceof Stream) value = Pointer.proxifyValue(value);
+
             // exception for Date: convert to Time (TODO: different approach?)
             if (value instanceof Date && !(value instanceof Time)) {
                 try {

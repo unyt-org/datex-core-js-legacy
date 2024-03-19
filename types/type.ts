@@ -1016,7 +1016,9 @@ export class Type<T = any> extends ExtensibleFunction {
         File: Type.get<File>("js:File"),
         TypedArray: Type.get<TypedArray>("js:TypedArray"),
         AsyncGenerator: Type.get<AsyncGenerator>("js:AsyncGenerator"),
-        Promise: Type.get<Promise<any>>("js:Promise")
+        Promise: Type.get<Promise<any>>("js:Promise"),
+        ReadableStream: Type.get<ReadableStream>("js:ReadableStream"),
+        WritableStream: Type.get<WritableStream>("js:WritableStream"),
     }
 
     /**

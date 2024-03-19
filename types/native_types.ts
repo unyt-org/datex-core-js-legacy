@@ -8,6 +8,7 @@ import { Tuple } from "./tuple.ts";
 
 import "../utils/auto_map.ts"
 import { ReactiveMapMethods } from "./reactive-methods/map.ts";
+import { Stream } from "./stream.ts";
 
 // @ts-ignore accecssible to dev console
 globalThis.serializeImg = (img:HTMLImageElement)=> {
@@ -367,6 +368,37 @@ Type.js.Promise.setJSInterface({
     }
 })
 
+Type.js.ReadableStream.setJSInterface({
+    class: ReadableStream,
+
+    serialize: value => {
+        return {stream:new Stream(value)}
+    },
+
+    cast: value => {
+        if (value?.stream instanceof Stream) {
+            return (value.stream as Stream).readable_stream
+        }
+        else return INVALID;
+    }
+})
+
+Type.js.WritableStream.setJSInterface({
+    class: WritableStream,
+
+    serialize: value => {
+        const stream = new Stream();
+        stream.pipeTo(value);
+        return {stream};
+    },
+
+    cast: value => {
+        if (value?.stream instanceof Stream) {
+            return (value.stream as Stream).writable_stream
+        }
+        else return INVALID;
+    }
+})
 
 // override set prototype to make sure all sets are sorted at runtime when calling [...set] (TODO is that good?)
 // const set_iterator = Set.prototype[Symbol.iterator];
