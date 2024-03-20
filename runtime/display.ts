@@ -35,6 +35,11 @@ function setup() {
 
 
 export function displayFatalError(code:string, reset_btn = true) {
+
+	// disable error screen (at least for now, immediately reset page)
+	errorReset();
+	return;
+
 	// @ts-ignore
 	if (client_type !== "deno" && globalThis.window && globalThis.document) {
 		// @ts-ignore

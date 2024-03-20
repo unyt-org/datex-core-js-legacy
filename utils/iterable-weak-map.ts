@@ -3,11 +3,20 @@
  */
 export class IterableWeakMap<K extends WeakKey, V> extends Map<any, V> {
 
+	// additional internal WeakSet for faster lookups
+	#weakMap = new WeakMap<K,V>()
+
 	set(key: K, value: V): this {
+		// already added
+		if (this.#weakMap.has(key)) return this;
+		this.#weakMap.set(key, value);
 		return super.set(new WeakRef(key), value);
 	}
 
 	delete(key: K): boolean {
+		if (!this.#weakMap.has(key)) return false;
+		this.#weakMap.delete(key);
+
 		const deleting = new Set<WeakRef<K>>()
 		try {
 			for (const keyRef of super.keys() as Iterable<WeakRef<K>>) {
@@ -30,10 +39,7 @@ export class IterableWeakMap<K extends WeakKey, V> extends Map<any, V> {
 	}
 
 	has(key: K): boolean {
-		for (const unwrappedKey of this.keys()) {
-			if (unwrappedKey === key) return true;
-		}
-		return false;
+		return this.#weakMap.has(key);
 	}
 
 	*keys(): IterableIterator<K> {
@@ -54,9 +60,12 @@ export class IterableWeakMap<K extends WeakKey, V> extends Map<any, V> {
 	}
 
 	get(key: K): V|undefined {
-		for (const [unwrappedKey, val] of this.entries()) {
-			if (unwrappedKey === key) return val;
-		}
+		return this.#weakMap.get(key);
+	}
+
+	clear() {
+		this.#weakMap = new WeakMap()
+		super.clear()
 	}
 
 	*values(): IterableIterator<V> {

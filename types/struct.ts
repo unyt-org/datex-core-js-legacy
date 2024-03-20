@@ -112,6 +112,12 @@ export function struct(defOrTypeName: StructuralTypeDefIn|Class|string, def?: St
 	const hash = typeName ?? sha256(Runtime.valueToDatexStringExperimental(template))
 	const type = new Type("struct", hash).setTemplate(template);
 
+    // custom instanceof handling for structs
+	// TODO: does not work in Deno (throws runtime error when checking instanceof)
+    (type as any)[Symbol.hasInstance] = (val: unknown) => {
+        return Type.ofValue(val).matchesType(type);
+    }
+
 	if (callerFile) type.jsTypeDefModule = callerFile;
 	type.proxify_children = true;
 	return type as any

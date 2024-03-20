@@ -214,7 +214,7 @@ export class CommunicationHubHandler {
             )
             const identifier = comInterface.toString()
             if (!mapping.has(identifier)) mapping.set(identifier, new Map())
-            sockets.forEach(([endpoint, socket]) => mapping.get(identifier)!.set(socket, {directEndpoint: endpoint, directEndpointDynamicProperties: this.#endpointSockets.get(endpoint)!.get(socket)!, indirectEndpoints: new Map()}))
+            sockets.forEach(([endpoint, socket]) => mapping.get(identifier)!.set(socket, {directEndpoint: endpoint, directEndpointDynamicProperties: this.#endpointSockets.get(endpoint)?.get(socket), indirectEndpoints: new Map()}))
         }
 
         // indirect connections

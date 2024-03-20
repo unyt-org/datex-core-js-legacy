@@ -75,7 +75,10 @@ export class Crypto {
 
     /** Sign + Verify */
     static async sign(buffer:ArrayBuffer): Promise<ArrayBuffer> {
-        if (!this.available) throw new SecurityError("Cannot sign DATEX requests, missing private keys");
+        if (!this.available) {
+            displayFatalError('missing-private-keys');
+            throw new SecurityError("Cannot sign DATEX requests, missing private keys");
+        }
         return await crypto.subtle.sign(this.sign_key_options, this.rsa_sign_key, buffer);
     }
     static async verify(data:ArrayBuffer, signature:ArrayBuffer, endpoint:Endpoint): Promise<boolean> {
@@ -86,7 +89,10 @@ export class Crypto {
 
     /** Encypt + Decrypt (RSA) */
     static async encrypt(buffer:ArrayBuffer, endpoint:Endpoint): Promise<ArrayBuffer> {
-        if (!this.available) throw new SecurityError("Cannot encrypt DATEX requests, missing private keys");
+        if (!this.available) {
+            displayFatalError('missing-private-keys');
+            throw new SecurityError("Cannot encrypt DATEX requests, missing private keys");
+        }
         const keys = await this.getKeysForEndpoint(endpoint);
         if (!keys || keys[1]==null) throw new SecurityError("Cannot encrypt DATEX requests, could not get keys for endpoint");
         return await crypto.subtle.encrypt("RSA-OAEP", keys[1], buffer);

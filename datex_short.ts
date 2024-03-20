@@ -52,6 +52,11 @@ declare global {
      */
     const isolate: typeof Ref.disableCapturing
 
+    /**
+     * The local endpoint of the current runtime (alias for Datex.Runtime.endpoint)
+     */
+    const localEndpoint: Endpoint
+
     // conflict with UIX.template (confusing)
 	// const template: typeof _template; 
 }
@@ -77,6 +82,7 @@ globalThis.entrypointProperty = _entrypointProperty;
 globalThis.timeout = _timeout;
 // @ts-ignore global
 globalThis.sync = _sync;
+
 
 // can be used instead of import(), calls a DATEX get instruction, works for urls, endpoint, ...
 export async function get<T=unknown>(dx:string|URL|Endpoint, assert_type?:Type<T> | Class<T> | string, context_location?:URL|string, plugins?:string[]):Promise<T> {
@@ -170,7 +176,16 @@ Object.defineProperty(_datex, 'get', {value:(res:string, type?:Class|Type, locat
 // add globalThis.meta
 // Object.defineProperty(globalThis, 'meta', {get:()=>getMeta(), set:()=>{}, configurable:false})
 
-export const datex = <typeof _datex & {meta:datex_meta, get:typeof get}><unknown>_datex;
+export const datex = <typeof _datex & {
+    /**
+     * metadata associated with the current function call
+     */
+    meta:datex_meta,
+    /**
+     * get a resource via datex
+     */
+    get:typeof get
+}><unknown>_datex;
 // @ts-ignore global datex
 globalThis.datex = datex;
 // global access to datex and meta
@@ -667,6 +682,8 @@ Object.defineProperty(globalThis, 'isolate', {value:Ref.disableCapturing.bind(Re
 Object.defineProperty(globalThis, 'grantAccess', {value:grantAccess, configurable:false})
 Object.defineProperty(globalThis, 'grantPublicAccess', {value:grantPublicAccess, configurable:false})
 Object.defineProperty(globalThis, 'revokeAccess', {value:revokeAccess, configurable:false})
+
+Object.defineProperty(globalThis, 'localEndpoint', {get: ()=>Runtime.endpoint, configurable:false})
 
 // @ts-ignore
 globalThis.get = get

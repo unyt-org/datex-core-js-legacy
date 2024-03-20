@@ -1,7 +1,61 @@
 # Types
 
-The DATEX Runtime comes with its own type system which can be mapped to JavaScript types.
-DATEX types can be access via `Datex.Type`.
+The DATEX Runtime comes with its own type system which is mapped to JavaScript types.
+DATEX types can be accessed via `Datex.Type`.
+
+## Supported built-in JavaScript and Web types
+| **JavaScript Type**            | **Support**           | **DATEX Type**  | **Synchronizable** | **Limitations**                                                                           |
+|:-------------------------------|:----------------------|:----------------|:-------------------|:------------------------------------------------------------------------------------------|
+| **string**                     | Full                  | `std:text`       | Yes <sup>1)</sup>  | <sup>3)</sup>                                                                             |
+| **number**                     | Full                  | `std:decimal`    | Yes <sup>1)</sup>  | <sup>3)</sup>                                                                             |
+| **bigint**                     | Full                  | `std:integer`    | Yes <sup>1)</sup>  | <sup>3)</sup>                                                                             |
+| **boolean**                    | Full                  | `std:boolean`    | Yes <sup>1)</sup>  | <sup>3)</sup>                                                                             |
+| **null**                       | Full                  | `std:null`       | Yes <sup>1)</sup>  | -                                                                                         |
+| **undefined**                  | Full                  | `std:void`       | Yes <sup>1)</sup>  | -                                                                                         |
+| **symbol**                     | Partial               | `js:Symbol`      | Yes <sup>1)</sup>  | Registered and well-known symbols are not yet supported                                   |
+| **Object**                     | Full                  | `std:Object`     | Yes                | Objects with prototypes other than `Object.prototype` or `null` are mapped to `js:Object` |
+| **Object (with prototype)**    | Sufficient            | `js:Object`      | Yes                | No synchronisation for nested objects per default                                         |
+| **Array**                      | Full                  | `std:Array`      | Yes                | -                                                                                         |
+| **Set**                        | Full                  | `std:Set`        | Yes                | -                                                                                         |
+| **Map**                        | Full                  | `std:Map`        | Yes                | -                                                                                         |
+| **WeakSet**                    | None                  | -                | -                  | Cannot be implemented because `WeakSet` internals are not accessible. Alternative: `StorageWeakSet` |
+| **WeakMap**                    | None                  | -                | -                  | Cannot be implemented because `WeakMap` internals are not accessible. Alternative: `StorageWeakMap` |
+| **Function**                   | Sufficient            | `std:Function`   | No (Immutable)     | Functions always return a Promise, even if they are synchronous                           |
+| **AsyncFunction**              | Sufficient            | `std:Function`   | No (Immutable)     | -                                                                                         |
+| **Generator**                  | Sufficient            | `js:AsyncGenerator` | No (Immutable)  | Generators are always mapped to AsyncGenerators. Generators cannot be stored persistently |
+| **AsyncGenerator**             | Sufficient            | `js:AsyncGenerator` | No (Immutable)  | Generators cannot be stored persistently                                                  |
+| **ArrayBuffer**                | Partial               | `std:buffer`     | No                 | ArrayBuffer mutations are currently not synchronized                                      |
+| **Uint8Array**                 | Partial               | `js:TypedArray/u8`  | No              | ArrayBuffer mutations are currently not synchronized                                      |
+| **Uint16Array**                | Partial               | `js:TypedArray/u16` | No              | ArrayBuffer mutations are currently not synchronized                                      |
+| **Uint32Array**                | Partial               | `js:TypedArray/u32` | No              | ArrayBuffer mutations are currently not synchronized                                      |
+| **BigUint64Array**             | Partial               | `js:TypedArray/u64` | No              | ArrayBuffer mutations are currently not synchronized                                      |
+| **Int8Array**                  | Partial               | `js:TypedArray/i8`  | No              | ArrayBuffer mutations are currently not synchronized                                      |
+| **Int16Array**                 | Partial               | `js:TypedArray/i16` | No              | ArrayBuffer mutations are currently not synchronized                                      |
+| **Int32Array**                 | Partial               | `js:TypedArray/i32` | No              | ArrayBuffer mutations are currently not synchronized                                      |
+| **BigInt64Array**              | Partial               | `js:TypedArray/i64` | No              | ArrayBuffer mutations are currently not synchronized                                      |
+| **Float32Array**               | Partial               | `js:TypedArray/f32` | No              | ArrayBuffer mutations are currently not synchronized                                      |
+| **Float64Array**               | Partial               | `js:TypedArray/f64` | No              | ArrayBuffer mutations are currently not synchronized                                      |
+| **Promise**                    | Full                  | `js:Promise`        | No (Immutable)  | Promises cannot be stored persistently                                                    |
+| **URL**                        | Partial               | `std:url`        | No                 | URL mutations are currently not synchronized                                              |
+| **Date**                       | Partial               | `std:time`       | No                 | `Date` objects are currently asymetrically mapped to DATEX `Time` objects                 |
+| **Blob**                       | Full                  | `std:*/*,`       | No (Immutable)     | -                                                                                         |
+| **File**                       | Full                  | `js:File`        | No (Immutable)     | -                                                                                         |
+| **ReadableStream**             | Full                  | `js:ReadableStream` | Yes             | -                                                                                         |
+| **WritableStream**             | Full                  | `js:WritableStream` | Yes             | -                                                                                         |
+| **RegExp**                     | Partial               | `js:RegExp`      | No (Immutable)     | RegExp values wrapped in a Ref are currently not synchronized                             |
+| **WeakRef**                    | Full                  | `std:WeakRef`    | No (Immutable)     | -                                                                                         |
+| **MediaStream**                | Partial               | `js:MediaStream` | Yes                | MediaStreams are only supported in browsers that provide a [WebRTC API](https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API) |
+| **Error**                      | Partial               | `std:Error`      | No                 | Error subclasses are not correctly mapped                                                 |
+| **HTMLElement**                | Partial <sup>2)</sup> | `std:html`       | No                 | HTML element mutations are currently not synchronized                                     |
+| **SVGElement**                 | Partial <sup>2)</sup> | `std:svg`        | No                 | SVG element mutations are currently not synchronized                                      |
+| **MathMLElement**              | Partial <sup>2)</sup> | `std:mathml`     | No                 | MathML element mutations are currently not synchronized                                   |
+| **Document**                   | Partial <sup>2)</sup> | `std:htmldocument` | No               | Document mutations are currently not synchronized                                         |
+| **DocumentFragment**           | Partial <sup>2)</sup> | `std:htmlfragment` | No               | DocumentFragment mutations are currently not synchronized                                 |
+
+
+<sup>1)</sup> Primitive JS values are immutable and cannot be synchronized on their own, but when wrapped in a Ref.<br>
+<sup>2)</sup> [UIX-DOM](https://github.com/unyt-org/uix-dom) required<br>
+<sup>3)</sup> The corresponding object values of primitive values (e.g. `new Number()` for `number`) are not supported<br>
 
 ## Std types 
 The `Datex.Type.std` namespace contains all the builtin (*std*) DATEX types that can be accessed as runtime values, e.g.:
@@ -26,43 +80,6 @@ Datex.Type.std.integer === bigint
 Datex.Type.std.boolean === boolean
 Datex.Type.std.Any === any
 ```
-
-## Supported built-in JS and Web types
-| **JS Type**                    | **Support**           | **DATEX Type** | **Synchronizable** | **Limitations**                                                                           |
-|:-------------------------------|:----------------------|:---------------|:-------------------|:------------------------------------------------------------------------------------------|
-| **string**                     | Full                  | std:text       | Yes <sup>1)</sup>  | <sup>3)</sup>                                                                             |
-| **number**                     | Full                  | std:decimal    | Yes <sup>1)</sup>  | <sup>3)</sup>                                                                             |
-| **bigint**                     | Full                  | std:integer    | Yes <sup>1)</sup>  | <sup>3)</sup>                                                                             |
-| **boolean**                    | Full                  | std:boolean    | Yes <sup>1)</sup>  | <sup>3)</sup>                                                                             |
-| **null**                       | Full                  | std:null       | Yes <sup>1)</sup>  | -                                                                                         |
-| **undefined**                  | Full                  | std:void       | Yes <sup>1)</sup>  | -                                                                                         |
-| **symbol**                     | Partial               | js:Symbol      | Yes <sup>1)</sup>  | Registered and well-known symbols are not yet supported                                   |
-| **Object (without prototype)** | Full                  | std:Object     | Yes                | Objects with prototypes other than `Object.prototype` or `null` are mapped to `js:Object` |
-| **Object**                     | Sufficient            | js:Object      | Yes                | No synchronisation for nested objects per default                                         |
-| **Array**                      | Full                  | std:Array      | Yes                | -                                                                                         |
-| **Set**                        | Full                  | std:Set        | Yes                | -                                                                                         |
-| **Map**                        | Full                  | std:Map        | Yes                | -                                                                                         |
-| **WeakSet**                    | None                  | -              | -                  | Cannot be implemented because `WeakSet` internals are not accessible. Alternative: `StorageWeakSet` |
-| **WeakMap**                    | None                  | -              | -                  | Cannot be implemented because `WeakMap` internals are not accessible. Alternative: `StorageWeakMap` |
-| **Function**                   | Sufficient            | std:Function   | No (Immutable)     | Functions always return a Promise, even if they are synchronous                           |
-| **AsyncFunction**              | Sufficient            | std:Function   | No (Immutable)     | -                                                                                         |
-| **GeneratorFunction**          | None                  | -              | -                  | -                                                                                         |
-| **ArrayBuffer**                | Partial               | std:buffer     | No                 | ArrayBuffer mutations are currently not synchronized                                      |
-| **URL**                        | Partial               | std:url        | No                 | URL mutations are currently not synchronized                                              |
-| **Date**                       | Partial               | std:time       | No                 | `Date` objects are currently asymetrically mapped to DATEX `Time` objects                 |
-| **RegExp**                     | Partial               | js:RegExp      | No (Immutable)     | RegExp values wrapped in a Ref are currently not synchronized                             |
-| **WeakRef**                    | Full                  | std:WeakRef    | No (Immutable)     | -                                                                                         |
-| **Error**                      | Partial               | std:Error      | No                 | Error subclasses are not correctly mapped                                                 |
-| **HTMLElement**                | Partial <sup>2)</sup> | std:html       | No                 | HTML element mutations are currently not synchronized                                     |
-| **SVGElement**                 | Partial <sup>2)</sup> | std:svg        | No                 | SVG element mutations are currently not synchronized                                      |
-| **MathMLElement**              | Partial <sup>2)</sup> | std:mathml     | No                 | MathML element mutations are currently not synchronized                                   |
-| **Document**                   | Partial <sup>2)</sup> | std:htmldocument | No               | Document mutations are currently not synchronized                                         |
-| **DocumentFragment**           | Partial <sup>2)</sup> | std:htmlfragment | No               | DocumentFragment mutations are currently not synchronized                                 |
-
-
-<sup>1)</sup> Primitive JS values are immutable and cannot be synchronized on their own, but when wrapped in a Ref.<br>
-<sup>2)</sup> [UIX-DOM](https://github.com/unyt-org/uix-dom) required<br>
-<sup>3)</sup> The corresponding object values of primitive values (e.g. `new Number()` for `number`) are not supported<br>
 
 ## Special JS types
 
@@ -102,7 +119,7 @@ In contrast to `std:Object`, `js:Object` is used for JavaScript object with a pr
 
 Examples for `std:Object`s:
  * A plain object like `{x: 1, y: new Set()}`
- * Object with `null` prototype `{__proto__: null, x: 1}`
+ * Object with `null` prototype (e.g. `{__proto__: null, x: 1}`)
 
 Examples for `js:Object`s:
  * A builtin object like `console`
@@ -115,9 +132,15 @@ The property values of a `js:Object` are never automatically bound to pointers w
 
 DATEX has no native symbol type. JavaScript symbols are mapped to `js:Symbol` values.
 
+### js:MediaStream
+
+This type mapping allows sharing `MediaStream` objects with audio/video tracks between browser endpoints.
+Backend (Deno) endpoints are not yet supported due to missing support for WebRTC. 
+
+
 ## Structs
 
-The `struct` helper function allows you to define DATEX types with a
+The `struct` helper function allows you to define custom DATEX types with a
 fixed structure.
 All `struct` values are represented as plain objects in JavaScripts.
 They can take any DATEX compatible value as properties.
@@ -129,7 +152,7 @@ structs are more efficient than plain objects.
 **Usage**:
 
 ```ts
-import { struct } from "datex-core-legacy/types/struct.ts";
+import { struct, inferType } from "datex-core-legacy/types/struct.ts";
 
 // struct definition
 const MyStruct = struct({

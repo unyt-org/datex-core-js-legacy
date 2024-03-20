@@ -27,7 +27,7 @@ import { BinaryCode } from "./binary_codes.ts";
 import { Scope } from "../types/scope.ts";
 import { ProtocolDataType } from "./protocol_types.ts";
 import { Quantity } from "../types/quantity.ts";
-import { EXTENDED_OBJECTS, INHERITED_PROPERTIES, VOID, SLOT_WRITE, SLOT_READ, SLOT_EXEC, NOT_EXISTING, SLOT_GET, SLOT_SET, DX_IGNORE, DX_BOUND_LOCAL_SLOT, DX_REPLACE } from "../runtime/constants.ts";
+import { EXTENDED_OBJECTS, INHERITED_PROPERTIES, VOID, SLOT_WRITE, SLOT_READ, SLOT_EXEC, NOT_EXISTING, SLOT_GET, SLOT_SET, DX_IGNORE, DX_BOUND_LOCAL_SLOT, DX_REPLACE, DX_PTR } from "../runtime/constants.ts";
 import { arrayBufferToBase64, base64ToArrayBuffer, buffer2hex, hex2buffer } from "../utils/utils.ts";
 import { RuntimePerformance } from "../runtime/performance_measure.ts";
 import { Conjunction, Disjunction, Logical, Negation } from "../types/logic.ts";
@@ -47,6 +47,8 @@ import { VolatileMap } from "../utils/volatile-map.ts";
 
 // await wasm_init();
 // wasm_init_runtime();
+
+let WebRTCInterface: undefined|typeof import("../network/communication-interfaces/webrtc-interface.ts").WebRTCInterface;
 
 export const activePlugins:string[] = [];
 
@@ -2513,7 +2515,7 @@ export class Compiler {
                 Compiler.builder.insertVariable(SCOPE, assignment[0], ACTION_TYPE.GET, undefined, BinaryCode.INTERNAL_VAR); // parent
                 Compiler.builder.handleRequiredBufferSize(SCOPE.b_index, SCOPE);
                 SCOPE.uint8[SCOPE.b_index++] = BinaryCode.CHILD_SET;
-                Compiler.builder.insert(assignment[1], SCOPE, true, undefined, undefined, false);  // insert key (don't save insert index for key value)
+                Compiler.builder.insert(assignment[1], SCOPE, true, undefined, undefined, false, false);  // insert key (don't save insert index for key value)
                 Compiler.builder.insertVariable(SCOPE, assignment[2], ACTION_TYPE.GET, undefined, BinaryCode.INTERNAL_VAR); // value
             }
             Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+1, SCOPE);
@@ -2832,6 +2834,15 @@ export class Compiler {
             // exception for functions: convert to Datex.Function & create Pointer reference (proxifyValue required!)
             if (value instanceof Function && !(value instanceof DatexFunction) && !(value instanceof JSTransferableFunction)) value = Pointer.proxifyValue(DatexFunction.createFromJSFunction(value));
 
+            // excpetion for MediaStream: always register as WebRTC mediastream when transmitting
+            if (globalThis.MediaStream && value instanceof MediaStream) {
+                if (!WebRTCInterface) throw new Error("Cannot bind MediaStream to WebRTCInterface (not yet initialized)")
+                WebRTCInterface.registerMediaStream(value);
+            }
+
+            // streams: always create pointer binding
+            if (value instanceof Stream) value = Pointer.proxifyValue(value);
+
             // exception for Date: convert to Time (TODO: different approach?)
             if (value instanceof Date && !(value instanceof Time)) {
                 try {
@@ -2901,6 +2912,10 @@ export class Compiler {
                 // add $$ operator, not if no_create_pointers enabled or skip_first_collapse
                 if (option_collapse && !SCOPE.options.no_create_pointers && !skip_first_collapse) SCOPE.uint8[SCOPE.b_index++] = BinaryCode.CREATE_POINTER;
             }
+
+            // temporary to find errors: throw if a cloned html element without a unique ptr id
+            if (globalThis.HTMLElement && value instanceof HTMLElement && value.hasAttribute("uix-ptr") && !(value as any)[DX_PTR]) console.error("Invalid cloned HTMLElement " + value.tagName + (value.hasAttribute("id")?"#"+value.getAttribute("id"):""));
+
 
             // first value was collapsed (if no_proxify == false, it was still collapsed because it's not a pointer reference)
             // if (SCOPE.options.collapse_first_inserted)  SCOPE.options.collapse_first_inserted = false; // reset
@@ -3172,7 +3187,7 @@ export class Compiler {
 
                 // special exception: insert raw datex script (dxb Scope can be inserted normally (synchronous))
                 if (d instanceof DatexResponse && !(d.datex instanceof Scope)) await Compiler.builder.compilerInsert(SCOPE, d);
-                else Compiler.builder.insert(d, SCOPE);
+                else Compiler.builder.insert(d, SCOPE, undefined, undefined, undefined, undefined, false); // disable replace optimization for now to prevent invalid replacement, e.g. for path properties
             }
             isEffectiveValue = true;
         }
@@ -5156,9 +5171,27 @@ export class Compiler {
         ) : SCOPE.buffer;
     }
 
+    /**
+     * Workaround: recursively cache all blob values in the iterable
+     */
+    static cacheValues(iterable: Iterable<unknown>, promises:Promise<void>[] = []): Promise<void>[] {
+        for (const val of iterable) {
+            if (val instanceof Blob) promises.push(Runtime.cacheValue(val));
+            else if (typeof val == "object" && (val as any)?.[Symbol.iterator]) this.cacheValues((val as any), promises);
+        }
+        return promises;
+    }
+
 
     // compile loop
     static async compileLoop(SCOPE:compiler_scope):Promise<ArrayBuffer|ReadableStream<ArrayBuffer>>  {
+
+        // make sure WebRTC interface is loaded
+        ({ WebRTCInterface } = await import("../network/communication-interfaces/webrtc-interface.ts"));
+
+        // cache inserted blob values
+        const promises = SCOPE.data ? this.cacheValues(SCOPE.data) : [];
+        if (promises.length) await Promise.all(promises);
 
         const body_compile_measure = RuntimePerformance.enabled ? RuntimePerformance.startMeasure("compile time", "body") : undefined;
 
@@ -5541,12 +5574,12 @@ export class Compiler {
 
     /** create a dxb file created from a DATEX Script string and convert to data url */
     static async datexScriptToDataURL(dx:string, type = ProtocolDataType.DATA):Promise<string> {
-        let dxb = <ArrayBuffer> await Compiler.compile(dx, [], {sign:false, encrypt: false, type})
+        const dxb = <ArrayBuffer> await Compiler.compile(dx, [], {sign:false, encrypt: false, type})
 
-        let blob = new Blob([dxb], {type: "text/dxb"}); // workaround to prevent download
+        const blob = new Blob([dxb], {type: "text/dxb"}); // workaround to prevent download
 
         return new Promise(resolve=>{
-            var a = new FileReader();
+            const a = new FileReader();
             a.onload = function(e) {resolve(<string>e.target.result);}
             a.readAsDataURL(blob);
         });
@@ -5554,9 +5587,9 @@ export class Compiler {
 
     /** create a dxb file created from a DATEX Script string and convert to object url */
     static async datexScriptToObjectURL(dx:string, type = ProtocolDataType.DATA):Promise<string> {
-        let dxb = <ArrayBuffer> await Compiler.compile(dx, [], {sign:false, encrypt: false, type})
+        const dxb = <ArrayBuffer> await Compiler.compile(dx, [], {sign:false, encrypt: false, type})
 
-        let blob = new Blob([dxb], {type: "text/dxb"}); // workaround to prevent download
+        const blob = new Blob([dxb], {type: "text/dxb"}); // workaround to prevent download
         return URL.createObjectURL(blob);
     }
 

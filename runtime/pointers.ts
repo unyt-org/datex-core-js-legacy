@@ -828,11 +828,15 @@ export type ObjectRef<T> =
     T
     // TODO:
     // {[K in keyof T]: MaybeObjectRef<T[K]>}
-    & 
-    {
-        $:Proxy$<T> // reference to value (might generate pointer property, if no underlying pointer reference)
-        $$:PropertyProxy$<T> // always returns a pointer property reference
-    };
+    & (
+        // add $ and $$ properties if not already present
+        T extends {$: any, $$: any} ?
+            unknown: 
+            {
+                $:Proxy$<T> // reference to value (might generate pointer property, if no underlying pointer reference)
+                $$:PropertyProxy$<T> // always returns a pointer property reference
+            }
+    );
 
 export type MaybeObjectRef<T> = T extends primitive|Function ? T : ObjectRef<T>
 
@@ -1389,11 +1393,11 @@ export class Pointer<T = any> extends Ref<T> {
 
     // returns the existing pointer for a value, or the value, if no pointer exists
     public static pointerifyValue(value:any):Pointer|any {
-        return value instanceof Pointer ? value : this.pointer_value_map.get(value) ?? value;
+        return value?.[DX_PTR] ?? (value instanceof Pointer ? value : this.pointer_value_map.get(value)) ?? value;
     }
     // returns pointer only if pointer exists
-    public static getByValue<T>(value:RefOrValue<T>):Pointer<T>|undefined{
-        return <Pointer<T>>this.pointer_value_map.get(Pointer.collapseValue(value));
+    public static getByValue<T>(value:RefOrValue<T>): Pointer<T>|undefined{
+        return (value?.[DX_PTR] ?? this.pointer_value_map.get(Pointer.collapseValue(value))) as Pointer<T>;
     }
 
     // returns pointer only if pointer exists
@@ -1404,6 +1408,15 @@ export class Pointer<T = any> extends Ref<T> {
 
     public static labelExists(label:string|number):boolean {
         return this.pointer_label_map.has(label)
+    }
+
+    /**
+     * returns the pointer of a value if bound to a pointer, otherwise null
+     */
+    public static getId(value:unknown) {
+        const pointer = this.pointerifyValue(value);
+        if (pointer instanceof Pointer) return pointer.id;
+        else return null
     }
 
     // get pointer by id, only returns pointer if pointer already exists
@@ -1423,7 +1436,7 @@ export class Pointer<T = any> extends Ref<T> {
     private static loading_pointers:Map<string, {promise: Promise<Pointer>, scopeList: WeakSet<datex_scope>}> = new Map();
 
     // load from storage or request from remote endpoint if pointer not yet loaded
-    static load(id:string|Uint8Array, SCOPE?:datex_scope, only_load_local = false, sender_knows_pointer = true, allow_failure = true): Promise<Pointer>|Pointer|LazyPointer<unknown> {
+    static load(id:string|Uint8Array, SCOPE?:datex_scope, only_load_local = false, sender_knows_pointer = true, allow_failure = false): Promise<Pointer>|Pointer|LazyPointer<unknown> {
 
         // pointer already exists
         const existing_pointer = Pointer.get(id);
@@ -2260,7 +2273,14 @@ export class Pointer<T = any> extends Ref<T> {
             
             this.finalizeSubscribe(override_endpoint, keep_pointer_origin)
 
-            if (!this.#loaded) return this.setValue(pointer_value); // set value
+            if (!this.#loaded) {
+                // special case: intercept MediaStream
+                if (globalThis.MediaStream && pointer_value instanceof MediaStream) {
+                    const {WebRTCInterface} = await import("../network/communication-interfaces/webrtc-interface.ts")
+                    return this.setValue(await WebRTCInterface.getMediaStream(this.id) as any);
+                }
+                else return this.setValue(pointer_value); // set value
+            }
             else return this;
         }
         
@@ -3619,7 +3639,7 @@ export class Pointer<T = any> extends Ref<T> {
         }
 
         // fake primitives TODO: dynamic mime types
-        if (obj instanceof Quantity || obj instanceof Time || obj instanceof Type || obj instanceof URL  || obj instanceof Target || obj instanceof Blob || (globalThis.HTMLImageElement && obj instanceof HTMLImageElement)) {
+        if (obj instanceof Quantity || obj instanceof Time || obj instanceof Type || obj instanceof URL  || obj instanceof Target || obj instanceof Blob || (globalThis.MediaStream && obj instanceof MediaStream) || (globalThis.HTMLImageElement && obj instanceof HTMLImageElement)) {
             return obj;
         }
 

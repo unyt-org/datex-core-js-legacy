@@ -215,6 +215,8 @@ type Source = '_source'|{};
  */
 export type trustedEndpointPermission = "remote-js-execution" | "protected-pointer-access" | "fallback-pointer-source";
 
+export const WRAPPED_PROMISE = Symbol("WRAPPED_PROMISE");
+
 export class Runtime {
 
 
@@ -230,7 +232,8 @@ export class Runtime {
         ERROR_STACK_TRACES: true, // create detailed stack traces with all DATEX Errors
         NATIVE_ERROR_STACK_TRACES: true, // create detailed stack traces of JS Errors (NATIVE_ERROR_MESSAGES must be true)
         NATIVE_ERROR_DEBUG_STACK_TRACES: false, // also display internal DATEX library stack traces (hidden per default)
-        NATIVE_ERROR_MESSAGES: true // expose native error messages
+        NATIVE_ERROR_MESSAGES: true, // expose native error messages
+        DATEX_HTTP_ORIGIN: globalThis.location?.origin // http origin to use to send datex-over-http messages (e.g. GOODBYE messages), default is current origin for browsers
     }
 
     public static MIME_TYPE_MAPPING: Record<mime_type, mime_type_definition<unknown>> = {
@@ -689,7 +692,7 @@ export class Runtime {
                 else {
                     if (!type) throw Error("Cannot infer type from URL content");
                     const mime_type = type.split("/");
-                    result = Runtime.castValue(Type.get("std",mime_type[0], mime_type[1].split(/;| /)[0]), content);
+                    result = Runtime.collapseValueCast(await Runtime.castValue(Type.get("std",mime_type[0], mime_type[1].split(/;| /)[0]), content));
                 }
             }
         }
@@ -738,7 +741,7 @@ export class Runtime {
             }
             else {
                 if (!mime) throw Error("Cannot infer type from URL content - missing mime module");
-                const content = <Uint8Array>(await getFileContent(url, true, true));
+                const content = ((await getFileContent(url, true, true)) as Uint8Array).buffer;
                 const ext = url.toString().match(/\.[^./]*$/)?.[0].replace(".","");
                 if (!ext) throw Error("Cannot infer type from URL content (no extension)");
                 const mime_type = mime.getType(ext);
@@ -747,7 +750,7 @@ export class Runtime {
                 if (raw) result = [content, mime_type];
                 else {
                     const type = mime_type.split("/");
-                    result = Runtime.castValue(Type.get("std",type[0], type[1].split(/;| /)[0]), content);
+                    result = Runtime.collapseValueCast(await Runtime.castValue(Type.get("std",type[0], type[1].split(/;| /)[0]), content));
                 }
             }
             
@@ -1215,7 +1218,7 @@ export class Runtime {
             this.ownLastEndpoint = endpoint;
             this.lastEndpointUnloadHandler = () => {
                 // send goodbye
-                if (this.goodbyeMessage) sendDatexViaHTTPChannel(this.goodbyeMessage);
+                if (this.goodbyeMessage) sendDatexViaHTTPChannel(this.goodbyeMessage, this.OPTIONS.DATEX_HTTP_ORIGIN);
                 if (client_type == "browser") {
                     try {
                         // remove from localstorage list
@@ -2261,7 +2264,18 @@ export class Runtime {
         return this.persistent_memory?.get(scope_identifier)
     }
 
-    /** casts an object, handles all <std:*> types */
+    /**
+     * Collapses WRAPPED_PROMISE values returned from Runtime.castValue
+     */
+    public static collapseValueCast(value: unknown) {
+        if (value && value[WRAPPED_PROMISE]) return value[WRAPPED_PROMISE];
+        else return value;
+    }
+
+    /**
+     * Cast a value to a specific type
+     * Result must be awaited and collapsed with Runtime.collapseValueCast
+     */
     public static async castValue(type:Type, value:any, context?:any, context_location?:URL, origin:Endpoint = Runtime.endpoint, no_fetch?:boolean, assigningPtrId?: string): Promise<any> {
         
         let old_type = Type.ofValue(value);
@@ -2272,12 +2286,12 @@ export class Runtime {
         let new_value:any = UNKNOWN_TYPE;
 
         // only handle std namespace / js:Object / js:Symbol
-        if (type.namespace == "std" || type == Type.js.NativeObject || type == Type.js.Symbol || type == Type.js.RegExp) {
+        if (type.namespace == "std" || type == Type.js.NativeObject || type == Type.js.Symbol || type == Type.js.RegExp || type == Type.js.MediaStream || type == Type.js.File || type.root_type == Type.js.TypedArray) {
             const uncollapsed_old_value = old_value
             if (old_value instanceof Pointer) old_value = old_value.val;
 
             // handle default casts
-            switch (type) {
+            switch (type.root_type) {
 
                 // get <Type>
                 case Type.std.Type:{
@@ -2299,6 +2313,7 @@ export class Runtime {
                     if (old_value === VOID) new_value = globalThis.String()
                     else if (old_value instanceof Markdown) new_value = old_value.toString();
                     else if (old_value instanceof ArrayBuffer) new_value = Runtime.utf8_decoder.decode(old_value); // cast to <text>
+                    else if (old_value instanceof TypedArray) new_value = Runtime.utf8_decoder.decode(old_value.buffer); // cast to <text>
                     else if (old_value instanceof Blob) new_value = await old_value.text()
                     else new_value = this.valueToDatexString(value, false, true); 
                     break;
@@ -2367,6 +2382,49 @@ export class Runtime {
                     }
                     else if (old_value instanceof Array) {
                         new_value = new RegExp(...old_value as [string, string?]);
+                    }
+                    else new_value = INVALID;
+                    break;
+                }
+                case Type.js.File: {
+                    if (old_value && typeof old_value == "object") {
+                        new_value = new File([old_value.content], old_value.name, {
+                            type: old_value.type,
+                            lastModified: old_value.lastModified
+                        });
+                    }
+                    else new_value = INVALID;
+                    break;
+                }
+                case Type.js.TypedArray: {
+                    if (old_value instanceof ArrayBuffer) {
+                        switch (type.variation) {
+                            case "u8": new_value = new Uint8Array(old_value); break;
+                            case "u16": new_value = new Uint16Array(old_value); break;
+                            case "u32": new_value = new Uint32Array(old_value); break;
+                            case "u64": new_value = new BigUint64Array(old_value); break;
+                            case "i8": new_value = new Int8Array(old_value); break;
+                            case "i16": new_value = new Int16Array(old_value); break;
+                            case "i32": new_value = new Int32Array(old_value); break;
+                            case "i64": new_value = new BigInt64Array(old_value); break;
+                            case "f32": new_value = new Float32Array(old_value); break;
+                            case "f64": new_value = new Float64Array(old_value); break;
+                            default: new_value = INVALID;
+                        }
+                    }
+                    else new_value = INVALID;
+
+                    break;
+                }
+
+                case Type.js.MediaStream: {
+                    if (!globalThis.MediaStream) throw new Error("MediaStreams are not supported on this endpoint")
+                    if (old_value === VOID || typeof old_value == "object") {
+                        if (assigningPtrId) {
+                            const {WebRTCInterface} = await import("../network/communication-interfaces/webrtc-interface.ts")
+                            new_value = await WebRTCInterface.getMediaStream(assigningPtrId)
+                        } 
+                        else new_value = new MediaStream();
                     }
                     else new_value = INVALID;
                     break;
@@ -2670,13 +2728,19 @@ export class Runtime {
         }
 
         // return new value
-        return new_value;
+        // dont' collapes Promise on return
+        if (new_value instanceof Promise) return {[WRAPPED_PROMISE]: new_value}
+        else return new_value;
     }
 
     
     static async cacheValue(value:unknown){
         if (value instanceof Blob) {
-            (<Record<symbol,fundamental>><unknown>value)[DX_SERIALIZED] = await value.arrayBuffer();
+            if (!(value as any)[DX_SERIALIZED]) {
+                (value as any)[DX_SERIALIZED] = await value.arrayBuffer();
+                // remove serialized value cache after 1 minute
+                setTimeout(()=>{delete (value as any)[DX_SERIALIZED]}, 60_000);
+            }
         }
         else {
             throw new ValueError("Cannot cache value of type " + Type.ofValue(value));
@@ -2691,6 +2755,12 @@ export class Runtime {
     static serializeValue(value:unknown, receiver?:target_clause):fundamental {
 
         let type:Type;
+
+        // file (special handling of DX_SERIALIZED inherited from Blob)
+        if (value instanceof File) {
+            if (!(value as any)[DX_SERIALIZED]) throw new RuntimeError("Cannot serialize file without cached content");
+            return {name: value.name, type: value.type, size: value.size, lastModified: value.lastModified, content: (value as any)[DX_SERIALIZED]};
+        }
 
         // cached serialized (e.g. for mime types)
         if ((<Record<symbol,fundamental>>value)?.[DX_SERIALIZED]) return (<Record<symbol,fundamental>>value)[DX_SERIALIZED];
@@ -2709,6 +2779,8 @@ export class Runtime {
 
         // regex
         if (value instanceof RegExp) return value.flags ? new Tuple([value.source, value.flags]) : value.source;
+
+        if (globalThis.MediaStream && value instanceof MediaStream) return {};
 
         // weakref
         if (value instanceof WeakRef) {
@@ -2870,7 +2942,7 @@ export class Runtime {
             const compiled = new Uint8Array(Compiler.encodeValue(value, undefined, false, deep_clone, collapse_value, false, true, false, true));
             return wasm_decompile(compiled, formatted, colorized, resolve_slots).replace(/\r\n$/, '');
         } catch (e) {
-            console.debug(e);
+            // console.debug(e);
             return this.valueToDatexString(value, formatted)
         }
         // return Decompiler.decompile(Compiler.encodeValue(value, undefined, false, deep_clone, collapse_value), true, formatted, formatted, false);
@@ -2938,7 +3010,19 @@ export class Runtime {
             string = value.toString();
         }
         else if (value instanceof ArrayBuffer || value instanceof TypedArray) {
-            string = "`"+buffer2hex(value instanceof Uint8Array ? value : new Uint8Array(value instanceof TypedArray ? value.buffer : value), null, null)+"`"
+            let type = ""
+            if (value instanceof Uint8Array) type = "<js:TypedArray/u8>";
+            else if (value instanceof Uint16Array) type = "<js:TypedArray/u16>";
+            else if (value instanceof Uint32Array) type = "<js:TypedArray/u32>";
+            else if (value instanceof BigInt64Array) type = "<js:TypedArray/i64>";
+            else if (value instanceof Int8Array) type = "<js:TypedArray/i8>";
+            else if (value instanceof Int16Array) type = "<js:TypedArray/i16>";
+            else if (value instanceof Int32Array) type = "<js:TypedArray/i32>";
+            else if (value instanceof BigUint64Array) type = "<js:TypedArray/u64>";
+            else if (value instanceof Float32Array) type = "<js:TypedArray/f32>";
+            else if (value instanceof Float64Array) type = "<js:TypedArray/f64>";
+
+            string = type+"`"+buffer2hex(value instanceof Uint8Array ? value : new Uint8Array(value instanceof TypedArray ? value.buffer : value), undefined, null)+"`"
         }
         else if (value instanceof Scope) {
             const spaces = Array(this.FORMAT_INDENT*(depth+1)).join(' ');
@@ -3228,14 +3312,14 @@ export class Runtime {
                 let el = INNER_SCOPE.type_casts.pop();
                 let type:Type | undefined;
                 // iterate over now remaining type casts
-                while (type = INNER_SCOPE.type_casts.pop()) el = await Runtime.castValue(type, el, INNER_SCOPE.ctx_intern, SCOPE.context_location, SCOPE.origin)
+                while ((type = INNER_SCOPE.type_casts.pop())) el = await Runtime.castValue(type, el, INNER_SCOPE.ctx_intern, SCOPE.context_location, SCOPE.origin)
                 INNER_SCOPE.active_value = el;
             }
 
             // assignments:
 
             // get current active value
-            let el = INNER_SCOPE.active_value;
+            const el = INNER_SCOPE.active_value;
             let did_assignment = false;
 
             // make sure endpoint has access (TODO: INNER_SCOPE.active_value should never be set if no access)
@@ -3266,7 +3350,7 @@ export class Runtime {
                                 }
                                 // subscribe for updates at pointer origin
                                 else {
-                                    ptr.subscribeForPointerUpdates();
+                                    await ptr.subscribeForPointerUpdates();
                                 }
                                 
                             }
@@ -4267,6 +4351,8 @@ export class Runtime {
             const pointer = el instanceof Pointer ? el : Pointer.getByValue(el);
             if (pointer instanceof Pointer) pointer.assertEndpointCanRead(SCOPE?.sender)
             
+            // make sure promise wrappers are collapsed
+            el = Runtime.collapseValueCast(el)
             // first make sure pointers are collapsed
             el = Ref.collapseValue(el) 
 
@@ -4405,8 +4491,8 @@ export class Runtime {
 
             // apply all casts 
             if (INNER_SCOPE.type_casts) {
-                let type:Type
-                while (type = INNER_SCOPE.type_casts.pop()) {
+                let type:Type|undefined
+                while ((type = INNER_SCOPE.type_casts.pop())) {
                     // workaround to get pointer that the new cast value will be assigned to
                     const waitingPtr = [...INNER_SCOPE.waiting_ptrs??[]][0];
                     let ptrId: string|undefined;
@@ -5055,7 +5141,7 @@ export class Runtime {
 
                             // create conjunctive (&) value by extending
                             const base_type = Type.ofValue(val);
-                            const base = await base_type.createDefaultValue();
+                            const base = Runtime.collapseValueCast(await base_type.createDefaultValue());
                             DatexObject.extend(base, val);
                             DatexObject.extend(base, el);
                             INNER_SCOPE.active_value = base;
@@ -5383,6 +5469,7 @@ export class Runtime {
         Object.defineProperty(scope.meta, 'encrypted', {value: header?.encrypted, writable: false, enumerable:true});
         Object.defineProperty(scope.meta, 'signed', {value: header?.signed, writable: false, enumerable:true});
         Object.defineProperty(scope.meta, 'sender', {value: header?.sender, writable: false, enumerable:true});
+        Object.defineProperty(scope.meta, 'caller', {value: header?.sender, writable: false, enumerable:true});
         Object.defineProperty(scope.meta, 'timestamp', {value: header?.timestamp, writable: false, enumerable:true});
         Object.defineProperty(scope.meta, 'type', {value: header?.type, writable: false, enumerable:true});
 

@@ -3,11 +3,12 @@ import { ValueError } from "./errors.ts";
 import { Type } from "./type.ts";
 import { Pointer } from "../runtime/pointers.ts";
 import type { any_class } from "../utils/global_types.ts";
-import { INVALID, NOT_EXISTING } from "../runtime/constants.ts";
+import { DX_TIMEOUT, INVALID, NOT_EXISTING } from "../runtime/constants.ts";
 import { Tuple } from "./tuple.ts";
 
 import "../utils/auto_map.ts"
 import { ReactiveMapMethods } from "./reactive-methods/map.ts";
+import { Stream } from "./stream.ts";
 
 // @ts-ignore accecssible to dev console
 globalThis.serializeImg = (img:HTMLImageElement)=> {
@@ -287,6 +288,116 @@ Type.std.Set.setJSInterface({
     count: (parent:Set<any>) => parent.size,
     keys: (parent:Set<any>) => [...parent],
     values: (parent:Set<any>) => [...parent],
+})
+
+
+const AsyncGenerator = Object.getPrototypeOf(Object.getPrototypeOf((async function*(){})()));
+const Generator = Object.getPrototypeOf(Object.getPrototypeOf((function*(){})()))
+
+Type.js.AsyncGenerator.setJSInterface({
+    no_instanceof: true,
+    class: AsyncGenerator,
+    detect_class: (val) => AsyncGenerator.isPrototypeOf(val) || Generator.isPrototypeOf(val),
+
+    is_normal_object: true,
+    proxify_children: true,
+
+    serialize: value => {
+        return {
+            next: (...args: []|[unknown]) => value.next(...args),
+            return: (v: any) => value.return(v),
+            throw: (v: any) => value.throw(v),
+        }
+    },
+
+
+    cast: value => {
+        if (value && value.next && value.return && value.throw) {
+            return async function*() {
+                let res = await value.next();
+                while (!res.done) {
+                    yield res.value;
+                    res = await value.next();
+                }
+                return value.return();
+            }()
+        }
+        else return INVALID;
+    }
+})
+
+Type.js.Promise.setJSInterface({
+    class: Promise,
+    
+    is_normal_object: true,
+    proxify_children: true,
+
+    serialize: value => {
+        return {
+            then: (onFulfilled:any, onRejected:any) => {
+                // fails if promise was serialized and js function was reconstructed locally
+                try {value}
+                catch {
+                    throw new Error("Promise cannot be restored - storing Promises persistently is not supported")
+                }
+                return value.then(onFulfilled, onRejected)
+            },
+            catch: (onRejected:any) => {
+                // fails if promise was serialized and js function was reconstructed locally 
+                try {value}
+                catch {
+                    throw new Error("Promise cannot be restored - storing Promises persistently is not supported")
+                }
+                return value.catch(onRejected)
+            }
+        }
+    },
+
+
+    cast: value => {
+        if (value && value.then && value.catch) {
+            (value.then as any)[DX_TIMEOUT] = Infinity;
+            (value.catch as any)[DX_TIMEOUT] = Infinity;
+            return new Promise((resolve, reject) => {
+                value
+                    .then(resolve)
+                    .catch(reject);
+            })
+        }
+        else return INVALID;
+    }
+})
+
+Type.js.ReadableStream.setJSInterface({
+    class: ReadableStream,
+
+    serialize: value => {
+        return {stream:new Stream(value)}
+    },
+
+    cast: value => {
+        if (value?.stream instanceof Stream) {
+            return (value.stream as Stream).readable_stream
+        }
+        else return INVALID;
+    }
+})
+
+Type.js.WritableStream.setJSInterface({
+    class: WritableStream,
+
+    serialize: value => {
+        const stream = new Stream();
+        stream.pipeTo(value);
+        return {stream};
+    },
+
+    cast: value => {
+        if (value?.stream instanceof Stream) {
+            return (value.stream as Stream).writable_stream
+        }
+        else return INVALID;
+    }
 })
 
 // override set prototype to make sure all sets are sorted at runtime when calling [...set] (TODO is that good?)

@@ -10,6 +10,7 @@ import { cache_path } from "./cache_path.ts";
 import { DatexObject } from "../types/object.ts";
 import { Ref } from "./pointers.ts";
 import { normalizePath } from "../utils/normalize-path.ts";
+import { ESCAPE_SEQUENCES } from "../datex_all.ts";
 
 type channel_type = 'websocket'|'http'
 type node_config = {
@@ -41,6 +42,8 @@ class EndpointConfig implements EndpointConfigData {
 	public nodes?: Map<Endpoint, node_config>
 	public blockchain_relay?: Endpoint
 	/*****************/
+
+	public usingHTTPoverDATEX = false;
 
 	// not saved in endpoint config, loaded from https://unyt.cc/nodes.dx
 	public publicNodes?: Map<Endpoint, node_config>
@@ -97,25 +100,32 @@ class EndpointConfig implements EndpointConfigData {
 			// try to get from .dx url
 			if (!path) path = new URL('/'+this.DX_FILE_NAME, globalThis.location.href)
 			try {
-				const configUpdate = await datex.get<EndpointConfigData>(path);
-				if (!config) {
-					config = configUpdate;
-					logger.info("loaded endpoint config from " + path);
-				}
-				else {
-					for (const [key, value] of DatexObject.entries(configUpdate as Record<string|symbol,unknown>)) {
-						DatexObject.set(config as Record<string|symbol,unknown>, key as string, value);
+
+				const dxResponse = await fetch(path);
+
+				// check headers for http-over-datex
+				if (dxResponse.headers.get("x-http-over-datex") == "yes") this.usingHTTPoverDATEX = true;
+
+				if (dxResponse.ok) {
+					const content = await dxResponse.text();
+					const configUpdate = await Runtime.executeDatexLocally(content, undefined, undefined, path) as EndpointConfigData;
+					if (!config) {
+						config = configUpdate;
+						logger.info("loaded endpoint config from " + path);
 					}
-					logger.debug("updated endpoint config from " + path);
+					else {
+						for (const [key, value] of DatexObject.entries(configUpdate as Record<string|symbol,unknown>)) {
+							DatexObject.set(config as Record<string|symbol,unknown>, key as string, value);
+						}
+						logger.debug("updated endpoint config from " + path);
+					}
 				}
+				// ignore if no .dx file found
+
 			}
 			catch (e) {
-				// ignore if no .dx file found
-				if (!(await fetch(path)).ok) {}
-				else {
-					logger.error `Could not read config file ${path}: ${e.toString()}`;
-					throw "invalid config file"
-				}
+				logger.error `Could not read config file ${path}: ${e.toString()}`;
+				throw "invalid config file"
 			}
 			
 		}

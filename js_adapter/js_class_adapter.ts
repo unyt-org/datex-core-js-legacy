@@ -288,7 +288,10 @@ export class Decorators {
             originalClass[METADATA]?.[Decorators.FORCE_TYPE] && 
             Object.hasOwn(originalClass[METADATA]?.[Decorators.FORCE_TYPE], 'constructor')
         ) normalizedType = originalClass[METADATA]?.[Decorators.FORCE_TYPE]?.constructor
-        else normalizedType = Type.get("ext", originalClass.name.replace(/^_/, '')); // remove leading _ from type name
+        else {
+            if (!originalClass.name) throw new Error("Cannot create DATEX type mapping for an anonymous class")
+            normalizedType = Type.get("ext", originalClass.name.replace(/^_/, '')); // remove leading _ from type name
+        }
 
         if (!callerFile && client_type == "deno" && normalizedType.namespace !== "std") {
             callerFile = getCallerInfo()?.[3]?.file ?? undefined;
@@ -726,10 +729,8 @@ export type MethodKeys<T> = {
 }[keyof T];
 
 export type dc<T extends Record<string,any>&{new (...args:unknown[]):unknown}, OT extends {new (...args:unknown[]):unknown} = ObjectRef<T>> = 
-    DatexClass<OT> & 
-    OT &
-    // TODO: required instead of OT to disable default constructor, but leads to problems with typing
-    // Pick<OT, keyof OT> & 
+    DatexClass<OT> &
+    Pick<OT, keyof OT> & 
     ((struct:Omit<InstanceType<OT>, MethodKeys<InstanceType<T>>>) => datexClassType<OT>);
 
 /**

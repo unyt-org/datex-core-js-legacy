@@ -88,9 +88,9 @@ Datex.Ref.isRef(map.get('y')) // true, was implicitly bound to a pointer
 There are some exceptions to this behaviour:
 1. Primitive property values are not converted to pointers per default
 2. Normal [class instances](./10%20Types.md#jsobject) (`js:Object`) are not converted to pointers per default.
-   Instances of [`@sync`](11%20Classes.md) classes are still converted to pointers
+   Instances of [`struct`](12%20Classes.md) classes are still converted to pointers
 3. When a [class instances](./10%20Types.md#jsobject) is directly bound to a pointer with `$$()`, its
-   properties are not converted to pointers per default (like 2., this does not affect `@sync` class instances 
+   properties are not converted to pointers per default (like 2., this does not affect `struct` class instances 
 
 
 

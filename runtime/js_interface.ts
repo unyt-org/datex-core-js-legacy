@@ -26,6 +26,7 @@ export type js_interface_configuration<T=any> = {
     handle_transform?: (value: T, pointer: Pointer<T>) => void, // gets called when a transform function produces a new value, default override behaviour is ignored
     allow_transform_value?: (type: Type<T>, pointer: Pointer<T>) => string|true, // returns true if the value can be wrapped with wrap transform, allows pointer union types
     class?: Class<T>, // the corresponding JS class or a prototype
+    no_instanceof?: boolean, // if true, don't use instanceof checks for the class, instead use isPrototypeOf
     prototype?: object, // the inherited JS prototype
     detect_class?: (value:any)=>boolean, // a function that returns whether the value has the type of the pseudo class
 
@@ -158,7 +159,7 @@ export class JSInterface {
     public static handleConfigUpdate(type:Type, config:js_interface_configuration){
 
         if (!type) throw new Error ("A type is required for a type configuration")
-        if (!config.class && !config.prototype) throw new Error ("The  'class' or 'prototype' property is required for a type configuration")
+        if (!config.class && !config.prototype && !config.detect_class) throw new Error ("The 'class', or 'prototype' property is required for a type configuration")
 
         config.__type = type; // save type to config for faster type reference
 
@@ -181,14 +182,14 @@ export class JSInterface {
 
     // return if a value has a matching pseudo class configuration
     static hasPseudoClass(value:any):boolean {
-        for (let [_class, config] of this.configurations_by_class) {
+        for (const [_class, config] of this.configurations_by_class) {
             if (value instanceof _class) { // is class instance
                 if (config.detect_class instanceof globalThis.Function && !(<globalThis.Function>config.detect_class)(value)) return false; // detect class invalid
                 return true;
             }
         }
 
-        for (let [proto, config] of this.configurations_by_prototype) {
+        for (const [proto, config] of this.configurations_by_prototype) {
             if (proto.isPrototypeOf(value)) { // has prototype
                 if (config.detect_class instanceof globalThis.Function && !(<globalThis.Function>config.detect_class)(value)) return false; // detect class invalid
                 return true;
@@ -271,20 +272,20 @@ export class JSInterface {
     // value -> <Type>
     static getValueDatexType(value:any):Type {
 
-        for (let [_class, config] of this.configurations_by_class) {
-            if (value instanceof _class) {
+        for (const [_class, config] of this.configurations_by_class) {
+            if (!config.detect_class && value instanceof _class) {
                 return config.get_type ? config.get_type(value) : config.__type;
             }
         }
 
-        for (let [proto, config] of this.configurations_by_prototype) {
+        for (const [proto, config] of this.configurations_by_prototype) {
             if (proto.isPrototypeOf(value)) {
                 return config.get_type ? config.get_type(value) : config.__type;
             }
         }
 
         // try afterwards (less likely to happen)
-        for (let [_class, config] of this.configurations_by_class) {
+        for (const [_class, config] of this.configurations_by_class) {
             if (config.detect_class instanceof globalThis.Function && (<globalThis.Function>config.detect_class)(value) ) {
                 return config.get_type ? config.get_type(value) : config.__type;
             }

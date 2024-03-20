@@ -18,7 +18,7 @@ export class IOHandler {
     // redirect std/print
     private static std_out:(data:any[])=>void|Promise<void> = async (data:any[])=>{
         for (let d=0; d<data.length;d++) {
-            data[d] = await Runtime.castValue(Type.std.text, data[d]);
+            data[d] = Runtime.collapseValueCast(await Runtime.castValue(Type.std.text, data[d]));
         }
         client_type == "browser" ? console.log(...data) : console.log("\x1b[90mprint\x1b[0m " + data.join("\n"))
     }
