@@ -32,6 +32,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 	name = "SQL_DB"
 	supportsPrefixSelection = true;
 	supportsMatchSelection = true;
+	supportsPartialUpdates = true;
 
 	#connected = false;
 	#initializing = false
@@ -822,7 +823,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			joins.forEach(join => builder.join(join));
 
 			const outerBuilder = new Query()
-				.select(options.returnRaw ? `*` :`DISTINCT SQL_CALC_FOUND_ROWS ${this.#pointerMysqlColumnName} as ptrId`)
+				.select(options.returnRaw ? `*` :`DISTINCT SQL_CALC_FOUND_ROWS ${this.#pointerMysqlColumnName} as ${this.#pointerMysqlColumnName}`)
 				.table('__placeholder__');
 
 			this.appendBuilderConditions(outerBuilder, options, where)
@@ -832,7 +833,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 
 		// no computed properties
 		else {
-			builder.select(`DISTINCT SQL_CALC_FOUND_ROWS ${this.#typeToTableName(valueType)}.${this.#pointerMysqlColumnName} as ptrId`);
+			builder.select(`DISTINCT SQL_CALC_FOUND_ROWS ${this.#typeToTableName(valueType)}.${this.#pointerMysqlColumnName} as ${this.#pointerMysqlColumnName}`);
 			this.appendBuilderConditions(builder, options, where)
 			joins.forEach(join => builder.join(join));
 			query = builder.build();
@@ -843,8 +844,8 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			await this.#getTableForType(type)
 		}
 
-		const queryResult = await this.#query<{ptrId:string}>(query);
-		const ptrIds = queryResult.map(({ptrId}) => ptrId)
+		const queryResult = await this.#query<{_ptr_id:string}>(query);
+		const ptrIds = queryResult.map(({_ptr_id}) => _ptr_id)
 		const limitedPtrIds = options.returnPointerIds ? 
 			// offset and limit manually after query
 			ptrIds.slice(options.offset ?? 0, options.limit ? (options.offset ?? 0) + options.limit : undefined) : 
@@ -1070,7 +1071,11 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 									const identifier = rememberEntryIdentifier ? `${namespacedKey}__${columnName}` : `${namespacedKey}.${columnName}`
 									if (rememberEntryIdentifier) collectedIdentifiers.add(identifier)
 
-									if (vals.length == 1) wheresOr.push(Where.eq(identifier, vals[0]))
+									// no match
+									if (vals.length == 0) wheresOr.push(Where.expr("false"))
+									// equals
+									else if (vals.length == 1) wheresOr.push(Where.eq(identifier, vals[0]))
+									// in
 									else wheresOr.push(Where.in(identifier, vals))
 								}
 								else {
@@ -1080,6 +1085,14 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 							
 						}
 						else throw new Error("Unsupported type for MatchConditionType.CONTAINS: " + or.type);
+					}
+					else if (or.type == MatchConditionType.POINTER_ID) {
+						const condition = or as MatchCondition<MatchConditionType.POINTER_ID, string>
+						const column = isRoot && entryIdentifier == namespacedKey ? this.#pointerMysqlColumnName : entryIdentifier!;
+						// no match
+						if (condition.data.length == 0) wheresOr.push(Where.expr("false"))
+						else if (condition.data.length == 1) wheresOr.push(Where.eq(column, condition.data[0]))
+						else wheresOr.push(Where.in(column, condition.data))
 					}
 					else {
 						throw new Error("Unsupported match condition type " + or.type)
@@ -1092,7 +1105,8 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 					const ptr = Pointer.pointerifyValue(or);
 					if (ptr instanceof Pointer) {
 						if (!namespacedKey) throw new Error("missing namespacedKey");
-						wheresOr.push(Where.eq(entryIdentifier!, ptr.id))
+						if (isRoot && entryIdentifier == namespacedKey) wheresOr.push(Where.eq(this.#pointerMysqlColumnName, ptr.id))
+						else wheresOr.push(Where.eq(entryIdentifier!, ptr.id))
 					}
 	
 					else {

@@ -126,7 +126,8 @@ export enum MatchConditionType {
     LESS_OR_EQUAL = "LESS_OR_EQUAL",
     GREATER_OR_EQUAL = "GREATER_OR_EQUAL",
     NOT_EQUAL = "NOT_EQUAL",
-    CONTAINS = "CONTAINS"
+    CONTAINS = "CONTAINS",
+    POINTER_ID = "POINTER_ID",
 }
 export type MatchConditionData<T extends MatchConditionType, V> = 
     T extends MatchConditionType.BETWEEN ? 
@@ -135,6 +136,8 @@ export type MatchConditionData<T extends MatchConditionType, V> =
         V :
     T extends MatchConditionType.CONTAINS ?
         V :
+    T extends MatchConditionType.POINTER_ID ?
+        string[] :
     never
 
 export class MatchCondition<Type extends MatchConditionType, V> {
@@ -170,6 +173,12 @@ export class MatchCondition<Type extends MatchConditionType, V> {
 
     static contains<V>(...values: V[]) {
         return new MatchCondition(MatchConditionType.CONTAINS, new Set(values))
+    }
+
+    static pointerId(id: string): MatchCondition<MatchConditionType.POINTER_ID, string>
+    static pointerId(ids: string[]): MatchCondition<MatchConditionType.POINTER_ID, string>
+    static pointerId(id: string|string[]) {
+        return new MatchCondition(MatchConditionType.POINTER_ID, id instanceof Array ? id : [id])
     }
 }
 
@@ -218,6 +227,10 @@ export interface StorageLocation<SupportedModes extends Storage.Mode = Storage.M
      * Must implement supportsMatchForType if true
      */
     supportsMatchSelection?: boolean
+    /**
+     * This storage location supports partial updates for setPointer operations
+     */
+    supportsPartialUpdates?: boolean
 
     isSupported(): boolean
     onAfterExit?(): void // called when deno process exits
@@ -803,9 +816,11 @@ export class Storage {
 
 
         const handler = (v:unknown,key:unknown,t?:Ref.UPDATE_TYPE)=>{
-
             if (saving) return;
-            saving = true;
+
+            // don't block saving if only partial update
+            if (!(location.supportsPartialUpdates && key !== NOT_EXISTING)) saving = true;
+
             this.setDirty(location, true)
             setTimeout(async ()=>{
                 // set pointer (async)
