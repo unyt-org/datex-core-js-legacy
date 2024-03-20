@@ -65,7 +65,7 @@ obj.sum // 26
 ## Constructors
 
 The normal JavaScript class constructor gets called every time an instance of a sync class is created.
-When an existing instance of a sync class is shared with another endpoint, the constructor is
+When an existing instance of a struct class is shared with another endpoint, the constructor is
 called again locally on the endpoint, which is not intended but can't be prevented.
 
 For this reason, struct classes cannot use normal constructors.
@@ -84,7 +84,7 @@ const MyObject = struct(
   }
 )
 
-const obj = new MyObject(42) // "constructed a new MyObject" is logged
+const obj = new MyObject() // "constructed a new MyObject" is logged
 ```
 
 When the `obj` pointer is now accessed on a remote endpoint, the `construct` method
