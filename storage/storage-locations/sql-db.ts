@@ -179,7 +179,8 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
             const result = await this.#sqlClient!.execute(query_string, query_params);
 			if (returnRawResult) return {rows: result.rows ?? [], result};
 			else return result.rows ?? [];
-        } catch (e){
+        } catch (e) {
+			console.log(query_string, query_params)
 			if (this.log) this.log("SQL error:", e)
            	else console.error("SQL error:", e);
             throw e;
@@ -754,10 +755,10 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			.join(
 				Join.left(this.#typeToTableName(valueType)).on(`${this.#metaTables.items.name}.${this.#pointerMysqlColumnName}`, `${this.#typeToTableName(valueType)}.${this.#pointerMysqlColumnName}`)
 			)
-		const where = this.buildQueryConditions(builder, match, joins, collectedTableTypes, collectedIdentifiers, valueType, undefined, undefined, options.computedProperties)
-		let query = "error";
-
 		const rootTableName = this.#typeToTableName(valueType);
+
+		const where = this.buildQueryConditions(builder, match, joins, collectedTableTypes, collectedIdentifiers, valueType, rootTableName, undefined, options.computedProperties, true)
+		let query = "error";
 
 		// computed properties - nested select
 		if (options.computedProperties || options.returnRaw) {
@@ -964,10 +965,13 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		return prop.replace(/__(?!.*__.*)/, '.')
 	}
 
-	private buildQueryConditions(builder: Query, match: unknown, joins: Map<string, Join>, collectedTableTypes:Set<Type>, collectedIdentifiers:Set<string>, valueType:Type, namespacedKey?: string, previousKey?: string, computedProperties?: Record<string, ComputedProperty<Datex.ComputedPropertyType>>): Where|undefined {
+	private buildQueryConditions(builder: Query, match: unknown, joins: Map<string, Join>, collectedTableTypes:Set<Type>, collectedIdentifiers:Set<string>, valueType:Type, namespacedKey?: string, previousKey?: string, computedProperties?: Record<string, ComputedProperty<Datex.ComputedPropertyType>>, isRoot = false): Where|undefined {
 
 		const matchOrs = match instanceof Array ? match : [match]
-		let entryIdentifier = previousKey ? previousKey + '.' + namespacedKey : namespacedKey // address.street
+		// entry identifier for nested props: address.street
+		// entry identifier for root table: person.name
+		// entry identifier for computed properties: computedProperty
+		let entryIdentifier = (previousKey && !(computedProperties && namespacedKey && namespacedKey in computedProperties)) ? previousKey + '.' + namespacedKey : namespacedKey
 		const underscoreIdentifier = entryIdentifier?.replaceAll(".", "__")
 
 		let where: Where|undefined;
@@ -1095,7 +1099,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 						insertedConditionForIdentifier = false;
 
 						// only enter after first recursion
-						if (namespacedKey) {
+						if (namespacedKey && !isRoot) {
 
 							const propertyType = valueType.template[namespacedKey];
 							if (!propertyType) throw new Error("Property '" + namespacedKey + "' does not exist in type " + valueType);
