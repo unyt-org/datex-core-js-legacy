@@ -4,13 +4,14 @@ import { CommunicationInterface, CommunicationInterfaceSocket, InterfaceDirectio
 import { communicationHub } from "../communication-hub.ts";
 
 export class WindowInterfaceSocket extends CommunicationInterfaceSocket {
-    constructor(public readonly window: Window, public readonly windowOrigin: string) {
+    constructor(public readonly window: Window, public readonly windowOrigin: string, public readonly transmissionMode: "buffer"|"json" = "buffer") {
         super();
     }
 
     handleReceive = (event: MessageEvent) => {
-        if (event.origin == this.windowOrigin && event.data instanceof ArrayBuffer) {
-            this.receive(event.data)
+        if (event.origin == this.windowOrigin) {
+            if (event.data instanceof ArrayBuffer) this.receive(event.data)
+            else if (typeof event.data == "string") this.receive(stringToArrayBuffer(event.data))
         }
     }
 
@@ -24,7 +25,8 @@ export class WindowInterfaceSocket extends CommunicationInterfaceSocket {
 
     send(dxb: ArrayBuffer) {
         try {
-            this.window.postMessage(dxb, this.windowOrigin)
+            if (this.transmissionMode == "json") this.window.postMessage(arrayBufferToString(dxb), this.windowOrigin)
+            else this.window.postMessage(dxb, this.windowOrigin)
             return true;
         }
         catch {
@@ -48,19 +50,21 @@ export class WindowInterface extends CommunicationInterface {
     #windowOrIFrame: Window|HTMLIFrameElement
     #windowOrigin: string
     #isChild: boolean
+    #transmissionMode: "buffer"|"json"
 
     get window() {
         return this.#windowOrIFrame instanceof HTMLIFrameElement ? this.#windowOrIFrame.contentWindow! : this.#windowOrIFrame;
     }
 
-    constructor(window: Window, windowOrigin?: string|URL, type?: "parent"|"child")
-    constructor(iframe: HTMLIFrameElement, iframeOrigin?: string|URL, type?: "parent"|"child")
-    constructor(window: Window|HTMLIFrameElement, windowOrigin?: string|URL, type?: "parent"|"child") {
+    constructor(window: Window, windowOrigin?: string|URL, type?: "parent"|"child", transmissionMode?: "buffer"|"json")
+    constructor(iframe: HTMLIFrameElement, iframeOrigin?: string|URL, type?: "parent"|"child", transmissionMode?: "buffer"|"json" )
+    constructor(window: Window|HTMLIFrameElement, windowOrigin?: string|URL, type?: "parent"|"child", transmissionMode: "buffer"|"json" = "buffer") {
         super()
 
         let windowOriginURL = windowOrigin ? new URL(windowOrigin) : null;
 
         this.#windowOrIFrame = window;
+        this.#transmissionMode = transmissionMode;
 
         // is parent document, has iframe
         if (window instanceof HTMLIFrameElement) {
@@ -158,7 +162,7 @@ export class WindowInterface extends CommunicationInterface {
                 // only one active socket allowed, remove existing
                 this.clearSockets();
 
-                const socket = new WindowInterfaceSocket(this.window, this.#windowOrigin)
+                const socket = new WindowInterfaceSocket(this.window, this.#windowOrigin, this.#transmissionMode)
                 this.addSocket(socket)
 
                 // if in parent: send INIT to window after initialized
@@ -168,20 +172,20 @@ export class WindowInterface extends CommunicationInterface {
     }
 
     cloneSocket(socket: WindowInterfaceSocket) {
-        return new WindowInterfaceSocket(socket.window, socket.windowOrigin);
+        return new WindowInterfaceSocket(socket.window, socket.windowOrigin, socket.transmissionMode);
     }
 
     
-    static createChildWindowInterface(childWindow: Window, windowOrigin: string|URL) {
-        return new WindowInterface(childWindow, windowOrigin, "parent")
+    static createChildWindowInterface(childWindow: Window, windowOrigin: string|URL, transmissionMode?: "buffer"|"json") {
+        return new WindowInterface(childWindow, windowOrigin, "parent", transmissionMode)
     }
 
-    static createChildIFrameInterface(iframe: HTMLIFrameElement) {
-        return new WindowInterface(iframe, undefined, "parent")
+    static createChildIFrameInterface(iframe: HTMLIFrameElement, transmissionMode?: "buffer"|"json") {
+        return new WindowInterface(iframe, undefined, "parent", transmissionMode)
     }
 
-    static createParentInterface(parentWindow: Window, windowOrigin?: string|URL) {
-        return new WindowInterface(parentWindow, windowOrigin, "child")
+    static createParentInterface(parentWindow: Window, windowOrigin?: string|URL, transmissionMode?: "buffer"|"json") {
+        return new WindowInterface(parentWindow, windowOrigin, "child", transmissionMode)
     }
 
 
@@ -239,4 +243,17 @@ export class WindowInterface extends CommunicationInterface {
         })
     }
 
+}
+
+export function arrayBufferToString(buf: ArrayBuffer) {
+	return String.fromCharCode.apply(null, new Uint16Array(buf) as unknown as number[]);
+}
+ 
+export function stringToArrayBuffer(str: string) {
+	const buf = new ArrayBuffer(str.length*2); // 2 bytes for each char
+	const bufView = new Uint16Array(buf);
+	for (let i=0, strLen=str.length; i < strLen; i++) {
+		bufView[i] = str.charCodeAt(i);
+	}
+	return buf;
 }
