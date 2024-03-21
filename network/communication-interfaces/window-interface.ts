@@ -2,6 +2,7 @@ import { Runtime } from "../../runtime/runtime.ts";
 import { Endpoint, Target } from "../../types/addressing.ts";
 import { CommunicationInterface, CommunicationInterfaceSocket, InterfaceDirection, InterfaceProperties } from "../communication-interface.ts";
 import { communicationHub } from "../communication-hub.ts";
+import { arrayBufferToBase64, base64ToArrayBuffer } from "../../utils/utils.ts";
 
 export class WindowInterfaceSocket extends CommunicationInterfaceSocket {
     constructor(public readonly window: Window, public readonly windowOrigin: string, public readonly transmissionMode: "buffer"|"json" = "buffer") {
@@ -11,7 +12,7 @@ export class WindowInterfaceSocket extends CommunicationInterfaceSocket {
     handleReceive = (event: MessageEvent) => {
         if (event.origin == this.windowOrigin) {
             if (event.data instanceof ArrayBuffer) this.receive(event.data)
-            else if (typeof event.data == "string") this.receive(stringToArrayBuffer(event.data))
+            else if (typeof event.data == "string") this.receive(base64ToArrayBuffer(event.data))
         }
     }
 
@@ -25,7 +26,7 @@ export class WindowInterfaceSocket extends CommunicationInterfaceSocket {
 
     send(dxb: ArrayBuffer) {
         try {
-            if (this.transmissionMode == "json") this.window.postMessage(arrayBufferToString(dxb), this.windowOrigin)
+            if (this.transmissionMode == "json") this.window.postMessage(arrayBufferToBase64(dxb), this.windowOrigin)
             else this.window.postMessage(dxb, this.windowOrigin)
             return true;
         }
@@ -243,17 +244,4 @@ export class WindowInterface extends CommunicationInterface {
         })
     }
 
-}
-
-export function arrayBufferToString(buf: ArrayBuffer) {
-	return String.fromCharCode.apply(null, new Uint16Array(buf) as unknown as number[]);
-}
- 
-export function stringToArrayBuffer(str: string) {
-	const buf = new ArrayBuffer(str.length*2); // 2 bytes for each char
-	const bufView = new Uint16Array(buf);
-	for (let i=0, strLen=str.length; i < strLen; i++) {
-		bufView[i] = str.charCodeAt(i);
-	}
-	return buf;
 }
