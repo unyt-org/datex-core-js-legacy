@@ -1,3 +1,6 @@
 [submodule "wasm/datex"]
 	path = wasm/datex
 	url = git@git.unyt.org:unyt/code/datex-core.git
+[submodule "utils/command-line-args"]
+	path = utils/command-line-args
+	url = https://github.com/unyt-org/command-line-args.git
