@@ -9,7 +9,7 @@ let _ptr_cache_path:string|URL = new URL('./pointers/', _cache_path);
 // command line args (--watch-backend)
 if (client_type == "deno") {
 
-	const commandLineOptions = (await import("../utils/args.ts")).commandLineOptions
+	const commandLineOptions = (await import("../utils/args.ts" /*lazy*/)).commandLineOptions
 
 	let custom_cache_path = commandLineOptions.option("cache-path", {aliases: ["c"], type: "string",  description: "Overrides the default path for datex cache files (.datex-cache)"})
  

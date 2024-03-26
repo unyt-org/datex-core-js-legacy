@@ -937,7 +937,7 @@ export let verboseArg = false;
 if (client_type === "deno") (async ()=> {
     // @ts-ignore no init workaround
     if (globalThis.NO_DATEX) return;
-    verboseArg = !!(await import("./args.ts")).commandLineOptions.option("verbose", {aliases: ["v"], type: "boolean", default: false, description: "Show logs for all levels, including debug logs"})
+    verboseArg = !!(await import("./args.ts" /*lazy*/)).commandLineOptions.option("verbose", {aliases: ["v"], type: "boolean", default: false, description: "Show logs for all levels, including debug logs"})
 
     if (verboseArg) {
         Logger.development_log_level = LOG_LEVEL.VERBOSE;

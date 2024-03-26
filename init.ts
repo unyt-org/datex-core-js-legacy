@@ -189,7 +189,7 @@ export async function init() {
 	if (verboseArg) MessageLogger.enable();
 
 	if (client_type == "deno" && !(globalThis as any).NO_INIT) {
-		const { clear } = await import("./utils/args.ts");
+		const { clear } = await import("./utils/args.ts" /*lazy*/);
 		if (clear) {
 			await Storage.clearAndReload();
 		}
