@@ -11,7 +11,7 @@ export function deleteCookie(name: string) {
 		throw new Error("cannot delete cookies for non-browser environment");
 	}
 	if (port) name += "/" + port;
-    document.cookie = name +'=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+    document.cookie = name +'=; Path=/; SameSite=None; Expires=Thu, 01 Jan 1970 00:00:01 GMT; Secure;'+ (browserIsSafariLocalhost ? "" :" Secure;");
 }
 
 
@@ -28,7 +28,7 @@ export function setCookie(name: string, value: string, expDays?: number) {
 		expiryDate.setTime(expiryDate.getTime() + (expDays * 24 * 60 * 60 * 1000));
 	}
 	const expires = expDays == 0 ? "" : "expires=" + expiryDate.toUTCString() + ";";
-	document.cookie = name + "=" + value + "; " + expires + " path=/; SameSite=None;"  + (browserIsSafariLocalhost ? "" :" Secure;")
+	document.cookie = name + "=" + value + "; " + expires + " path=/; SameSite=None;" + (browserIsSafariLocalhost ? "" :" Secure;")
 }
 
 export function getCookie(name: string) {

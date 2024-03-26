@@ -37,6 +37,10 @@ function setup() {
 export function displayFatalError(code:string, reset_btn = true) {
 
 	// disable error screen (at least for now, immediately reset page)
+	console.error `
+	FATAL ERROR: ${code}
+	Cannot restore the current state. Deleting all caches.
+`
 	errorReset();
 	return;
 
