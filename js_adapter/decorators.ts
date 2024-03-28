@@ -131,7 +131,6 @@ export function timeout(timeMs:number): (value: (...args:any[])=>any, context: C
 
 /**
  * Maps a class to a corresponding DATEX type
- * @deprecated Use struct(class {...}) instead;
  */
 export function sync(type: string): (value: Class, context: ClassDecoratorContext)=>void
 export function sync(value: Class, context: ClassDecoratorContext): void

@@ -31,9 +31,7 @@ declare global {
     const entrypointProperty: typeof _entrypointProperty;
     const timeout: typeof _timeout;
     const always: typeof _always;
-    /**
-     * @deprecated Use struct(class {...}) instead;
-     */
+    
     const sync: typeof _sync;
     const asyncAlways: typeof _asyncAlways;
     const reactiveFn: typeof _reactiveFn;
