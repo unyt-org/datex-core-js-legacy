@@ -4,7 +4,7 @@
 import { client_type } from "./constants.ts";
 
 const port = globalThis.location?.port;
-const browserIsSafariLocalhost = window.location?.hostname == "localhost" && (/^((?!chrome|android).)*safari/i.test(navigator.userAgent));
+const browserIsSafariLocalhost = globalThis.location?.hostname == "localhost" && (/^((?!chrome|android).)*safari/i.test(navigator.userAgent));
 
 export function deleteCookie(name: string) {
 	if (client_type !== "browser") {
