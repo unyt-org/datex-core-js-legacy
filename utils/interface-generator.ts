@@ -38,7 +38,7 @@ export async function generateTSModuleForRemoteAccess(module_path_or_datex_get:U
 			© ${new Date().getFullYear()} unyt.org
 		*/
 
-		import { Datex, datex, endpoint, property, meta, timeout, sync, sealed } from "unyt_core";
+		import { Datex, datex, endpoint, property, timeout, sync } from "unyt_core";
 		const logger = new Datex.Logger("${module_name}");\n\n`;
 
 	for (const [name, val, valid, no_pointer] of values) {
