@@ -1785,7 +1785,10 @@ export class Pointer<T = any> extends Ref<T> {
             const buffer = hex2buffer(id.replace("$",""), undefined, true); 
             return (has_$ ? "$" : "") + this.normalizePointerId(buffer);
         }
-        else throw Error("Cannot normalize invalid pointer id - must be string or Uint8Array")
+        else {
+            console.log(">>id", id, new Error().stack)
+            throw Error("Cannot normalize invalid pointer id - must be string or Uint8Array")
+        }
     }
 
 

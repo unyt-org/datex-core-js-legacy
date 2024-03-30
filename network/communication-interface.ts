@@ -49,7 +49,14 @@ export type InterfaceProperties =  {
      * If true, the interface does not support continuous connections.
      * All sockets are indirectly connected
      */
-    noContinuousConnection?: boolean
+    noContinuousConnection?: boolean,
+
+    /**
+     * If true, the interface can be used to redirect DATEX messages to other endpoints
+     * which are not directly connected to the interface (default: true)
+     * Currently only enforced for broadcast messages
+     */
+    allowRedirects?: boolean
 }
 
 function getIdentifier(properties?: InterfaceProperties) {

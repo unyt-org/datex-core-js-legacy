@@ -624,6 +624,7 @@ export class CommunicationHubHandler {
         for (const socket of this.iterateSockets()) {
             if (data.socket === socket) continue;
             if (reachedEndpoints.has(socket.endpoint)) continue;
+            if (socket.interfaceProperties.allowRedirects === false) continue;
             reachedEndpoints.add(socket.endpoint);
 
             socket.sendBlock(data.dxb).catch(console.error);

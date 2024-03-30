@@ -233,7 +233,8 @@ export class Runtime {
         NATIVE_ERROR_STACK_TRACES: true, // create detailed stack traces of JS Errors (NATIVE_ERROR_MESSAGES must be true)
         NATIVE_ERROR_DEBUG_STACK_TRACES: false, // also display internal DATEX library stack traces (hidden per default)
         NATIVE_ERROR_MESSAGES: true, // expose native error messages
-        DATEX_HTTP_ORIGIN: globalThis.location?.origin // http origin to use to send datex-over-http messages (e.g. GOODBYE messages), default is current origin for browsers
+        DATEX_HTTP_ORIGIN: globalThis.location?.origin, // http origin to use to send datex-over-http messages (e.g. GOODBYE messages), default is current origin for browsers
+        USE_DX_CONFIG: true // use local /.dx file for endpoint/connection setup
     }
 
     public static MIME_TYPE_MAPPING: Record<mime_type, mime_type_definition<unknown>> = {

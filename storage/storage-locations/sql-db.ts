@@ -862,13 +862,22 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 
 		const loadStart = Date.now();
 
-		const result = options.returnRaw ? null : new Set((await Promise.all(limitedPtrIds.map(ptrId => Pointer.load(ptrId)))).filter(ptr => {
-			if (ptr instanceof LazyPointer) {
-				logger.warn("Cannot return lazy pointer from match query (" + ptr.id + ")");
-				return false;
-			}
-			return true;
-		}).map(ptr => (ptr as Pointer).val as T))
+		console.log("ids", ptrIds)
+
+		const result = options.returnRaw ? null : new Set((await Promise.all(limitedPtrIds
+			.filter(ptrId => {
+				if (!ptrId) logger.warn("Empty pointer id found in match query");
+				else return ptrId;
+			})
+			.map(ptrId => Pointer.load(ptrId))))
+			.filter(ptr => {
+				if (ptr instanceof LazyPointer) {
+					logger.warn("Cannot return lazy pointer from match query (" + ptr.id + ")");
+					return false;
+				}
+				return true;
+			})
+			.map(ptr => (ptr as Pointer).val as T))
 
 		console.log("load time", (Date.now() - loadStart) + "ms")
 		console.log("total query time", (Date.now() - start) + "ms")
