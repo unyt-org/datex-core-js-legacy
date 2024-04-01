@@ -1324,14 +1324,16 @@ export class Runtime {
         this.STD_STATIC_SCOPE = {};
 
         // std.print
-        const print = DatexFunction.createFromJSFunction((meta, ...params:any[])=>{
-            IOHandler.stdOut(params, meta.sender);
-        }, undefined, undefined, undefined, undefined, undefined, new Tuple({v1:Type.std.Any, v2:Type.std.Any, v3:Type.std.Any, v4:Type.std.Any, v5:Type.std.Any, v6:Type.std.Any}), 0)
+        const print = DatexFunction.createFromJSFunction((...params:any[])=>{
+            const meta = datex.meta;
+            IOHandler.stdOut(params, meta);
+        }, undefined, undefined, undefined, undefined, undefined, new Tuple({v1:Type.std.Any, v2:Type.std.Any, v3:Type.std.Any, v4:Type.std.Any, v5:Type.std.Any, v6:Type.std.Any}))
 
         // std.printf (formatted output)
-        const printf = DatexFunction.createFromJSFunction(async (meta,...params:any[])=>{
-            await IOHandler.stdOutF(params, meta.sender);
-        }, undefined, undefined, undefined, undefined, undefined, new Tuple({v1:Type.std.Any, v2:Type.std.Any, v3:Type.std.Any, v4:Type.std.Any, v5:Type.std.Any, v6:Type.std.Any}), 0);
+        const printf = DatexFunction.createFromJSFunction(async (...params:any[])=>{
+            const meta = datex.meta;
+            await IOHandler.stdOutF(params, meta);
+        }, undefined, undefined, undefined, undefined, undefined, new Tuple({v1:Type.std.Any, v2:Type.std.Any, v3:Type.std.Any, v4:Type.std.Any, v5:Type.std.Any, v6:Type.std.Any}));
 
         // std.printn (native output)
         const printn = DatexFunction.createFromJSFunction((...params:any[])=>{
