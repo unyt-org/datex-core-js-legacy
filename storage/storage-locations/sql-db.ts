@@ -826,7 +826,9 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 				.select(options.returnRaw ? `*` :`DISTINCT SQL_CALC_FOUND_ROWS ${this.#pointerMysqlColumnName} as ${this.#pointerMysqlColumnName}`)
 				.table('__placeholder__');
 
+			// TODO: does not work for all cases, only a workaround for now
 			this.appendBuilderConditions(outerBuilder, options, where)
+
 			// nested select
 			query = outerBuilder.build().replace('`__placeholder__`', `(${builder.build()}) as _inner_res`)
 		}

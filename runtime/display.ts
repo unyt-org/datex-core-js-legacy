@@ -36,6 +36,12 @@ function setup() {
 
 export function displayFatalError(code:string, reset_btn = true) {
 
+	// don't reset in deno
+	if (client_type === "deno") {
+		console.error("Fatal Error: ", code);
+		return;
+	}
+
 	// disable error screen (at least for now, immediately reset page)
 	console.error `
 	FATAL ERROR: ${code}

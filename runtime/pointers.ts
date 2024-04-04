@@ -1786,7 +1786,6 @@ export class Pointer<T = any> extends Ref<T> {
             return (has_$ ? "$" : "") + this.normalizePointerId(buffer);
         }
         else {
-            console.log(">>id", id, new Error().stack)
             throw Error("Cannot normalize invalid pointer id - must be string or Uint8Array")
         }
     }
@@ -2945,21 +2944,29 @@ export class Pointer<T = any> extends Ref<T> {
                         this.#waiting_for_always_promise = val; 
 
                         // wait until val promise resolves
-                        val.then((resolvedVal)=>{
-                            // got a more recent promise result in the meantime, ignore this one
-                            if (val !== this.#waiting_for_always_promise) {
-                                return;
-                            }
-                            this.#waiting_for_always_promise = undefined;
-                            this.handleTransformValue(
-                                resolvedVal,
-                                capturedGetters,
-                                capturedGettersWithKeys,
-                                state,
-                                ignoreReturnValue,
-                                options
-                            )
-                        })
+                        val
+                            .then((resolvedVal)=>{
+                                // got a more recent promise result in the meantime, ignore this one
+                                if (val !== this.#waiting_for_always_promise) {
+                                    return;
+                                }
+                                this.#waiting_for_always_promise = undefined;
+                                this.handleTransformValue(
+                                    resolvedVal,
+                                    capturedGetters,
+                                    capturedGettersWithKeys,
+                                    state,
+                                    ignoreReturnValue,
+                                    options
+                                )
+                            })
+                            .catch(e => {
+                                if (e !== Pointer.WEAK_EFFECT_DISPOSED) console.error(e);
+                                this.#waiting_for_always_promise = undefined;
+                                // invalid result, no update
+                                // TODO: handle case where promise is rejected in initial transform call
+                                // and captured refs are not observed?
+                            })
                     }
                     // normal sync transform
                     else {
