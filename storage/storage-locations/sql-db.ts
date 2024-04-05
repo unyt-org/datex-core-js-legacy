@@ -864,8 +864,6 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 
 		const loadStart = Date.now();
 
-		console.log("ids", ptrIds)
-
 		const result = options.returnRaw ? null : new Set((await Promise.all(limitedPtrIds
 			.filter(ptrId => {
 				if (!ptrId) logger.warn("Empty pointer id found in match query");
