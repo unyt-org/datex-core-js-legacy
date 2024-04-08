@@ -85,7 +85,7 @@ We can pass an iframe from the host side to the `WindowInterface.bindIFrame` cal
 
 ```ts
 const endpoint = await WindowInterface.bindIFrame(
-  iframe, // Iframe DOM element
+	iframe, // Iframe DOM element
 	10_000  // optional timeout
 );
 ```
