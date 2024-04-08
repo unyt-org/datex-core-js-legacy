@@ -36,7 +36,62 @@ The interface constructor signature can be different for other communication int
 ### Worker
 -
 ### Window
--
+
+DATEX provides a simple communication interface that makes use of the [window.postMessage()](https://developer.mozilla.org/en-US/docs/Web/API/Window/postMessage) API to enable cross-origin communication between Window objects; e.g., between a page and a pop-up that it spawned, or between a page and an iframe embedded within it.
+
+The `WindowInterface.createWindow` method can open a window (page, popup or tab) and behaves similar to the [window.open](https://developer.mozilla.org/en-US/docs/Web/API/Window/open) API with the difference that it is asynchronously and returns an object including the remote endpoint (the endpoint of the popup) and the actual [Window](https://developer.mozilla.org/en-US/docs/Web/API/Window) containing the DOM document.
+
+```ts
+import { WindowInterface } from "datex-core-legacy/network/communication-interfaces/window-interface.ts";
+
+const { endpoint, window } = await WindowInterface.createWindow(
+	"https://popup.com",   // URL of our window
+	"MyWindow",            // Target specifying the name of the context
+	`popup=yes`            // Window feature list
+);
+```
+
+The window site can connect to the host window by creating a parent interface via `WindowInterface.createParentInterface`:
+
+```ts
+const parentInterface = WindowInterface.createParentInterface(
+	globalThis.opener,  // Parent window instance (app)
+	"https://myapp.com" // URL of the parent window (app)
+);
+
+// The connection event is fired if we got a response from the app
+parentInterface.addEventListener("connect", (event) => {
+	// connection is established
+	// event.endpoint gives us the endpoint of the host side
+});
+```
+
+When the `createWindow` call of the parent did resolve, all DATEX traffic of the host side directed to the [endpoint](https://docs.unyt.org/manual/datex/endpoints) of the window is directly routed via [postMessage](https://developer.mozilla.org/en-US/docs/Web/API/Window/postMessage) API without using the network layer.
+
+The `createWindow` utility is a wrapper method that opens the new window by passing it's URL and registers the attached WindowInterface. It automatically handles the removal of the interface when the window is closed. We can also manually create and register the interface via `WindowInterface.createChildWindowInterface` by passing the window object and the window origin URL. In this case we need to make sure to remove the interface on window close.
+
+```ts
+const url = new URL("https://popup.com");
+const myWindow = window.open(url);
+const windowInterface = WindowInterface.createChildWindowInterface(myWindow, url);
+
+const connected = await communicationHub.addInterface(windowInterface);
+```
+
+### IFrame
+
+The DATEX API for IFrame communication behaves pretty similar to the [window API](#window).
+We can pass an iframe from the host side to the `WindowInterface.bindIFrame` call together with an optional connection timeout:
+
+```ts
+const endpoint = await WindowInterface.bindIFrame(
+  iframe, // Iframe DOM element
+	10_000  // optional timeout
+);
+```
+
+The DATEX API inside of the IFrame can establish the interface to the host similar to the window using `WindowInterface.createParentInterface`.
+
 ### WebRTC
 
 #### Legend
