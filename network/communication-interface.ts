@@ -57,17 +57,17 @@ function getIdentifier(properties?: InterfaceProperties) {
     return `${properties.type}${properties.name? ` (${properties.name})` : ''}`
 }
 
-class EndpointConnectEvent extends Event {
+export class EndpointConnectEvent extends Event {
     constructor(public endpoint: Endpoint) {
         super('connect');
     }
 }
-class EndpointBeforeChangeEvent extends Event {
+export class EndpointBeforeChangeEvent extends Event {
     constructor(public endpoint: Endpoint) {
         super('beforechange')
     }
 }
-class BrokenChannelEvent extends Event {
+export class BrokenChannelEvent extends Event {
     constructor() {
         super('brokenchannel')
     }
