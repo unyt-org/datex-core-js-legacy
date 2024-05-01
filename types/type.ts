@@ -188,8 +188,11 @@ export class Type<T = any> extends ExtensibleFunction {
         return this.#template;
     }
 
-    // cast object with template to new <Tuple>
-    private createFromTemplate(value:Record<string,unknown> = {}, assign_to_object:Record<string,unknown> = {[DX_TYPE]: this}):T {
+    /**
+     * Creates a new instance of this type from a given object - throws error if required properties are missing or have wrong type if strict=true
+     * Only works for types with a template
+     */
+    public new(value:Record<string,unknown> = {}, strict = true, assign_to_object:Record<string,unknown> = {[DX_TYPE]: this}):T {
         if (!this.#template) throw new RuntimeError("Type has no template");
         if (!(typeof value == "object")) throw new RuntimeError("Cannot create template value from non-object value");
 
@@ -208,7 +211,10 @@ export class Type<T = any> extends ExtensibleFunction {
             
             // TODO how to handle protoype properties?
             // don't set to void/undefined if key not in properties object, prevents overrides of JS prototype properties/methods
-            if (!(key in value)) continue;
+            if (!(key in value)) {
+                if (strict) throw new ValueError("Property '" + key + "' is required");
+                else continue
+            };
 
             try {
 
@@ -238,9 +244,10 @@ export class Type<T = any> extends ExtensibleFunction {
             catch (e) {
                 // TODO: catch required? for readonly properties
                 // error while assigning to readonly property from prototype chain might still occur
-
-                logger.debug("ignoring unwriteable template prototype property " + key);
-                // throw e;
+                if (e instanceof TypeError) {
+                    logger.debug("ignoring unwriteable template prototype property " + key);
+                }
+                else if (strict) throw e;
             }
             
         }
@@ -340,10 +347,10 @@ export class Type<T = any> extends ExtensibleFunction {
         return instance;
     }
 
-    public initProperties(instance:any, value:any, strict = true) {
+    public initProperties(instance:any, value:any, useTemplate = true) {
         if (!value) return;
         // initialize with template
-        if (strict && this.#template) this.createFromTemplate(value, instance)
+        if (useTemplate && this.#template) this.new(value, false, instance)
         // just copy all properties if no template found
         else {
             for (const [key, val] of Object.entries(value)) {
