@@ -8,18 +8,18 @@ import { Decorators } from "../js_adapter/js_class_adapter.ts";
 import { getCallerFile } from "../utils/caller_metadata.ts";
 import { client_type } from "../utils/constants.ts";
 
-type StructuralTypeDefIn = {
+export type StructuralTypeDefIn = {
 	[key: string]: Type|Type[]|(new () => unknown)|StructuralTypeDefIn|StructuralTypeDefIn[]
 }
-type StructuralTypeDef = {
+export type StructuralTypeDef = {
 	[key: string]: Type|StructuralTypeDef
 }
 
-type collapseTypeDef<Def extends StructuralTypeDefIn> = {
+export type collapseTypeDef<Def extends StructuralTypeDefIn> = {
 	[K in keyof Def]: collapseType<Def[K]>
 }
 
-type collapseType<TT> = 
+export type collapseType<TT> = 
 	TT extends Type<infer T> ? 
 		// if Type
 		T : 
