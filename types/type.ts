@@ -196,6 +196,14 @@ export class Type<T = any> extends ExtensibleFunction {
         if (!this.#template) throw new RuntimeError("Type has no template");
         if (!(typeof value == "object")) throw new RuntimeError("Cannot create template value from non-object value");
 
+        if (strict) {
+            for (const key of Object.keys(value)) {
+                if (!(key in this.#template)) {
+                    throw new ValueError("Property '" + key + "' is not allowed");
+                }
+            }    
+        }
+
         // add all allowed properties (check template types)
         for (const key of Object.keys(this.#template)) {
             // @ts-ignore this.#template is always a Tuple
@@ -213,8 +221,7 @@ export class Type<T = any> extends ExtensibleFunction {
             // don't set to void/undefined if key not in properties object, prevents overrides of JS prototype properties/methods
             if (!(key in value)) {
                 if (strict) throw new ValueError("Property '" + key + "' is required");
-                else continue
-            };
+            }
 
             try {
 
@@ -232,12 +239,13 @@ export class Type<T = any> extends ExtensibleFunction {
                 }
                 // add default template value
                 else if (value[key] == VOID && required_type.template) {
-                    assign_to_object[key] = required_type.createFromTemplate();
+                    console.log("TYP",required_type)
+                    assign_to_object[key] = required_type.new({}, strict);
                 }
                 else if (value[key] == VOID) assign_to_object[key] = VOID;
                 // try to cast to struct
                 else if (required_type instanceof Type && required_type.namespace == "struct" && Type.ofValue(value[key]) == Type.std.Object) {
-                    assign_to_object[key] = required_type.cast(value[key])
+                    assign_to_object[key] = required_type.new(value[key] as Record<string,unknown>, strict)
                 }
                 else throw new ValueError("Property '" + key + "' must be of type " + required_type);
             }
@@ -282,7 +290,7 @@ export class Type<T = any> extends ExtensibleFunction {
     }
 
     // cast any value to a value of this type (for custom types)
-    public cast(value: any, context?:any, origin:Endpoint = Runtime.endpoint, make_pointer = false, ignore_js_config = false, assigningPtrId?: string):T {
+    public cast(value: any, context?:any, origin:Endpoint = Runtime.endpoint, make_pointer = false, ignore_js_config = false, assigningPtrId?: string, strict = false):T {
         // unknown type (no template or config)
         //if (!this.interface_config && !this.template) return UNKNOWN_TYPE;
         
@@ -316,7 +324,7 @@ export class Type<T = any> extends ExtensibleFunction {
             is_constructor = false; // is replicated object, not created with constructor arguments
         }
 
-        const propertyInitializer = this.getPropertyInitializer(value);
+        const propertyInitializer = this.getPropertyInitializer(value, true, strict);
         const instance = this.newJSInstance(is_constructor, args, propertyInitializer);
 
         // initialize properties, if not [INIT_PROPS] yet called inside constructor
@@ -327,14 +335,14 @@ export class Type<T = any> extends ExtensibleFunction {
     }
 
     /** returns an object with a [INIT_PROPS] function that can be passed to newJSInstance() or called manually */
-    public getPropertyInitializer(value:any, strict = true) {
+    public getPropertyInitializer(value:any, useTemplate = true, strict = false) {
         const initialized = {i:false};
         // property initializer - sets existing property for pointer object (is passed as first constructor argument when reconstructing)
         return Object.freeze({
             [INIT_PROPS]: (instance:any)=>{
                 if (initialized.i) return; 
                 initialized.i=true; 
-                this.initProperties(instance, value, strict)
+                this.initProperties(instance, value, useTemplate, strict)
             }
         })
     }
@@ -347,10 +355,10 @@ export class Type<T = any> extends ExtensibleFunction {
         return instance;
     }
 
-    public initProperties(instance:any, value:any, useTemplate = true) {
+    public initProperties(instance:any, value:any, useTemplate = true, strict = false) {
         if (!value) return;
         // initialize with template
-        if (useTemplate && this.#template) this.new(value, false, instance)
+        if (useTemplate && this.#template) this.new(value, strict, instance)
         // just copy all properties if no template found
         else {
             for (const [key, val] of Object.entries(value)) {
@@ -744,7 +752,7 @@ export class Type<T = any> extends ExtensibleFunction {
     public static matches<T extends Type>(value:RefOrValue<any>, type:type_clause, throwInvalidAssertion = false): value is (T extends Type<infer TT> ? TT : any)  {
         value = Ref.collapseValue(value, true, true);
         // value has a matching DX_TEMPLATE
-        if (type instanceof Type && type.template && value[DX_TEMPLATE] && this.matchesTemplate(value[DX_TEMPLATE], type.template)) return true;
+        if (type instanceof Type && type.template && value?.[DX_TEMPLATE] && this.matchesTemplate(value[DX_TEMPLATE], type.template)) return true;
         // compare types
 
         // workaround: explicit text length matching, TODO: more general solution

@@ -9,20 +9,35 @@ import { getCallerFile } from "../utils/caller_metadata.ts";
 import { client_type } from "../utils/constants.ts";
 
 type StructuralTypeDefIn = {
-	[key: string]: Type|(new () => unknown)|StructuralTypeDefIn
+	[key: string]: Type|Type[]|(new () => unknown)|StructuralTypeDefIn|StructuralTypeDefIn[]
 }
 type StructuralTypeDef = {
 	[key: string]: Type|StructuralTypeDef
 }
 
-type collapseType<Def extends StructuralTypeDefIn> = {
-		[K in keyof Def]: 
-			Def[K] extends Type<infer T> ? T : (
-				Def[K] extends (new () => infer T) ? T : (
-					Def[K] extends StructuralTypeDefIn ? collapseType<Def[K]> : never
-				)
-			)
+type collapseTypeDef<Def extends StructuralTypeDefIn> = {
+	[K in keyof Def]: collapseType<Def[K]>
 }
+
+type collapseType<TT> = 
+	TT extends Type<infer T> ? 
+		// if Type
+		T : 
+		// else
+		TT extends Array<infer DT> ?
+			// if Array
+			Array<DT extends StructuralTypeDefIn ? collapseTypeDef<DT> : collapseType<DT>> :
+			// else 
+			TT extends (new () => infer T) ? 
+				// if constructor
+				T :
+				// else
+				TT extends StructuralTypeDefIn ? 
+					// is StructuralTypeDefIn
+					collapseType<TT> :
+					never
+
+
 
 export type inferType<DXTypeOrClass extends Type|Class> = 
 	DXTypeOrClass extends Type<infer Def> ? 
@@ -30,6 +45,7 @@ export type inferType<DXTypeOrClass extends Type|Class> =
 	DXTypeOrClass extends Class ? 
 		InstanceType<DXTypeOrClass> : 
 	never;
+
 
 /**
  * Define a structural type without a class or prototype.
@@ -69,8 +85,8 @@ export type inferType<DXTypeOrClass extends Type|Class> =
 
 export function struct<T extends Record<string, any> & Class>(classDefinition: T): dc<T>
 export function struct<T extends Record<string, any> & Class>(type: string, classDefinition: T): dc<T>
-export function struct<Def extends StructuralTypeDefIn>(typeName: string, def: Def): Type<collapseType<Def>> & ((val: collapseType<Def>)=>ObjectRef<collapseType<Def>>)
-export function struct<Def extends StructuralTypeDefIn>(def: Def): Type<collapseType<Def>> & ((val: collapseType<Def>)=>ObjectRef<collapseType<Def>>)
+export function struct<Def extends StructuralTypeDefIn>(typeName: string, def: Def): Type<collapseTypeDef<Def>> & ((val: collapseTypeDef<Def>)=>ObjectRef<collapseTypeDef<Def>>)
+export function struct<Def extends StructuralTypeDefIn>(def: Def): Type<collapseTypeDef<Def>> & ((val: collapseTypeDef<Def>)=>ObjectRef<collapseTypeDef<Def>>)
 export function struct(defOrTypeName: StructuralTypeDefIn|Class|string, def?: StructuralTypeDefIn|Class): any {
 	// create unique type name from template hash
 
@@ -90,23 +106,7 @@ export function struct(defOrTypeName: StructuralTypeDefIn|Class|string, def?: St
 
 	const template:StructuralTypeDef = {};
 	for (const [key, val] of Object.entries(def)) {
-		// Datex type
-		if (val instanceof Type) {
-			template[key] = val
-		}
-		// constructor
-		else if (typeof val == "function") {
-			const type = Type.getClassDatexType(val);
-			template[key] = type;
-		}
-		// object
-		else if (val && typeof val == "object") {
-			const type = struct(val);
-			template[key] = type;
-		}
-		else {
-			throw new Error("Invalid struct definition value for property '"+key+"' (type " + (typeof val) + ")")
-		}
+		template[key] = convertDefinitionToType(val, key);
 	}
 
 	const hash = typeName ?? sha256(Runtime.valueToDatexStringExperimental(template))
@@ -121,4 +121,31 @@ export function struct(defOrTypeName: StructuralTypeDefIn|Class|string, def?: St
 	if (callerFile) type.jsTypeDefModule = callerFile;
 	type.proxify_children = true;
 	return type as any
+}
+
+
+function convertDefinitionToType(val: StructuralTypeDefIn[string], key: string): Type {
+	// Datex type
+	if (val instanceof Type) {
+		return val
+	}
+	// Array
+	else if (val instanceof Array) {
+		if (val.length != 1) throw new Error("Invalid struct definition value for property '"+key+"'. Array must have exactly one element.");
+		const type = convertDefinitionToType(val[0], key);
+		return Type.std.Array.getParametrized([type]);
+	}
+	// constructor
+	else if (typeof val == "function") {
+		const type = Type.getClassDatexType(val);
+		return type;
+	}
+	// object
+	else if (val && typeof val == "object") {
+		const type = struct(val);
+		return type;
+	}
+	else {
+		throw new Error("Invalid struct definition value for property '"+key+"' (type " + (typeof val) + ")")
+	}
 }
