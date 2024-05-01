@@ -757,6 +757,12 @@ export class Runtime {
             
         }
 
+        else if (url.protocol == "route:") {
+            // TODO: only a warning for now (for js module preloading), should be an error
+            logger.warn("Route could not be resolved: " + url_string);
+            return null as any;
+        }
+
         else {
             throw new RuntimeError("Protocol '"+url.protocol.slice(0,-1)+"' not supported");
         }
