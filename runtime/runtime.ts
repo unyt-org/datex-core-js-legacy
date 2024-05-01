@@ -1245,10 +1245,9 @@ export class Runtime {
         const endpointName = endpoint.toString();
         // TODO: store signed endpoint validation cookie
         if (client_type == "browser") {
-            deleteCookie("datex-endpoint-new");
             const currentEndpointName = getCookie("datex-endpoint");
             // only update if endpoint not already set in cookie
-            if (currentEndpointName != endpointName) {
+            if (currentEndpointName != endpointName || !getCookie("datex-endpoint-validation")) {
                 deleteCookie("datex-endpoint-validation");
                 setCookie("datex-endpoint", endpointName, endpoint_config.temporary ? 0 : undefined);
                 (async() => {

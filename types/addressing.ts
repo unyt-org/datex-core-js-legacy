@@ -554,44 +554,8 @@ export class Endpoint extends Target {
 	 */
 	public static getFromCookie() {
 		const cookieEndpoint = getCookie("datex-endpoint");
-		if (cookieEndpoint) {
-			const newKeysEntry = localStorage.getItem("new_keys");
-			if (!newKeysEntry) {
-				logger.warn("no keys for datex-endpoint found");
-				deleteCookie("datex-endpoint")
-				deleteCookie("datex-endpoint-validation")
-				deleteCookie("uix-session") // TODO: this is UIX specific and should not be handled here
-				return null;
-			}
-			localStorage.removeItem("new_keys");
-
-			// check if has matching new_keys
-			const newKeys = JSON.parse(newKeysEntry);
-
-			try {
-				const endpoint = Target.get(cookieEndpoint) as Endpoint;
-
-				if (newKeys.endpoint !== endpoint.main.toString()) {
-					logger.warn("datex-endpoint does not match keys")
-					deleteCookie("datex-endpoint")
-					deleteCookie("datex-endpoint-validation")
-					deleteCookie("uix-session") // TODO: this is UIX specific and should not be handled here
-					return null;
-				}
-
-				const exportedKeys:Crypto.ExportedKeySet = {
-					sign: [base64ToArrayBuffer(newKeys.keys.sign[0]), base64ToArrayBuffer(newKeys.keys.sign[1])],
-					encrypt: [base64ToArrayBuffer(newKeys.keys.encrypt[0]), base64ToArrayBuffer(newKeys.keys.encrypt[1])]
-				}
-
-				logger.debug("loaded endpoint from 'datex-endpoint' cookie: " + endpoint)
-				return {endpoint, keys:exportedKeys}
-			}
-			catch {
-				deleteCookie("datex-endpoint")
-			}
-		}
-		return null;
+		if (cookieEndpoint) return Target.get(cookieEndpoint) as Endpoint;
+		else return null;
 	}
 
 	public static createNewID():filter_target_name_id{
