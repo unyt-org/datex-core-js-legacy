@@ -761,6 +761,15 @@ export class Type<T = any> extends ExtensibleFunction {
             return value.length <= type.parameters[0];
         }
 
+        // typed array matching
+        if (Type.ofValue(value) == Type.std.Array && type !== Type.std.Array && type instanceof Type && type.base_type === Type.std.Array) {
+            // check if all elements match
+            for (const val of value) {
+                if (!Type.matches(val, type.parameters[0])) return false;
+            }
+            return true;
+        }
+
         return Type.matchesType(Type.ofValue(value), type, value, throwInvalidAssertion);
     }
 
