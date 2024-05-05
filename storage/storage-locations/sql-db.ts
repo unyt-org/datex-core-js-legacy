@@ -172,7 +172,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			}
 		}
 		
-        // console.log("QUERY: " + query_string, query_params)
+    	// console.log("QUERY: " + query_string, query_params)
 
 		if (typeof query_string != "string") {console.error("invalid query:", query_string); throw new Error("invalid query")}
         if (!query_string) throw new Error("empty query");
@@ -743,6 +743,10 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 	}
 
 	async matchQuery<T extends object, Options extends MatchOptions>(itemPrefix: string, valueType: Datex.Type<T>, match: Datex.MatchInput<T>, options: Options): Promise<MatchResult<T, Options>> {
+
+		// validate options
+		if ('limit' in options && options.limit != undefined && !isFinite(options.limit)) throw new Error("Invalid limit: " + options.limit)
+		if ('offset' in options && options.offset != undefined && !isFinite(options.offset)) throw new Error("Invalid offset: " + options.offset) 
 	  
 		// measure total query time
 		const start = Date.now();

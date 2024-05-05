@@ -856,30 +856,37 @@ export type AnyObjectRef = {$: Record<string,unknown>, $$: Record<string,unknown
 
 export type WrappedPointerValue = number|string|boolean|bigint|URL|Endpoint
 
+
+// Hint: T&{} is a workaround to prevent collapse of generic unions https://www.typescriptlang.org/docs/handbook/2/conditional-types.html#distributive-conditional-types
+
 // convert from any JS/DATEX value to minimal representation with reference
 // if a value is a object ref, it is converted to a Pointer<T>
 export type MinimalJSRefWithIndirectRef<T, _C = CollapsedValue<T>> =
-    _C extends symbol ? symbol : (
-        _C extends WrappedPointerValue ?
+    _C&{} extends symbol ? symbol : (
+        _C&{} extends WrappedPointerValue ?
             PointerWithPrimitive<_C>: // keep pointer reference
-            _C extends AnyObjectRef ?
+            _C&{} extends AnyObjectRef ?
                 Pointer<_C> : // pointer wrapper to keep indirect reference intact
                 ObjectRef<_C> // collapsed object
     )
 
 export type MinimalJSRef<T, _C = CollapsedValue<T>> =
-    _C extends symbol ? symbol : (
-        _C extends WrappedPointerValue ?
+    _C&{} extends symbol ? symbol : (
+        _C&{} extends WrappedPointerValue ?
             PointerWithPrimitive<_C>: // keep pointer reference
             ObjectRef<_C> // collapsed object
     )
 
 // return Pointer<T>&T for primitives (excluding boolean) and Pointer<T> otherwise
-export type PointerWithPrimitive<T> = T extends WrappedPointerValue ? 
-    T extends primitive ? 
+export type PointerWithPrimitive<T> = T&{} extends WrappedPointerValue ? 
+    T&{} extends primitive ? 
             Pointer<T>&T : // e.g. Pointer<number>&number
             Pointer<T> : // e.g. Pointer<URL>
     Pointer<T> // e.g. Pointer<Record<string, unknown>>
+
+
+type a = MinimalJSRef<boolean>
+
 
 export type CollapsedValueAdvanced<T extends RefOrValue<unknown>, COLLAPSE_POINTER_PROPERTY extends boolean|undefined = true, COLLAPSE_PRIMITIVE_POINTER extends boolean|undefined = true, _C = CollapsedValue<T>> = 
     // if
