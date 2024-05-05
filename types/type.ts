@@ -239,7 +239,6 @@ export class Type<T = any> extends ExtensibleFunction {
                 }
                 // add default template value
                 else if (value[key] == VOID && required_type.template) {
-                    console.log("TYP",required_type)
                     assign_to_object[key] = required_type.new({}, strict);
                 }
                 else if (value[key] == VOID) assign_to_object[key] = VOID;
