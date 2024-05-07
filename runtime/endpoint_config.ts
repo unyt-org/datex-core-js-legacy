@@ -65,7 +65,10 @@ class EndpointConfig implements EndpointConfigData {
 	async load(path?:URL) {
 		let config:EndpointConfigData|null = null;
 
-		if (client_type=="deno") {
+		if (!Runtime.OPTIONS.USE_DX_CONFIG) {
+			console.log("Skipping endpoint config file");
+		}
+		else if (client_type=="deno") {
 			let config_file = new URL('./'+this.DX_FILE_NAME, cache_path);
 			// try to open .dx from cache
 			try {

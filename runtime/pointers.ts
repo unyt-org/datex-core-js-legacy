@@ -856,30 +856,37 @@ export type AnyObjectRef = {$: Record<string,unknown>, $$: Record<string,unknown
 
 export type WrappedPointerValue = number|string|boolean|bigint|URL|Endpoint
 
+
+// Hint: T&{} is a workaround to prevent collapse of generic unions https://www.typescriptlang.org/docs/handbook/2/conditional-types.html#distributive-conditional-types
+
 // convert from any JS/DATEX value to minimal representation with reference
 // if a value is a object ref, it is converted to a Pointer<T>
 export type MinimalJSRefWithIndirectRef<T, _C = CollapsedValue<T>> =
-    _C extends symbol ? symbol : (
-        _C extends WrappedPointerValue ?
+    _C&{} extends symbol ? symbol : (
+        _C&{} extends WrappedPointerValue ?
             PointerWithPrimitive<_C>: // keep pointer reference
-            _C extends AnyObjectRef ?
+            _C&{} extends AnyObjectRef ?
                 Pointer<_C> : // pointer wrapper to keep indirect reference intact
                 ObjectRef<_C> // collapsed object
     )
 
 export type MinimalJSRef<T, _C = CollapsedValue<T>> =
-    _C extends symbol ? symbol : (
-        _C extends WrappedPointerValue ?
+    _C&{} extends symbol ? symbol : (
+        _C&{} extends WrappedPointerValue ?
             PointerWithPrimitive<_C>: // keep pointer reference
             ObjectRef<_C> // collapsed object
     )
 
 // return Pointer<T>&T for primitives (excluding boolean) and Pointer<T> otherwise
-export type PointerWithPrimitive<T> = T extends WrappedPointerValue ? 
-    T extends primitive ? 
+export type PointerWithPrimitive<T> = T&{} extends WrappedPointerValue ? 
+    T&{} extends primitive ? 
             Pointer<T>&T : // e.g. Pointer<number>&number
             Pointer<T> : // e.g. Pointer<URL>
     Pointer<T> // e.g. Pointer<Record<string, unknown>>
+
+
+type a = MinimalJSRef<boolean>
+
 
 export type CollapsedValueAdvanced<T extends RefOrValue<unknown>, COLLAPSE_POINTER_PROPERTY extends boolean|undefined = true, COLLAPSE_PRIMITIVE_POINTER extends boolean|undefined = true, _C = CollapsedValue<T>> = 
     // if
@@ -1785,7 +1792,9 @@ export class Pointer<T = any> extends Ref<T> {
             const buffer = hex2buffer(id.replace("$",""), undefined, true); 
             return (has_$ ? "$" : "") + this.normalizePointerId(buffer);
         }
-        else throw Error("Cannot normalize invalid pointer id - must be string or Uint8Array")
+        else {
+            throw Error("Cannot normalize invalid pointer id - must be string or Uint8Array")
+        }
     }
 
 
@@ -2942,21 +2951,29 @@ export class Pointer<T = any> extends Ref<T> {
                         this.#waiting_for_always_promise = val; 
 
                         // wait until val promise resolves
-                        val.then((resolvedVal)=>{
-                            // got a more recent promise result in the meantime, ignore this one
-                            if (val !== this.#waiting_for_always_promise) {
-                                return;
-                            }
-                            this.#waiting_for_always_promise = undefined;
-                            this.handleTransformValue(
-                                resolvedVal,
-                                capturedGetters,
-                                capturedGettersWithKeys,
-                                state,
-                                ignoreReturnValue,
-                                options
-                            )
-                        })
+                        val
+                            .then((resolvedVal)=>{
+                                // got a more recent promise result in the meantime, ignore this one
+                                if (val !== this.#waiting_for_always_promise) {
+                                    return;
+                                }
+                                this.#waiting_for_always_promise = undefined;
+                                this.handleTransformValue(
+                                    resolvedVal,
+                                    capturedGetters,
+                                    capturedGettersWithKeys,
+                                    state,
+                                    ignoreReturnValue,
+                                    options
+                                )
+                            })
+                            .catch(e => {
+                                if (e !== Pointer.WEAK_EFFECT_DISPOSED) console.error(e);
+                                this.#waiting_for_always_promise = undefined;
+                                // invalid result, no update
+                                // TODO: handle case where promise is rejected in initial transform call
+                                // and captured refs are not observed?
+                            })
                     }
                     // normal sync transform
                     else {

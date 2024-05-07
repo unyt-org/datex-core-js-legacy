@@ -53,7 +53,7 @@ Example:
 ```ts
 @endpoint class MyInterface {
   @property myMethod(a: number) {
-    console.log("myMethod called by endpoint " + datex.meta.sender)  
+    console.log("myMethod called by endpoint " + datex.meta.caller)  
   }
 }
 ```

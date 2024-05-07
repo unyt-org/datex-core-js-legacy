@@ -113,7 +113,7 @@ export class WindowInterface extends CommunicationInterface {
         }
 
         this.properties.name = windowOriginURL?.toString() || this.#windowOrigin;
-    
+
         globalThis.addEventListener("message", this.onReceive);
         if (this.#isChild) {
             // if in sub window: send INIT to parent immediately

@@ -27,7 +27,7 @@ const admin = f `@exampleAdmin`
 @endpoint class MyAPI {
     @property static exampleFunction(a: number, b: string) {
         // the endpoint that called with function:
-        const callerEndpoint = datex.meta.sender;
+        const callerEndpoint = datex.meta.caller;
         
         if (callerEndpoint === admin) {
             console.log("doing admin stuff")

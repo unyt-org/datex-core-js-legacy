@@ -21,6 +21,7 @@ import { Datex } from "../mod.ts";
 import { Storage } from "../storage/storage.ts";
 import { WebSocketClientInterface } from "./communication-interfaces/websocket-client-interface.ts";
 import { communicationHub } from "./communication-hub.ts";
+import { getCookie } from "../utils/cookies.ts";
 
 const logger = new Logger("DATEX Supranet");
 
@@ -320,8 +321,11 @@ export class Supranet {
     // load stuff ...
 
 
-    public static async getLocalEndpointAndKeys():Promise<[Endpoint|UnresolvedEndpointProperty, Crypto.ExportedKeySet]> {
-        let endpoint: Endpoint|UnresolvedEndpointProperty;
+    public static async getLocalEndpointAndKeys():Promise<[Endpoint, Crypto.ExportedKeySet]> {
+        let endpoint: Endpoint|undefined;
+
+        // has datex-endpoint-nonce cookie: indicates that new endpoint id was pushed from server, override and drop current endpoint config
+        if (getCookie("datex-endpoint-nonce")) endpoint_config.clear();
 
         // create new endpoint
         if (!endpoint_config.endpoint) endpoint = await this.createAndSaveNewEndpoint();
@@ -337,7 +341,7 @@ export class Supranet {
         // implicitly create new anonymous endpoint, if set to @@local
         if (endpoint == Datex.LOCAL_ENDPOINT) endpoint = undefined;
 
-        if (!(endpoint instanceof Endpoint || endpoint instanceof UnresolvedEndpointProperty)) {
+        if (!(endpoint instanceof Endpoint)) {
             if (endpoint !== undefined) logger.error("Config Value 'endpoint' is not of type <Endpoint>", endpoint);
             endpoint = await this.createAndSaveNewEndpoint();
         } 
@@ -349,10 +353,9 @@ export class Supranet {
     /**
      * Create new anonymous endpoint or load from "datex-endpoint" cookie + "new_keys" entry
      */
-    private static createAndSaveNewEndpoint(){
-        const {endpoint, keys} = Endpoint.getFromCookie() ?? {endpoint: <Endpoint> Endpoint.get(Endpoint.createNewID())};
+    private static createAndSaveNewEndpoint() {
+        const endpoint = Endpoint.getFromCookie() ?? Endpoint.getNewEndpoint();
         endpoint_config.endpoint = endpoint;
-        if (keys) endpoint_config.keys = keys;
         endpoint_config.save();
         return endpoint;
     }

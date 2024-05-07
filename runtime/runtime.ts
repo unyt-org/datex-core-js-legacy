@@ -233,7 +233,8 @@ export class Runtime {
         NATIVE_ERROR_STACK_TRACES: true, // create detailed stack traces of JS Errors (NATIVE_ERROR_MESSAGES must be true)
         NATIVE_ERROR_DEBUG_STACK_TRACES: false, // also display internal DATEX library stack traces (hidden per default)
         NATIVE_ERROR_MESSAGES: true, // expose native error messages
-        DATEX_HTTP_ORIGIN: globalThis.location?.origin // http origin to use to send datex-over-http messages (e.g. GOODBYE messages), default is current origin for browsers
+        DATEX_HTTP_ORIGIN: globalThis.location?.origin, // http origin to use to send datex-over-http messages (e.g. GOODBYE messages), default is current origin for browsers
+        USE_DX_CONFIG: true // use local /.dx file for endpoint/connection setup
     }
 
     public static MIME_TYPE_MAPPING: Record<mime_type, mime_type_definition<unknown>> = {
@@ -756,6 +757,12 @@ export class Runtime {
             
         }
 
+        else if (url.protocol == "route:") {
+            // TODO: only a warning for now (for js module preloading), should be an error
+            logger.warn("Route could not be resolved: " + url_string);
+            return null as any;
+        }
+
         else {
             throw new RuntimeError("Protocol '"+url.protocol.slice(0,-1)+"' not supported");
         }
@@ -1244,10 +1251,9 @@ export class Runtime {
         const endpointName = endpoint.toString();
         // TODO: store signed endpoint validation cookie
         if (client_type == "browser") {
-            deleteCookie("datex-endpoint-new");
             const currentEndpointName = getCookie("datex-endpoint");
             // only update if endpoint not already set in cookie
-            if (currentEndpointName != endpointName) {
+            if (currentEndpointName != endpointName || !getCookie("datex-endpoint-validation")) {
                 deleteCookie("datex-endpoint-validation");
                 setCookie("datex-endpoint", endpointName, endpoint_config.temporary ? 0 : undefined);
                 (async() => {
@@ -1323,14 +1329,16 @@ export class Runtime {
         this.STD_STATIC_SCOPE = {};
 
         // std.print
-        const print = DatexFunction.createFromJSFunction((meta, ...params:any[])=>{
-            IOHandler.stdOut(params, meta.sender);
-        }, undefined, undefined, undefined, undefined, undefined, new Tuple({v1:Type.std.Any, v2:Type.std.Any, v3:Type.std.Any, v4:Type.std.Any, v5:Type.std.Any, v6:Type.std.Any}), 0)
+        const print = DatexFunction.createFromJSFunction((...params:any[])=>{
+            const meta = datex.meta;
+            IOHandler.stdOut(params, meta);
+        }, undefined, undefined, undefined, undefined, undefined, new Tuple({v1:Type.std.Any, v2:Type.std.Any, v3:Type.std.Any, v4:Type.std.Any, v5:Type.std.Any, v6:Type.std.Any}))
 
         // std.printf (formatted output)
-        const printf = DatexFunction.createFromJSFunction(async (meta,...params:any[])=>{
-            await IOHandler.stdOutF(params, meta.sender);
-        }, undefined, undefined, undefined, undefined, undefined, new Tuple({v1:Type.std.Any, v2:Type.std.Any, v3:Type.std.Any, v4:Type.std.Any, v5:Type.std.Any, v6:Type.std.Any}), 0);
+        const printf = DatexFunction.createFromJSFunction(async (...params:any[])=>{
+            const meta = datex.meta;
+            await IOHandler.stdOutF(params, meta);
+        }, undefined, undefined, undefined, undefined, undefined, new Tuple({v1:Type.std.Any, v2:Type.std.Any, v3:Type.std.Any, v4:Type.std.Any, v5:Type.std.Any, v6:Type.std.Any}));
 
         // std.printn (native output)
         const printn = DatexFunction.createFromJSFunction((...params:any[])=>{
