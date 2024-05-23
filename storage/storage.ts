@@ -1295,7 +1295,8 @@ export class Storage {
         // RC is 0, delet pointer from storage
         if (newCount <= 0) {
             localStorage.removeItem(this.rc_prefix+ptrId);
-            this.removePointer(ptrId, undefined, true);
+            this.removePointer(ptrId, undefined, true)
+                .catch(e=>console.error(e))
         }
         // decrease RC
         else localStorage.setItem(this.rc_prefix+ptrId, newCount.toString());
