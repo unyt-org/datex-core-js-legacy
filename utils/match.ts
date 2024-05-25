@@ -2,6 +2,7 @@ import { StorageSet } from "../types/storage_set.ts";
 import { Type } from "../types/type.ts";
 import type { Class } from "./global_types.ts";
 import { MatchInput, MatchResult, MatchOptions, Storage } from "../storage/storage.ts";
+import { StorageMap } from "../types/storage-map.ts";
 
 export type { MatchInput, MatchOptions, MatchResult } from "../storage/storage.ts";
 
@@ -12,7 +13,7 @@ export type { MatchInput, MatchOptions, MatchResult } from "../storage/storage.t
  * @param limit 
  * @returns 
  */
-export async function match<T extends object, Options extends MatchOptions>(inputSet: StorageSet<T>, valueType:Class<T>|Type<T>, match: MatchInput<T>, options?: Options): Promise<MatchResult<T, Options>> {
+export async function match<T extends object, Options extends MatchOptions>(inputSet: StorageSet<T>|StorageMap<unknown,T>, valueType:Class<T>|Type<T>, match: MatchInput<T>, options?: Options): Promise<MatchResult<T, Options>> {
 	options ??= {} as Options;
 	const found = new Set<T>();
 	const matchOrEntries = (match instanceof Array ? match : [match]).map(m => Object.entries(m)) as [keyof T, T[keyof T]][][];

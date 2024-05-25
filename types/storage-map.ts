@@ -3,7 +3,10 @@
 import { Compiler } from "../compiler/compiler.ts";
 import { DX_PTR } from "../runtime/constants.ts";
 import { Pointer } from "../runtime/pointers.ts";
-import { Storage } from "../storage/storage.ts";
+import { MatchOptions, Storage } from "../storage/storage.ts";
+import { Class } from "../utils/global_types.ts";
+import { MatchInput, MatchResult, match } from "../utils/match.ts";
+import { Type } from "./type.ts";
 
 
 /**
@@ -275,5 +278,8 @@ export class StorageMap<K,V> extends StorageWeakMap<K,V> {
 		await Promise.all(promises);
 	}
 
+	match<Options extends MatchOptions, T extends V & object>(valueType:Class<T>|Type<T>, matchInput: MatchInput<T>, options?: Options): Promise<MatchResult<T, Options>> {
+		return match(this as unknown as StorageMap<unknown, T>, valueType, matchInput, options)
+	}
 
 }
