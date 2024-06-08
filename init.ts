@@ -6,7 +6,6 @@ import { Storage, registerStorageAsPointerSource } from "./storage/storage.ts";
 import { logger, projectRootURL } from "./utils/global_values.ts";
 import { IndexedDBStorageLocation } from "./storage/storage-locations/indexed-db.ts";
 import { LocalStorageLocation } from "./storage/storage-locations/local-storage.ts";
-import { DenoKVStorageLocation } from "./storage/storage-locations/deno-kv.ts";
 import { loadEternalValues } from "./utils/eternals.ts";
 import { DX_BOUND_LOCAL_SLOT } from "./runtime/constants.ts";
 import { verboseArg } from "./utils/logger.ts";
@@ -93,6 +92,7 @@ export async function init() {
 			})
 		}
 		else if (client_type == "deno") {
+			const { DenoKVStorageLocation } = await import("./storage/storage-locations/deno-kv.ts");
 			const denoKV = new DenoKVStorageLocation();
 			if (denoKV.isSupported()) {
 				console.log("Using DenoKV as primary storage location (experimental)")

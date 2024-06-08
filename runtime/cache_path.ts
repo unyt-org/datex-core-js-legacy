@@ -1,11 +1,15 @@
 import { client_type } from "../utils/constants.ts";
 import { projectRootURL } from "../utils/global_values.ts";
 import { normalizePath } from "../utils/normalize-path.ts";
-import { commandLineOptions } from "../utils/args.ts";
 
-let custom_cache_path = commandLineOptions.option("cache-path", {aliases: ["c"], type: "string",  description: "Overrides the default path for datex cache files (.datex-cache)"})
+let custom_cache_path: string|undefined|-1 = -1;
 
 export async function _updateCachePaths() {
+	
+	if (custom_cache_path === -1 && client_type == "deno") {
+		const { commandLineOptions } = await import("../utils/args.ts");
+		custom_cache_path = commandLineOptions.option("cache-path", {aliases: ["c"], type: "string",  description: "Overrides the default path for datex cache files (.datex-cache)"})
+	}
 
 	let _cache_path:string|URL = new URL('./.datex-cache/', projectRootURL);
 	let _ptr_cache_path:string|URL = new URL('./pointers/', _cache_path);
