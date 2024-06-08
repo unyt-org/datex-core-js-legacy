@@ -14,6 +14,7 @@ import { IOHandler } from "../runtime/io_handler.ts";
 import { DATEX_ERROR } from "../types/error_codes.ts";
 import { LocalLoopbackInterfaceSocket } from  "./communication-interfaces/local-loopback-interface.ts";
 import { Datex } from "../mod.ts";
+import { Supranet } from "./supranet.ts";
 
 export type DatexInData = {
     dxb: ArrayBuffer|ReadableStreamDefaultReader<Uint8Array>,
@@ -115,8 +116,19 @@ export class CommunicationHubHandler {
         const isConnected = this.isConnected();
         if (isConnected !== this.connected) {
             this.#connected = isConnected;
+            Supranet._setConnected(this.#connected);
             this.#logger.debug(`Connection status was changed. This endpoint (${Datex.Runtime.endpoint}) is ${isConnected ? "online" : "offline"}!`);
+            if (this.#connected)
+                this.onlineEvents.forEach(e => e());
         }
+    }
+    
+    private onlineEvents = new Set<() => unknown>();
+    public addOnlineHandler(method: () => unknown) {
+        this.onlineEvents.add(method);
+    }
+    public removeOnlineHandler(method: () => unknown) {
+        this.onlineEvents.delete(method);
     }
 
     private isConnected() {

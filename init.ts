@@ -3,7 +3,7 @@ import { Pointer } from "./runtime/pointers.ts";
 import { LOCAL_ENDPOINT } from "./types/addressing.ts";
 import { client_type } from "./utils/constants.ts";
 import { Storage, registerStorageAsPointerSource } from "./storage/storage.ts";
-import { cwdURL, logger } from "./utils/global_values.ts";
+import { logger, projectRootURL } from "./utils/global_values.ts";
 import { IndexedDBStorageLocation } from "./storage/storage-locations/indexed-db.ts";
 import { LocalStorageLocation } from "./storage/storage-locations/local-storage.ts";
 import { DenoKVStorageLocation } from "./storage/storage-locations/deno-kv.ts";
@@ -66,7 +66,7 @@ export async function init() {
 		}
 		else if (client_type == "deno") {
 			// TODO: dynamic storage.ts location - use uix path backend/storage.ts as workaround
-			storageInitModule = new Path('./backend/storage.ts', cwdURL)
+			storageInitModule = new Path('./backend/storage.ts', projectRootURL)
 		}
 
 		if (await storageInitModule?.fsExists()) {

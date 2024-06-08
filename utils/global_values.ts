@@ -34,4 +34,17 @@ export const baseURL = new URL('../../', import.meta.url);
 export const libURL = new URL('../', import.meta.url);
 
 // path from which the script was executed (same aas baseURL in browsers)
-export const cwdURL = client_type == "deno" ? new URL('file://'+Deno.cwd()+"/") : baseURL;
+export const cwdURL = client_type  == "deno" ? new URL('file://'+Deno.cwd()+"/") : baseURL;
+
+export let projectRootURL = cwdURL;
+
+/**
+ * Modify the project root URL (default is the current working directory)
+ * @param url 
+ */
+export async function _updateProjectRootURL(url:URL) {
+	const { _updateCachePaths } = await import("../runtime/cache_path.ts");
+
+	projectRootURL = url;
+	await _updateCachePaths();
+}

@@ -1,6 +1,6 @@
 // store and read endpoint config (name, keys, ...)
 
-import { cwdURL, Deno, logger } from "../utils/global_values.ts";
+import { Deno, logger, projectRootURL } from "../utils/global_values.ts";
 import { client_type } from "../utils/constants.ts";
 import { Endpoint } from "../types/addressing.ts";
 import { Crypto } from "./crypto.ts";
@@ -77,7 +77,7 @@ class EndpointConfig implements EndpointConfigData {
 			} 
 			// use normal dx file
 			catch {
-				if (!path) path = new URL('./'+this.DX_FILE_NAME, cwdURL)
+				if (!path) path = new URL('./'+this.DX_FILE_NAME, projectRootURL)
 				config_file = path;
 			}
 			try {

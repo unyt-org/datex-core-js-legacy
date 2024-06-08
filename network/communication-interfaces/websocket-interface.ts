@@ -1,5 +1,5 @@
 import { CommunicationInterface, CommunicationInterfaceSocket } from "../communication-interface.ts";
-import { onlineStatus } from "../online-status.ts";
+import { getOnlineState, onlineStatus } from "../online-state.ts";
 
 /**
  * WebSocket interface socket, used by WebSocket client and server interfaces
@@ -51,7 +51,6 @@ export abstract class WebSocketInterface extends CommunicationInterface<WebSocke
         
                 let connectionOpen = false;
                 const errorHandler = () => {
-                    console.warn("error handler", connectionOpen)
                     // don't trigger any further errorHandlers
                     webSocket.removeEventListener('close', errorHandler);
                     webSocket.removeEventListener('error', errorHandler);
@@ -64,7 +63,6 @@ export abstract class WebSocketInterface extends CommunicationInterface<WebSocke
 
                     if (!connectionOpen) resolve(false);
                     else {
-                        console.warn("Remove socket");
                         this.removeSocket(socket);
                         this.onWebSocketClosed(socket)
                     }
@@ -86,8 +84,9 @@ export abstract class WebSocketInterface extends CommunicationInterface<WebSocke
                 webSocket.addEventListener('error', errorHandler);
                 webSocket.addEventListener('close', errorHandler);
                 
+                const onlineState = getOnlineState();
                 effect(()=>{
-                    if (!onlineStatus.val)
+                    if (!onlineState.val)
                         errorHandler();
                 });
                 
