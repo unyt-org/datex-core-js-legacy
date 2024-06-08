@@ -162,6 +162,11 @@ export class Supranet {
         return connected;
     }
 
+    // update Supranet.connected state
+    static _setConnected(connected:boolean) {
+        this.#connected = connected;    
+    }
+
 
     static getNode(use_node?:Endpoint) {
         // channel types?

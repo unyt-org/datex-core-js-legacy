@@ -1,6 +1,6 @@
 // store and read endpoint config (name, keys, ...)
 
-import { cwdURL, Deno, logger } from "../utils/global_values.ts";
+import { Deno, logger, projectRootURL } from "../utils/global_values.ts";
 import { client_type } from "../utils/constants.ts";
 import { Endpoint } from "../types/addressing.ts";
 import { Crypto } from "./crypto.ts";
@@ -10,7 +10,6 @@ import { cache_path } from "./cache_path.ts";
 import { DatexObject } from "../types/object.ts";
 import { Ref } from "./pointers.ts";
 import { normalizePath } from "../utils/normalize-path.ts";
-import { ESCAPE_SEQUENCES } from "../datex_all.ts";
 
 type channel_type = 'websocket'|'http'
 type node_config = {
@@ -78,7 +77,7 @@ class EndpointConfig implements EndpointConfigData {
 			} 
 			// use normal dx file
 			catch {
-				if (!path) path = new URL('./'+this.DX_FILE_NAME, cwdURL)
+				if (!path) path = new URL('./'+this.DX_FILE_NAME, projectRootURL)
 				config_file = path;
 			}
 			try {

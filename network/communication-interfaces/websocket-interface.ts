@@ -1,4 +1,5 @@
 import { CommunicationInterface, CommunicationInterfaceSocket } from "../communication-interface.ts";
+import { getOnlineState, onlineStatus } from "../online-state.ts";
 
 /**
  * WebSocket interface socket, used by WebSocket client and server interfaces
@@ -82,7 +83,13 @@ export abstract class WebSocketInterface extends CommunicationInterface<WebSocke
                 webSocket.addEventListener('open', openHandler);
                 webSocket.addEventListener('error', errorHandler);
                 webSocket.addEventListener('close', errorHandler);
-
+                
+                const onlineState = getOnlineState();
+                effect(()=>{
+                    if (!onlineState.val)
+                        errorHandler();
+                });
+                
                 this.#webSockets.set(webSocket, {
                     errorHandler,
                     openHandler
