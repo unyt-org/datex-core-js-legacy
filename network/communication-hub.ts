@@ -416,7 +416,7 @@ export class CommunicationHubHandler {
             await sleep(1000);
 
             // iterate direct outgoing sockets
-            const helloMessage = await this.compileHelloMessage(1);
+            const helloMessage = await this.compileHelloMessage(); // TODO: set ttl to 1?
             if (helloMessage) {
                 for (const socket of this.iterateSockets()) {
                     socket.sendHello(helloMessage)
