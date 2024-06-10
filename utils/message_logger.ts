@@ -65,7 +65,7 @@ export class MessageLogger {
             if (content.trim() == "\x1b[38;2;219;45;129mvoid\x1b[39m;") return; // dont log void; messages
             
             content = 
-                `${ESCAPE_SEQUENCES.BLUE}${receiverIsOwnEndpoint?'':Runtime.valueToDatexStringExperimental(receivers, false, false)+ ' '}◀── ${header.sender||'@*'} ${header.type!=undefined ? `(${ProtocolDataType[header.type]}) ` : ''}${socket ? `via ${socket.toString()} ` : ''}`.padEnd(80, '─') + '\n'
+                `${ESCAPE_SEQUENCES.BLUE}${receiverIsOwnEndpoint?'':Runtime.valueToDatexStringExperimental(receivers, false, false)+ ' '}◀── ${header.sender||'@*'} ${header.type!=undefined ? `(${ProtocolDataType[header.type]}) ` : ''}${socket ? `via ${socket.toString()} ` : ''}${socket?.endpoint ? ` ${socket?.endpoint}` : ''}`.padEnd(80, '─') + '\n'
                 + content
                 + `\n${ESCAPE_SEQUENCES.BLUE}──────────────────────────────────────────────────────────────────────────\n`;
             log(content)
@@ -91,7 +91,7 @@ export class MessageLogger {
             if (content.trim() == "\x1b[38;2;219;45;129mvoid\x1b[39m;") return; // dont log void; messages
  
             content = 
-                `${ESCAPE_SEQUENCES.GREEN}${senderIsOwnEndpoint?'':Runtime.valueToDatexStringExperimental(header.sender, false, false)+' '}──▶ ${receivers||'@*'} ${header.type!=undefined ? `(${ProtocolDataType[header.type]}) ` : ''}${socket ? `via ${socket.toString()} ` : ''}`.padEnd(80, '─') + '\n'
+                `${ESCAPE_SEQUENCES.GREEN}${senderIsOwnEndpoint?'':Runtime.valueToDatexStringExperimental(header.sender, false, false)+' '}──▶ ${receivers||'@*'} ${header.type!=undefined ? `(${ProtocolDataType[header.type]}) ` : ''}${socket ? `via ${socket.toString()} ` : ''}${socket?.endpoint ? ` ${socket?.endpoint}` : '-'}`.padEnd(80, '─') + '\n'
                 + content
                 + `\n${ESCAPE_SEQUENCES.GREEN}──────────────────────────────────────────────────────────────────────────\n`;
 
