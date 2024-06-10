@@ -54,12 +54,13 @@ export const ESCAPE_SEQUENCES = {
 
     RESET:      "\x1b[0m",
     BOLD:       "\x1b[1m",
-    DEFAULT:    "\x1b[2m",
+    DIM:        "\x1b[2m",
     ITALIC:     "\x1b[3m",
     UNDERLINE: "\x1b[4m",
     INVERSE:    "\x1b[7m",
     HIDDEN:     "\x1b[8m",
 
+    DEFAULT:    "\x1b[22m",
     RESET_UNDERLINE: "\x1b[24m",
     RESET_INVERSE:    "\x1b[27m",
 
