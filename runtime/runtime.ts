@@ -1891,8 +1891,7 @@ export class Runtime {
             if (header) {
                 this.handleScopeError(header, e[1]);
                 this.updateEndpointOnlineState(header);
-                console.error(e[1]??e)
-
+                // console.error(e[1]??e)
                 return header;
             }
             throw e;
