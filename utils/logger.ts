@@ -340,7 +340,6 @@ type dynamicReturn = {
 }
 
 export class Logger {
-
     private static loggers_by_origin = new Map<string,Set<Logger>>();
     private static global_log_streams = new Set<StreamSink>();
 
@@ -363,6 +362,7 @@ export class Logger {
 
     public log_to_console = true;
     public log_to_cache = false;
+    public log_to_streams = true;
     public cache?: string
     private out_streams = new Set<StreamSink>();
 
@@ -402,7 +402,7 @@ export class Logger {
         if (this.origin) Logger.loggers_by_origin.get(this.origin)?.delete(this);
     }
 
-    private log(color: COLOR, text: string, data:any[], log_level:LOG_LEVEL = LOG_LEVEL.DEFAULT, only_log_own_stream = false, add_tag = true, raw = false) {
+    private log(color: COLOR, text: string, data:any[], log_level:LOG_LEVEL = LOG_LEVEL.DEFAULT, only_log_own_stream = !this.log_to_streams, add_tag = true, raw = false) {
 
         if (this.production && (log_level < Logger.production_log_level)) return; // don't log for production
         if (!this.production && (log_level < Logger.development_log_level)) return; // don't log for development
@@ -413,7 +413,7 @@ export class Logger {
     // log_level: decides which console log method is used (log, error, warn, debug)
     // only_log_own_stream: if true, only streams where no other logger is piped in are affected (e.g. to prevent clear of all loggers)
     // force_browser_compat_mode: if true, browser console formatting falls back to %c sequences (required for non compatible ascii sequences or images)
-    private logRaw(text:string, log_level:LOG_LEVEL = LOG_LEVEL.DEFAULT, only_log_own_stream = false, update_xy = true) {
+    private logRaw(text:string, log_level:LOG_LEVEL = LOG_LEVEL.DEFAULT, only_log_own_stream = !this.log_to_streams, update_xy = true) {
 
         if (this.production && (log_level < Logger.production_log_level)) return; // don't log for production
         if (!this.production && (log_level < Logger.development_log_level)) return; // don't log for development

@@ -12,13 +12,14 @@ import { displayFatalError } from "../runtime/display.ts"
 import { Type } from "../types/type.ts";
 import { addPersistentListener } from "../utils/persistent-listeners.ts";
 import { Endpoint, LOCAL_ENDPOINT } from "../types/addressing.ts";
-import { ESCAPE_SEQUENCES } from "../utils/logger.ts";
+import { ESCAPE_SEQUENCES, verboseArg } from "../utils/logger.ts";
 import { StorageMap } from "../types/storage-map.ts";
 import { StorageSet } from "../types/storage-set.ts";
 import { IterableWeakSet } from "../utils/iterable-weak-set.ts";
 import { LazyPointer } from "../runtime/lazy-pointer.ts";
 import { AutoMap } from "../utils/auto_map.ts";
-import { JSInterface } from "../runtime/js_interface.ts";
+import { hasDebugCookie } from "../utils/debug-cookie.ts";
+import { setStorage } from "../runtime/reset.ts";
 
 
 // displayInit();
@@ -478,6 +479,11 @@ export class Storage {
         // if (globalThis.Deno) setTimeout(()=>{Deno.exit(1)},20_000)
         
         this.saveDirtyState();
+        
+        if (this.#dirty || this.dirtyValues.size) {
+            logger.debug("Storage has dirty flag set, following values could not be stored", this.dirtyValues);
+        }
+        
         for (const [loc,options] of this.#locations) {
             if (options.modes.includes(<any>Storage.Mode.SAVE_ON_EXIT)) Storage.saveCurrentState(loc, true);
             loc.onAfterExit?.();
@@ -556,21 +562,26 @@ export class Storage {
     // handle dirty states for async storage operations:
     static #dirty_locations = new Map<StorageLocation, number>()
 
+    static dirtyValues = new Set<string>();
     // called when a full backup to this storage location was made
-    public static setDirty(location:StorageLocation, dirty = true) {
+    public static setDirty(location:StorageLocation, dirty = true, metadata = '') {
         // update counter
         if (dirty) {
+            this.dirtyValues.add(metadata);
             const currentCount = this.#dirty_locations.get(location)??0;
             this.#dirty_locations.set(location, currentCount + 1);
         }
         else {
-            if (!this.#dirty_locations.has(location)) logger.warn("Invalid dirty state reset for location '"+location.name + "', dirty state was not set");
+            if (!this.#dirty_locations.has(location)) {
+                logger.warn("Invalid dirty state reset for location '"+location.name + "', dirty state was not set", metadata);
+            }
             else {
                 const newCount = this.#dirty_locations.get(location)! - 1;
                 if (newCount <= 0) {
                     this.#dirty_locations.delete(location);
                 }
                 else this.#dirty_locations.set(location, newCount);
+                this.dirtyValues.delete(metadata);
             }
         }
     }
@@ -644,14 +655,15 @@ export class Storage {
     }
 
 	static async setItemAsync(location:AsyncStorageLocation, key: string, value: unknown,listen_for_pointer_changes: boolean) {
-        this.setDirty(location, true)
+        const metadata = this.isDebugMode ? (key + ": " +Runtime.valueToDatexString(value)) : undefined;
+        this.setDirty(location, true, metadata);
         const itemExisted = await location.hasItem(key);
         // store value (might be pointer reference)
         const dependencies = await location.setItem(key, value);
         if (Pointer.is_local) this.checkUnresolvedLocalDependenciesForItem(key, value, dependencies);
         this.updateItemDependencies(key, [...dependencies].map(p=>p.id));
         await this.saveDependencyPointersAsync(dependencies, listen_for_pointer_changes, location);
-        this.setDirty(location, false)
+        this.setDirty(location, false, metadata);
         return itemExisted;
 	}
 
@@ -757,11 +769,16 @@ export class Storage {
         return true;
     }
 
+    private static get isDebugMode(): boolean {
+        return (verboseArg || hasDebugCookie());
+    }
+
     private static async updatePointerAsync(location: AsyncStorageLocation, pointer:Pointer, partialUpdateKey: unknown = NOT_EXISTING): Promise<Set<Pointer>> {
-        this.setDirty(location, true)
-		const res = await location.setPointer(pointer, partialUpdateKey);
-		this.setDirty(location, false)
-		return res;
+        const metadata = this.isDebugMode ? `${pointer.id}: ${Runtime.valueToDatexString(pointer.val)}` : undefined;
+        this.setDirty(location, true, metadata);
+        const res = await location.setPointer(pointer, partialUpdateKey);
+        this.setDirty(location, false, metadata);
+        return res;
     }
 
     /**
@@ -820,8 +837,9 @@ export class Storage {
 
             // don't block saving if only partial update
             if (!(location.supportsPartialUpdates && key !== NOT_EXISTING)) saving = true;
+            const metadata = this.isDebugMode ? `${pointer.id}: ${Runtime.valueToDatexString(pointer.val)}` : undefined;
 
-            this.setDirty(location, true)
+            this.setDirty(location, true, metadata);
             setTimeout(async ()=>{
                 // set pointer (async)
                 saving = false;
@@ -832,7 +850,7 @@ export class Storage {
                 else {
                     pointer.unobserve(handler);
                 }
-                this.setDirty(location, false)
+                this.setDirty(location, false, metadata)
             }, 1000);
         };
 
@@ -882,7 +900,7 @@ export class Storage {
     }
 
 
-    private static async restoreDirtyState(){
+    private static async restoreDirtyState() {
         if (this.#primary_location != undefined && this.isInDirtyState(this.#primary_location) && this.#trusted_location != undefined && this.#trusted_location!=this.#primary_location) {
             await this.copyStorage(this.#trusted_location, this.#primary_location)
             logger.warn `restored dirty state of ${this.#primary_location.name} from trusted location ${this.#trusted_location.name}`
@@ -911,7 +929,7 @@ export class Storage {
 
         if (this.#dirty) {
             displayFatalError('storage-unrecoverable');
-            throw new Error(`cannot restore dirty state of ${this.#primary_location!.name}, no trusted secondary storage location found`)
+            throw new Error(`cannot restore dirty state of ${this.#primary_location!.name}, no trusted secondary storage location found`);
         }
 
         // try to find pointer at a storage location
@@ -1396,7 +1414,9 @@ export class Storage {
         await Storage.clearAll();
         Storage.allowExitWithoutSave();
         if (client_type === "deno") Deno.exit(1);
-        else if (globalThis.window?.location) window.location.reload();
+        else if (globalThis.window?.location) {
+            window.location.reload();
+        }
         else logger.error("Could not reload in non-browser or Deno context")
     }
 
@@ -1754,6 +1774,8 @@ export class Storage {
 
 }
 
+setStorage(Storage);
+
 export namespace Storage {
 
 	export enum Mode {
@@ -1791,9 +1813,6 @@ if (!globalThis.NO_INIT) {
 }
 // ------------------------------------------------------------------------------
 
-// @ts-ignore storage reset
-globalThis.reset = Storage.clearAndReload
-
 // proxy for Storage
 class DatexStoragePointerSource implements PointerSource {
     getPointer(pointer_id:string, pointerify?:boolean, localOnly?: boolean) {
@@ -1807,3 +1826,4 @@ class DatexStoragePointerSource implements PointerSource {
 export function registerStorageAsPointerSource() {
 	Pointer.registerPointerSource(new DatexStoragePointerSource());
 }
+

@@ -1,27 +1,8 @@
 import { client_type } from "../utils/constants.ts";
-
-/**
- * used to display error and reset page to user
- */
-const errorReset = async ()=> {
-	try {
-		// TODO: remove localStorage.clear here?
-		localStorage.clear();
-		// @ts-ignore
-		if (globalThis.reset) await reset()
-		else throw ""
-	}
-	catch {
-		localStorage.clear(); // last resort, clear localStorage - TODO: also clear indexeddb?
-	}
-	if (globalThis.Deno) Deno.exit(1);
-}
-// @ts-ignore
-globalThis.errorReset = errorReset
+import { reset } from "./reset.ts";
 
 function setup() {
 	if (client_type !== "deno" && globalThis.window && globalThis.document) {
-		// @ts-ignore
 		const document = globalThis.document;
 
 		document.body.style.width = "100%"
@@ -47,7 +28,7 @@ export function displayFatalError(code:string, reset_btn = true) {
 	FATAL ERROR: ${code}
 	Cannot restore the current state. Deleting all caches.
 `
-	errorReset();
+	reset();
 	return;
 
 	// @ts-ignore
@@ -61,7 +42,7 @@ export function displayFatalError(code:string, reset_btn = true) {
 	<div style="flex:1;display:flex;flex-direction:column;width:100%;justify-content:center;align-items:center;color:#ddd;">
 		<h3 style="color:#ddd">Oh no, something bad happened :/</h3>
 		<div style="color:#bbb;margin-bottom:15px;">Your app data on this device might not be recoverable</div>
-		${reset_btn ? `<button style="all:unset;background:#333;padding:8px;border-radius:10px;text-align:center;font-size:1.1em" onclick="errorReset()">
+		${reset_btn ? `<button style="all:unset;background:#333;padding:8px;border-radius:10px;text-align:center;font-size:1.1em" onclick="reset()">
 			Reset App
 		</button>` : '' }
 	</div>
@@ -74,7 +55,7 @@ FATAL ERROR: ${code}
 Cannot restore the current state. Deleting all caches (.datex-cache).
 		`
 		// @ts-ignore
-		errorReset()
+		reset()
 	}
 }
 

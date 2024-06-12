@@ -1891,8 +1891,7 @@ export class Runtime {
             if (header) {
                 this.handleScopeError(header, e[1]);
                 this.updateEndpointOnlineState(header);
-                console.error(e[1]??e)
-
+                // console.error(e[1]??e)
                 return header;
             }
             throw e;
@@ -2161,7 +2160,7 @@ export class Runtime {
             // ignore
         }
         else if (header.type == ProtocolDataType.GOODBYE) {
-            console.error("Error in GOODBYE message:",e)
+            logger.error("Error in GOODBYE message:", e instanceof Error ? (e.message ?? '') : '')
         }
         else {
             logger.error("Invalid proctocol data type: " + ProtocolDataTypesMap[header.type]??header.type)
@@ -7515,8 +7514,6 @@ Type.get<JSTransferableFunction>("js:Function").setJSInterface({
     },
 
 });
-
-
 
 Type.get("std:Iterator").setJSInterface({
     class: Iterator,

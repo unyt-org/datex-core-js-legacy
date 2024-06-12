@@ -5,6 +5,7 @@ import type { StreamConsumer } from "./abstract_types.ts";
 import { Logger } from "../utils/logger.ts";
 
 const logger = new Logger("Stream")
+logger.log_to_streams = false;
 
 // <Stream> is stream sink and readable stream at the same time
 export class Stream<T = ArrayBuffer> implements StreamConsumer<T> {
@@ -39,7 +40,7 @@ export class Stream<T = ArrayBuffer> implements StreamConsumer<T> {
     #startStreamOut() {
         const ptr = Pointer.createOrGet(this);
         if (ptr instanceof Pointer) {
-            logger.info("Start stream out for " + ptr.idString());
+            logger.debug("Start stream out for " + ptr.idString());
             setTimeout(() => {
                 ptr.startStreamOut(); // stream to all subscribers or origin, workaround: timeout to prevent stream init too early (TODO: fix)
             }, 100)

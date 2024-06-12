@@ -161,11 +161,11 @@ export class StorageMap<K,V> extends StorageWeakMap<K,V> {
 	}
 
 	async #incrementSize() {
-		this.#updateSize(await this.getSize() + 1);
+		this.#updateSize(this.#size == undefined ? await this.getSize() : this.#size + 1);
 	}
 	
 	async #decrementSize() {
-		this.#updateSize(await this.getSize() - 1);
+		this.#updateSize(this.#size == undefined ? await this.getSize() : this.#size - 1);
 	}
 
 	override async set(key: K, value: V): Promise<this> {
