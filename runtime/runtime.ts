@@ -2160,7 +2160,7 @@ export class Runtime {
             // ignore
         }
         else if (header.type == ProtocolDataType.GOODBYE) {
-            console.error("Error in GOODBYE message:",e)
+            logger.error("Error in GOODBYE message:", e instanceof Error ? (e.message ?? '') : '')
         }
         else {
             logger.error("Invalid proctocol data type: " + ProtocolDataTypesMap[header.type]??header.type)

@@ -23,6 +23,7 @@ import { WebSocketClientInterface } from "./communication-interfaces/websocket-c
 import { communicationHub } from "./communication-hub.ts";
 import { deleteCookie, getCookie } from "../utils/cookies.ts";
 import { f } from "../datex_short.ts";
+import { reset } from "../runtime/reset.ts";
 
 const logger = new Logger("DATEX Supranet");
 
@@ -335,13 +336,11 @@ export class Supranet {
             const didEndpointChange = endpoint_config?.endpoint?.main && Endpoint.getFromCookie()?.main !== endpoint_config.endpoint.main;
             
             // if endpoint has already had a session or validation but lost the keys due to localStorage.clear we also request a new endpoint & key pairs
+            // We have to purge everything in this case to avoid duplicate endpoint creation due to existing session
             const hasLostKeys = getCookie("datex-endpoint-validation") && !endpoint_config.keys;
-            if (hasLostKeys) {
-                deleteCookie("datex-endpoint-validation");
-                deleteCookie("datex-endpoint");
-                deleteCookie("datex-endpoint-nonce");
-            }
-            if (didEndpointChange || hasLostKeys)
+            if (hasLostKeys)
+                reset();
+            else if (didEndpointChange)
                 endpoint_config.clear();
 
         }
