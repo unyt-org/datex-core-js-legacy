@@ -330,10 +330,15 @@ export class Supranet {
     public static async getLocalEndpointAndKeys():Promise<[Endpoint, Crypto.ExportedKeySet]> {
         let endpoint: Endpoint|undefined;
 
-        // if endpoint cookie does not match the local endpoint, we clear the config and create a new one
         if (client_type != "deno") {
-            if (endpoint_config?.endpoint?.main && Endpoint.getFromCookie()?.main !== endpoint_config.endpoint.main)
+            // if endpoint cookie does not match the local endpoint, we clear the config and create a new one
+            const didEndpointChange = endpoint_config?.endpoint?.main && Endpoint.getFromCookie()?.main !== endpoint_config.endpoint.main;
+            
+            // if endpoint has already had a session or validation but lost the keys due to localStorage.clear we also request a new endpoint & key pairs
+            const hasLostKeys = getCookie("datex-endpoint-validation") && !endpoint_config.keys;
+            if (didEndpointChange || hasLostKeys)
                 endpoint_config.clear();
+
         }
 
         // create new endpoint
