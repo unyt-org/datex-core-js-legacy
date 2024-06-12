@@ -148,11 +148,11 @@ export class StorageSet<V> extends StorageWeakSet<V> {
 	}
 
 	async #incrementSize() {
-		this.#updateSize(await this.getSize() + 1);
+		this.#updateSize(this.#size == undefined ? await this.getSize() : this.#size + 1);
 	}
 	
 	async #decrementSize() {
-		this.#updateSize(await this.getSize() - 1);
+		this.#updateSize(this.#size == undefined ? await this.getSize() : this.#size - 1);
 	}
 
 
