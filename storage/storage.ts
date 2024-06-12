@@ -18,10 +18,8 @@ import { StorageSet } from "../types/storage-set.ts";
 import { IterableWeakSet } from "../utils/iterable-weak-set.ts";
 import { LazyPointer } from "../runtime/lazy-pointer.ts";
 import { AutoMap } from "../utils/auto_map.ts";
-import { JSInterface } from "../runtime/js_interface.ts";
-import { Datex } from "../mod.ts";
-import { debugMode } from "../utils/debug-cookie.ts";
 import { hasDebugCookie } from "../utils/debug-cookie.ts";
+import { setStorage } from "../runtime/reset.ts";
 
 
 // displayInit();
@@ -657,7 +655,7 @@ export class Storage {
     }
 
 	static async setItemAsync(location:AsyncStorageLocation, key: string, value: unknown,listen_for_pointer_changes: boolean) {
-        const metadata = this.isDebugMode ? (key + ": " +Datex.Runtime.valueToDatexString(value)) : undefined;
+        const metadata = this.isDebugMode ? (key + ": " +Runtime.valueToDatexString(value)) : undefined;
         this.setDirty(location, true, metadata);
         const itemExisted = await location.hasItem(key);
         // store value (might be pointer reference)
@@ -776,7 +774,7 @@ export class Storage {
     }
 
     private static async updatePointerAsync(location: AsyncStorageLocation, pointer:Pointer, partialUpdateKey: unknown = NOT_EXISTING): Promise<Set<Pointer>> {
-        const metadata = this.isDebugMode ? `${pointer.id}: ${Datex.Runtime.valueToDatexString(pointer.val)}` : undefined;
+        const metadata = this.isDebugMode ? `${pointer.id}: ${Runtime.valueToDatexString(pointer.val)}` : undefined;
         this.setDirty(location, true, metadata);
         const res = await location.setPointer(pointer, partialUpdateKey);
         this.setDirty(location, false, metadata);
@@ -839,7 +837,7 @@ export class Storage {
 
             // don't block saving if only partial update
             if (!(location.supportsPartialUpdates && key !== NOT_EXISTING)) saving = true;
-            const metadata = this.isDebugMode ? `${pointer.id}: ${Datex.Runtime.valueToDatexString(pointer.val)}` : undefined;
+            const metadata = this.isDebugMode ? `${pointer.id}: ${Runtime.valueToDatexString(pointer.val)}` : undefined;
 
             this.setDirty(location, true, metadata);
             setTimeout(async ()=>{
@@ -1775,6 +1773,8 @@ export class Storage {
     }
 
 }
+
+setStorage(Storage);
 
 export namespace Storage {
 

@@ -2255,7 +2255,6 @@ export class Pointer<T = any> extends Ref<T> {
         }
 
         const endpoint = override_endpoint ?? this.origin;
-        console.warn(endpoint, this.idString());
         // early return, trying to subscribe to the own main endpoint, guaranteed to be routed back to self, which is not allowed
         if (endpoint.equals(Runtime.endpoint.main) || endpoint.equals(Runtime.endpoint) || endpoint.equals(LOCAL_ENDPOINT)) {
             logger.warn("tried to subscribe to own pointer: " + this.idString() + "(pointer origin: " + this.origin + ", own endpoint instance: " + Runtime.endpoint + ")");

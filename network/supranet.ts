@@ -21,8 +21,7 @@ import { Datex } from "../mod.ts";
 import { Storage } from "../storage/storage.ts";
 import { WebSocketClientInterface } from "./communication-interfaces/websocket-client-interface.ts";
 import { communicationHub } from "./communication-hub.ts";
-import { deleteCookie, getCookie } from "../utils/cookies.ts";
-import { f } from "../datex_short.ts";
+import { getCookie } from "../utils/cookies.ts";
 import { reset } from "../runtime/reset.ts";
 
 const logger = new Logger("DATEX Supranet");
