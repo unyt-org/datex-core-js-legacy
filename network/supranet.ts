@@ -331,8 +331,10 @@ export class Supranet {
         let endpoint: Endpoint|undefined;
 
         // if endpoint cookie does not match the local endpoint, we clear the config and create a new one
-        if (endpoint_config?.endpoint?.main && Endpoint.getFromCookie()?.main !== endpoint_config.endpoint.main)
-            endpoint_config.clear();
+        if (client_type != "deno") {
+            if (endpoint_config?.endpoint?.main && Endpoint.getFromCookie()?.main !== endpoint_config.endpoint.main)
+                endpoint_config.clear();
+        }
 
         // create new endpoint
         if (!endpoint_config.endpoint) endpoint = await this.createAndSaveNewEndpoint();
