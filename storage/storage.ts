@@ -1416,7 +1416,9 @@ export class Storage {
         await Storage.clearAll();
         Storage.allowExitWithoutSave();
         if (client_type === "deno") Deno.exit(1);
-        else if (globalThis.window?.location) window.location.reload();
+        else if (globalThis.window?.location) {
+            // window.location.reload();
+        }
         else logger.error("Could not reload in non-browser or Deno context")
     }
 

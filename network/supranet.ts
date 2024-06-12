@@ -22,6 +22,7 @@ import { Storage } from "../storage/storage.ts";
 import { WebSocketClientInterface } from "./communication-interfaces/websocket-client-interface.ts";
 import { communicationHub } from "./communication-hub.ts";
 import { getCookie } from "../utils/cookies.ts";
+import { f } from "../datex_short.ts";
 
 const logger = new Logger("DATEX Supranet");
 
@@ -306,7 +307,6 @@ export class Supranet {
 
         endpoint_config.endpoint = endpoint;
         endpoint_config.keys = keys;
-        console.warn("Setting endpoint keys", keys, endpoint);
         endpoint_config.save();
 
         // save own keys
@@ -330,8 +330,9 @@ export class Supranet {
     public static async getLocalEndpointAndKeys():Promise<[Endpoint, Crypto.ExportedKeySet]> {
         let endpoint: Endpoint|undefined;
 
-        // has datex-endpoint-nonce cookie: indicates that new endpoint id was pushed from server, override and drop current endpoint config
-        if (getCookie("datex-endpoint-nonce")) endpoint_config.clear();
+        // if endpoint cookie does not match the local endpoint, we clear the config and create a new one
+        if (endpoint_config?.endpoint?.main && Endpoint.getFromCookie()?.main !== endpoint_config.endpoint.main)
+            endpoint_config.clear();
 
         // create new endpoint
         if (!endpoint_config.endpoint) endpoint = await this.createAndSaveNewEndpoint();
