@@ -1,5 +1,5 @@
 import { client_type } from "../utils/constants.ts";
-// import { reset } from "./reset.ts";
+import { reset } from "./reset.ts";
 
 function setup() {
 	if (client_type !== "deno" && globalThis.window && globalThis.document) {
