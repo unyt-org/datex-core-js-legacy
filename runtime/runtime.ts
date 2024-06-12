@@ -7516,8 +7516,6 @@ Type.get<JSTransferableFunction>("js:Function").setJSInterface({
 
 });
 
-
-
 Type.get("std:Iterator").setJSInterface({
     class: Iterator,
     is_normal_object: true,

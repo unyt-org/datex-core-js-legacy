@@ -306,6 +306,7 @@ export class Supranet {
 
         endpoint_config.endpoint = endpoint;
         endpoint_config.keys = keys;
+        console.warn("Setting endpoint keys", keys, endpoint);
         endpoint_config.save();
 
         // save own keys

@@ -1811,9 +1811,6 @@ if (!globalThis.NO_INIT) {
 }
 // ------------------------------------------------------------------------------
 
-// @ts-ignore storage reset
-globalThis.reset = Storage.clearAndReload
-
 // proxy for Storage
 class DatexStoragePointerSource implements PointerSource {
     getPointer(pointer_id:string, pointerify?:boolean, localOnly?: boolean) {
@@ -1827,3 +1824,4 @@ class DatexStoragePointerSource implements PointerSource {
 export function registerStorageAsPointerSource() {
 	Pointer.registerPointerSource(new DatexStoragePointerSource());
 }
+

@@ -96,6 +96,7 @@ class EndpointConfig implements EndpointConfigData {
 		else if (client_type == "browser") {
 			// get config from cache
 			const serialized = this.storage?.getItem(this.storageId);
+			console.warn("serialized", serialized)
 			if (serialized) {
 				config = <EndpointConfigData> await Runtime.executeDatexLocally(serialized, undefined, undefined, globalThis.location?.href ? new URL(globalThis.location.href) : undefined)
 			}
