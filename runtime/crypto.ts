@@ -258,7 +258,12 @@ export class Crypto {
                     this.#activeEndpoints.delete(endpoint);
                 }
                 
-                const [verifyKey, encKey, timestamp] = await Storage.getItem(key);
+                const data = await Storage.getItem(key);
+                if (!(data instanceof Array)) {
+                    await Storage.removeItem(key);
+                    continue;
+                }
+                const [verifyKey, encKey, timestamp] = data;
                 if (!isActiveEndpoint && (!timestamp || Date.now() - timestamp > this.MAX_KEY_LIFETIME)) {
                     await Storage.removeItem(key);
                     // store key hash
