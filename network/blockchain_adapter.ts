@@ -115,28 +115,28 @@ const relayNode = new Disjunction(f('@+unyt2'));
 	 * Methods that must be implemented on an endpoint that has access to the blockchain:#
 	 */
 	// Add a blockchain entry like: new Registration, Endpoint Assignment (Registration&Verification + Property), new Verification, new Property Assignment, new Pointer
-	@property static addEntry<T extends BCEntryType>(entry: BCEntry<T>):Datex.Return<entry_index<T>> {}
+	@property static addEntry<T extends BCEntryType>(entry: BCEntry<T>): Promise<number> {}
 	// get any entry by the index
-	@property static getEntry(index: number): Datex.Return<BCEntry<BCEntryType>> {}
+	@property static getEntry(index: number): Promise<BCEntry<BCEntryType>> {}
 	// Public keys for encryption of messages and verification of signatures
-	@property static getEndpointPublicKeys(endpoint: Endpoint):Datex.Return<[ArrayBuffer, ArrayBuffer]> {}
+	@property static getEndpointPublicKeys(endpoint: Endpoint):Promise<[ArrayBuffer, ArrayBuffer]> {}
 	// Get the (authority) endpoint that certified an endpoint
-	@property static getEndpointCertifier(endpoint: Endpoint):Datex.Return<Endpoint|undefined> {}
+	@property static getEndpointCertifier(endpoint: Endpoint):Promise<Endpoint|undefined> {}
 	// get entry for endpoint registration
-	@property static getEndpointEntry(endpoint: Endpoint): Datex.Return<BCEntry<BCEntryType.ENDPOINT_REGISTRATION>> {}
+	@property static getEndpointEntry(endpoint: Endpoint): Promise<BCEntry<BCEntryType.ENDPOINT_REGISTRATION>> {}
 	// gets an endpoint property like @endpoint.name
 	@property static getEndpointProperty(endpoint: Endpoint, key: unknown): any {}
 	// gets an endpoint default value
 	@property static getEndpointDefault(endpoint: Endpoint): any {}
 	// get latest entry for an endpoint property
-	@property static getEndpointPropertyEntry(endpoint: Endpoint, key: unknown): Datex.Return<BCEntry<BCEntryType.ENDPOINT_PROPERTY>> {}
+	@property static getEndpointPropertyEntry(endpoint: Endpoint, key: unknown): Promise<BCEntry<BCEntryType.ENDPOINT_PROPERTY>> {}
 	// get a pointer value
 	@property static getPointer(id: number) : any {}
-	@property static getPointerEntry(id: number): Datex.Return<BCEntry<BCEntryType.POINTER>> {}
+	@property static getPointerEntry(id: number): Promise<BCEntry<BCEntryType.POINTER>> {}
 	// traces backe the alias name of an endpoint or object (e.g. @@3456677564 -> get @unyt )
-	@property static resolveAlias(target: Endpoint|BCEntry<BCEntryType.POINTER|BCEntryType.ENDPOINT_REGISTRATION>): Datex.Return<string|undefined> {}
+	@property static resolveAlias(target: Endpoint|BCEntry<BCEntryType.POINTER|BCEntryType.ENDPOINT_REGISTRATION>): Promise<string|undefined> {}
 	// returns an existing registered endpoint instances, if hash is registered, otherwise finds an available instance and returns
-	@property static getEndpointInstance(endpoint: Endpoint, hash: string): Datex.Return<Endpoint> {}
+	@property static getEndpointInstance(endpoint: Endpoint, hash: string): Promise<Endpoint> {}
 	/**
 	 * implemented blockchain util methods (validation, ...)
 	 */
