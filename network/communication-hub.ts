@@ -54,6 +54,10 @@ export class CommunicationHub {
         return this.handler.defaultSocket;
     }
 
+    public clear() {
+        return this.handler.clear();
+    }
+
     /**
      * Registers a new CommunicationInterface and initializes it
      * @param comInterface - CommunicationInterface to add
@@ -121,6 +125,10 @@ export class CommunicationHubHandler {
             if (this.#connected)
                 this.onlineEvents.forEach(e => e());
         }
+    }
+    public async clear() {
+        for (const iterf of this.#interfaces)
+            await this.removeInterface(iterf);
     }
     
     private onlineEvents = new Set<() => unknown>();
