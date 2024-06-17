@@ -156,6 +156,7 @@ export class Endpoint extends Target {
 
 	get name() {return this.#name}
 	get instance() {return this.#instance}
+	get instance_number() {return parseInt(this.#instance, 16)}
 	get instance_binary() {return this.#instance_binary}
 	get prefix() {return (<typeof Endpoint>this.constructor).prefix}
 	get type() {return (<typeof Endpoint>this.constructor).type}

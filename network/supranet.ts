@@ -126,14 +126,14 @@ export class Supranet {
             if (!hash) hash = Math.random().toString(36).substring(2,18);
 
             try {
-                const instance = (await Runtime.Blockchain.getEndpointInstance(endpoint, hash))!;
+                const instance = (await Runtime.Blockchain.getEndpointInstance(endpoint, hash, endpoint.instance_number))!;
                 // makes sure hash is set in cache
                 hashes.set(instance, hash);
                 // set endpoint to instace
                 Runtime.init(instance);
                 endpoint_config.endpoint = instance;
                 endpoint_config.save();
-                logger.success("Switched to endpoint instance " + instance)
+                logger.success("Switched to endpoint instance " + instance + " (previously " + endpoint.instance_number + ")")
                 this.handleConnect();
                 return true;
             }
