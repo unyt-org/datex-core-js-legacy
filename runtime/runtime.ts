@@ -1255,6 +1255,7 @@ export class Runtime {
             // only update if endpoint not already set in cookie
             if (currentEndpointName != endpointName || !getCookie("datex-endpoint-validation")) {
                 deleteCookie("datex-endpoint-validation");
+                deleteCookie("datex-endpoint-nonce");
                 setCookie("datex-endpoint", endpointName, endpoint_config.temporary ? 0 : undefined);
                 (async() => {
                     const nonceBase64 = getCookie("datex-endpoint-nonce");
