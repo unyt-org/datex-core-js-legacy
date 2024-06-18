@@ -12,7 +12,7 @@ import { ProtocolDataType } from "../compiler/protocol_types.ts";
 import { Crypto } from "../runtime/crypto.ts";
 import { IOHandler } from "../runtime/io_handler.ts";
 import { DATEX_ERROR } from "../types/error_codes.ts";
-import { LocalLoopbackInterfaceSocket } from  "./communication-interfaces/local-loopback-interface.ts";
+import { LocalLoopbackInterface, LocalLoopbackInterfaceSocket } from  "./communication-interfaces/local-loopback-interface.ts";
 import { WindowInterface } from  "./communication-interfaces/window-interface.ts";
 
 import { Datex } from "../mod.ts";
@@ -130,8 +130,10 @@ export class CommunicationHubHandler {
     }
     public async clear() {
         for (const iterf of this.#interfaces) {
-            await this.removeInterface(iterf);
-            this.#logger.warn("Removing interface " + iterf);
+            if (!(iterf instanceof LocalLoopbackInterface)) {
+                await this.removeInterface(iterf);
+                this.#logger.warn("Removing interface " + iterf);
+            }
         }
     }
     
@@ -443,7 +445,7 @@ export class CommunicationHubHandler {
     public compileGoodbyeMessage() {
         if (!Runtime.endpoint || Runtime.endpoint == LOCAL_ENDPOINT) return;
         this.#logger.debug("Compiled goodbye message for", Runtime.endpoint);
-        return Compiler.compile("", [], {type:ProtocolDataType.GOODBYE, sign:true, flood:true, __routing_ttl:4}) as Promise<ArrayBuffer>
+        return Compiler.compile("", [], {type:ProtocolDataType.GOODBYE, sign:true, flood:true, __routing_ttl:1}) as Promise<ArrayBuffer>
     }
 
     public compileHelloMessage(ttl = 6) {
