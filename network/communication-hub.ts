@@ -414,17 +414,17 @@ export class CommunicationHubHandler {
         let lastEndpointGooodbyeMessage = await this.compileGoodbyeMessage();
         let lastEndpoint = Runtime.endpoint;
         Runtime.onEndpointChanged(async (endpoint) => {
-            this.#logger.success("Endpoint changed to " + endpoint.toString())
+            this.#logger.success("Endpoint changed to " + endpoint.toString() + " (previous: " + lastEndpoint + ")");
 
             // send GOODBYE for previous endpoint
-            if (lastEndpointGooodbyeMessage && lastEndpoint.main !== lastEndpoint) {
+            if (lastEndpointGooodbyeMessage /*  && lastEndpoint.main !== lastEndpoint */) {
                 this.#logger.info(`Broadcasting GOODBYE for previous endpoint ${lastEndpoint} over all sockets`);
 
                 // iterate direct outgoing sockets
                 for (const socket of this.iterateSockets()) {
                     socket.sendGoodbye(lastEndpointGooodbyeMessage)
                 }
-            }  else this.#logger.info(`Skipping GOODBYE message fir ${lastEndpoint}`);
+            } else this.#logger.info(`Skipping GOODBYE message for ${lastEndpoint}`);
 
             lastEndpointGooodbyeMessage = await this.compileGoodbyeMessage();
             lastEndpoint = endpoint;
@@ -441,8 +441,8 @@ export class CommunicationHubHandler {
     }
 
     public compileGoodbyeMessage() {
-        this.#logger.info("Compiled goodbye message for ", Runtime.endpoint)
         if (!Runtime.endpoint || Runtime.endpoint == LOCAL_ENDPOINT) return;
+        this.#logger.debug("Compiled goodbye message for", Runtime.endpoint);
         return Compiler.compile("", [], {type:ProtocolDataType.GOODBYE, sign:true, flood:true, __routing_ttl:4}) as Promise<ArrayBuffer>
     }
 
