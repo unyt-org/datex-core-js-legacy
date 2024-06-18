@@ -1822,7 +1822,7 @@ export class Runtime {
         let isDuplicate = false;
         // is duplicate
         if (this.receivedMessagesHistory.includes(identifier)) {
-            // console.debug("duplicate " + identifier, header.type);
+            // console.debug("duplicate " + identifier);
             isDuplicate = true;
         }
 

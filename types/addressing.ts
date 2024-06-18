@@ -497,8 +497,7 @@ export class Endpoint extends Target {
 			resolve_online!(this.#current_online = true)
 		}
 		// could not reach endpoint
-		catch (e) {
-			logger.info("> " + e.toString?.());
+		catch {
 			communicationHub.handler.handleOfflineEndpoint(this);
 			resolve_online!(this.#current_online = false)
 		}

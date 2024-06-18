@@ -130,7 +130,7 @@ export class CommunicationHubHandler {
     }
     public async clear() {
         for (const iterf of this.#interfaces) {
-            if (!(iterf instanceof LocalLoopbackInterface)) {
+            if (!(iterf instanceof LocalLoopbackInterface) /*&& !(iterf instanceof WindowInterface)*/) {
                 await this.removeInterface(iterf);
                 this.#logger.warn("Removing interface " + iterf);
             }
@@ -560,6 +560,8 @@ export class CommunicationHubHandler {
         
         // find socket that matches endpoint instance exactly
         const socket = this.findMatchingEndpointSocket(endpoint, excludeSocket);
+        // console.log("getPreferredSocketForEndpoint", socket, endpoint, excludeSocket);
+
         if (socket) return socket;
 
         // find socket that matches instance if main endpoint
@@ -631,6 +633,7 @@ export class CommunicationHubHandler {
 
         const promises = []
 
+        // console.log("datexOut", receivers, outGroups);
         for (const [socket, endpoints] of outGroups) {
             if (!socket) continue;
             promises.push(this.sendAddressedBlockToReceivers(data.dxb, endpoints, socket));
