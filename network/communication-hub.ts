@@ -560,7 +560,6 @@ export class CommunicationHubHandler {
         
         // find socket that matches endpoint instance exactly
         const socket = this.findMatchingEndpointSocket(endpoint, excludeSocket);
-        // console.log("getPreferredSocketForEndpoint", socket, endpoint, excludeSocket);
 
         if (socket) return socket;
 
@@ -633,7 +632,6 @@ export class CommunicationHubHandler {
 
         const promises = []
 
-        // console.log("datexOut", receivers, outGroups);
         for (const [socket, endpoints] of outGroups) {
             if (!socket) continue;
             promises.push(this.sendAddressedBlockToReceivers(data.dxb, endpoints, socket));

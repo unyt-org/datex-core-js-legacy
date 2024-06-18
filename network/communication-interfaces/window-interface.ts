@@ -10,14 +10,9 @@ export class WindowInterfaceSocket extends CommunicationInterfaceSocket {
     }
 
     handleReceive = (event: MessageEvent) => {
-        console.log("Receive", event)
         if (event.origin == this.windowOrigin) {
             if (event.data instanceof ArrayBuffer) this.receive(event.data)
             else if (typeof event.data == "string") this.receive(base64ToArrayBuffer(event.data))
-            else
-                this.logger.error("Got an invalid request in window socket", event)
-        } else {
-            this.logger.error("Got an invalid origin", event.origin, this.windowOrigin, this.toString(), this.endpoint?.toString())
         }
     }
 
@@ -26,7 +21,6 @@ export class WindowInterfaceSocket extends CommunicationInterfaceSocket {
     }
 
     close() {
-        console.warn("Why are we removing this socket??????", this)
         globalThis.removeEventListener('message', this.handleReceive);
     }
 
@@ -36,8 +30,7 @@ export class WindowInterfaceSocket extends CommunicationInterfaceSocket {
             else this.window.postMessage(dxb, this.windowOrigin)
             return true;
         }
-        catch (e) {
-            console.error(e, "window socket");
+        catch {
             return false;
         }
     }

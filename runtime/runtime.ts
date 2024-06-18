@@ -1773,7 +1773,6 @@ export class Runtime {
 
             // block end
             if (current_block && index >= current_block_size) {
-                console.log("received new block from stream")
                 this.handleDatexIn(current_block.buffer, full_scope_callback, variables, header_callback, socket)
                     .catch(e=>console.error("Error handling block stream: ", e)) 
                 // reset for next block
