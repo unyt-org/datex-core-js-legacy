@@ -13,6 +13,8 @@ import { Crypto } from "../runtime/crypto.ts";
 import { IOHandler } from "../runtime/io_handler.ts";
 import { DATEX_ERROR } from "../types/error_codes.ts";
 import { LocalLoopbackInterfaceSocket } from  "./communication-interfaces/local-loopback-interface.ts";
+import { WindowInterface } from  "./communication-interfaces/window-interface.ts";
+
 import { Datex } from "../mod.ts";
 import { Supranet } from "./supranet.ts";
 
@@ -127,8 +129,10 @@ export class CommunicationHubHandler {
         }
     }
     public async clear() {
-        for (const iterf of this.#interfaces)
+        for (const iterf of this.#interfaces) {
             await this.removeInterface(iterf);
+            this.#logger.warn("Removing interface " + iterf);
+        }
     }
     
     private onlineEvents = new Set<() => unknown>();
@@ -408,19 +412,22 @@ export class CommunicationHubHandler {
      */
     async init() {
         let lastEndpointGooodbyeMessage = await this.compileGoodbyeMessage();
+        let lastEndpoint = Runtime.endpoint;
         Runtime.onEndpointChanged(async (endpoint) => {
-            this.#logger.debug("Endpoint changed to " + endpoint.toString())
+            this.#logger.success("Endpoint changed to " + endpoint.toString())
 
             // send GOODBYE for previous endpoint
-            if (lastEndpointGooodbyeMessage) {
-                this.#logger.debug("Broadcasting GOODBYE for previous endpoint over all sockets");
+            if (lastEndpointGooodbyeMessage && lastEndpoint.main !== lastEndpoint) {
+                this.#logger.info(`Broadcasting GOODBYE for previous endpoint ${lastEndpoint} over all sockets`);
 
                 // iterate direct outgoing sockets
                 for (const socket of this.iterateSockets()) {
                     socket.sendGoodbye(lastEndpointGooodbyeMessage)
                 }
-            }
+            }  else this.#logger.info(`Skipping GOODBYE message fir ${lastEndpoint}`);
 
+            lastEndpointGooodbyeMessage = await this.compileGoodbyeMessage();
+            lastEndpoint = endpoint;
             await sleep(1000);
 
             // iterate direct outgoing sockets
@@ -430,15 +437,13 @@ export class CommunicationHubHandler {
                     socket.sendHello(helloMessage)
                 }
             }
-            
-            
-            lastEndpointGooodbyeMessage = await this.compileGoodbyeMessage();
         })
     }
 
     public compileGoodbyeMessage() {
+        this.#logger.info("Compiled goodbye message for ", Runtime.endpoint)
         if (!Runtime.endpoint || Runtime.endpoint == LOCAL_ENDPOINT) return;
-        return Compiler.compile("", [], {type:ProtocolDataType.GOODBYE, sign:true, flood:true, __routing_ttl:1}) as Promise<ArrayBuffer>
+        return Compiler.compile("", [], {type:ProtocolDataType.GOODBYE, sign:true, flood:true, __routing_ttl:4}) as Promise<ArrayBuffer>
     }
 
     public compileHelloMessage(ttl = 6) {
