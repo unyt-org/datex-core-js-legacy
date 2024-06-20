@@ -399,7 +399,9 @@ export class Runtime {
     static set endpoint(endpoint: Endpoint){
         const _isInitialSetWorkaround = this.#endpoint==undefined;
         if (this.#endpoint === endpoint) return; // already set
-        if (endpoint != LOCAL_ENDPOINT) logger.debug("using endpoint: " + endpoint);
+        if (endpoint != LOCAL_ENDPOINT) {
+            logger.debug("using endpoint: " + endpoint);
+        }
         this.#endpoint = endpoint;
 
         if (!_isInitialSetWorkaround) Observers.call(this,"endpoint",this.#endpoint);

@@ -65,9 +65,6 @@ export class Supranet {
 
         const shouldSwitchInstance = this.shouldSwitchInstance(endpoint);
 
-        // switching from potentially instance to another instance, make sure current endpoint is not an already active instance
-        if (shouldSwitchInstance && endpoint !== endpoint.main) Runtime.init(endpoint.main);
-
         // already connected to endpoint during init
         if (alreadyConnected && endpoint === Runtime.endpoint) {
             if (shouldSwitchInstance) await this.handleSwitchToInstance()
@@ -126,14 +123,15 @@ export class Supranet {
             if (!hash) hash = Math.random().toString(36).substring(2,18);
 
             try {
-                const instance = (await Runtime.Blockchain.getEndpointInstance(endpoint, hash, endpoint.instance_number+1))!;
+                const previousInstance = Runtime.endpoint.instance;
+                const newInstanceEndpoint = (await Runtime.Blockchain.getEndpointInstance(endpoint, hash, endpoint.instance_number+1))!;
                 // makes sure hash is set in cache
-                hashes.set(instance, hash);
+                hashes.set(newInstanceEndpoint, hash);
                 // set endpoint to instace
-                Runtime.init(instance);
-                endpoint_config.endpoint = instance;
+                Runtime.init(newInstanceEndpoint);
+                endpoint_config.endpoint = newInstanceEndpoint;
                 endpoint_config.save();
-                logger.success("Switched to endpoint instance " + instance + " (previously " + endpoint.instance_number + ")")
+                logger.info("Switched to endpoint " + newInstanceEndpoint + " (previous instance: " + previousInstance + ")")
                 this.handleConnect();
                 return true;
             }

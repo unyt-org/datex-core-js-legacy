@@ -416,17 +416,17 @@ export class CommunicationHubHandler {
         let lastEndpointGooodbyeMessage = await this.compileGoodbyeMessage();
         let lastEndpoint = Runtime.endpoint;
         Runtime.onEndpointChanged(async (endpoint) => {
-            this.#logger.success("Endpoint changed to " + endpoint.toString() + " (previous: " + lastEndpoint + ")");
+            this.#logger.debug("Endpoint changed to " + endpoint.toString() + (lastEndpoint ? " (previous: " + lastEndpoint + ")" : ""));
 
             // send GOODBYE for previous endpoint
             if (lastEndpointGooodbyeMessage /*  && lastEndpoint.main !== lastEndpoint */) {
-                this.#logger.info(`Broadcasting GOODBYE for previous endpoint ${lastEndpoint} over all sockets`);
+                this.#logger.debug(`Broadcasting GOODBYE for previous endpoint ${lastEndpoint} over all sockets`);
 
                 // iterate direct outgoing sockets
                 for (const socket of this.iterateSockets()) {
                     socket.sendGoodbye(lastEndpointGooodbyeMessage)
                 }
-            } else this.#logger.info(`Skipping GOODBYE message for ${lastEndpoint}`);
+            } else if (lastEndpoint) this.#logger.debug(`Skipping GOODBYE message for ${lastEndpoint}`);
 
             lastEndpointGooodbyeMessage = await this.compileGoodbyeMessage();
             lastEndpoint = endpoint;
