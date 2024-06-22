@@ -718,6 +718,16 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		}
 		builder.insert(entries);
 
+		// first delete all existing entries for this pointer (except the default entry)
+		try {
+			await this.#query('SET FOREIGN_KEY_CHECKS=0;');
+			await this.#query('DELETE FROM ?? WHERE ?? = ? AND `hash` != "";', [this.#metaTables.sets.name, this.#pointerMysqlColumnName, pointer.id])
+			await this.#query('SET FOREIGN_KEY_CHECKS=1;');
+		}
+		catch (e) {
+			console.error("Error deleting old set entries", e)
+		}
+
 		// replace INSERT with INSERT IGNORE to prevent duplicate key errors
 		const {result} = await this.#query(builder.build().replace("INSERT", "INSERT IGNORE"), undefined, true)
 		// add to pointer mapping TODO: better decision if to add to pointer mapping
