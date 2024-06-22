@@ -195,10 +195,17 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			console.log(query_string, query_params)
 			if (this.log) this.log("SQL error:", e)
            	else console.error("SQL error:", e);
-			// TODO: enable throwing error here, ignore for now
-            // throw e;
-			if (returnRawResult) return {rows: [], result: {affectedRows: 0, lastInsertId: 0, rows: []}};
-			else return [];
+
+			// errors to ignore for now (TODO: this is only a temporary solution, input should be validated beforehand)
+			// incorrect datetime value (out of range, etc.)
+			if (e?.toString?.().startsWith("Error: Incorrect datetime value")) {
+				console.error("SQL: Ignoring incorrect datetime value error", e.message);
+				if (returnRawResult) return {rows: [], result: {affectedRows: 0, lastInsertId: 0, rows: []}};
+				else return [];
+			}
+
+            throw e;
+			
         }
     }
 
