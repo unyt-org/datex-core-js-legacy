@@ -184,7 +184,8 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			console.log(query_string, query_params)
 			if (this.log) this.log("SQL error:", e)
            	else console.error("SQL error:", e);
-            throw e;
+			// TODO: enable throwing error here, ignore for now
+            // throw e;
         }
     }
 
