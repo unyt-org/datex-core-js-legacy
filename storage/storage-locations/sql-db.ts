@@ -110,7 +110,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
     }
 	async #connect(){
 		if (this.#connected) return;
-        this.#sqlClient = await new Client().connect({poolSize: 30, ...this.#options});
+        this.#sqlClient = await new Client().connect({poolSize: 20, ...this.#options});
 		logger.info("Using SQL database " + this.#options.db + " on " + this.#options.hostname + ":" + this.#options.port + " as storage location")
         this.#connected = true;
     }
@@ -186,6 +186,8 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
            	else console.error("SQL error:", e);
 			// TODO: enable throwing error here, ignore for now
             // throw e;
+			if (returnRawResult) return {rows: [], result: {affectedRows: 0, lastInsertId: 0, rows: []}};
+			else return [];
         }
     }
 
