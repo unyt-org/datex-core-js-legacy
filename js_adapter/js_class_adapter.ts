@@ -640,7 +640,7 @@ export function createTemplateClass(original_class: Class, type:Type, sync = tru
     const sync_auto_cast_class = proxyClass(original_class, type, metadata?.[Decorators.IS_SYNC]?.constructor ?? sync)
     
     // only for debugging / dev console TODO remove
-    globalThis[sync_auto_cast_class.name] = sync_auto_cast_class;
+    // globalThis[sync_auto_cast_class.name] = sync_auto_cast_class;
 
     templated_classes.set(original_class, sync_auto_cast_class);
 
