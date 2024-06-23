@@ -99,6 +99,10 @@ export type MatchOptions<T = unknown> = {
      */
     returnPointerIds?: boolean,
     /**
+     * Return map keys (only works with StorageMaps)
+     */
+    returnKeys?: boolean,
+    /**
      * Custom computed properties for match query
      */
     computedProperties?: Record<string, ComputedProperty<ComputedPropertyType>>
@@ -244,6 +248,7 @@ export interface StorageLocation<SupportedModes extends Storage.Mode = Storage.M
     getItemValueDXB(key:string): Promise<ArrayBuffer|null>|ArrayBuffer|null
     setItemValueDXB(key:string, value: ArrayBuffer):Promise<void>|void
     getItemKeys(prefix?:string): Promise<Generator<string, void, unknown>> | Generator<string, void, unknown>
+    getItemKey?(value: unknown): Promise<string|undefined>|string|undefined
 
     setPointer(pointer:Pointer, partialUpdateKey: unknown|typeof NOT_EXISTING): Promise<Set<Pointer>>|Set<Pointer>
     getPointerValue(pointerId:string, outer_serialized:boolean, conditions?:ExecConditions):Promise<unknown>|unknown
@@ -270,6 +275,7 @@ export abstract class SyncStorageLocation implements StorageLocation<Storage.Mod
     abstract getItem(key:string, conditions?:ExecConditions): Promise<unknown>|unknown
     abstract hasItem(key:string): boolean
     abstract getItemKeys(prefix?:string): Generator<string, void, unknown>
+    abstract getItemKey?(value: unknown): string|undefined
 
     abstract removeItem(key: string): void
     abstract getItemValueDXB(key: string): ArrayBuffer|null
@@ -301,6 +307,7 @@ export abstract class AsyncStorageLocation implements StorageLocation<Storage.Mo
     abstract getItem(key:string, conditions?:ExecConditions): Promise<unknown>
     abstract hasItem(key:string): Promise<boolean>
     abstract getItemKeys(prefix?:string): Promise<Generator<string, void, unknown>>
+    abstract getItemKey?(value: unknown): Promise<string|undefined>
 
     abstract removeItem(key: string): Promise<void>
     abstract getItemValueDXB(key: string): Promise<ArrayBuffer|null> 
@@ -1244,6 +1251,21 @@ export class Storage {
 		await this.initItemFromTrustedLocation(key, val, location)
 
 		return val;
+    }
+
+    public static async getItemKey(value: any, location?:StorageLocation|undefined):Promise<string|undefined> {
+        // try to find item at a storage location
+        for (const loc of (location!=undefined ? [location] : this.getLocationPriorityOrder(""))) {
+            if (loc==undefined) continue;
+            const val = await this.getItemKeyFromLocation(value, loc);
+            if (val !== undefined) return val;
+        }
+        return undefined;
+    }
+
+    public static getItemKeyFromLocation(value: any, location:StorageLocation):Promise<string|undefined>|string|undefined {
+        if (!location.supportsMatchSelection) throw new Error(`Storage Location ${location.name} does not support match queries (getItemKey)`);
+        return location.getItemKey?.(value);
     }
 
     

@@ -23,12 +23,23 @@ import { MatchResult } from "../storage.ts";
 import { Time } from "../../types/time.ts";
 import { Order } from "https://deno.land/x/sql_builder@v1.9.2/order.ts";
 import { configLogger } from "https://deno.land/x/mysql@v2.12.1/src/logger.ts";
+import { replaceParams } from "https://deno.land/x/sql_builder@v1.9.2/util.ts";
 
 configLogger({level: "WARNING"})
 
 const logger = new Logger("SQL Storage");
 
 export class SQLDBStorageLocation extends AsyncStorageLocation {
+
+	static #debugMode = false;
+
+	/**
+	 * Enable or disable debug mode, which logs all queries
+	 */
+	static debug(debugMode = true) {
+		this.#debugMode = debugMode;
+	}
+
 	name = "SQL_DB"
 	supportsPrefixSelection = true;
 	supportsMatchSelection = true;
@@ -172,7 +183,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			}
 		}
 		
-    	// console.log("QUERY: " + query_string, query_params)
+    	if (SQLDBStorageLocation.#debugMode) console.log("QUERY: " + query_string, query_params)
 
 		if (typeof query_string != "string") {console.error("invalid query:", query_string); throw new Error("invalid query")}
         if (!query_string) throw new Error("empty query");
@@ -184,10 +195,17 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			console.log(query_string, query_params)
 			if (this.log) this.log("SQL error:", e)
            	else console.error("SQL error:", e);
-			// TODO: enable throwing error here, ignore for now
-            // throw e;
-			if (returnRawResult) return {rows: [], result: {affectedRows: 0, lastInsertId: 0, rows: []}};
-			else return [];
+
+			// errors to ignore for now (TODO: this is only a temporary solution, input should be validated beforehand)
+			// incorrect datetime value (out of range, etc.)
+			if (e?.toString?.().startsWith("Error: Incorrect datetime value")) {
+				console.error("SQL: Ignoring incorrect datetime value error", e.message);
+				if (returnRawResult) return {rows: [], result: {affectedRows: 0, lastInsertId: 0, rows: []}};
+				else return [];
+			}
+
+            throw e;
+			
         }
     }
 
@@ -840,7 +858,9 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			joins.forEach(join => builder.join(join));
 
 			const outerBuilder = new Query()
-				.select(options.returnRaw ? `*` :`DISTINCT SQL_CALC_FOUND_ROWS ${this.#pointerMysqlColumnName} as ${this.#pointerMysqlColumnName}`)
+				.select(options.returnRaw ? `*` :`DISTINCT SQL_CALC_FOUND_ROWS ${this.#pointerMysqlColumnName} as ${this.#pointerMysqlColumnName}` + (
+					options.returnKeys ? `, ${this.#metaTables.items.name}.key as map_key` : ''
+				))
 				.table('__placeholder__');
 
 			// TODO: does not work for all cases, only a workaround for now
@@ -852,7 +872,9 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 
 		// no computed properties
 		else {
-			builder.select(`DISTINCT SQL_CALC_FOUND_ROWS ${this.#typeToTableName(valueType)}.${this.#pointerMysqlColumnName} as ${this.#pointerMysqlColumnName}`);
+			builder.select(`DISTINCT SQL_CALC_FOUND_ROWS ${this.#typeToTableName(valueType)}.${this.#pointerMysqlColumnName} as ${this.#pointerMysqlColumnName}` + (
+				options.returnKeys ? `, ${this.#metaTables.items.name}.key as map_key` : ''
+			));
 			this.appendBuilderConditions(builder, options, where)
 			joins.forEach(join => builder.join(join));
 			query = builder.build();
@@ -863,8 +885,8 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			await this.#getTableForType(type)
 		}
 
-		const queryResult = await this.#query<{_ptr_id:string}>(query);
-		const ptrIds = queryResult.map(({_ptr_id}) => _ptr_id)
+		const queryResult = await this.#query<{_ptr_id:string, map_key: string}>(query);
+		const ptrIds = options.returnKeys ? queryResult.map(({map_key}) => map_key.split(".")[1].slice(1)) : queryResult.map(({_ptr_id}) => _ptr_id)
 		const limitedPtrIds = options.returnPointerIds ? 
 			// offset and limit manually after query
 			ptrIds.slice(options.offset ?? 0, options.limit ? (options.offset ?? 0) + options.limit : undefined) : 
@@ -1075,8 +1097,8 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 								namespacedKey, 
 								Join
 									.left(`${this.#metaTables.sets.name}`, namespacedKey)
-									.on(`${namespacedKey}.${this.#pointerMysqlColumnName}`, tableAName))
-							;
+									.on(`${namespacedKey}.${this.#pointerMysqlColumnName}`, tableAName)
+							);
 							const values = [...condition.data];
 							// group values by type
 							const valuesByType = Map.groupBy(values, v => v instanceof Date ? "time" : typeof v);
@@ -1110,7 +1132,25 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 							}
 							
 						}
-						else throw new Error("Unsupported type for MatchConditionType.CONTAINS: " + or.type);
+
+						else if (propertyType.base_type == Type.std.StorageSet) {
+							// CONTAINS for storage sets currently only supports pointer id matching
+							const values = [...condition.data];
+							const ptrIds = values.map(v => Pointer.getId(v));
+							if (ptrIds.some(v => !v)) throw new Error("Cannot match non-pointer value in CONTAINS for <StorageSet>");
+
+							const join = Join
+								.left(`${this.#metaTables.items.name}`, namespacedKey)
+							join.value += replaceParams(` ON ?? LIKE CONCAT('dxset::$', ??, '.%')`, [`${namespacedKey}.key`, tableAName]);
+
+							joins.set(namespacedKey, join);
+
+							for (const ptrId of ptrIds) {
+								wheresOr.push(Where.eq(`${namespacedKey}.${this.#pointerMysqlColumnName}`, ptrId))
+							}
+
+						}
+						else throw new Error("MatchConditionType.CONTAINS is not supported for type " + propertyType.base_type);
 					}
 					else if (or.type == MatchConditionType.POINTER_ID) {
 						const condition = or as MatchCondition<MatchConditionType.POINTER_ID, string>
@@ -1244,6 +1284,34 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 				yield key;
 			} 
 		}()
+	}
+
+	async getItemKey(value: unknown) {
+		
+		// value is pointer
+		const ptrId = Pointer.getId(value);
+		if (ptrId) {
+			const key = await this.#queryFirst<{key:string}>(
+				new Query()
+					.table(this.#metaTables.items.name)
+					.select("key")
+					.where(Where.eq(this.#pointerMysqlColumnName, ptrId))
+					.build()
+			);
+			return key?.key;
+		}
+		else {
+			const encoded = Compiler.encodeValue(value, undefined, true, false, true);
+			const key = await this.#queryFirst<{key:string}>(
+				new Query()
+					.table(this.#metaTables.items.name)
+					.select("key")
+					.where(Where.eq("value", encoded))
+					.build()
+			);
+			return key?.key;
+		
+		}
 	}
 
 	async getPointerIds() {

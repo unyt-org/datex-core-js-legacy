@@ -61,6 +61,7 @@ export class StorageWeakMap<K,V> {
 		const storage_key = await this.getStorageKey(key);
 		return this._get(storage_key);
 	}
+
 	protected _get(storage_key:string) {
 		this.activateCacheTimeout(storage_key);
 		return Storage.getItem(storage_key);
@@ -81,7 +82,6 @@ export class StorageWeakMap<K,V> {
 	protected _delete(storage_key:string) {
 		return Storage.removeItem(storage_key)
 	}
-
 
 	async set(key: K, value:V) {
 		const storage_key = await this.getStorageKey(key);
@@ -146,6 +146,12 @@ export class StorageMap<K,V> extends StorageWeakMap<K,V> {
 			await this.#determineSizeFromStorage(); 
 			return this.#size!
 		}
+	}
+
+	async getKeyForValue(value: V): Promise<K|undefined> {
+		const keyId = await Storage.getItemKey(value);
+		const key = await Storage.getItem(this.#key_prefix + keyId);
+		return key;
 	}
 
 	/**
@@ -278,8 +284,8 @@ export class StorageMap<K,V> extends StorageWeakMap<K,V> {
 		await Promise.all(promises);
 	}
 
-	match<Options extends MatchOptions, T extends V & object>(valueType:Class<T>|Type<T>, matchInput: MatchInput<T>, options?: Options): Promise<MatchResult<T, Options>> {
-		return match(this as unknown as StorageMap<unknown, T>, valueType, matchInput, options)
+	match<Options extends MatchOptions, T extends V & object>(valueType:Class<T>|Type<T>, matchInput: MatchInput<T>, options?: Options): Promise<MatchResult<Options['returnKeys'] extends true ? K : T, Options>> {
+		return match(this as unknown as StorageMap<unknown, T>, valueType, matchInput, options) as any;
 	}
 
 }
