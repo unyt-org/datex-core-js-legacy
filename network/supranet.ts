@@ -65,20 +65,27 @@ export class Supranet {
 
         const shouldSwitchInstance = this.shouldSwitchInstance(endpoint);
 
+        const previousInstance = Runtime.endpoint.instance_number;
+
+        // switching from potentially instance to another instance, make sure current endpoint is not an already active instance and sends HELLO/GOODBYE from here
+        if (shouldSwitchInstance && endpoint !== endpoint.main) {
+            Runtime.init(endpoint.main);
+        }
+
         // already connected to endpoint during init
         if (alreadyConnected && endpoint === Runtime.endpoint) {
-            if (shouldSwitchInstance) await this.handleSwitchToInstance()
+            if (shouldSwitchInstance) await this.handleSwitchToInstance(previousInstance)
             logger.success("Connected to the supranet as " + endpoint)
             return true;
         }
 
         if (alreadyConnected) {
-            if (shouldSwitchInstance) await this.handleSwitchToInstance();
+            if (shouldSwitchInstance) await this.handleSwitchToInstance(previousInstance);
             return true;
         }
         else {
             const connected = await this._connect(via_node, !shouldSwitchInstance);
-            if (shouldSwitchInstance) await this.handleSwitchToInstance()
+            if (shouldSwitchInstance) await this.handleSwitchToInstance(previousInstance)
             return connected;
         }
 
@@ -94,7 +101,7 @@ export class Supranet {
      * Finds an available instance and switches endpoint
      * @returns true if switched to new instance (and hello sent)
      */
-    private static async handleSwitchToInstance() {
+    private static async handleSwitchToInstance(previousInstance: number) {
         if (!Runtime.Blockchain) {
             logger.error("Cannot determine endpoint instance, blockchain not available")
         }
@@ -123,8 +130,7 @@ export class Supranet {
             if (!hash) hash = Math.random().toString(36).substring(2,18);
 
             try {
-                const previousInstance = Runtime.endpoint.instance_number != 0 ? Runtime.endpoint.instance : null;
-                const newInstanceEndpoint = (await Runtime.Blockchain.getEndpointInstance(endpoint, hash, endpoint.instance_number+1))!;
+                const newInstanceEndpoint = (await Runtime.Blockchain.getEndpointInstance(endpoint, hash, previousInstance+1))!;
                 // makes sure hash is set in cache
                 hashes.set(newInstanceEndpoint, hash);
                 // set endpoint to instace
