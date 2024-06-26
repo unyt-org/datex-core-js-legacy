@@ -2604,7 +2604,7 @@ export class Pointer<T = any> extends Ref<T> {
                 const value = alreadyProxy ? val : this.addObjProxy((val instanceof UnresolvedValue) ? val[DX_VALUE] : val); 
                 // add $, $$
                 if (!alreadyProxy && typeof value !== "symbol") this.add$Properties(value);
-                
+
                 this.#loaded = true; // this.value exists (must be set to true before the super.value getter is called)
     
                 if (val instanceof UnresolvedValue) {
@@ -3241,8 +3241,7 @@ export class Pointer<T = any> extends Ref<T> {
                         this.#registeredForGC = true;
                         Pointer.garbage_registry.register(<object><unknown>(this.is_js_primitive ? this : this.current_val), mockPointer, this)
                     }
-                    catch (e){
-                        console.log(e)
+                    catch {
                         logger.error("couldn't register for garbage collection: ", this.idString())
                     }
                 }
