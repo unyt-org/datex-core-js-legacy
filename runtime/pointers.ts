@@ -2579,6 +2579,13 @@ export class Pointer<T = any> extends Ref<T> {
             else {
                 this.#original_value = this.#shadow_object = <any> new WeakRef(<any>val);
 
+                // already a proxified value bound to a ptr
+                let alreadyProxy = false;
+                if (val && typeof val == "object" && DX_PTR in val) {
+                    alreadyProxy = true;
+                    console.warn("The value assigned to pointer "+this.idString()+" is already bound to " + (val[DX_PTR] as unknown as Pointer).idString() + ":", val)
+                }
+
                 // TODO: is this required somewhere?
                 // add reference to this DatexPointer to the original value
                 if (!this.is_anonymous) {
@@ -2593,16 +2600,11 @@ export class Pointer<T = any> extends Ref<T> {
                 // save original value in map to find the right pointer for this value in the future
                 Pointer.pointer_value_map.set(val, this);
                 // create proxy
-                const value = this.addObjProxy((val instanceof UnresolvedValue) ? val[DX_VALUE] : val); 
-                // add $, $$
-                if (typeof value !== "symbol") this.add$Properties(value);
 
-                // // add reference to this DatexPointer to the value
-                // if (!this.is_anonymous) {
-                //     try {value[DX_PTR] = this;
-                //     } catch(e) {}
-                // }
-    
+                const value = alreadyProxy ? val : this.addObjProxy((val instanceof UnresolvedValue) ? val[DX_VALUE] : val); 
+                // add $, $$
+                if (!alreadyProxy && typeof value !== "symbol") this.add$Properties(value);
+                
                 this.#loaded = true; // this.value exists (must be set to true before the super.value getter is called)
     
                 if (val instanceof UnresolvedValue) {
@@ -3756,6 +3758,7 @@ export class Pointer<T = any> extends Ref<T> {
                     })
                 }
                 catch (e) {
+                    console.log(e);
                     logger.error("Cannot set custom array methods on " + this.idString())
                 }
             }
