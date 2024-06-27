@@ -1132,7 +1132,8 @@ const observableArrayMethods = new Set<string>([
     "toSorted",
     "toSpliced",
     "values",
-    "with"
+    "with",
+    "sort"
 ])
 
 
