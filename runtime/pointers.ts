@@ -1849,6 +1849,14 @@ export class Pointer<T = any> extends Ref<T> {
         if (deleteCount && deleteCount < 0) deleteCount = 0;
         return this.handleSplice(start??0, deleteCount, items) ?? [];
     }
+
+    private arraySort(compareFn?: (a: unknown, b: unknown) => number): T{
+        if (!(this.shadow_object instanceof Array)) throw new Error("Cannot call sort on non-array value");
+        const sortedValues = this.shadow_object.toSorted(compareFn) as T;
+        console.log("sortnew",sortedValues)
+        this.handleSplice(0, this.shadow_object.length, sortedValues);
+        return this.val;
+    }
     
 
     /** END STATIC */
@@ -3752,8 +3760,15 @@ export class Pointer<T = any> extends Ref<T> {
                 // overwrite special array methods TODO
 
                 try {
+                    // splice
                     Object.defineProperty(obj, "splice", {
                         value: this.arraySplice.bind(this),
+                        enumerable: false,
+                        writable: false
+                    })
+                    // sort
+                    Object.defineProperty(obj, "sort", {
+                        value: this.arraySort.bind(this),
                         enumerable: false,
                         writable: false
                     })
