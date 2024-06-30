@@ -1042,6 +1042,8 @@ export class Type<T = any> extends ExtensibleFunction {
         Promise: Type.get<Promise<any>>("js:Promise"),
         ReadableStream: Type.get<ReadableStream>("js:ReadableStream"),
         WritableStream: Type.get<WritableStream>("js:WritableStream"),
+        Request: Type.get<Request>("js:Request"),
+        Response: Type.get<Response>("js:Response"),
     }
 
     /**

@@ -400,6 +400,82 @@ Type.js.WritableStream.setJSInterface({
     }
 })
 
+Type.js.Response.setJSInterface({
+    class: Response,
+
+    serialize: value => {
+        return {
+            body: value.body,
+            status: value.status,
+            statusText: value.statusText,
+            headers: Array.from(value.headers.entries())
+        }
+    },
+
+    cast: value => {
+        if (typeof value === "object") {
+            const headers = new Headers();
+            if (value.headers) {
+                for (const [key, val] of value.headers) {
+                    headers.append(key, val);
+                }
+            }
+            return new Response(value.body, {
+                status: value.status,
+                statusText: value.statusText,
+                headers
+            })
+        }
+        else return INVALID;
+    }
+})
+
+Type.js.Request.setJSInterface({
+    class: Request,
+
+    serialize: value => {
+        return {
+            url: value.url,
+            method: value.method,
+            headers: Array.from(value.headers.entries()),
+            body: value.body,
+            cache: value.cache,
+            credentials: value.credentials,
+            integrity: value.integrity,
+            keepalive: value.keepalive,
+            mode: value.mode,
+            redirect: value.redirect,
+            referrer: value.referrer,
+            referrerPolicy: value.referrerPolicy,
+        }
+    },
+
+    cast: value => {
+        if (typeof value === "object") {
+            const headers = new Headers();
+            if (value.headers) {
+                for (const [key, val] of value.headers) {
+                    headers.append(key, val);
+                }
+            }
+            return new Request(value.url, {
+                method: value.method,
+                headers,
+                body: value.body,
+                cache: value.cache,
+                credentials: value.credentials,
+                integrity: value.integrity,
+                keepalive: value.keepalive,
+                mode: value.mode,
+                redirect: value.redirect,
+                referrer: value.referrer,
+                referrerPolicy: value.referrerPolicy,
+            })
+        }
+        else return INVALID;
+    }
+})
+
 // override set prototype to make sure all sets are sorted at runtime when calling [...set] (TODO is that good?)
 // const set_iterator = Set.prototype[Symbol.iterator];
 // Set.prototype[Symbol.iterator] = function() {
