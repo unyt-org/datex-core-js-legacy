@@ -38,7 +38,7 @@ export async function generateTSModuleForRemoteAccess(module_path_or_datex_get:U
 		*/
 
 		import { Datex, datex, endpoint, property, timeout, sync } from "datex-core-legacy";
-		const logger = new Datex.Logger("${module_name}");\n\n`;
+		const logger = new Datex.Logger("${module_name.replaceAll("\\", "/")}");\n\n`;
 
 	for (const [name, val, valid, no_pointer] of values) {
 		if (!valid) code += `logger.warn('Another module tried to import "${name}", which does not exist in this module. You might need to restart the backend.');\n`
