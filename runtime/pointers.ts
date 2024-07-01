@@ -2125,8 +2125,10 @@ export class Pointer<T = any> extends Ref<T> {
      * @param endpoint
      */
     public grantAccessTo(endpoint: Endpoint, _force = false) {
+        // already has public access
+        if (this.#allowed_access == BROADCAST) return;
         if (!_force && !Runtime.OPTIONS.PROTECT_POINTERS) throw new Error("Read permissions are not enabled per default (set Datex.Runtime.OPTIONS.PROTECT_POINTERS to true)")
-        if (!this.#allowed_access || this.#allowed_access == BROADCAST) this.#allowed_access = new Disjunction()
+        if (!this.#allowed_access) this.#allowed_access = new Disjunction()
         if (this.#allowed_access instanceof Disjunction) {
             this.#allowed_access.add(endpoint)
             Pointer.#allowed_access_by_endpoint.getAuto(endpoint).add(this);
