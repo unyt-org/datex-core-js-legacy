@@ -1853,9 +1853,21 @@ export class Runtime {
                 if (header.signed) {
                     logger.debug("GOODBYE from " + header.sender)
                     header.sender.setOnline(false)
-                    Pointer.clearEndpointSubscriptions(header.sender)
-                    Pointer.clearEndpointPermissions(header.sender)
-                    this.clearEndpointScopes(header.sender);
+                    const endpoint = header.sender;
+
+                    // don't immediately clear permissions to keep permissions on endpoint instance switch
+                    setTimeout(async ()=> {
+                        // permission are always for the main endpoint, not per instance
+                        if (!await endpoint.main.isOnline()) {
+                            Pointer.clearEndpointPermissions(endpoint.main)
+                        }
+
+                        // clear other stuff for instance
+                        if (!await endpoint.isOnline()) {
+                            Pointer.clearEndpointSubscriptions(endpoint)
+                            this.clearEndpointScopes(endpoint);
+                        }
+                    }, 5_000)
                 }
                 else {
                     logger.error("ignoring unsigned GOODBYE message")
