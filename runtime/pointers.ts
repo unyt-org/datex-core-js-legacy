@@ -2100,6 +2100,8 @@ export class Pointer<T = any> extends Ref<T> {
      * @returns 
      */
     public assertEndpointCanRead(endpoint?: Endpoint) {
+        // always use main endpoint (TODO: change?)
+        endpoint = endpoint?.main;
         if (
             Runtime.OPTIONS.PROTECT_POINTERS 
             && !(endpoint == Runtime.endpoint)
@@ -2107,8 +2109,8 @@ export class Pointer<T = any> extends Ref<T> {
             && (
                 !endpoint || 
                 (this.allowed_access instanceof Disjunction && this.allowed_access.size==0) || // TODO: this case is just added because Logical.matches currently always returns true for an empty Disjunction, which is not intended here
-                !Logical.matches(endpoint, this.allowed_access, Target))
-            && (endpoint && !Runtime.trustedEndpoints.get(endpoint.main)?.includes("protected-pointer-access"))
+                !Logical.matches(endpoint.main, this.allowed_access, Target))
+            && (endpoint && !Runtime.trustedEndpoints.get(endpoint)?.includes("protected-pointer-access"))
         ) {
             throw new PermissionError("Endpoint "+endpoint+" has no read permissions for pointer "+this.idString()+" (origin: "+this.origin+")");
         }
@@ -2125,6 +2127,8 @@ export class Pointer<T = any> extends Ref<T> {
      * @param endpoint
      */
     public grantAccessTo(endpoint: Endpoint, _force = false) {
+        // always use main endpoint (TODO: change?)
+        endpoint = endpoint.main;
         // already has public access
         if (this.#allowed_access == BROADCAST) return;
         if (!_force && !Runtime.OPTIONS.PROTECT_POINTERS) throw new Error("Read permissions are not enabled per default (set Datex.Runtime.OPTIONS.PROTECT_POINTERS to true)")
@@ -2152,6 +2156,8 @@ export class Pointer<T = any> extends Ref<T> {
      * @param endpoint 
      */
     public revokeAccessFor(endpoint: Endpoint, _force = false) {
+        // always use main endpoint (TODO: change?)
+        endpoint = endpoint.main;
         if (!_force && !Runtime.OPTIONS.PROTECT_POINTERS) throw new Error("Read permissions are not enabled per default (set Datex.Runtime.OPTIONS.PROTECT_POINTERS to true)")
         if (this.#allowed_access instanceof Disjunction) {
             this.#allowed_access.delete(endpoint);
