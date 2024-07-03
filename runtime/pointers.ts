@@ -3700,11 +3700,18 @@ export class Pointer<T = any> extends Ref<T> {
         }
 
         // only define getters/setters (no Proxy wrapper class)
-        else if (!Object.isSealed(obj) &&this.visible_children) {
+        else if (!Object.isSealed(obj) && this.visible_children) {
 
             // set new shadow_object to handle properties in background
             const shadow_object = {[DX_PTR]:this};
             this.#shadow_object = new WeakRef(shadow_object);
+
+            // remember children with getters and
+            // init them after all other properties to make sure
+            // that reactive properties are already initialized and
+            // prevent unnecessary "transform value is a static value" warnings
+            // (cannot be guaranteed that this works in all cases)
+            const childrenWithGetters = new Map<string, PropertyDescriptor>();
 
             for (const name of this.visible_children) {
 
@@ -3720,11 +3727,7 @@ export class Pointer<T = any> extends Ref<T> {
                     // @property getter: set pointer as property instead of getter
                     // TODO: what should happen if getter & SETTER set (still use always transform?)
                     if (property_descriptor.get && !property_descriptor?.set) {
-                        
-                        // copied from always in datex_short
-                        const transformRef = Pointer.createSmartTransform(property_descriptor.get.bind(obj));
-
-                        Object.defineProperty(shadow_object, name, {value:transformRef})
+                        childrenWithGetters.set(name, property_descriptor);
                     }
                     // bind default getters and setters
                     else {
@@ -3739,7 +3742,6 @@ export class Pointer<T = any> extends Ref<T> {
                 // no original getter/setter
                 else shadow_object[name] = obj[name];
 
-               
                 // new getter + setter
                 Object.defineProperty(obj, name, {
                     configurable:  true, // TODO: cant be false because of uix @content bindings, fix
@@ -3754,6 +3756,13 @@ export class Pointer<T = any> extends Ref<T> {
                     }
                 });
             
+            }
+
+            for (const [name, property_descriptor] of childrenWithGetters) {
+                // copied from always in datex_short
+                const transformRef = Pointer.createSmartTransform(property_descriptor.get!.bind(obj));
+
+                Object.defineProperty(shadow_object, name, {value:transformRef})
             }
 
             return obj;
