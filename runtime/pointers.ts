@@ -1853,7 +1853,6 @@ export class Pointer<T = any> extends Ref<T> {
     private arraySort(compareFn?: (a: unknown, b: unknown) => number): T{
         if (!(this.shadow_object instanceof Array)) throw new Error("Cannot call sort on non-array value");
         const sortedValues = this.shadow_object.toSorted(compareFn) as T;
-        console.log("sortnew",sortedValues)
         this.handleSplice(0, this.shadow_object.length, sortedValues);
         return this.val;
     }
@@ -4215,14 +4214,27 @@ export class Pointer<T = any> extends Ref<T> {
 
         const ret = Array.prototype.splice.call(this.shadow_object, start_index, deleteCount, ...replace);
 
+        // default strategy: insert;
+        let dxScript = "#0=?0;#0.(?4..?1) = void; #0.(?2..((count #0) + ?3)) = #0.(?4..(count #0));#0.(?4..?5) = ?6;"
+        let dxParams = [this, end, start-size+replace_length, replace_length, start, start+replace_length, replace];
+
+        // only delete
+        if (!replace?.length) {
+            dxScript = "#0 = ?0; #1 = count #0;#0.(?1..?2) = void;#0.(?1..#1) = #0.(?3..#1);"
+            dxParams = [this, start, end, start+size];
+        }
+        // exact replace
+        else if (deleteCount == replace.length && deleteCount == originalLength && start_index == 0) {
+            dxScript = "#0=?0; #0 = ?1;"
+            dxParams = [this, replace];
+        }
+
         // propagate updates via datex?
         if (this.send_updates_to_origin) {
-            if (!replace?.length) this.handleDatexUpdate(null, '#0 = ?0; #1 = count #0;#0.(?1..?2) = void;#0.(?1..#1) = #0.(?3..#1);', [this, start, end, start+size], this.origin) // no insert
-            else this.handleDatexUpdate(null, '#0=?0;#0.(?4..?1) = void; #0.(?2..((count #0) + ?3)) = #0.(?4..(count #0));#0.(?4..?5) = ?6;', [this, end, start-size+replace_length, replace_length, start, start+replace_length, replace], this.origin) // insert
+            this.handleDatexUpdate(null, dxScript, dxParams, this.origin)
         }
         if (this.update_endpoints.size) {
-            if (!replace?.length) this.handleDatexUpdate(null, '#0 = ?0; #1 = count #0;#0.(?1..?2) = void;#0.(?1..#1) = #0.(?3..#1);', [this, start, end, start+size], this.update_endpoints) // no insert
-            else  this.handleDatexUpdate(null, '#0=?0;#0.(?4..?1) = void; #0.(?2..((count #0) + ?3)) = #0.(?4..(count #0));#0.(?4..?5) = ?6;', [this, end, start-size+replace_length, replace_length, start, start+replace_length, replace], this.update_endpoints) // insert
+            this.handleDatexUpdate(null, dxScript, dxParams, this.update_endpoints)
         }
 
         // inform observers TODO what to do here?
