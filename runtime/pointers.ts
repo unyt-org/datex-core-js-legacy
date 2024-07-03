@@ -2719,6 +2719,13 @@ export class Pointer<T = any> extends Ref<T> {
             return;
         }
 
+        // also check if array is equal
+        if (this.current_val instanceof Array && val instanceof Array) {
+            if (this.current_val.length == val.length && this.current_val.every((v,i)=>v===val[i])) {
+                return;
+            }
+        }
+
         if (this.type?.interface_config?.allow_transform_value) {
             let error:string|boolean
             if ((error = this.type.interface_config.allow_transform_value(newType, this)) !== true) {
@@ -4224,7 +4231,7 @@ export class Pointer<T = any> extends Ref<T> {
             dxParams = [this, start, end, start+size];
         }
         // exact replace
-        else if (deleteCount == replace.length && deleteCount == originalLength && start_index == 0) {
+        else if (deleteCount == originalLength && start_index == 0) {
             dxScript = "#0=?0; #0 = ?1;"
             dxParams = [this, replace];
         }
