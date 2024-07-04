@@ -4,11 +4,11 @@
  */
 
 
-import { AsyncTransformFunction, CollapsedValue, CollapsedValueAdvanced, Decorators, INSERT_MARK, METADATA, MaybeObjectRef, MinimalJSRef, Pointer, Ref, RefLike, RefOrValue, Runtime, SmartTransformFunction, SmartTransformOptions, TransformFunction, TransformFunctionInputs, handleDecoratorArgs, logger, primitive } from "./datex_all.ts";
+import { AsyncTransformFunction, INSERT_MARK, MaybeObjectRef, MinimalJSRef, Pointer, Ref, RefLike, RefOrValue, SmartTransformFunction, SmartTransformOptions, TransformFunction, TransformFunctionInputs, logger } from "./datex_all.ts";
 import { Datex } from "./mod.ts";
 import { PointerError } from "./types/errors.ts";
 import { IterableHandler } from "./utils/iterable-handler.ts";
-import { MinimalJSRefWithIndirectRef, RestrictSameType } from "./runtime/pointers.ts";
+import { AsyncSmartTransformFunction, MinimalJSRefWithIndirectRef, RestrictSameType } from "./runtime/pointers.ts";
 
 
 /**
@@ -53,7 +53,7 @@ export function always(scriptOrJSTransform:TemplateStringsArray|SmartTransformFu
 /**
  * A generic transform function, creates a new pointer containing the result of the callback function.
  * At any point in time, the pointer is the result of the callback function.
- * In contrast to the always function, this function can return a Promise, but the callback function cannot be an async function.
+ * In contrast to the always function, this function can return a Promise
  * ```ts
  * const x = $$(42);
  * const y = await asyncAlways (() => complexCalculation(x.val * 10));
@@ -64,11 +64,7 @@ export function always(scriptOrJSTransform:TemplateStringsArray|SmartTransformFu
  * }
  * ```
  */
-export async function asyncAlways<T>(transform:SmartTransformFunction<T>, options?: SmartTransformOptions): Promise<MinimalJSRefWithIndirectRef<T>> { // return signature from Value.collapseValue(Pointer.smartTransform())
-    // make sure handler is not an async function
-    if (transform.constructor.name == "AsyncFunction") {
-        throw new Error("asyncAlways cannot be used with async functions, but with functions returning a Promise")
-    }
+export async function asyncAlways<T>(transform:AsyncSmartTransformFunction<T>, options?: SmartTransformOptions): Promise<MinimalJSRefWithIndirectRef<T>> { // return signature from Value.collapseValue(Pointer.smartTransform())
     const ptr = Pointer.createSmartTransform(transform, undefined, undefined, undefined, options);
     if (!ptr.value_initialized && ptr.waiting_for_always_promise) {
         await ptr.waiting_for_always_promise;
@@ -139,11 +135,6 @@ const getGreetingMessage = (country: RefOrValue<string>) => {
 export function effect<W extends Record<string, WeakKey>|undefined>(handler:W extends undefined ? () => void|Promise<void> :(weakVariables: W) => void|Promise<void>, weakVariables?: W): {dispose: () => void, [Symbol.dispose]: () => void} {
     
     let ptr: Pointer;
-
-    // make sure handler is not an async function
-    if (handler.constructor.name == "AsyncFunction") {
-        throw new Error("Async functions are not allowed as effect handlers")
-    }
 
     // weak variable binding
     if (weakVariables) {
