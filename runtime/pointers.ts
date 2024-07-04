@@ -940,6 +940,7 @@ export type TransformFunctionInputs = readonly any[];
 export type TransformFunction<Values extends TransformFunctionInputs, ReturnType> = (...values:CollapsedDatexArray<Values>)=>RestrictSameType<RefOrValue<ReturnType>>;
 export type AsyncTransformFunction<Values extends TransformFunctionInputs, ReturnType> = (...values:CollapsedDatexArray<Values>)=>Promise<RestrictSameType<RefOrValue<ReturnType>>>|RestrictSameType<RefOrValue<ReturnType>>;
 export type SmartTransformFunction<ReturnType> = ()=>Awaited<RestrictSameType<RefOrValue<ReturnType>>>;
+export type AsyncSmartTransformFunction<ReturnType> = ()=>Awaited<RestrictSameType<RefOrValue<ReturnType>>>|Promise<Awaited<RestrictSameType<RefOrValue<ReturnType>>>>;
 
 
 // send datex updates from pointers only at specific times / intervals
