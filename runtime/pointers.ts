@@ -2109,7 +2109,7 @@ export class Pointer<T = any> extends Ref<T> {
             && (
                 !endpoint || 
                 (this.allowed_access instanceof Disjunction && this.allowed_access.size==0) || // TODO: this case is just added because Logical.matches currently always returns true for an empty Disjunction, which is not intended here
-                !Logical.matches(endpoint.main, this.allowed_access, Target))
+                !Logical.matches(endpoint, this.allowed_access, Target))
             && (endpoint && !Runtime.trustedEndpoints.get(endpoint)?.includes("protected-pointer-access"))
         ) {
             throw new PermissionError("Endpoint "+endpoint+" has no read permissions for pointer "+this.idString()+" (origin: "+this.origin+")");

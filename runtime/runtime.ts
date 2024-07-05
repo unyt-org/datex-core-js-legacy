@@ -1851,23 +1851,17 @@ export class Runtime {
             // received signed GOODBYE message -> endpoint is offline
             if (header.type == ProtocolDataType.GOODBYE) {
                 if (header.signed) {
-                    logger.debug("GOODBYE from " + header.sender)
-                    header.sender.setOnline(false)
                     const endpoint = header.sender;
 
-                    // don't immediately clear permissions to keep permissions on endpoint instance switch
-                    setTimeout(async ()=> {
-                        // permission are always for the main endpoint, not per instance
-                        if (!await endpoint.main.isOnline()) {
-                            Pointer.clearEndpointPermissions(endpoint.main)
-                        }
+                    logger.debug("GOODBYE from " + endpoint)
+                    endpoint.setOnline(false)
 
-                        // clear other stuff for instance
-                        if (!await endpoint.isOnline()) {
-                            Pointer.clearEndpointSubscriptions(endpoint)
-                            this.clearEndpointScopes(endpoint);
-                        }
-                    }, 5_000)
+                    Pointer.clearEndpointSubscriptions(endpoint)
+                    this.clearEndpointScopes(endpoint);
+
+                    // TODO/NOTE: permissions are not reset immediately here, otherwise DOM pointers might not be accessible during hydration in UIX
+                    // permissions will still be reset in the periodic cleanup procedure
+                    // Pointer.clearEndpointPermissions(header.sender)
                 }
                 else {
                     logger.error("ignoring unsigned GOODBYE message")

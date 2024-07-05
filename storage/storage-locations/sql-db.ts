@@ -918,8 +918,8 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			})
 			.map(ptr => (ptr as Pointer).val as T))
 
-		console.log("load time", (Date.now() - loadStart) + "ms")
-		console.log("total query time", (Date.now() - start) + "ms")
+		logger.debug("load time", (Date.now() - loadStart) + "ms")
+		logger.debug("total query time", (Date.now() - start) + "ms")
 
 		const matches = options.returnRaw ? 
 			await Promise.all(queryResult.map(async entry => (this.mergeNestedObjects(await Promise.all(Object.entries(entry).map(
