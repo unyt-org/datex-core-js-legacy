@@ -51,6 +51,7 @@ export class Quantity<U extends Unit = Unit> {
         ["g*m^2/A^2/s^3", "Ω", 1000n],
         ["s^-1", "Hz"],
         ["A*s", "C"],
+        ["A^2*s^4/g/m", "F/m", 1n, 1000n],
 
         ["g", "kg", 1000n],
 
@@ -94,6 +95,7 @@ export class Quantity<U extends Unit = Unit> {
     unit_formatted!: string
     unit_formatted_short!: string
     short_divisor!: bigint
+    short_multiplier!: bigint
 
     get unit_factor_number() {return this.unit.length}
 
@@ -437,6 +439,7 @@ export class Quantity<U extends Unit = Unit> {
         let formatted = "";
         let is_first = true;
         let format_divisor = 1n;
+        let format_multiplier = 1n;
 
         for (const encoded of this.unit) {
             if (is_first) formatted += encoded[1] < 0 ? 'x/' : ''
@@ -449,16 +452,17 @@ export class Quantity<U extends Unit = Unit> {
         this.unit_formatted = formatted || UnitSymbol[Unit.DIMENSIONLESS];
 
         // replace with shortcut aliases
-        for (const [expression, alias, divisor] of Quantity.known_aliases) {
+        for (const [expression, alias, divisor, multiplicator] of Quantity.known_aliases) {
             if (formatted.startsWith(expression)) {
                 formatted = formatted.replace(expression, alias);
-                if (divisor) format_divisor *= divisor;
+                if (divisor) format_divisor *= divisor??1;
+                if (multiplicator) format_multiplier *= multiplicator??1
             }
         }
         
         this.unit_formatted_short = formatted || UnitSymbol[Unit.DIMENSIONLESS];
         this.short_divisor = format_divisor;
-
+        this.short_multiplier = format_multiplier;
     }
 
 
@@ -634,7 +638,7 @@ export class Quantity<U extends Unit = Unit> {
         let denominator = this.#denominator;
 
         // divide by short_divisor to match alias factor
-        if (alias_factor) [numerator, denominator] = Quantity.#normalizeFraction(numerator, denominator*this.short_divisor);
+        if (alias_factor) [numerator, denominator] = Quantity.#normalizeFraction(numerator*this.short_multiplier, denominator*this.short_divisor);
 
         // fixed decimals
         if (decimals != undefined) return (Number(numerator)/Number(denominator)).toFixed(decimals);
