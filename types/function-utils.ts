@@ -63,13 +63,17 @@ function getUsedVars(fn: (...args:unknown[])=>unknown) {
     const usedVarsSource = source.match(/^(?:(?:[\w\s*])+\(.*?\)\s*{|\(.*?\)\s*=>\s*{?|.*?\s*=>\s*{?)\s*use\s*\(([\s\S]*?)\)/)?.[1]
     if (!usedVarsSource) return {};
 
-    const usedVars = usedVarsSource.split(",").map(v=>v.trim()).filter(v=>!!v)
+    const _usedVars = usedVarsSource.split(",").map(v=>v.trim()).filter(v=>!!v)
     const flags = []
-    for (const usedVar of usedVars) {
+    const usedVars = []
+    for (const usedVar of _usedVars) {
         if (usedVar == `"standalone"` || usedVar == `'standalone'`) flags.push("standalone");
-        else if (!usedVar.match(/^[a-zA-Z_$][0-9a-zA-Z_$\u0080-\uFFFF]*$/)) throw new RuntimeError("Unexpected identifier in 'use' declaration: '" + usedVar+ "' - only variable names are allowed.");
+        else if (!usedVar.match(/^[a-zA-Z_$][0-9a-zA-Z_$\u0080-\uFFFF]*$/)) {
+            // TODO: only warn if not artifact from minification
+            // console.warn("Unexpected identifier in 'use' declaration: '" + usedVar+ "' - only variable names are allowed.");
+        }
+        else usedVars.push(usedVar);
     }
-    if (flags.length) usedVars.splice(0, flags.length); // remove flags
     return {usedVars, flags};
 }
 

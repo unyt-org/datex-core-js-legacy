@@ -27,7 +27,6 @@ import { Conjunction, Disjunction, Logical } from "../types/logic.ts";
 import { client_type } from "../utils/constants.ts";
 import { Assertion } from "../types/assertion.ts";
 import { getCallerInfo } from "../utils/caller_metadata.ts";
-import { createFunctionWithDependencyInjectionsResolveLazyPointers } from "../types/function-utils.ts";
 
 const { Reflect: MetadataReflect } = client_type == 'deno' ? await import("https://deno.land/x/reflect_metadata@v0.1.12/mod.ts") : {Reflect};
 
