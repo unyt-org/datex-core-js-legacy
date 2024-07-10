@@ -265,7 +265,7 @@ async function registerServiceWorker(path:string|URL) {
  * export const exportedValue = $$([1,2,3]);
  * 
  * /// file: main.ts
- * using thread = await getServiceWorkerThread<typeof import('./sw.ts')>('./sw.ts');
+ * using thread = await getServiceWorkerThread<typeof import('./thread-worker.ts')>('./thread-worker.ts');
  * // access exported values:
  * const res = await thread.exportedFunction(1,2);
  * thread.exportedValue.push(4);
@@ -408,7 +408,7 @@ function freeThread(thread: ThreadModule) {
  * export const exportedValue = $$([1,2,3]);
  * 
  * /// file: main.ts
- * using thread = await spawnThread<typeof import('./thread.ts')>('./thread.ts');
+ * using thread = await spawnThread<typeof import('./threads.ts')>('./threads.ts');
  * // access exported values:
  * const res = await thread.exportedFunction(1,2);
  * thread.exportedValue.push(4);

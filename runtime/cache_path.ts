@@ -7,7 +7,7 @@ let custom_cache_path: string|undefined|-1 = -1;
 export async function _updateCachePaths() {
 	
 	if (custom_cache_path === -1 && client_type == "deno") {
-		const { commandLineOptions } = await import("../utils/args.ts");
+		const { commandLineOptions } = await import("../utils/args.ts" /*lazy*/);
 		custom_cache_path = commandLineOptions.option("cache-path", {aliases: ["c"], type: "string",  description: "Overrides the default path for datex cache files (.datex-cache)"})
 	}
 
