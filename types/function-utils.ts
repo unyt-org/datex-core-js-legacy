@@ -60,20 +60,23 @@ declare global {
 
 function getUsedVars(fn: (...args:unknown[])=>unknown) {
     const source = fn.toString();
-    const usedVarsSource = source.match(/^(?:(?:[\w\s*])+\(.*?\)\s*{|\(.*?\)\s*=>\s*{?|.*?\s*=>\s*{?)\s*use\s*\(([\s\S]*?)\)/)?.[1]
+    const usedVarsSource = source.match(/^(?:(?:[\w\s*])+\(.*?\)\s*{|\(.*?\)\s*=>\s*[{(]?|.*?\s*=>\s*[{(]?)\s*use\s*\(([\s\S]*?)\)/)?.[1]
     if (!usedVarsSource) return {};
 
     const _usedVars = usedVarsSource.split(",").map(v=>v.trim()).filter(v=>!!v)
     const flags = []
     const usedVars = []
+    let ignoreVarCounter = 0;
     for (const usedVar of _usedVars) {
         if (usedVar == `"standalone"` || usedVar == `'standalone'`) flags.push("standalone");
         else if (!usedVar.match(/^[a-zA-Z_$][0-9a-zA-Z_$\u0080-\uFFFF]*$/)) {
+            usedVars.push("#" + (ignoreVarCounter++)); // ignore variables start with #
             // TODO: only warn if not artifact from minification
             // console.warn("Unexpected identifier in 'use' declaration: '" + usedVar+ "' - only variable names are allowed.");
         }
         else usedVars.push(usedVar);
     }
+
     return {usedVars, flags};
 }
 
@@ -206,8 +209,9 @@ export function createFunctionWithDependencyInjectionsResolveLazyPointers(source
  */
 export function createFunctionWithDependencyInjections(source: string, dependencies: Record<string, unknown>, allowValueMutations = true): ((...args:unknown[]) => unknown) {
 	const hasThis = Object.keys(dependencies).includes('this');
-    const renamedVars = Object.keys(dependencies).filter(d => d!=='this').map(k=>'_'+k);
-    const varMapping = renamedVars.map(k=>`const ${k.slice(1)} = ${allowValueMutations ? 'createStaticObject' : ''}(${k});`).join("\n");
+    let ignoreVarCounter = 0;
+    const renamedVars = Object.keys(dependencies).filter(d => d!=='this').map(k => k.startsWith("#") ? '_ignore_'+(ignoreVarCounter++) : '_'+k);
+    const varMapping = renamedVars.filter(v=>!v.startsWith("_ignore_")).map(k=>`const ${k.slice(1)} = ${allowValueMutations ? 'createStaticObject' : ''}(${k});`).join("\n");
     const isArrow = isArrowFunction(source);
 
     if (isNativeFunction(source)) {
@@ -222,8 +226,10 @@ export function createFunctionWithDependencyInjections(source: string, dependenc
         return val;
     };`
 
+    const creatorSource = `"use strict";\n${(varMapping&&allowValueMutations)?createStaticFn:''}\n${varMapping};\nreturn (${source})`;
+
     try {
-        let creatorFn = new Function(...renamedVars, `"use strict";${(varMapping&&allowValueMutations)?createStaticFn:''}${varMapping}; return (${source})`)
+        let creatorFn = new Function(...renamedVars, creatorSource)
         // arrow function without own this context - bind creatorFn to this
         if (hasThis && isArrow) creatorFn = creatorFn.bind(dependencies['this']) 
         const fn = creatorFn(...Object.entries(dependencies).filter(([d]) => d!=='this').map(([_,v]) => v));
@@ -232,7 +238,8 @@ export function createFunctionWithDependencyInjections(source: string, dependenc
         else return fn;
     }
     catch (e) {
-        console.error("createFunctionWithDependencyInjections", e, source)
+        console.error(creatorSource)
+        console.error(e);
         throw e;
     }
     
