@@ -20,6 +20,7 @@ import { LazyPointer } from "../runtime/lazy-pointer.ts";
 import { AutoMap } from "../utils/auto_map.ts";
 import { hasDebugCookie } from "../utils/debug-cookie.ts";
 import { setStorage } from "../runtime/reset.ts";
+import { KnownError, handleError } from "../utils/error-handling.ts";
 
 
 // displayInit();
@@ -374,6 +375,7 @@ export class Storage {
 
     static #storage_active_pointers = new IterableWeakSet<Pointer>();
     static #storage_active_pointer_ids = new Set<string>();
+    static #scheduledUpdates = new Set<()=>void|Promise<void>>();
 
     /**
      * Try to cache the actual pointer if it is stored in storage.
@@ -484,7 +486,13 @@ export class Storage {
         this.#exiting = true
         // TODO: add race promise with timeout to return if cache takes too long
         // if (globalThis.Deno) setTimeout(()=>{Deno.exit(1)},20_000)
-        
+
+        // first run remaining scheduled updates (only sync supported)
+        for (const update of this.#scheduledUpdates) {
+            const res = update()
+            if (res instanceof Promise) logger.error("Cannot store state in async storage location on exit");
+        }
+
         this.saveDirtyState();
         
         if (this.#dirty || this.dirtyValues.size) {
@@ -846,24 +854,61 @@ export class Storage {
             if (!(location.supportsPartialUpdates && key !== NOT_EXISTING)) saving = true;
             const metadata = this.isDebugMode ? `${pointer.id}: ${Runtime.valueToDatexString(pointer.val)}` : undefined;
 
-            this.setDirty(location, true, metadata);
-            setTimeout(async ()=>{
+            this.scheduleStorageUpdate(()=>{
                 // set pointer (async)
                 saving = false;
-                const couldSave = await this.setPointer(pointer, false, location, key); // update value and add new dependencies recursively
-                if (couldSave) {
-                    logger.debug("updated " + pointer.idString() + " in storage");
+                const res = this.setPointer(pointer, false, location, key); // update value and add new dependencies recursively
+                if (res instanceof Promise) {
+                    return res.then((couldSave)=>{
+                        if (couldSave) {
+                            logger.debug("updated " + pointer.idString() + " in storage");
+                        }
+                        else {
+                            pointer.unobserve(handler);
+                        }
+                    });
                 }
                 else {
-                    pointer.unobserve(handler);
+                    const couldSave = res; 
+                    if (couldSave) {
+                        logger.debug("updated " + pointer.idString() + " in storage");
+                    }
+                    else {
+                        pointer.unobserve(handler);
+                    }
                 }
-                this.setDirty(location, false, metadata)
-            }, 1000);
+            }, location, metadata);
         };
 
         pointer.observe(handler, undefined, undefined, {ignore_transforms:true, recursive:false});   
     }
 
+
+    /**
+     * Run a pointer update after 1s on process exit and keep the dirty state until the update is finished
+     */
+    private static scheduleStorageUpdate(update:()=>void|Promise<void>, location: StorageLocation, metadata?: string) {
+        
+        this.setDirty(location, true, metadata);
+        const updateFn = () => {
+            clearTimeout(timeout);
+            const res = update();
+            if (res instanceof Promise) {
+                return res.then(()=>{
+                    this.setDirty(location, false, metadata);
+                    this.#scheduledUpdates.delete(updateFn);
+                })
+            }
+            else {
+                this.#scheduledUpdates.delete(updateFn);
+                this.setDirty(location, false, metadata);
+            }
+        }
+
+        this.#scheduledUpdates.add(updateFn);
+        const timeout = setTimeout(updateFn, 1000);
+    }
+ 
     public static hasPointer(pointer:Pointer, location:StorageLocation|undefined = this.#trusted_location) {
 		if (location)  {
 			return location.hasPointer(pointer.id);
@@ -935,8 +980,20 @@ export class Storage {
     public static async getPointer(pointer_id:string, pointerify?:boolean, bind?:any, location?:StorageLocation, conditions?: ExecConditions):Promise<any> {
 
         if (this.#dirty) {
-            displayFatalError('storage-unrecoverable');
-            throw new Error(`cannot restore dirty state of ${this.#primary_location!.name}, no trusted secondary storage location found`);
+            handleError(new KnownError(
+                `Cannot restore dirty eternal state (location: ${this.#primary_location!.name})`,
+                [],
+                [
+                    {
+                        description: "Do you want to reset the current application state? (THIS IS IRREVERSIBLE)",
+                        fix: () => {
+                            this.clearAndReload();
+                        }
+                    }
+                ]
+            ))
+            // displayFatalError('storage-unrecoverable');
+            // throw new Error(`cannot restore dirty state of ${this.#primary_location!.name}, no trusted secondary storage location found`);
         }
 
         // try to find pointer at a storage location
@@ -1222,8 +1279,20 @@ export class Storage {
     public static async getItem(key:string, location?:StorageLocation|undefined/* = this.#primary_location*/, conditions?: ExecConditions):Promise<any> {
 
         if (this.#dirty) {
-            displayFatalError('storage-unrecoverable');
-            throw new Error(`cannot restore dirty state of ${this.#primary_location!.name}, no trusted secondary storage location found`)
+            // displayFatalError('storage-unrecoverable');
+            handleError(new KnownError(
+                `Cannot restore dirty eternal state (location: ${this.#primary_location!.name})`,
+                [],
+                [
+                    {
+                        description: "Do you want to reset the current application state? (THIS IS IRREVERSIBLE)",
+                        fix: () => {
+                            this.clearAndReload();
+                        }
+                    }
+                ]
+            ))
+            // throw new Error(`cannot restore dirty state of ${this.#primary_location!.name}, no trusted secondary storage location found`)
         }
 
         // get from cache
