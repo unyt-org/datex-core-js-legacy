@@ -965,6 +965,22 @@ export class Storage {
         }
     }
 
+    private static handleDirtyStateError() {
+        handleError(new KnownError(
+            `Cannot restore dirty eternal state (location: ${this.#primary_location!.name})`,
+            [],
+            [
+                {
+                    description: "Do you want to reset the current application state? (THIS IS IRREVERSIBLE)",
+                    fix: () => {
+                        this.clearAndReload();
+                    }
+                }
+            ]
+        ))
+    }
+
+
     /**
      * Maps pointer ids to existing subscriber caches that were preloaded from storage
      */
@@ -980,20 +996,7 @@ export class Storage {
     public static async getPointer(pointer_id:string, pointerify?:boolean, bind?:any, location?:StorageLocation, conditions?: ExecConditions):Promise<any> {
 
         if (this.#dirty) {
-            handleError(new KnownError(
-                `Cannot restore dirty eternal state (location: ${this.#primary_location!.name})`,
-                [],
-                [
-                    {
-                        description: "Do you want to reset the current application state? (THIS IS IRREVERSIBLE)",
-                        fix: () => {
-                            this.clearAndReload();
-                        }
-                    }
-                ]
-            ))
-            // displayFatalError('storage-unrecoverable');
-            // throw new Error(`cannot restore dirty state of ${this.#primary_location!.name}, no trusted secondary storage location found`);
+            this.handleDirtyStateError();
         }
 
         // try to find pointer at a storage location
@@ -1279,20 +1282,7 @@ export class Storage {
     public static async getItem(key:string, location?:StorageLocation|undefined/* = this.#primary_location*/, conditions?: ExecConditions):Promise<any> {
 
         if (this.#dirty) {
-            // displayFatalError('storage-unrecoverable');
-            handleError(new KnownError(
-                `Cannot restore dirty eternal state (location: ${this.#primary_location!.name})`,
-                [],
-                [
-                    {
-                        description: "Do you want to reset the current application state? (THIS IS IRREVERSIBLE)",
-                        fix: () => {
-                            this.clearAndReload();
-                        }
-                    }
-                ]
-            ))
-            // throw new Error(`cannot restore dirty state of ${this.#primary_location!.name}, no trusted secondary storage location found`)
+            this.handleDirtyStateError();
         }
 
         // get from cache
