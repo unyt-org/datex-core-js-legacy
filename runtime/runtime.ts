@@ -1038,6 +1038,7 @@ export class Runtime {
                 const reader = dxb.getReader();
                 let next:ReadableStreamReadResult<ArrayBuffer>;
                 let end_of_scope = false;
+                finish();
                 // read all blocks (before the last block)
                 while (true) {
                     next = await reader.read()
