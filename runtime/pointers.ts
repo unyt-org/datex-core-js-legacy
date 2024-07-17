@@ -3887,7 +3887,12 @@ export class Pointer<T = any> extends Ref<T> {
                     if (is_array && Number(prop)+1==obj.length) Runtime.runtime_actions.trimArray(obj)
 
                     return true
-                }
+                },
+                ownKeys: (target) => {
+                    // assume that the whole object should be observed for transform
+                    this.handleBeforeNonReferencableGet();
+                    return Reflect.ownKeys(target);
+                },
             });
 
             // set right 'this' context for getters / setters
