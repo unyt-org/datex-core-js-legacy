@@ -7123,16 +7123,19 @@ export class Runtime {
                     const init_block_size = SCOPE.buffer_views.data_view.getUint32(SCOPE.current_index, true);
 					SCOPE.current_index += Uint32Array.BYTES_PER_ELEMENT;
 
+                    const {promise: lockedPointerPromise, resolve: lockedPointerResolve, reject: lockedPointerReject} = Promise.withResolvers<Pointer>();
+
                     // pointer exists
                     try {
                         let pointer = Pointer.create(id);
                         // when remote pointer is initialized by owner endpoint, it does not have to be loaded here from the remote endpoint, because the content is loaded in the initialization
                         // TODO: currently the initialization block is always used, even if it was not sent by the pointer owner, because SCOPE.sender?.equals(pointer.origin) does not work with ids and aliases of remote endpoints
                         const only_load_local = true; //pointer.is_origin || SCOPE.sender?.equals(pointer.origin);
-                        pointer = await Pointer.load(id, SCOPE, only_load_local, knows_pointer?true:false);
+                        pointer = await Pointer.load(id, SCOPE, only_load_local, knows_pointer?true:false, false, lockedPointerPromise);
                         // console.log("has $" + Pointer.normalizePointerId(id), jmp_index, buffer2hex(SCOPE.buffer_views.uint8.slice(jmp_index), " "));
                         // pointer.is_persistent = true;
                         SCOPE.current_index += init_block_size; // jump to end of init block
+                        lockedPointerResolve(pointer);
                     }
                     // does not exist: init, or no permission
                     catch (e) {
@@ -7146,11 +7149,9 @@ export class Runtime {
                         else {
                             if (!SCOPE.inner_scope.waiting_ptrs) SCOPE.inner_scope.waiting_ptrs = new Set();
                             const tmp_ptr = Pointer.create(id);
-                            // add pointer init promise for recursive init
-                            const {promise, resolve, reject} = Promise.withResolvers<Pointer>();
-                            Pointer.addLoadingPointerPromise(id, promise, SCOPE);
+                            Pointer.addLoadingPointerPromise(id, lockedPointerPromise, SCOPE);
                             // TODO: make sure resolve or reject is called at some point or the promise is removed
-                            SCOPE.inner_scope.waiting_ptrs.add([tmp_ptr, {resolve, reject}]); // assign next value to pointer;
+                            SCOPE.inner_scope.waiting_ptrs.add([tmp_ptr, {resolve: lockedPointerResolve, reject: lockedPointerReject}]); // assign next value to pointer;
                         }
 
                     }

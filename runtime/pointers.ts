@@ -1446,7 +1446,7 @@ export class Pointer<T = any> extends Ref<T> {
     private static loading_pointers:Map<string, {promise: Promise<Pointer>, scopeList: WeakSet<datex_scope>}> = new Map();
 
     // load from storage or request from remote endpoint if pointer not yet loaded
-    static load(id:string|Uint8Array, SCOPE?:datex_scope, only_load_local = false, sender_knows_pointer = true, allow_failure = false): Promise<Pointer>|Pointer|LazyPointer<unknown> {
+    static load(id:string|Uint8Array, SCOPE?:datex_scope, only_load_local = false, sender_knows_pointer = true, allow_failure = false, lockedPointerPromise?: Promise<Pointer>): Promise<Pointer>|Pointer|LazyPointer<unknown> {
 
         // pointer already exists
         const existing_pointer = Pointer.get(id);
@@ -1481,7 +1481,7 @@ export class Pointer<T = any> extends Ref<T> {
         const loadPromise = this.handleLoad(id_string, id, SCOPE, only_load_local, sender_knows_pointer, allow_failure);
         // only add load data if load not already finished
         if (this.loading_pointers.has(id_string)) {
-            this.addLoadingPointerPromise(id_string, loadPromise, SCOPE);
+            this.addLoadingPointerPromise(id_string, lockedPointerPromise??loadPromise, SCOPE);
         }
 
         return loadPromise;
