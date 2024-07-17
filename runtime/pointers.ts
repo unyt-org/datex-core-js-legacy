@@ -2601,7 +2601,8 @@ export class Pointer<T = any> extends Ref<T> {
                 let alreadyProxy = false;
                 if (val && typeof val == "object" && DX_PTR in val) {
                     alreadyProxy = true;
-                    console.warn("The value assigned to pointer "+this.idString()+" is already bound to " + (val[DX_PTR] as unknown as Pointer).idString() + ":", val)
+                    // TODO: handle this correctly
+                    // console.warn("The value assigned to pointer "+this.idString()+" is already bound to " + (val[DX_PTR] as unknown as Pointer).idString() + ":", val)
                 }
 
                 // TODO: is this required somewhere?
