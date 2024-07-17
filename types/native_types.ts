@@ -181,7 +181,8 @@ Type.std.Set.setJSInterface({
     create_proxy: (value:Set<any>, pointer:Pointer) => {
         // override methods
         Object.defineProperty(value, "add", {value: el => {
-                return pointer.handleAdd(el);
+                if (value.has(el)) return false;
+                return pointer.handleAdd(el); // TODO: return the Set
             }, writable:false, enumerable:false});
 
         Object.defineProperty(value, "clear", {value: () => {
@@ -189,7 +190,8 @@ Type.std.Set.setJSInterface({
             }, writable:false, enumerable:false});
 
         Object.defineProperty(value, "delete", {value: el => {
-                return pointer.handleRemove(el);
+                if (!value.has(el)) return false;
+                return pointer.handleRemove(el); // TODO: return the Set
             }, writable:false, enumerable:false});
 
         /**** override getters to trigger handleBeforeValueGet(): ****/
