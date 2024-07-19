@@ -34,15 +34,14 @@ export class StorageWeakMap<K,V> {
 	 */
 	allowNonPointerObjectValues = false;
 
-
-	constructor(){
-		Pointer.proxifyValue(this)
-	}
-
+	// StorageWeakMaps are not bound to a pointer per default, but a pointer is automatically created if needed
 	#_pointer?: Pointer;
 	get #pointer() {
 		if (!this.#_pointer) this.#_pointer = Pointer.getByValue(this);
-		if (!this.#_pointer) throw new Error(this.constructor.name + " not bound to a pointer")
+		if (!this.#_pointer) {
+			Pointer.proxifyValue(this);
+			this.#_pointer = Pointer.getByValue(this)!;
+		}
 		return this.#_pointer;
 	}
 
@@ -53,7 +52,7 @@ export class StorageWeakMap<K,V> {
 	}
 
 	protected get _prefix() {
-		if (!this.#prefix) this.#prefix = 'dxmap::'+(this as any)[DX_PTR].idString()+'.';
+		if (!this.#prefix) this.#prefix = 'dxmap::'+this.#pointer.idString()+'.';
 		return this.#prefix;
 	}
 

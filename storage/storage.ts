@@ -744,6 +744,10 @@ export class Storage {
 
     private static initPointerSync(location: SyncStorageLocation, pointer:Pointer, listen_for_changes = true, partialUpdateKey: unknown = NOT_EXISTING):boolean {
         // if (pointer.transform_scope && this.hasPointer(pointer)) return true; // ignore transform pointer, initial transform scope already stored, does not change
+        // was garbage collected in the meantime
+        if (pointer.garbage_collected) {
+            return false
+        }
 
         const dependencies = this.updatePointerSync(location, pointer, partialUpdateKey);
         dependencies.delete(pointer);
@@ -762,11 +766,19 @@ export class Storage {
     }
 
     private static updatePointerSync(location: SyncStorageLocation, pointer:Pointer, partialUpdateKey: unknown = NOT_EXISTING): Set<Pointer>{
+        // was garbage collected in the meantime
+        if (pointer.garbage_collected) {
+            return new Set();
+        }
 		return location.setPointer(pointer, partialUpdateKey);
     }
 
     private static async initPointerAsync(location: AsyncStorageLocation, pointer:Pointer, listen_for_changes = true, partialUpdateKey: unknown = NOT_EXISTING):Promise<boolean>{
         // if (pointer.transform_scope && await this.hasPointer(pointer)) return true; // ignore transform pointer, initial transform scope already stored, does not change
+        // was garbage collected in the meantime
+        if (pointer.garbage_collected) {
+            return false
+        }
 
         const dependencies = await this.updatePointerAsync(location, pointer, partialUpdateKey);
         dependencies.delete(pointer);
@@ -789,6 +801,10 @@ export class Storage {
     }
 
     private static async updatePointerAsync(location: AsyncStorageLocation, pointer:Pointer, partialUpdateKey: unknown = NOT_EXISTING): Promise<Set<Pointer>> {
+        // was garbage collected in the meantime
+        if (pointer.garbage_collected) {
+            return new Set();
+        }
         const metadata = this.isDebugMode ? `${pointer.id}: ${Runtime.valueToDatexString(pointer.val)}` : undefined;
         this.setDirty(location, true, metadata);
         const res = await location.setPointer(pointer, partialUpdateKey);
@@ -1021,7 +1037,7 @@ export class Storage {
 
         let pointer:Pointer|undefined;
 		if (pointerify && (pointer = Pointer.get(pointer_id))?.value_initialized) {
-            return pointer.val; // pointer still exists in runtime
+            return pointer.val; // pointer exists in runtime
         }
 
 

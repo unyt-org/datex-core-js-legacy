@@ -2469,7 +2469,7 @@ export class Pointer<T = any> extends Ref<T> {
     }    
 
     override get val():T {
-        if (this.#garbage_collected) throw new PointerError("Pointer was garbage collected");
+        if (this.#garbage_collected) throw new PointerError("Pointer "+this.idString()+" was garbage collected");
         else if (!this.#loaded) {
             throw new PointerError("Cannot get value of uninitialized pointer")
         }
@@ -2479,7 +2479,7 @@ export class Pointer<T = any> extends Ref<T> {
             // seems to be garbage collected
             if (val === undefined && this.#loaded && !this.#is_js_primitive) {
                 Pointer.handleGarbageCollected(this)
-                throw new PointerError("Pointer was garbage collected");
+                throw new PointerError("Pointer "+this.idString()+" was garbage collected");
             }
             // can be returned
             return val;
@@ -2497,7 +2497,7 @@ export class Pointer<T = any> extends Ref<T> {
 
     // same as get val, with current_val (calling super.current_val)
     override get current_val():T|undefined {
-        if (this.#garbage_collected) throw new PointerError("Pointer was garbage collected");
+        if (this.#garbage_collected) throw new PointerError("Pointer "+this.idString()+" was garbage collected");
         else if (!this.#loaded) {
             throw new PointerError("Cannot get value of uninitialized pointer")
         }
@@ -2507,7 +2507,7 @@ export class Pointer<T = any> extends Ref<T> {
             // seems to be garbage collected
             if (val === undefined && this.#loaded && !this.#is_js_primitive) {
                 Pointer.handleGarbageCollected(this)
-                throw new PointerError("Pointer was garbage collected");
+                throw new PointerError("Pointer "+this.idString()+" was garbage collected");
             }
             // can be returned
             return val;
@@ -2602,7 +2602,7 @@ export class Pointer<T = any> extends Ref<T> {
                 if (val && typeof val == "object" && DX_PTR in val) {
                     alreadyProxy = true;
                     // TODO: handle this correctly
-                    // console.warn("The value assigned to pointer "+this.idString()+" is already bound to " + (val[DX_PTR] as unknown as Pointer).idString() + ":", val)
+                    console.warn("The value assigned to pointer "+this.idString()+" is already bound to " + (val[DX_PTR] as unknown as Pointer).idString() + ":", val, new Error().stack);
                 }
 
                 // TODO: is this required somewhere?
