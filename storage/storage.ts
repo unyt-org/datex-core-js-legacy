@@ -1096,9 +1096,6 @@ export class Storage {
 		// remove from all
 		else {
 
-            // clear dependencies
-            this.updatePointerDependencies(pointer_id, [])
-
             const ptr = Pointer.get(pointer_id)
             if (ptr) {
                 this.#storage_active_pointers.delete(ptr);
@@ -1118,6 +1115,9 @@ export class Storage {
             promises.push(this.removePointerSubscriberCache(pointer_id));
 
             await Promise.all(promises);
+
+            // clear dependencies
+            this.updatePointerDependencies(pointer_id, [])
 		}
     }
 
@@ -1383,15 +1383,16 @@ export class Storage {
 		else {
             Storage.cache.delete(key); // delete from cache
             
-            // clear dependencies
-            this.updateItemDependencies(key, [])
-
             let itemExists = false;
 			for (const location of this.#locations.keys()) {
                 // TODO: handle hasItem() internally in storage locations
                 if (!itemExists) itemExists = await location.hasItem(key);
 				await location.removeItem(key);
 			}
+
+            // clear dependencies
+            this.updateItemDependencies(key, [])
+
             return itemExists;
 		}
     }
@@ -1407,7 +1408,7 @@ export class Storage {
      */
     private static decreaseReferenceCount(ptrId:string) {
         const newCount = this.getReferenceCount(ptrId) - 1;
-        // RC is 0, delet pointer from storage
+        // RC is 0, delete pointer from storage
         if (newCount <= 0) {
             localStorage.removeItem(this.rc_prefix+ptrId);
             this.removePointer(ptrId, undefined, true)
