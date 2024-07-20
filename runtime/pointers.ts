@@ -655,6 +655,7 @@ export class PointerProperty<T=any> extends Ref<T> {
         const val = this.pointer!.getProperty(this.key, this.#leak_js_properties);
         
         if (val === NOT_EXISTING) {
+            console.log(this.pointer)
             throw new Error(`Property ${this.key} does not exist in ${this.pointer?.type??"Unknown"}`);
         }
         else return val;
@@ -735,7 +736,9 @@ export class PointerProperty<T=any> extends Ref<T> {
     }
 
     get type():Type|undefined {
-        return this.pointer?.type.getAllowedPropertyType(this.key);
+        const type = this.pointer?.type.getAllowedPropertyType(this.key);
+        if (type != Type.std.Any) return type; // TODO: returning Any makes problems
+        else return undefined;
     }
 }
 

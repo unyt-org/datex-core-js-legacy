@@ -820,8 +820,8 @@ export class Type<T = any> extends ExtensibleFunction {
         if (value instanceof Pointer) {
             return value.type ?? Type.std.void;
         }
-        else if (value instanceof PointerProperty) {
-            return (value.type || Type.std.void) as Type<T>;
+        else if (value instanceof PointerProperty && value.type) {
+            return value.type as Type<T>;
         }
 
         value = Ref.collapseValue(value,true,true)
