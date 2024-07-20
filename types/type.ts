@@ -12,7 +12,7 @@ import { Quantity } from "./quantity.ts";
 import { Function as DatexFunction } from "./function.ts";
 import { logger, TypedArray } from "../utils/global_values.ts";
 import { BinaryCode } from "../compiler/binary_codes.ts"
-import { RefOrValue, Pointer, Ref } from "../runtime/pointers.ts";
+import { RefOrValue, Pointer, Ref, PointerProperty } from "../runtime/pointers.ts";
 import { clause, Conjunction, Disjunction, Logical, Negation } from "./logic.ts";
 import { Debugger } from "../runtime/debugger.ts";
 import { Time } from "./time.ts";
@@ -819,6 +819,9 @@ export class Type<T = any> extends ExtensibleFunction {
 
         if (value instanceof Pointer) {
             return value.type ?? Type.std.void;
+        }
+        else if (value instanceof PointerProperty) {
+            return (value.type || Type.std.void) as Type<T>;
         }
 
         value = Ref.collapseValue(value,true,true)

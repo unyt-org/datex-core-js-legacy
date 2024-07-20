@@ -735,6 +735,9 @@ export class PointerProperty<T=any> extends Ref<T> {
         if (internal_handler) this.pointer!.unobserve(internal_handler, bound_object, this.key); // get associated internal handler and unobserve
     }
 
+    get type():Type|undefined {
+        return this.pointer?.type.getAllowedPropertyType(this.key);
+    }
 }
 
 
