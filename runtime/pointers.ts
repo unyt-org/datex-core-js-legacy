@@ -1346,11 +1346,11 @@ export class Pointer<T = any> extends Ref<T> {
      * 'A' byte: first 3 bits for type, last 5 bits unused, can be used for custom flags 
      * */
     /** total pointer id size: 26 bytes */
-    static getUniquePointerID(forPointer:Pointer): Uint8Array {
+    static getUniquePointerID(forPointer?:Pointer): Uint8Array {
         const id = new Uint8Array(this.MAX_POINTER_ID_SIZE);
         const id_view = new DataView(id.buffer)
         // add custom origin id
-        if (!forPointer.is_origin) id.set(forPointer.origin.getPointerPrefix());
+        if (forPointer && !forPointer.is_origin) id.set(forPointer.origin.getPointerPrefix());
         // add current endpoint origin id
         else id.set(this.pointer_prefix)
 
@@ -1379,7 +1379,7 @@ export class Pointer<T = any> extends Ref<T> {
         this.last_t = timestamp; // save actual last time a pointer was created
 
         // add to local pointers list if no global endpoint id yet -> update pointer id as soon as global id available
-        if (Pointer.is_local) {
+        if (forPointer && Pointer.is_local) {
             this.#local_pointers.add(forPointer)
         }
 
@@ -1684,7 +1684,7 @@ export class Pointer<T = any> extends Ref<T> {
     } 
 
     // create a new pointer or return the existing pointer/pointer property for this value
-    static createOrGet<T>(value:RefOrValue<T>, sealed = false, allowed_access?:target_clause, anonymous = false, persistant = false):Pointer<T>{
+    static createOrGet<T>(value:RefOrValue<T>, sealed = false, allowed_access?:target_clause, anonymous = false, persistant = false, id?: string):Pointer<T>{
         if (value instanceof LazyPointer) throw new PointerError("Lazy Pointer not supported in this context");
         if (value instanceof Pointer) return <Pointer<T>>value; // return pointer by reference
         //if (value instanceof PointerProperty) return value; // return pointerproperty TODO: handle pointer properties?
@@ -1698,7 +1698,7 @@ export class Pointer<T = any> extends Ref<T> {
             return ptr;
         }
         // create new pointer
-        else return <Pointer<T>>Pointer.create(undefined, value, sealed, undefined, persistant, anonymous, false, allowed_access); 
+        else return <Pointer<T>>Pointer.create(id, value, sealed, undefined, persistant, anonymous, false, allowed_access); 
     }
 
     // same as createOrGet, but also return lazy pointer if it exists

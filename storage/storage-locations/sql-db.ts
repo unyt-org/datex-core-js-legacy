@@ -1124,10 +1124,21 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 									.left(`${this.#metaTables.sets.name}`, namespacedKey)
 									.on(`${namespacedKey}.${this.#pointerMysqlColumnName}`, tableAName)
 							);
-							const values = [...condition.data];
+							const values = [...condition.data]
 							// group values by type
-							const valuesByType = Map.groupBy(values, v => v instanceof Date ? "time" : typeof v);
+							const valuesByType = Map.groupBy(values, v => 
+									v instanceof Date ? 
+										"time" : 
+									Pointer.getByValue(v) ? "value_pointer" :
+										typeof v
+								);
+							
 							for (const [type, vals] of valuesByType) {
+
+								for (let i=0;i<vals.length;i++) {
+									if (Pointer.getByValue(vals[i])) vals[i] = Pointer.getByValue(vals[i])!.id
+								}
+
 								const columnName = {
 									string: "value_text",
 									number: "value_decimal",
@@ -1137,6 +1148,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 									time: "value_time",
 									object: "value_dxb",
 									symbol: "value_dxb",
+									value_pointer: "value_pointer",
 									undefined: "value_dxb",
 								}[type];
 
