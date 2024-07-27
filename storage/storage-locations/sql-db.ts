@@ -389,7 +389,14 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 							foreignTable = this.#metaTables.sets.name;
 						}
 						else {
-							logger.warn("Cannot map type " + propType + " to a SQL table, falling back to raw pointer storage")
+							if (
+								propType !== Datex.Type.std.StorageSet &&
+								propType !== Datex.Type.std.StorageMap &&
+								propType !== Datex.Type.std.StorageWeakSet &&
+								propType !== Datex.Type.std.StorageWeakMap
+							) {
+								logger.warn("Cannot map type " + propType + " to a SQL table, falling back to raw pointer storage")
+							}
 							foreignTable = this.#metaTables.rawPointers.name;
 						}
 						
@@ -506,8 +513,15 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			[this.#pointerMysqlColumnName]: pointer.id
 		}
 
+		// was garbage collected in the meantime
+        if (pointer.garbage_collected) {
+            return dependencies;
+        }
+
+		const val = pointer.val;
+
 		for (const [name, {foreignPtr, type}] of columns) {
-			const value = pointer.val[name];
+			const value = val[name];
 			if (foreignPtr) {
 				const propPointer = Datex.Pointer.getByValue(value);
 				// no pointer value
@@ -549,18 +563,24 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		if (!table) throw new Error("Cannot store pointer of type " + pointer.type + " in a custom table")
 		const columns = await this.#getTableColumns(table);
 
+		// was garbage collected in the meantime
+		if (pointer.garbage_collected) {
+			return;
+		}
+		const ptrVal = pointer.val;
+
 		for (const key of keys) {
 			const column = columns.get(key);
 			const val = 
 				column?.foreignPtr ?
 					// foreign pointer id
-					Datex.Pointer.getByValue(pointer.val[key])!.id : 
+					Datex.Pointer.getByValue(ptrVal[key])!.id : 
 					(
-						(column?.type == "blob" && !(pointer.val[key] instanceof ArrayBuffer || pointer.val[key] instanceof TypedArray)) ?
+						(column?.type == "blob" && !(ptrVal[key] instanceof ArrayBuffer || ptrVal[key] instanceof TypedArray)) ?
 							// raw dxb value
-							Compiler.encodeValue(pointer.val[key], dependencies, true, false, false) : 
+							Compiler.encodeValue(ptrVal[key], dependencies, true, false, false) : 
 							// normal value
-							pointer.val[key]
+							ptrVal[key]
 					)
 			await this.#query('UPDATE ?? SET ?? = ? WHERE ?? = ?;', [table, key, val, this.#pointerMysqlColumnName, pointer.id])
 		}
@@ -701,9 +721,13 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 	}
 
 	async #setPointerSet(pointer: Pointer) {
-		if (!(pointer.val instanceof Set)) throw new Error("Pointer value must be a Set");
-
 		const dependencies = new Set<Pointer>()
+
+		// was garbage collected in the meantime
+		if (pointer.garbage_collected) {
+			return;
+		}
+		if (!(pointer.val instanceof Set)) throw new Error("Pointer value must be a Set");
 
 		const builder = new Query().table(this.#metaTables.sets.name)
 		const entries = []
@@ -1045,7 +1069,8 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		if (isPrimitiveArray) {
 			if (!namespacedKey) throw new Error("missing namespacedKey");
 			if (matchOrs.length == 1) where = Where.eq(entryIdentifier!, matchOrs[0])
-			else where = Where.in(entryIdentifier!, matchOrs)
+			else if (matchOrs.length) where = Where.in(entryIdentifier!, matchOrs)
+			else where = Where.expr("false")
 		}
 
 		else {
@@ -1099,10 +1124,21 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 									.left(`${this.#metaTables.sets.name}`, namespacedKey)
 									.on(`${namespacedKey}.${this.#pointerMysqlColumnName}`, tableAName)
 							);
-							const values = [...condition.data];
+							const values = [...condition.data]
 							// group values by type
-							const valuesByType = Map.groupBy(values, v => v instanceof Date ? "time" : typeof v);
+							const valuesByType = Map.groupBy(values, v => 
+									v instanceof Date ? 
+										"time" : 
+									Pointer.getByValue(v) ? "value_pointer" :
+										typeof v
+								);
+							
 							for (const [type, vals] of valuesByType) {
+
+								for (let i=0;i<vals.length;i++) {
+									if (Pointer.getByValue(vals[i])) vals[i] = Pointer.getByValue(vals[i])!.id
+								}
+
 								const columnName = {
 									string: "value_text",
 									number: "value_decimal",
@@ -1112,6 +1148,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 									time: "value_time",
 									object: "value_dxb",
 									symbol: "value_dxb",
+									value_pointer: "value_pointer",
 									undefined: "value_dxb",
 								}[type];
 

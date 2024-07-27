@@ -1,7 +1,9 @@
 // generates typescript code for @namespace JS classes with static @expose methods
 // (matching code to call the methods on another endpoint)
+import { Pointer } from "../datex_all.ts";
 import { $$, Datex } from "../mod.ts";
-import { DX_SOURCE } from "../runtime/constants.ts";
+import { DX_PTR, DX_SOURCE } from "../runtime/constants.ts";
+import { Storage } from "../storage/storage.ts";
 import { indent } from "./indent.ts";
 
 const logger = new Datex.Logger("ts interface generator")
@@ -46,11 +48,11 @@ export async function generateTSModuleForRemoteAccess(module_path_or_datex_get:U
 			// TODO: decroators for js only, currently fallback to getValueTSCode
 			if (!types) {
 				code += `\nlogger.warn('Exposed classes with decorators are not yet fully supported');\n`;
-				code += getValueTSCode(module_name, name, val, no_pointer, types);
+				code += await getValueTSCode(module_name, name, val, no_pointer, types);
 			}
 			else code += getClassTSCode(name, <interf>val, no_pointer);
 		}
-		else code += getValueTSCode(module_name, name, val, no_pointer, types);
+		else code += await getValueTSCode(module_name, name, val, no_pointer, types);
 	}
 
 
@@ -130,13 +132,14 @@ async function getAllExportNames(path:URL|string) {
 }
 
 
-function getValueTSCode(module_name:string, name:string, value: any, no_pointer = false, types = true) {
+async function getValueTSCode(module_name:string, name:string, value: any, no_pointer = false, types = true) {
 	let code = "";
 
 	const is_datex_module = module_name.endsWith(".dx") || module_name.endsWith(".dxb")
 
 	const type = Datex.Type.ofValue(value)
 	const is_pointer = (value instanceof Datex.Ref) || !!(Datex.Pointer.getByValue(value));
+	const original_value = value;
 
 	// if (no_pointer) {
 	// 	// no pointer
@@ -159,7 +162,6 @@ function getValueTSCode(module_name:string, name:string, value: any, no_pointer 
 			// convert es6 class with static properties
 			if (typeof value == "function" && /^\s*class/.test(value.toString())) {
 				// convert static class to normal object
-				const original_value = value;
 				original_value[BACKEND_EXPORT] = true;
 				value = {}
 				for (const prop of Object.getOwnPropertyNames(original_value)) {
@@ -184,7 +186,10 @@ function getValueTSCode(module_name:string, name:string, value: any, no_pointer 
 			}
 		}
 
-		value = $$(value);
+		// TODO: cleanup unused pointer ids
+		const pointerId = await Storage.loadOrCreate("ptrid::" + module_name + "::" + name, ()=>Pointer.normalizePointerId(Pointer.getUniquePointerID()));
+		value = Pointer.createOrGet(value, undefined, undefined, undefined, undefined, pointerId.val).val;
+
 		try {
 			value[BACKEND_EXPORT] = true;
 		}
@@ -197,7 +202,16 @@ function getValueTSCode(module_name:string, name:string, value: any, no_pointer 
 
 	// disable garbage collection
 	const ptr = <Datex.Pointer> Datex.Pointer.getByValue(value);
-	if (ptr) ptr.is_persistent = true;
+	if (ptr) {
+		ptr.is_persistent = true;
+		// fake pointer binding for original value
+		try {
+			// @ts-ignore
+			original_value[DX_PTR] = ptr;
+		}
+		catch {}
+	
+	}
 
 	const loader = value?.[DX_SOURCE] ? `await datex.get('${value[DX_SOURCE]}')` : `await datex('${Datex.Runtime.valueToDatexStringExperimental(value)}')`
 	code += `${name =='default' ? 'export default' : 'export const ' + name + ' ='} ${loader}${types ? ` as ${getValueTSType(value)}` : ''};\n`;

@@ -744,6 +744,10 @@ export class Storage {
 
     private static initPointerSync(location: SyncStorageLocation, pointer:Pointer, listen_for_changes = true, partialUpdateKey: unknown = NOT_EXISTING):boolean {
         // if (pointer.transform_scope && this.hasPointer(pointer)) return true; // ignore transform pointer, initial transform scope already stored, does not change
+        // was garbage collected in the meantime
+        if (pointer.garbage_collected) {
+            return false
+        }
 
         const dependencies = this.updatePointerSync(location, pointer, partialUpdateKey);
         dependencies.delete(pointer);
@@ -762,11 +766,19 @@ export class Storage {
     }
 
     private static updatePointerSync(location: SyncStorageLocation, pointer:Pointer, partialUpdateKey: unknown = NOT_EXISTING): Set<Pointer>{
+        // was garbage collected in the meantime
+        if (pointer.garbage_collected) {
+            return new Set();
+        }
 		return location.setPointer(pointer, partialUpdateKey);
     }
 
     private static async initPointerAsync(location: AsyncStorageLocation, pointer:Pointer, listen_for_changes = true, partialUpdateKey: unknown = NOT_EXISTING):Promise<boolean>{
         // if (pointer.transform_scope && await this.hasPointer(pointer)) return true; // ignore transform pointer, initial transform scope already stored, does not change
+        // was garbage collected in the meantime
+        if (pointer.garbage_collected) {
+            return false
+        }
 
         const dependencies = await this.updatePointerAsync(location, pointer, partialUpdateKey);
         dependencies.delete(pointer);
@@ -789,6 +801,10 @@ export class Storage {
     }
 
     private static async updatePointerAsync(location: AsyncStorageLocation, pointer:Pointer, partialUpdateKey: unknown = NOT_EXISTING): Promise<Set<Pointer>> {
+        // was garbage collected in the meantime
+        if (pointer.garbage_collected) {
+            return new Set();
+        }
         const metadata = this.isDebugMode ? `${pointer.id}: ${Runtime.valueToDatexString(pointer.val)}` : undefined;
         this.setDirty(location, true, metadata);
         const res = await location.setPointer(pointer, partialUpdateKey);
@@ -1021,7 +1037,7 @@ export class Storage {
 
         let pointer:Pointer|undefined;
 		if (pointerify && (pointer = Pointer.get(pointer_id))?.value_initialized) {
-            return pointer.val; // pointer still exists in runtime
+            return pointer.val; // pointer exists in runtime
         }
 
 
@@ -1080,9 +1096,6 @@ export class Storage {
 		// remove from all
 		else {
 
-            // clear dependencies
-            this.updatePointerDependencies(pointer_id, [])
-
             const ptr = Pointer.get(pointer_id)
             if (ptr) {
                 this.#storage_active_pointers.delete(ptr);
@@ -1102,6 +1115,9 @@ export class Storage {
             promises.push(this.removePointerSubscriberCache(pointer_id));
 
             await Promise.all(promises);
+
+            // clear dependencies
+            this.updatePointerDependencies(pointer_id, [])
 		}
     }
 
@@ -1367,15 +1383,16 @@ export class Storage {
 		else {
             Storage.cache.delete(key); // delete from cache
             
-            // clear dependencies
-            this.updateItemDependencies(key, [])
-
             let itemExists = false;
 			for (const location of this.#locations.keys()) {
                 // TODO: handle hasItem() internally in storage locations
                 if (!itemExists) itemExists = await location.hasItem(key);
 				await location.removeItem(key);
 			}
+
+            // clear dependencies
+            this.updateItemDependencies(key, [])
+
             return itemExists;
 		}
     }
@@ -1391,7 +1408,7 @@ export class Storage {
      */
     private static decreaseReferenceCount(ptrId:string) {
         const newCount = this.getReferenceCount(ptrId) - 1;
-        // RC is 0, delet pointer from storage
+        // RC is 0, delete pointer from storage
         if (newCount <= 0) {
             localStorage.removeItem(this.rc_prefix+ptrId);
             this.removePointer(ptrId, undefined, true)

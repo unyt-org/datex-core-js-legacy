@@ -37,15 +37,15 @@ export class StorageWeakSet<V> {
 
 	#prefix?: string;
 
+	// StorageWeakSets are not bound to a pointer per default, but a pointer is automatically created if needed
 	#_pointer?: Pointer;
 	get #pointer() {
 		if (!this.#_pointer) this.#_pointer = Pointer.getByValue(this);
-		if (!this.#_pointer) throw new Error(this.constructor.name + " not bound to a pointer")
+		if (!this.#_pointer) {
+			Pointer.proxifyValue(this);
+			this.#_pointer = Pointer.getByValue(this)!;
+		}
 		return this.#_pointer;
-	}
-
-	constructor(){
-		Pointer.proxifyValue(this)
 	}
 
 	static async from<V>(values: readonly V[]) {
@@ -55,7 +55,7 @@ export class StorageWeakSet<V> {
 	}
 
 	get _prefix() {
-		if (!this.#prefix) this.#prefix = 'dxset::'+(this as any)[DX_PTR].idString()+'.';
+		if (!this.#prefix) this.#prefix = 'dxset::'+this.#pointer.idString()+'.';
 		return this.#prefix;
 	}
 

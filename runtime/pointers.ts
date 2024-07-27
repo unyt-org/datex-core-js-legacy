@@ -655,8 +655,8 @@ export class PointerProperty<T=any> extends Ref<T> {
         const val = this.pointer!.getProperty(this.key, this.#leak_js_properties);
         
         if (val === NOT_EXISTING) {
-            console.log(this)
-            throw new Error(`Property ${this.key} does not exist in ${this.pointer}`);
+            console.log(this.pointer)
+            throw new Error(`Property ${this.key} does not exist in ${this.pointer?.type??"Unknown"}`);
         }
         else return val;
     }
@@ -735,6 +735,11 @@ export class PointerProperty<T=any> extends Ref<T> {
         if (internal_handler) this.pointer!.unobserve(internal_handler, bound_object, this.key); // get associated internal handler and unobserve
     }
 
+    get type():Type|undefined {
+        const type = this.pointer?.type.getAllowedPropertyType(this.key);
+        if (type != Type.std.Any) return type; // TODO: returning Any makes problems
+        else return undefined;
+    }
 }
 
 
@@ -1341,11 +1346,11 @@ export class Pointer<T = any> extends Ref<T> {
      * 'A' byte: first 3 bits for type, last 5 bits unused, can be used for custom flags 
      * */
     /** total pointer id size: 26 bytes */
-    static getUniquePointerID(forPointer:Pointer): Uint8Array {
+    static getUniquePointerID(forPointer?:Pointer): Uint8Array {
         const id = new Uint8Array(this.MAX_POINTER_ID_SIZE);
         const id_view = new DataView(id.buffer)
         // add custom origin id
-        if (!forPointer.is_origin) id.set(forPointer.origin.getPointerPrefix());
+        if (forPointer && !forPointer.is_origin) id.set(forPointer.origin.getPointerPrefix());
         // add current endpoint origin id
         else id.set(this.pointer_prefix)
 
@@ -1374,7 +1379,7 @@ export class Pointer<T = any> extends Ref<T> {
         this.last_t = timestamp; // save actual last time a pointer was created
 
         // add to local pointers list if no global endpoint id yet -> update pointer id as soon as global id available
-        if (Pointer.is_local) {
+        if (forPointer && Pointer.is_local) {
             this.#local_pointers.add(forPointer)
         }
 
@@ -1679,7 +1684,7 @@ export class Pointer<T = any> extends Ref<T> {
     } 
 
     // create a new pointer or return the existing pointer/pointer property for this value
-    static createOrGet<T>(value:RefOrValue<T>, sealed = false, allowed_access?:target_clause, anonymous = false, persistant = false):Pointer<T>{
+    static createOrGet<T>(value:RefOrValue<T>, sealed = false, allowed_access?:target_clause, anonymous = false, persistant = false, id?: string):Pointer<T>{
         if (value instanceof LazyPointer) throw new PointerError("Lazy Pointer not supported in this context");
         if (value instanceof Pointer) return <Pointer<T>>value; // return pointer by reference
         //if (value instanceof PointerProperty) return value; // return pointerproperty TODO: handle pointer properties?
@@ -1693,7 +1698,7 @@ export class Pointer<T = any> extends Ref<T> {
             return ptr;
         }
         // create new pointer
-        else return <Pointer<T>>Pointer.create(undefined, value, sealed, undefined, persistant, anonymous, false, allowed_access); 
+        else return <Pointer<T>>Pointer.create(id, value, sealed, undefined, persistant, anonymous, false, allowed_access); 
     }
 
     // same as createOrGet, but also return lazy pointer if it exists
@@ -2469,7 +2474,7 @@ export class Pointer<T = any> extends Ref<T> {
     }    
 
     override get val():T {
-        if (this.#garbage_collected) throw new PointerError("Pointer was garbage collected");
+        if (this.#garbage_collected) throw new PointerError("Pointer "+this.idString()+" was garbage collected");
         else if (!this.#loaded) {
             throw new PointerError("Cannot get value of uninitialized pointer")
         }
@@ -2479,7 +2484,7 @@ export class Pointer<T = any> extends Ref<T> {
             // seems to be garbage collected
             if (val === undefined && this.#loaded && !this.#is_js_primitive) {
                 Pointer.handleGarbageCollected(this)
-                throw new PointerError("Pointer was garbage collected");
+                throw new PointerError("Pointer "+this.idString()+" was garbage collected");
             }
             // can be returned
             return val;
@@ -2497,7 +2502,7 @@ export class Pointer<T = any> extends Ref<T> {
 
     // same as get val, with current_val (calling super.current_val)
     override get current_val():T|undefined {
-        if (this.#garbage_collected) throw new PointerError("Pointer was garbage collected");
+        if (this.#garbage_collected) throw new PointerError("Pointer "+this.idString()+" was garbage collected");
         else if (!this.#loaded) {
             throw new PointerError("Cannot get value of uninitialized pointer")
         }
@@ -2507,7 +2512,7 @@ export class Pointer<T = any> extends Ref<T> {
             // seems to be garbage collected
             if (val === undefined && this.#loaded && !this.#is_js_primitive) {
                 Pointer.handleGarbageCollected(this)
-                throw new PointerError("Pointer was garbage collected");
+                throw new PointerError("Pointer "+this.idString()+" was garbage collected");
             }
             // can be returned
             return val;
@@ -2602,7 +2607,7 @@ export class Pointer<T = any> extends Ref<T> {
                 if (val && typeof val == "object" && DX_PTR in val) {
                     alreadyProxy = true;
                     // TODO: handle this correctly
-                    // console.warn("The value assigned to pointer "+this.idString()+" is already bound to " + (val[DX_PTR] as unknown as Pointer).idString() + ":", val)
+                    console.warn("The value assigned to pointer "+this.idString()+" is already bound to " + (val[DX_PTR] as unknown as Pointer).idString() + ":", val);
                 }
 
                 // TODO: is this required somewhere?
