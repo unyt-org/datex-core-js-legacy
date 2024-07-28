@@ -17,6 +17,7 @@ import { WindowInterface } from  "./communication-interfaces/window-interface.ts
 
 import { Datex } from "../mod.ts";
 import { Supranet } from "./supranet.ts";
+import { DisposableCallbackHandler } from "../utils/disposable-callback-handler.ts";
 
 export type DatexInData = {
     dxb: ArrayBuffer|ReadableStreamDefaultReader<Uint8Array>,
@@ -91,6 +92,14 @@ export class CommunicationHub {
 
 
     /**
+     * Adds a handler that is called when the online state of the communication hub changes
+     * @param handler 
+     */
+    public onOnlineStateChange(handler: (online: boolean) => any) {
+        return this.handler.onOnlineStateChange(handler);
+    }
+
+    /**
      * @private
      */
     handler = new CommunicationHubHandler()
@@ -126,6 +135,7 @@ export class CommunicationHubHandler {
             this.#logger.debug(`Connection status was changed. This endpoint (${Datex.Runtime.endpoint}) is ${isConnected ? "online" : "offline"}!`);
             if (this.#connected)
                 this.onlineEvents.forEach(e => e());
+            this.onlineStateChangeCallbackHandler.trigger(this.#connected);
         }
     }
     public async clear() {
@@ -136,6 +146,8 @@ export class CommunicationHubHandler {
             }
         }
     }
+
+    private onlineStateChangeCallbackHandler = new DisposableCallbackHandler<(online: boolean) => any>()
     
     private onlineEvents = new Set<() => unknown>();
     public addOnlineHandler(method: () => unknown) {
@@ -144,6 +156,11 @@ export class CommunicationHubHandler {
     public removeOnlineHandler(method: () => unknown) {
         this.onlineEvents.delete(method);
     }
+
+    public onOnlineStateChange(handler: (online: boolean) => any) {
+        return this.onlineStateChangeCallbackHandler.add(handler);
+    }
+
 
     private isConnected() {
         if (this.#defaultInterface?.getSockets().size) {
