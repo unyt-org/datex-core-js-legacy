@@ -203,4 +203,4 @@ JavaScript classes or other struct definitions as values.
 
 ## Mapping your own JS classes to DATEX types
 
-Check out the chapter [11 Classes](./11%20Classes.md) for more information.
+Check out the chapter [Classes](./12%20Classes.md) for more information.
