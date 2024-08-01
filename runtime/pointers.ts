@@ -31,6 +31,7 @@ import { ReactiveArrayMethods } from "../types/reactive-methods/array.ts";
 import { Assertion } from "../types/assertion.ts";
 import { Storage } from "../storage/storage.ts";
 import { client_type } from "../utils/constants.ts";
+import { BACKEND_EXPORT } from "../utils/interface-generator.ts";
 
 export type observe_handler<K=any, V extends RefLike = any> = (value:V extends RefLike<infer T> ? T : V, key?:K, type?:Ref.UPDATE_TYPE, transform?:boolean, is_child_update?:boolean, previous?: any, atomic_id?:symbol)=>void|boolean
 export type observe_options = {types?:Ref.UPDATE_TYPE[], ignore_transforms?:boolean, recursive?:boolean}
@@ -3570,8 +3571,8 @@ export class Pointer<T = any> extends Ref<T> {
         if (value === NOT_EXISTING && !this.shadow_object) throw new Error("Cannot proxify child of non-object value");
         let child = value === NOT_EXISTING ? this.shadow_object![name] : value;
         
-        // special native function -> <Function> conversion;
-        if (typeof child == "function" && !(child instanceof DatexFunction) && !(child instanceof JSTransferableFunction)) {
+        // special native function -> <Function> conversion - exception: BACKEND_EXPORT functions (normal js functions that are virtually bound to a datex function)
+        if (typeof child == "function" && !(child instanceof DatexFunction) && !(child instanceof JSTransferableFunction) && !((child as any)?.[BACKEND_EXPORT])) {
             child = DatexFunction.createFromJSFunction(child as (...args: unknown[]) => unknown, this, name);
         }
 
