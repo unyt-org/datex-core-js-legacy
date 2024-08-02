@@ -24,6 +24,7 @@ import {StorageSet, StorageWeakSet} from "./storage-set.ts"
 import { ExtensibleFunction } from "./function-utils.ts";
 import { JSTransferableFunction } from "./js-function.ts";
 import type { MatchCondition } from "../storage/storage.ts";
+import { sendReport } from "../utils/error-reporting.ts";
 
 export type inferDatexType<T extends Type> = T extends Type<infer JST> ? JST : any;
 
@@ -525,7 +526,12 @@ export class Type<T = any> extends ExtensibleFunction {
         }
 
         else {
-            throw new ValueError("Cannot update value of type " + this.toString());
+            console.error("Cannot update value of type " + this.toString(), new Error().stack);
+            sendReport("invalid-function-value-update", {
+                fn: value?.toString(),
+            }).catch(console.error)
+            // TODO:
+            // throw new ValueError("Cannot update value of type " + this.toString());
         }
     }
 
