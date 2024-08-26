@@ -7,6 +7,7 @@ import { IOHandler } from "../runtime/io_handler.ts";
 import { LOCAL_ENDPOINT } from "../types/addressing.ts";
 import { Runtime } from "../runtime/runtime.ts";
 import type { dxb_header } from "../utils/global_types.ts";
+import { Crypto } from "../runtime/crypto.ts";
 
 export enum InterfaceDirection {
     /**
@@ -116,6 +117,8 @@ export abstract class CommunicationInterfaceSocket extends EventTarget {
 
     static defaultLogger = new Logger("CommunicationInterfaceSocket")
     public logger = CommunicationInterfaceSocket.defaultLogger;
+
+    public readonly uuid: string = globalThis.crypto.randomUUID();
 
     #connectTimestamp = Date.now();
 
