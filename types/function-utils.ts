@@ -218,8 +218,12 @@ export function createFunctionWithDependencyInjections(source: string, dependenc
         throw new Error("Cannot create transferable function from native function: " + source);
     }
 
-    const createStaticFn = `function createStaticObject(val) {
+    const createStaticFn = `
+    const freezedObjects = new WeakSet();
+    function createStaticObject(val) {
         if (val && typeof val == "object" && !globalThis.Datex?.Ref.isRef(val)) {
+            if (freezedObjects.has(val)) return val;
+            freezedObjects.add(val);    
             for (const key of Object.keys(val)) val[key] = createStaticObject(val[key]);
             Object.freeze(val);
         }

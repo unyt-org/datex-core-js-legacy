@@ -1,5 +1,5 @@
 import { CommunicationInterface, CommunicationInterfaceSocket } from "../communication-interface.ts";
-import { getOnlineState, onlineStatus } from "../online-state.ts";
+import { getOnlineState } from "../online-state.ts";
 
 /**
  * WebSocket interface socket, used by WebSocket client and server interfaces

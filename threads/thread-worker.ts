@@ -1,5 +1,6 @@
 import type { MessageToWorker } from "./threads.ts";
 import type { Datex as DatexType } from "../mod.ts";
+import type { EndpointConfigData } from "../runtime/endpoint_config.ts";
 
 const isServiceWorker = 'registration' in globalThis && (globalThis as any).registration instanceof ServiceWorkerRegistration;
 
@@ -22,9 +23,15 @@ let Datex: typeof DatexType;
 let generateTSModuleForRemoteAccess: typeof import("../utils/interface-generator.ts").generateTSModuleForRemoteAccess;
 
 
-async function initDatex(url: string) {
+async function initDatex(url: string, datexConfig?: EndpointConfigData) {
 	({Datex} = await import(url));
-	await Datex.Supranet.connect();
+	const {endpoint_config} = await import(new URL("./runtime/endpoint_config.ts", url).toString());
+	if (datexConfig) {
+		Datex.Runtime.OPTIONS.USE_DX_CONFIG = false;
+		Datex.Runtime.OPTIONS.USE_PUBLIC_NODES = false;
+		endpoint_config.set(datexConfig)
+	}
+	await Datex.Supranet.start();
 }
 
 async function initTsInterfaceGenerator(url: string) {
@@ -66,7 +73,7 @@ addEventListener("message", async function (event) {
 			// inherit theme from parent
 			(globalThis as any)._override_console_theme = data.theme;
 
-			await initDatex(data.datexURL);
+			await initDatex(data.datexURL, data.datexConfig);
 			const {WorkerInterface} = await getWorkerComInterface(data.workerInterfaceURL);
 			const {communicationHub} = await getCommunicationHub(data.communicationHubURL);
 

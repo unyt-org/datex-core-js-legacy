@@ -3,7 +3,7 @@ import type { Equals } from "../utils/global_types.ts";
 
 const logger = new Logger("thread-runner");
 
-import { Datex, f } from "../mod.ts";
+import { Datex, f } from "../datex.ts";
 import { blobifyFile, blobifyScript } from "../utils/blobify.ts";
 import { RuntimeError } from "../types/errors.ts";
 import { Path } from "../utils/path.ts";
@@ -14,6 +14,7 @@ import { INSERT_MARK } from "../compiler/compiler.ts";
 import { ComputeCluster } from "./compute-clusters.ts";
 import { communicationHub } from "../network/communication-hub.ts";
 import { WorkerInterface } from "../network/communication-interfaces/worker-interface.ts";
+import { EndpointConfigData } from "../runtime/endpoint_config.ts";
 
 export type ThreadModule<imports extends Record<string, unknown> = Record<string, unknown>> = {
 	[key in keyof imports]: imports[key] extends ((...args: infer args) => infer returnType) ? ((...args: args) => Promise<returnType>) : imports[key]
@@ -24,14 +25,17 @@ export type ThreadPool<imports extends Record<string, unknown> = Record<string, 
 	& {readonly __tag: unique symbol} & {[Symbol.dispose]: ()=>void}
 
 export type MessageToWorker = 
-	{type: "INIT", datexURL: string, workerInterfaceURL: string, communicationHubURL: string, moduleURL: string, tsInterfaceGeneratorURL:string, endpoint: string, importMap:Record<string,any>, theme:"dark"|"light"} |
+	{type: "INIT", datexURL: string, workerInterfaceURL: string, communicationHubURL: string, moduleURL: string, tsInterfaceGeneratorURL:string, endpoint: string, importMap:Record<string,any>, datexConfig?: EndpointConfigData, theme:"dark"|"light"} |
 	{type: "INIT_PORT"}
 
 export type MessageFromWorker = 
 	{type: "INITIALIZED", endpoint: string, remoteModule: string} |
 	{type: "ERROR", error: string}
 
-type threadOptions = {signal?: AbortSignal}
+type ThreadOptions = {signal?: AbortSignal, datexConfig?: EndpointConfigData}
+
+
+const ServiceWorkerRegistration = globalThis.ServiceWorkerRegistration ?? class MockServiceWorkerRegistration {} as typeof globalThis.ServiceWorkerRegistration
 
 /**
  * Object representing an idle thread without an associated module
@@ -417,13 +421,13 @@ function freeThread(thread: ThreadModule) {
  * @param modulePath JS/TS module path to load in the thread
  * @returns module exports from the thread
  */
-export async function spawnThread<imports extends Record<string,unknown>>(modulePath: string|URL, options?: threadOptions): Promise<ThreadModule<imports>>
+export async function spawnThread<imports extends Record<string,unknown>>(modulePath: string|URL, options?: ThreadOptions): Promise<ThreadModule<imports>>
 /**
  * Spawn a new idle worker thread
  * @returns an empty thread object
  */
-export async function spawnThread<imports extends Record<string,unknown>>(modulePath?:null, options?: threadOptions): Promise<ThreadModule<Record<string,never>>>
-export async function spawnThread<imports extends Record<string,unknown>>(modulePath?: string|URL|null, options?: threadOptions): Promise<ThreadModule<imports>> {
+export async function spawnThread<imports extends Record<string,unknown>>(modulePath?:null, options?: ThreadOptions): Promise<ThreadModule<Record<string,never>>>
+export async function spawnThread<imports extends Record<string,unknown>>(modulePath?: string|URL|null, options?: ThreadOptions): Promise<ThreadModule<imports>> {
 
 	try {
 		spawningThreads++;
@@ -485,7 +489,7 @@ function awaitServiceWorkerActive(registration: ServiceWorkerRegistration) {
  * @param modulePath 
  * @returns 
  */
-export async function _initWorker(worker: Worker|ServiceWorkerRegistration, modulePath?: string|URL|null, options?: threadOptions) {
+export async function _initWorker(worker: Worker|ServiceWorkerRegistration, modulePath?: string|URL|null, options?: ThreadOptions) {
 
 	const isServiceWorker = worker instanceof ServiceWorkerRegistration
 
@@ -509,7 +513,7 @@ export async function _initWorker(worker: Worker|ServiceWorkerRegistration, modu
 	}
 
 
-	workerTarget.postMessage(<MessageToWorker>{
+	workerTarget.postMessage({
 		type: "INIT",
 		importMap: importMap,
 		datexURL: import.meta.resolve("../datex.ts"),
@@ -518,8 +522,9 @@ export async function _initWorker(worker: Worker|ServiceWorkerRegistration, modu
 		tsInterfaceGeneratorURL: import.meta.resolve("../utils/interface-generator.ts"),
 		moduleURL: modulePath ? import.meta.resolve(modulePath.toString()): null,
 		endpoint: Datex.Runtime.endpoint.toString(),
-		theme: console_theme
-	});
+		theme: console_theme,
+		datexConfig: options?.datexConfig
+	} as MessageToWorker);
 
 	let resolve: Function;
 	let reject: Function
@@ -621,7 +626,7 @@ export async function _initWorker(worker: Worker|ServiceWorkerRegistration, modu
  * @param args input arguments for the function that are passed on to the execution thread
  * @returns 
  */
-export async function run<ReturnType, Args extends unknown[]>(task: () => ReturnType, options?: {signal?:AbortSignal}, _meta?: {taskIndex?: number}): Promise<ReturnType>
+export async function run<ReturnType, Args extends unknown[]>(task: () => ReturnType, options?: ThreadOptions, _meta?: {taskIndex?: number}): Promise<ReturnType>
 /**
  * Run a DATEX script in a separate thread and return the result.
  * 
@@ -641,7 +646,7 @@ export async function run<ReturnType, Args extends unknown[]>(task: () => Return
  */
 export async function run<ReturnType=unknown>(task:TemplateStringsArray, ...args:any[]):Promise<ReturnType>
 
-export async function run<ReturnType>(task: (() => ReturnType)|JSTransferableFunction|TemplateStringsArray, options?: {signal?:AbortSignal}, _meta?: {taskIndex?: number }, ..._rest:unknown[]): Promise<ReturnType> {
+export async function run<ReturnType>(task: (() => ReturnType)|JSTransferableFunction|TemplateStringsArray, options?: ThreadOptions, _meta?: {taskIndex?: number }, ..._rest:unknown[]): Promise<ReturnType> {
 	
 	let datexSource: string;
 	let datexArgs: unknown[];
@@ -665,7 +670,7 @@ export async function run<ReturnType>(task: (() => ReturnType)|JSTransferableFun
 
 	else throw new Error("task must be a function or template string");
 	
-	const thread = await getThread();
+	const thread = options?.datexConfig ? await spawnThread(null, options) : await getThread();
 	const endpoint = threadEndpoints.get(thread);	
 
 	try {

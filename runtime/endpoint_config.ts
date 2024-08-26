@@ -18,7 +18,7 @@ type node_config = {
 }
 
 export interface EndpointConfigData {
-	endpoint?:Endpoint
+	endpoint?:Endpoint|string
 	keys?: Crypto.ExportedKeySet
 	connect?:boolean // default true
 	ws_relay?: boolean // create ws relay on backend server (default: true)
@@ -50,8 +50,8 @@ class EndpointConfig implements EndpointConfigData {
 	public get endpoint() {
 		return Ref.collapseValue(this.#endpoint, true, true)!;
 	}
-	public set endpoint(endpoint: Endpoint) {
-		this.#endpoint = endpoint;
+	public set endpoint(endpoint: Endpoint|string|undefined) {
+		this.#endpoint = typeof endpoint == "string" ? Endpoint.get(endpoint) as Endpoint : endpoint;
 	}
 
 
@@ -61,6 +61,10 @@ class EndpointConfig implements EndpointConfigData {
 	#node_channels_by_type = new Map<string, [Endpoint, unknown][]>();
 
 
+	/**
+	 * Load the endpoint config data from a .dx file
+	 * @param path URL of the .dx file
+	 */
 	async load(path?:URL) {
 		let config:EndpointConfigData|null = null;
 
@@ -136,13 +140,8 @@ class EndpointConfig implements EndpointConfigData {
 		}
 
 		if (config!=null) {
-			this.#endpoint = DatexObject.get(<any>config, 'endpoint')
-			this.keys = DatexObject.get(<any>config, 'keys')
-			this.connect = DatexObject.get(<any>config, 'connect')
-			this.temporary = DatexObject.get(<any>config, 'temporary')
-			this.ws_relay = DatexObject.get(<any>config, 'ws_relay')
-			this.blockchain_relay = DatexObject.get(<any>config, 'blockchain_relay')
-			this.nodes = DatexObject.get(<any>config, 'nodes')
+			const configObj = config instanceof Tuple ? config.toObject() : config;
+			this.set(configObj);
 		}
 
 		if (this.storage) {
@@ -160,7 +159,7 @@ class EndpointConfig implements EndpointConfigData {
 		}
 
 		// load public nodes from unyt.org
-		await this.loadPublicNodes();
+		if (Runtime.OPTIONS.USE_PUBLIC_NODES) await this.loadPublicNodes();
 		await this.initNodes()
 	}
 	
@@ -169,6 +168,19 @@ class EndpointConfig implements EndpointConfigData {
 	}
 	get locationId() {
 		return "endpoint_config_location::"+(globalThis.location?.origin ?? '');
+	}
+
+	/**
+	 * Set the endpoint config data manually
+	 */
+	set(data: EndpointConfigData) {
+		this.endpoint = data.endpoint;
+		this.connect = data.connect;
+		this.ws_relay = data.ws_relay;
+		this.temporary = data.temporary;
+		this.keys = data.keys;
+		this.nodes = data.nodes;
+		this.blockchain_relay = data.blockchain_relay;
 	}
 
 	save() {

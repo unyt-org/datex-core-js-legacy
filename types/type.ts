@@ -775,6 +775,9 @@ export class Type<T = any> extends ExtensibleFunction {
             return true;
         }
 
+        // workaound: more specific integer, allow any bigint
+        if (type instanceof Type && type.root_type === Type.std.integer && typeof value == "bigint") return true;
+
         return Type.matchesType(Type.ofValue(value), type, value, throwInvalidAssertion);
     }
 

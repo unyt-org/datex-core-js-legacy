@@ -15,25 +15,70 @@ export class WebSocketServerInterface extends WebSocketInterface {
         bandwidth: 50_000
     }
 
-    #server: WebServer;
+    #server?: WebServer;
+    #serverOptions?: Deno.ServeOptions;
 
-    constructor(server: WebServer) {
+    #denoServer?: Deno.HttpServer;
+
+    constructor(server?: WebServer)
+    constructor(serveOptions: Deno.ServeOptions)
+    constructor(server?: WebServer|Deno.ServeOptions) {
         super()
-        this.#server = server;
+        if ((server as any)?.addRequestHandler) this.#server = server as WebServer;
+        else this.#serverOptions = server as Deno.ServeOptions;
     }
 
     connect() {
-        this.#server.addRequestHandler(this.handleRequest.bind(this), true);
+        if (this.#server) {
+            this.#server.addRequestHandler(async (reqEvent) => {
+                const response = await this.handleRequest(reqEvent.request);
+                if (response) {
+                    reqEvent.respondWith(response).catch(() => {});
+                    return true;
+                }
+                else return false;
+            }, true);
+        }
+        else if (this.#serverOptions) {
+            this.#denoServer = Deno.serve({
+                ...this.#serverOptions,
+                handler: async (req) => {
+                    const response = await this.handleRequest(req);
+                    if (response) return response;
+                    else return new Response("DATEX WebSocketInterface", {status: 501});
+                }
+            });
+        }
+        // TODO: websocket interface might not be set up yet
         return true;
     }
 
-    protected async handleRequest(requestEvent: Deno.RequestEvent){
-        // is websocket upgrade?
-        if (requestEvent.request.headers.get("upgrade") === "websocket") {
+    async disconnect() {
+        super.disconnect();
+        if (this.#denoServer) {
             try {
-                const socket = this.upgradeWebSocket(requestEvent);
-                await this.initWebSocket(socket);
-                return true;
+                await this.#denoServer.shutdown();
+            }
+            catch (e) {
+                console.error("Failed to shutdown server", e);
+            }
+        }
+    }
+
+
+    /**
+     * Can be called manually to upgrade a request to a WebSocket connection
+     * used for the websocket server interface
+     * @param request 
+     * @returns a response to the request if a websocket upgrade is possible
+     */
+    public handleRequest(request: Request){
+        // is websocket upgrade?
+        if (request.headers.get("upgrade") === "websocket") {
+            try {
+                const {socket, response} = this.upgradeWebSocket(request);
+                this.initWebSocket(socket).catch(console.error);
+                return response;
             }
             catch {
                 return false;
@@ -42,19 +87,13 @@ export class WebSocketServerInterface extends WebSocketInterface {
         else return false;
     }
 
-    protected upgradeWebSocket(requestEvent: Deno.RequestEvent) {
+    protected upgradeWebSocket(request: Request) {
         // upgrade to websocket
-        const req = requestEvent.request; 
-        const { socket, response } = Deno.upgradeWebSocket(req);
+        const { socket, response } = Deno.upgradeWebSocket(request);
         
-        requestEvent
-            .respondWith(response)
-            .catch(() => {}); // ignore error
-
-
         // infer interface ws url from request url
         if (!this.properties.name) {
-            let name = requestEvent.request.url
+            let name = request.url
                 .replace("http://localhost", "ws://localhost")
                 .replace("http://", "wss://")
                 .replace("https://", "wss://");
@@ -62,7 +101,7 @@ export class WebSocketServerInterface extends WebSocketInterface {
             this.properties.name = name;
         }
 
-        return socket;
+        return { socket, response };
     }
 
     onWebSocketOpened(_webSocket: WebSocket) {

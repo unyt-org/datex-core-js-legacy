@@ -36,6 +36,15 @@ export class Supranet {
     static #initialized = false;
     static get initialized(){return this.#initialized}
 
+    /**
+     * Runs Supranet.connect.
+     * If 'connect' is set to false in the endpoint config, Supranet.init is called instead
+     */
+    public static start() {
+        if (endpoint_config.connect) return this.connect();
+        else return this.init();
+    }
+
 
     // connect without cache and random endpoint id
     public static connectAnonymous(){
@@ -324,6 +333,9 @@ export class Supranet {
 
         this.#initialized = true;
 
+        // enable network interface
+	    await import("../network/network-interface.ts");
+
         return endpoint;
     }
 
@@ -334,7 +346,7 @@ export class Supranet {
     public static async getLocalEndpointAndKeys():Promise<[Endpoint, Crypto.ExportedKeySet]> {
         let endpoint: Endpoint|undefined;
 
-        if (client_type != "deno") {
+        if (client_type == "browser") {
             // if endpoint cookie does not match the local endpoint, we clear the config and create a new one
             const didEndpointChange = endpoint_config?.endpoint?.main && Endpoint.getFromCookie()?.main !== endpoint_config.endpoint.main;
             
