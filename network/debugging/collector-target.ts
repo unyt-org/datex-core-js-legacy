@@ -1,5 +1,4 @@
 // deno-lint-ignore-file
-// import { DisposableCallbackHandler } from "../../utils/disposable-callback-handler.ts";
 import { Stream } from "../../types/stream.ts";
 import { MessageFilter, MessageStream } from "./Types.ts";
 import { DebuggingInterface } from "./debugging-interface.ts";
@@ -8,13 +7,16 @@ import { DebuggingInterface } from "./debugging-interface.ts";
 @sync("CollectorDebuggingInterface")
 export class CollectorDebuggingInterface {
 	private static debuggingInterfaces: Map<DebuggingInterface, Stream<MessageStream> | undefined> = new Map();
+	private static instance: CollectorDebuggingInterface | undefined
 
 	@property public static async registerInterface(interf: DebuggingInterface) {
 		this.debuggingInterfaces.set(interf, undefined);
 	}
 
-	public static get() {
-		return new CollectorDebuggingInterface();
+	@property public static get() {
+		// TODO handle permissions and instances
+		this.instance = this.instance ?? $$(new CollectorDebuggingInterface());
+		return this.instance;
 	}
 
 	@property async getMessages(filter: MessageFilter = { }) {

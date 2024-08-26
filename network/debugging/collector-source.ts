@@ -1,10 +1,10 @@
 import { Endpoint } from "../../datex_all.ts";
-import { f } from "../../datex_short.ts";
 import { ObjectRef } from "../../runtime/pointers.ts";
+import { CollectorDebuggingInterface } from "./collector-target.ts";
 import { DebuggingInterface } from "./debugging-interface.ts";
 
 let debuggingInterface: ObjectRef<DebuggingInterface> | undefined;
-export const shareDebuggingInterface = async (collectorTarget: Endpoint = f('@+unyt2')) => {
+export const shareDebuggingInterface = async (collectorTarget: Endpoint) => {
 	debuggingInterface = $$(new DebuggingInterface());
-	await DebuggingInterface.registerInterface.to(collectorTarget)(debuggingInterface);
+	await CollectorDebuggingInterface.registerInterface.to(collectorTarget)(debuggingInterface);
 }
