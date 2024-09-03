@@ -665,6 +665,8 @@ export function translocate<T extends Map<unknown,unknown>|Set<unknown>|Array<un
 Object.defineProperty(globalThis, 'once', {value:once, configurable:false})
 Object.defineProperty(globalThis, 'always', {value:_always, configurable:false})
 Object.defineProperty(globalThis, 'asyncAlways', {value:_asyncAlways, configurable:false})
+// used internally for reactive $ syntax
+Object.defineProperty(globalThis, '_$', {value:(cb:SmartTransformFunction<unknown>)=>_always(cb, {allowStatic: true}), configurable:false})
 Object.defineProperty(globalThis, 'reactiveFn', {value:_reactiveFn, configurable:false})
 Object.defineProperty(globalThis, 'toggle', {value:_toggle, configurable:false})
 Object.defineProperty(globalThis, 'map', {value:_map, configurable:false})

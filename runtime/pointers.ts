@@ -1101,7 +1101,8 @@ type MockPointer = {id: string, origin: Endpoint, subscribed?: Endpoint|false, i
 
 export type SmartTransformOptions<T=unknown> = {
     initial?: T,
-	cache?: boolean
+	cache?: boolean,
+    allowStatic?: boolean,
 }
 
 type TransformState = {
@@ -3144,8 +3145,9 @@ export class Pointer<T = any> extends Ref<T> {
         const gettersCount = (capturedGetters?.size??0) + (capturedGettersWithKeys?.size??0);
 
         // no dependencies, will never change, this is not the intention of the transform
-        if (!ignoreReturnValue && hasGetters && !gettersCount) {
+        if (!ignoreReturnValue && hasGetters && !gettersCount && !options?.allowStatic) {
             logger.warn("The transform value for " + this.idString() + " is a static value:", val);
+            // TODO: cleanup stuff not needed if no reactive transform
         }
 
         if (state.isLive) {
