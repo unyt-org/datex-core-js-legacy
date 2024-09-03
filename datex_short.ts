@@ -316,6 +316,20 @@ export function pointer<T>(value:RefOrValue<T>, property?:unknown): unknown {
 
 
 /**
+ * Returns a reactive pointer property if the parent is bound to a pointer, otherwise the plain property value
+ * @param parent a Map or Object, optionally bound to a pointer
+ * @param propertyKey 
+ */
+export function prop<T extends Map<unknown, unknown>>(parent:RefOrValue<T>, propertyKey: T extends Map<infer K, infer V> ? K : unknown): PointerProperty<T extends Map<infer K, infer V> ? V : unknown>|(T extends Map<infer K, infer V> ? V : unknown)
+export function prop<T extends Record<PropertyKey, unknown>>(parent:RefOrValue<T>, propertyKey: keyof T): PointerProperty<T[keyof T]>|T[keyof T]
+export function prop(parent:Map<unknown, unknown>|Record<PropertyKey, unknown>, propertyKey: unknown): any {
+    if (Ref.isRef(parent)) return PointerProperty.get(parent, propertyKey);
+    else if (parent instanceof Map) return parent.get(propertyKey);
+    else return parent[propertyKey as keyof typeof parent];
+}
+
+
+/**
  * Add endpoint to allowed_access list
  * @param endpoint
  */
@@ -684,6 +698,8 @@ Object.defineProperty(globalThis, 'grantPublicAccess', {value:grantPublicAccess,
 Object.defineProperty(globalThis, 'revokeAccess', {value:revokeAccess, configurable:false})
 
 Object.defineProperty(globalThis, 'localEndpoint', {get: ()=>Runtime.endpoint, configurable:false})
+
+Object.defineProperty(globalThis, 'prop', {value:prop, configurable:false})
 
 // @ts-ignore
 globalThis.get = get
