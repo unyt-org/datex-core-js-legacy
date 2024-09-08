@@ -16,7 +16,7 @@ if (root.JS_SHA256_NO_WINDOW) {
     WINDOW = false;
 }
 var WEB_WORKER = !WINDOW && typeof self === 'object';
-var NODE_JS = !root.JS_SHA256_NO_NODE_JS && typeof process === 'object' && process.versions && process.versions.node;
+var NODE_JS = !globalThis.Deno && !root.JS_SHA256_NO_NODE_JS && typeof process === 'object' && process.versions && process.versions.node;
 if (NODE_JS) {
     root = global;
 } else if (WEB_WORKER) {
