@@ -2,7 +2,8 @@ import {Logger} from "./logger.ts";
 
 // node not supported
 // @ts-ignore check if node environment
-if (!globalThis.Deno) throw new Error("node.js is currently not supported - use deno instead")
+// TODO: fix this check, detect node
+// if (!globalThis.Deno) throw new Error("node.js is currently not supported - use deno instead")
 
 export const TypedArray:typeof Uint8Array|typeof Uint16Array|typeof Uint32Array|typeof Int8Array|typeof Int16Array|typeof Int32Array|typeof BigInt64Array|typeof BigUint64Array|typeof Float32Array|typeof Float64Array = Object.getPrototypeOf(Uint8Array);
 export type TypedArray = Uint8Array|Uint16Array|Uint32Array|Int8Array|Int16Array|Int32Array|BigInt64Array|BigUint64Array|Float32Array|Float64Array;
