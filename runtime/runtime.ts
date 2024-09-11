@@ -222,7 +222,7 @@ export class Runtime {
 
     // can be changed
     public static OPTIONS = {
-        PROTECT_POINTERS: false, // explicit permissions are required for remote endpoints to read/write pointers (current default: false)
+        PROTECT_POINTERS: true, // explicit permissions are required for remote endpoints to read/write pointers (default: true)
         INDIRECT_REFERENCES: false, // enable support for indirect references to pointers from other pointers
         DEFAULT_REQUEST_TIMEOUT: 5000, // default timeout for DATEX requests in ms
         GARBAGE_COLLECTION_TIMEOUT: 1000, // time after which a value can get garbage collected
