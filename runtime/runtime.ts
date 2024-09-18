@@ -27,7 +27,7 @@ Symbol.prototype.toJSON = function(){return globalThis.String(this)}
 
 /***** imports */
 import { Compiler, compiler_options, PrecompiledDXB, ProtocolDataTypesMap, DatexResponse} from "../compiler/compiler.ts"; // Compiler functions
-import { Pointer, PointerProperty, RefOrValue, Ref, ObjectWithDatexValues, JSValueWith$, MinimalJSRef, ObjectRef, RefLike, UpdateScheduler} from "./pointers.ts";
+import { Pointer, PointerProperty, RefOrValue, ReactiveValue, ObjectWithDatexValues, JSValueWith$, MinimalJSRef, ObjectRef, RefLike, UpdateScheduler} from "./pointers.ts";
 import { BROADCAST, Endpoint, endpoints, IdEndpoint, LOCAL_ENDPOINT, Target, target_clause, WildcardTarget } from "../types/addressing.ts";
 import { RuntimePerformance } from "./performance_measure.ts";
 import { NetworkError, PermissionError, PointerError, RuntimeError, SecurityError, ValueError, Error as DatexError, CompilerError, TypeError, SyntaxError, AssertionError } from "../types/errors.ts";
@@ -89,7 +89,7 @@ function static_pointer<T>(value:RefOrValue<T>, endpoint:IdEndpoint, unique_id:n
     const static_id = Pointer.getStaticPointerId(endpoint, unique_id);
     const pointer = Pointer.create(static_id, value)
     if (label) pointer.addLabel(typeof label == "string" ? label.replace(/^\$/, '') : label);
-    return Ref.collapseValue(pointer);
+    return ReactiveValue.collapseValue(pointer);
 }
 
 // --------------------------------------------------------------
@@ -140,6 +140,8 @@ export class StaticScope {
         return this[name];
     }
     setVariable(name: string, value: any) {
+        const ptr = Pointer.pointerifyValue(value);
+        if (ptr) ptr.grantPublicAccess(true);
         return this[name] = value;
     }
     hasVariable(name: string) {
@@ -309,13 +311,13 @@ export class Runtime {
 
         // create new transform pointer
         else {
-            const keyVal = Ref.collapseValue(key, true, true);
+            const keyVal = ReactiveValue.collapseValue(key, true, true);
             const value_available = !local_map[Runtime.ENV.LANG] || (keyVal in local_map[Runtime.ENV.LANG]); // in map or auto translate
             const transformValues:RefLike<string>[] = [PointerProperty.get(Runtime.ENV, 'LANG')];
-            if (key instanceof Ref) transformValues.push(key)
+            if (key instanceof ReactiveValue) transformValues.push(key)
 
             const string_transform = Pointer.createTransform(transformValues, 
-                (lang:string) => this.transformLangValue(lang, local_map, Ref.collapseValue(key, true, true)), // sync js mapping
+                (lang:string) => this.transformLangValue(lang, local_map, ReactiveValue.collapseValue(key, true, true)), // sync js mapping
                 value_available ? `
                     var lang = #env->LANG; 
                     var local_map = ${Runtime.valueToDatexString(local_map)};
@@ -356,7 +358,7 @@ export class Runtime {
 
         // force override transform values (currently unknown)
         for (const key of this.#not_loaded_local_strings.get(local_map)??[]) {
-            const keyVal = Ref.collapseValue(key, true, true);
+            const keyVal = ReactiveValue.collapseValue(key, true, true);
             if (lang in local_map && keyVal in local_map[lang]) {
                 local_strings_map.get(key)!.val = await this.transformLangValue(lang, local_map, keyVal);
                 local_strings_map.get(key)!.setDatexTransform(`
@@ -1806,7 +1808,7 @@ export class Runtime {
     public static async simpleScopeExecution(scope:datex_scope) {
         // run scope, result is saved in 'scope' object
         await this.run(scope);
-        return Ref.collapseValue(scope.result);
+        return ReactiveValue.collapseValue(scope.result);
     }
 
     static #cryptoProxies = new Map<Endpoint, [signKey:CryptoKey, decKey:CryptoKey]>()
@@ -2906,8 +2908,8 @@ export class Runtime {
      */
     public static async equalValues(a:any, b:any) {
         // collapse (primitive) pointers
-        a = Ref.collapseValue(a,true,true);
-        b = Ref.collapseValue(b,true,true);
+        a = ReactiveValue.collapseValue(a,true,true);
+        b = ReactiveValue.collapseValue(b,true,true);
 
         // empty Tuple equals void
         if (a === VOID && b instanceof Tuple && Object.keys(b).length == 0) return true;
@@ -2985,7 +2987,7 @@ export class Runtime {
 
         // proxyify pointers
         if (!collapse_pointers && !deep_collapse) value = Pointer.pointerifyValue(value);
-        if (collapse_pointers && value instanceof Ref) value = value.val; 
+        if (collapse_pointers && value instanceof ReactiveValue) value = value.val; 
         // don't show anonymous pointers as pointers
         if (value instanceof Pointer && value.is_anonymous) value = value.original_value;
 
@@ -3657,7 +3659,7 @@ export class Runtime {
             if (o_parent instanceof Pointer) o_parent.assertEndpointCanRead(SCOPE?.sender)
 
 
-            key = Ref.collapseValue(key,true,true);
+            key = ReactiveValue.collapseValue(key,true,true);
 
             // check read permission (throws an error)
             Runtime.runtime_actions.checkValueReadPermission(SCOPE, parent, key)
@@ -3713,7 +3715,7 @@ export class Runtime {
                 return Iterator.map(parent, (child)=>Runtime.runtime_actions.getProperty(SCOPE, child, key))
             }
 
-            parent = Ref.collapseValue(parent,true,true);
+            parent = ReactiveValue.collapseValue(parent,true,true);
 
             // custom types get
             let new_obj = JSInterface.handleGetProperty(parent, key) 
@@ -3766,7 +3768,7 @@ export class Runtime {
             if (!(o_parent instanceof Pointer)) o_parent = null;
             else o_parent.assertEndpointCanRead(SCOPE?.sender)
 
-            key = Ref.collapseValue(key,true,true);
+            key = ReactiveValue.collapseValue(key,true,true);
             
             // check read/write permission (throws an error)
             Runtime.runtime_actions.checkValueUpdatePermission(SCOPE, parent, key)
@@ -3778,7 +3780,7 @@ export class Runtime {
 
             // key is * -  set for all matching keys (recursive)
             if (key === WILDCARD) {
-                parent = Ref.collapseValue(parent,true,true);
+                parent = ReactiveValue.collapseValue(parent,true,true);
                 // handle custom pseudo class
                 if (JSInterface.hasPseudoClass(parent)) {
                     // void => clear
@@ -3839,8 +3841,8 @@ export class Runtime {
             }
            
 
-            parent = Ref.collapseValue(parent,true,true);
-            value = Ref.collapseValue(value,true);
+            parent = ReactiveValue.collapseValue(parent,true,true);
+            value = ReactiveValue.collapseValue(value,true);
 
             // TODO permission handling
             // if (parent[DX_PERMISSIONS]?.[key] && !(<Filter>parent[DX_PERMISSIONS][key]).test(SCOPE.sender)) {
@@ -3933,14 +3935,14 @@ export class Runtime {
             if (!(o_parent instanceof Pointer)) o_parent = null;
             else o_parent.assertEndpointCanRead(SCOPE?.sender)
 
-            key = Ref.collapseValue(key,true,true);
+            key = ReactiveValue.collapseValue(key,true,true);
 
             // check read/write permission (throws an error)
             if (parent) Runtime.runtime_actions.checkValueUpdatePermission(SCOPE, parent, key)
 
             // key is * -  add for all matching keys (recursive)
             if (key === WILDCARD) {
-                parent = Ref.collapseValue(parent);
+                parent = ReactiveValue.collapseValue(parent);
                 let keys:Iterable<any>;
                 // handle custom pseudo class
                 if (JSInterface.hasPseudoClass(parent)) {
@@ -4000,9 +4002,9 @@ export class Runtime {
             
 
 
-            current_val = Ref.collapseValue(current_val); // first make sure that current_val is actual value
-            parent = Ref.collapseValue(parent);
-            value = Ref.collapseValue(value);
+            current_val = ReactiveValue.collapseValue(current_val); // first make sure that current_val is actual value
+            parent = ReactiveValue.collapseValue(parent);
+            value = ReactiveValue.collapseValue(value);
 
             if (SCOPE.header.type==ProtocolDataType.UPDATE) o_parent?.excludeEndpointFromUpdates(SCOPE.sender);
 
@@ -4018,19 +4020,19 @@ export class Runtime {
             else if (assigned == NOT_EXISTING) {
 
                  // DatexPrimitivePointers also collapsed
-                const current_val_prim = Ref.collapseValue(current_val,true,true);
-                const value_prim = Ref.collapseValue(value,true,true); // DatexPrimitivePointers also collapsed
+                const current_val_prim = ReactiveValue.collapseValue(current_val,true,true);
+                const value_prim = ReactiveValue.collapseValue(value,true,true); // DatexPrimitivePointers also collapsed
                 try {
 
-                    const currentValIsIntegerRef = current_val instanceof Ref && typeof current_val.val == "bigint";
-                    const currentValIsDecimalRef = current_val instanceof Ref && typeof current_val.val == "number";
+                    const currentValIsIntegerRef = current_val instanceof ReactiveValue && typeof current_val.val == "bigint";
+                    const currentValIsDecimalRef = current_val instanceof ReactiveValue && typeof current_val.val == "number";
 
                     // x.current_val ?= value
                     switch (action_type) {
 
                         case BinaryCode.ADD:
                             if (current_val instanceof Array && !(current_val instanceof Tuple)) current_val.push(value); // Array push (TODO array extend?)
-                            else if (current_val instanceof Ref && typeof current_val.val == "string" && typeof value_prim == "string") await current_val.setVal(current_val.val + value_prim); // primitive pointer operations
+                            else if (current_val instanceof ReactiveValue && typeof current_val.val == "string" && typeof value_prim == "string") await current_val.setVal(current_val.val + value_prim); // primitive pointer operations
                             else if (currentValIsDecimalRef && typeof value_prim == "number") await current_val.setVal(current_val.val + value_prim);
                             else if (currentValIsIntegerRef && typeof value_prim == "bigint") await current_val.setVal(current_val.val + value_prim);
                             else if (currentValIsDecimalRef && typeof value_prim == "bigint") await current_val.setVal(current_val.val + Number(value_prim));
@@ -4371,7 +4373,7 @@ export class Runtime {
             // make sure promise wrappers are collapsed
             el = Runtime.collapseValueCast(el)
             // first make sure pointers are collapsed
-            el = Ref.collapseValue(el) 
+            el = ReactiveValue.collapseValue(el) 
 
             // collapse Maybes (TODO)
             //if (el instanceof Maybe) el = await el.value;
@@ -4465,7 +4467,7 @@ export class Runtime {
                     el = new Negation(el)
                 }
          
-                else if (typeof el == "boolean" || typeof (el = Ref.collapseValue(el, true, true)) == "boolean" ) {
+                else if (typeof el == "boolean" || typeof (el = ReactiveValue.collapseValue(el, true, true)) == "boolean" ) {
                     el = !el;
                 }
                 else throw(new ValueError("Cannot negate this value ("+Runtime.valueToDatexString(el)+")", SCOPE))               
@@ -4747,7 +4749,7 @@ export class Runtime {
 
                 const pointer = Pointer.pointerifyValue(el);
 
-                if (!(pointer instanceof Ref) || (pointer instanceof Pointer && pointer.is_anonymous)) {
+                if (!(pointer instanceof ReactiveValue) || (pointer instanceof Pointer && pointer.is_anonymous)) {
                     throw new ValueError("sync expects a reference value", SCOPE);
                 }
 
@@ -4784,9 +4786,9 @@ export class Runtime {
 
                 // convert value to stream (writes to stream everytime the pointer value changes)
                 else if (to instanceof Stream) {
-                    to.write(Ref.collapseValue(pointer, true, true)); // current value as initial value
+                    to.write(ReactiveValue.collapseValue(pointer, true, true)); // current value as initial value
                     pointer.observe((v,k,t)=>{
-                        if (t == Ref.UPDATE_TYPE.INIT) to.write(v);
+                        if (t == ReactiveValue.UPDATE_TYPE.INIT) to.write(v);
                     });
                 }
 
@@ -4802,7 +4804,7 @@ export class Runtime {
 
                 let pointer = Pointer.pointerifyValue(el);
 
-                if (!(pointer instanceof Ref) || (pointer instanceof Pointer && pointer.is_anonymous)) throw new ValueError("stop sync expects a reference value", SCOPE);
+                if (!(pointer instanceof ReactiveValue) || (pointer instanceof Pointer && pointer.is_anonymous)) throw new ValueError("stop sync expects a reference value", SCOPE);
 
                 // is a sync consumer
                 const to = INNER_SCOPE.active_value;
@@ -5007,7 +5009,7 @@ export class Runtime {
 
             // stream
             else if (SCOPE.inner_scope.stream_consumer) {
-                el = Ref.collapseValue(el, true, true); // collapse primitive values
+                el = ReactiveValue.collapseValue(el, true, true); // collapse primitive values
 
                 // pipe stream
                 if (el instanceof Stream) {
@@ -5027,8 +5029,8 @@ export class Runtime {
 
                 let is_true = false;
 
-                let a = Ref.collapseValue(INNER_SCOPE.active_value,true); // only collapse pointer properties, keep primitive pointers
-                let b = Ref.collapseValue(el,true);
+                let a = ReactiveValue.collapseValue(INNER_SCOPE.active_value,true); // only collapse pointer properties, keep primitive pointers
+                let b = ReactiveValue.collapseValue(el,true);
 
                 
                 let compared;
@@ -5091,8 +5093,8 @@ export class Runtime {
             // +
             else if (INNER_SCOPE.operator === BinaryCode.ADD || INNER_SCOPE.operator === BinaryCode.SUBTRACT) {
 
-                el = Ref.collapseValue(el, true, true); // collapse primitive values
-                let val = Ref.collapseValue(INNER_SCOPE.active_value, true, true);
+                el = ReactiveValue.collapseValue(el, true, true); // collapse primitive values
+                let val = ReactiveValue.collapseValue(INNER_SCOPE.active_value, true, true);
 
                 // negate for subtract
                 if (INNER_SCOPE.operator === BinaryCode.SUBTRACT && (typeof el == "number" || typeof el == "bigint")) el = -el;
@@ -5130,8 +5132,8 @@ export class Runtime {
             else if (INNER_SCOPE.operator === BinaryCode.AND) {
 
                 // collapse primitive values
-                const val = Ref.collapseValue(INNER_SCOPE.active_value, true, true);
-                el = Ref.collapseValue(el, true, true); 
+                const val = ReactiveValue.collapseValue(INNER_SCOPE.active_value, true, true);
+                el = ReactiveValue.collapseValue(el, true, true); 
 
                 // logical
                 if (val instanceof Logical) {
@@ -5181,8 +5183,8 @@ export class Runtime {
             else if (INNER_SCOPE.operator === BinaryCode.OR) {
                 
                 // collapse primitive values
-                let val = Ref.collapseValue(INNER_SCOPE.active_value, true, true);
-                el = Ref.collapseValue(el, true, true); 
+                let val = ReactiveValue.collapseValue(INNER_SCOPE.active_value, true, true);
+                el = ReactiveValue.collapseValue(el, true, true); 
 
 
                 // logical
@@ -5216,8 +5218,8 @@ export class Runtime {
             else if (INNER_SCOPE.operator === BinaryCode.MULTIPLY) {
                 
                 // collapse primitive values
-                let val = Ref.collapseValue(INNER_SCOPE.active_value, true, true);
-                el = Ref.collapseValue(el, true, true); 
+                let val = ReactiveValue.collapseValue(INNER_SCOPE.active_value, true, true);
+                el = ReactiveValue.collapseValue(el, true, true); 
 
                 if (typeof val == "bigint" && typeof el == "bigint") {
                     INNER_SCOPE.active_value *= el;
@@ -5269,8 +5271,8 @@ export class Runtime {
             else if (INNER_SCOPE.operator === BinaryCode.DIVIDE) {
 
                 // collapse primitive values
-                let val = Ref.collapseValue(INNER_SCOPE.active_value, true, true);
-                el = Ref.collapseValue(el, true, true); 
+                let val = ReactiveValue.collapseValue(INNER_SCOPE.active_value, true, true);
+                el = ReactiveValue.collapseValue(el, true, true); 
 
                 if (typeof val == "bigint" && typeof el == "bigint") {
                     if (el === 0n) throw new ValueError("Division by zero", SCOPE);
@@ -5298,8 +5300,8 @@ export class Runtime {
             else if (INNER_SCOPE.operator === BinaryCode.POWER) {
                 
                 // collapse primitive values
-                let val = Ref.collapseValue(INNER_SCOPE.active_value, true, true);
-                el = Ref.collapseValue(el, true, true); 
+                let val = ReactiveValue.collapseValue(INNER_SCOPE.active_value, true, true);
+                el = ReactiveValue.collapseValue(el, true, true); 
 
                 if (typeof val == "bigint" && typeof el == "bigint") {
                     if (el < 0) throw new ValueError("Cannot use a negative exponent with an integer")
@@ -5327,8 +5329,8 @@ export class Runtime {
             else if (INNER_SCOPE.operator === BinaryCode.MODULO) {
     
                 // collapse primitive values
-                let val = Ref.collapseValue(INNER_SCOPE.active_value, true, true);
-                el = Ref.collapseValue(el, true, true); 
+                let val = ReactiveValue.collapseValue(INNER_SCOPE.active_value, true, true);
+                el = ReactiveValue.collapseValue(el, true, true); 
 
                 if (typeof val == "bigint" && typeof el == "bigint") {
                     INNER_SCOPE.active_value %= el;
@@ -5412,7 +5414,7 @@ export class Runtime {
                 // handle all ValueConsumers (<Function>, <Type> TODO?, ...)
                 if (val instanceof DatexFunction || val instanceof Target /*|| val instanceof Filter*/ || val instanceof Assertion) {
                     // insert <Tuple>el or [el], or [] if el==VOID (call without parameters)                    
-                    if (val.handleApply) INNER_SCOPE.active_value = await val.handleApply(Ref.collapseValue(el), SCOPE);
+                    if (val.handleApply) INNER_SCOPE.active_value = await val.handleApply(ReactiveValue.collapseValue(el), SCOPE);
                     else throw new ValueError("Cannot apply values to this value", SCOPE);
                 }
 
@@ -6130,7 +6132,7 @@ export class Runtime {
                         else {
                             await this.runtime_actions.insertToScope(
                                 SCOPE,
-                                Ref.collapseValue(await Pointer.createTransformAsync(INNER_SCOPE.scope_block_vars, code_block))
+                                ReactiveValue.collapseValue(await Pointer.createTransformAsync(INNER_SCOPE.scope_block_vars, code_block))
                             )
                         }
                         

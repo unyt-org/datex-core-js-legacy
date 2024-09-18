@@ -4,12 +4,11 @@
  */
 
 
-import { AsyncTransformFunction, INSERT_MARK, MaybeObjectRef, MinimalJSRef, Pointer, Ref, RefLike, RefOrValue, SmartTransformFunction, SmartTransformOptions, TransformFunction, TransformFunctionInputs, logger } from "./datex_all.ts";
+import { AsyncTransformFunction, INSERT_MARK, MaybeObjectRef, MinimalJSRef, Pointer, ReactiveValue, RefLike, RefOrValue, SmartTransformFunction, SmartTransformOptions, TransformFunction, TransformFunctionInputs, logger } from "./datex_all.ts";
 import { Datex } from "./mod.ts";
 import { PointerError } from "./types/errors.ts";
 import { IterableHandler } from "./utils/iterable-handler.ts";
 import { AsyncSmartTransformFunction, MinimalJSRefWithIndirectRef, RestrictSameType } from "./runtime/pointers.ts";
-
 
 /**
  * A generic transform function, creates a new pointer containing the result of the callback function.
@@ -24,6 +23,11 @@ import { AsyncSmartTransformFunction, MinimalJSRefWithIndirectRef, RestrictSameT
  * ```
  */
 export function always<T>(transform:SmartTransformFunction<T>, options?: SmartTransformOptions): MinimalJSRefWithIndirectRef<T> // return signature from Value.collapseValue(Pointer.smartTransform())
+
+
+// only works with JUSIX compilation
+export function always<const T>(value:T, options?: SmartTransformOptions): MinimalJSRef<T>
+
 /**
  * Shortcut for datex `always (...)`
  * @param script 
@@ -42,11 +46,11 @@ export function always(scriptOrJSTransform:TemplateStringsArray|SmartTransformFu
             throw new PointerError(`Promises cannot be returned from always transforms - use 'asyncAlways' instead`);
         }
         else {
-            return Ref.collapseValue(ptr);
+            return ReactiveValue.collapseValue(ptr);
         }
     }
     // datex script
-    else return (async ()=>Ref.collapseValue(await datex(`always (${scriptOrJSTransform.raw.join(INSERT_MARK)})`, vars)))()
+    else return (async ()=>ReactiveValue.collapseValue(await datex(`always (${scriptOrJSTransform.raw.join(INSERT_MARK)})`, vars)))()
 }
 
 
@@ -72,7 +76,7 @@ export async function asyncAlways<T>(transform:AsyncSmartTransformFunction<T>, o
     else {
         logger.warn("asyncAlways: transform function did not return a Promise, you should use 'always' instead")
     }
-    return Ref.collapseValue(ptr) as MinimalJSRef<T>
+    return ReactiveValue.collapseValue(ptr) as MinimalJSRef<T>
 }
 
 /**
@@ -95,12 +99,12 @@ export async function asyncAlways<T>(transform:AsyncSmartTransformFunction<T>, o
  */
 export function reactiveFn<ReturnType, Args extends unknown[]>(fn: (...args: Args) => Awaited<RestrictSameType<RefOrValue<ReturnType>>>) {
     return (...args: MapToRefOrVal<Args>) => always(() => {
-        const collapsedArgs = args.map(arg => Ref.collapseValue(arg, true, true)) as Args;
+        const collapsedArgs = args.map(arg => ReactiveValue.collapseValue(arg, true, true)) as Args;
         return fn(...collapsedArgs)
     });
 }
 
-type MapToRefOrVal<T extends unknown[]> = {[K in keyof T]: T[K] extends Ref ? T[K] : RefOrValue<T[K]>}
+type MapToRefOrVal<T extends unknown[]> = {[K in keyof T]: T[K] extends ReactiveValue ? T[K] : RefOrValue<T[K]>}
 
 
 const getGreetingMessage = (country: RefOrValue<string>) => {
@@ -183,7 +187,7 @@ export function effect<W extends Record<string, WeakKey>|undefined>(handler:W ex
  * @returns 
  */
 export function transform<T,V extends TransformFunctionInputs>(dependencies:V, transform:TransformFunction<V,T>, persistent_datex_transform?:string) {
-    return Ref.collapseValue(Pointer.createTransform(dependencies, transform, persistent_datex_transform));
+    return ReactiveValue.collapseValue(Pointer.createTransform(dependencies, transform, persistent_datex_transform));
 }
 /**
  * A generic transform function, creates a new pointer containing the result of the callback function.
@@ -196,7 +200,7 @@ export function transform<T,V extends TransformFunctionInputs>(dependencies:V, t
  * @returns 
  */
 export async function transformAsync<T,V extends TransformFunctionInputs>(dependencies:V, transform:AsyncTransformFunction<V,T>, persistent_datex_transform?:string) {
-    return Ref.collapseValue(await Pointer.createTransformAsync(dependencies, transform, persistent_datex_transform));
+    return ReactiveValue.collapseValue(await Pointer.createTransformAsync(dependencies, transform, persistent_datex_transform));
 }
 
 
@@ -204,7 +208,7 @@ export function map<T, U, O extends 'array'|'map' = 'array'>(iterable: Iterable<
     let mapped:U[]|Map<number, U>
     
     // live map
-    if (Datex.Ref.isRef(iterable)) {
+    if (Datex.ReactiveValue.isRef(iterable)) {
 
         // return map
         if (options?.outType == "map") {
@@ -339,7 +343,7 @@ export const select = toggle;
  * @param b input value
  */
 export function equals<T,V>(a:RefLike<T>|T, b: RefLike<V>|V): Datex.Pointer<boolean> {
-    return transform([a, b], (a,b) =>  Datex.Ref.collapseValue(a, true, true) === Datex.Ref.collapseValue(b, true, true), 
+    return transform([a, b], (a,b) =>  Datex.ReactiveValue.collapseValue(a, true, true) === Datex.ReactiveValue.collapseValue(b, true, true), 
     // dx transforms not working correctly (with uix)
         /*`always (${Runtime.valueToDatexString(a)} === ${Runtime.valueToDatexString(b)})`*/) as any;
 }

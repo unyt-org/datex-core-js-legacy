@@ -5,7 +5,7 @@ import type { ExecConditions, PointerSource } from "../utils/global_types.ts";
 import { logger } from "../utils/global_values.ts";
 import { client_type } from "../utils/constants.ts";
 import { NOT_EXISTING } from "../runtime/constants.ts";
-import { Pointer, type MinimalJSRef, Ref } from "../runtime/pointers.ts";
+import { Pointer, type MinimalJSRef, ReactiveValue } from "../runtime/pointers.ts";
 import { localStorage } from "./storage-locations/local-storage-compat.ts";
 import { MessageLogger } from "../utils/message_logger.ts";
 import { displayFatalError } from "../runtime/display.ts"
@@ -863,7 +863,7 @@ export class Storage {
         let saving = false;
 
 
-        const handler = (v:unknown,key:unknown,t?:Ref.UPDATE_TYPE)=>{
+        const handler = (v:unknown,key:unknown,t?:ReactiveValue.UPDATE_TYPE)=>{
             if (saving) return;
 
             // don't block saving if only partial update

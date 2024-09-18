@@ -89,7 +89,7 @@ export class IOHandler {
         else if (this.std_outf) await this.std_outf(params, meta);
     }
     public static stdOut(params:any[], meta: datex_meta){
-        for (let i=0;i<params.length;i++) params[i] = Datex.Ref.collapseValue(params[i],true,true);
+        for (let i=0;i<params.length;i++) params[i] = Datex.ReactiveValue.collapseValue(params[i],true,true);
         if(this.e_std_outs.has(meta.caller)) this.e_std_outs.get(endpoint)(params, meta);
         else if (this.std_out) this.std_out(params, meta);
     }

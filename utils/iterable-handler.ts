@@ -64,14 +64,14 @@ export class IterableHandler<T, U = T> {
 					}
 					deref.onValueChanged(v, k, t)
 				}
-				Datex.Ref.observeAndInit(iterable, callback);
+				Datex.ReactiveValue.observeAndInit(iterable, callback);
 				return callback;
 			},
 			(callback) => {
 				use (iterableRef, Datex);
 
 				const deref = iterableRef.deref()
-				if (deref) Datex.Ref.unobserve(deref, callback);
+				if (deref) Datex.ReactiveValue.unobserve(deref, callback);
 			}
 		);
 	}
@@ -133,13 +133,13 @@ export class IterableHandler<T, U = T> {
 		if (iterable instanceof Object) return Object.values(iterable);
 	}
 
-	protected onValueChanged(value: Iterable<T>|T, key: number|undefined, type:Datex.Ref.UPDATE_TYPE) {
-		if (type == Datex.Ref.UPDATE_TYPE.DELETE) return; // ignore DELETE event, only use BEFORE_DELETE event
-		if (type == Datex.Ref.UPDATE_TYPE.REMOVE) return; // ignore REMOVE event, only use BEFORE_REMOVE event
+	protected onValueChanged(value: Iterable<T>|T, key: number|undefined, type:Datex.ReactiveValue.UPDATE_TYPE) {
+		if (type == Datex.ReactiveValue.UPDATE_TYPE.DELETE) return; // ignore DELETE event, only use BEFORE_DELETE event
+		if (type == Datex.ReactiveValue.UPDATE_TYPE.REMOVE) return; // ignore REMOVE event, only use BEFORE_REMOVE event
 
 		// compatibility with key-value iterables
 		// Map or Object
-		if (type != Datex.Ref.UPDATE_TYPE.INIT && type != Datex.Ref.UPDATE_TYPE.CLEAR && (this.iterable instanceof Map || !(this.iterable instanceof Set || this.iterable instanceof Array))) {
+		if (type != Datex.ReactiveValue.UPDATE_TYPE.INIT && type != Datex.ReactiveValue.UPDATE_TYPE.CLEAR && (this.iterable instanceof Map || !(this.iterable instanceof Set || this.iterable instanceof Array))) {
 			const original_value = value;
 			// TODO: required?
 			if (this.iterable instanceof Map) value = <Iterable<T>>[key, value]
@@ -151,10 +151,10 @@ export class IterableHandler<T, U = T> {
 		}
 
 		// single property update
-		if (type == Datex.Ref.UPDATE_TYPE.SET) this.handleNewEntry(<T>value, key)
-		else if (type == Datex.Ref.UPDATE_TYPE.ADD) this.handleNewEntry(<T>value, this.getPseudoIndex(key, <T>value));
+		if (type == Datex.ReactiveValue.UPDATE_TYPE.SET) this.handleNewEntry(<T>value, key)
+		else if (type == Datex.ReactiveValue.UPDATE_TYPE.ADD) this.handleNewEntry(<T>value, this.getPseudoIndex(key, <T>value));
 		// clear all
-		else if (type == Datex.Ref.UPDATE_TYPE.CLEAR) {
+		else if (type == Datex.ReactiveValue.UPDATE_TYPE.CLEAR) {
 			// handle onEmpty
 			if (this.onEmpty) {
 				this.onEmpty.call ? this.onEmpty.call(this) : this.onEmpty();
@@ -166,10 +166,10 @@ export class IterableHandler<T, U = T> {
 				}
 			}
 		}
-		else if (type == Datex.Ref.UPDATE_TYPE.BEFORE_DELETE) this.handleRemoveEntry(key);
-		else if (type == Datex.Ref.UPDATE_TYPE.BEFORE_REMOVE) this.handleRemoveEntry(this.getPseudoIndex(key, <T>value));
+		else if (type == Datex.ReactiveValue.UPDATE_TYPE.BEFORE_DELETE) this.handleRemoveEntry(key);
+		else if (type == Datex.ReactiveValue.UPDATE_TYPE.BEFORE_REMOVE) this.handleRemoveEntry(this.getPseudoIndex(key, <T>value));
 		// completely new value
-		else if (type == Datex.Ref.UPDATE_TYPE.INIT) {
+		else if (type == Datex.ReactiveValue.UPDATE_TYPE.INIT) {
 			for (const e of this.entries.keys()) this.handleRemoveEntry(e); // clear all entries
 			let key = 0;
 			for (const child of <Iterable<T>>this.iterator(value??[])) this.handleNewEntry(child, key++);

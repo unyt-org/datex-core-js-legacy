@@ -1,7 +1,7 @@
 
 // shortcut functions
 // import { Datex } from "./datex.ts";
-import { baseURL, Runtime, PrecompiledDXB, Type, Pointer, Ref, PointerProperty, primitive, Target, IdEndpoint, Markdown, MinimalJSRef, RefOrValue, PartialRefOrValueObject, datex_meta, ObjectWithDatexValues, Compiler, endpoint_by_endpoint_name, endpoint_name, Storage, compiler_scope, datex_scope, DatexResponse, target_clause, ValueError, logger, Class, getUnknownMeta, Endpoint, INSERT_MARK, CollapsedValueAdvanced, CollapsedValue, SmartTransformFunction, compiler_options, activePlugins, METADATA, handleDecoratorArgs, RefOrValueObject, PointerPropertyParent, InferredPointerProperty, RefLike, dc } from "./datex_all.ts";
+import { baseURL, Runtime, PrecompiledDXB, Type, Pointer, ReactiveValue, PointerProperty, primitive, Target, IdEndpoint, Markdown, MinimalJSRef, RefOrValue, PartialRefOrValueObject, datex_meta, ObjectWithDatexValues, Compiler, endpoint_by_endpoint_name, endpoint_name, Storage, compiler_scope, datex_scope, DatexResponse, target_clause, ValueError, logger, Class, getUnknownMeta, Endpoint, INSERT_MARK, CollapsedValueAdvanced, CollapsedValue, SmartTransformFunction, compiler_options, activePlugins, METADATA, handleDecoratorArgs, RefOrValueObject, PointerPropertyParent, InferredPointerProperty, RefLike, dc } from "./datex_all.ts";
 
 /** make decorators global */
 import { assert as _assert, timeout as _timeout, entrypoint as _entrypoint, ref as _ref, entrypointProperty as _entrypointProperty, property as _property, struct as _struct, endpoint as _endpoint, sync as _sync, allow as _allow} from "./datex_all.ts";
@@ -41,14 +41,14 @@ declare global {
     const selectProperty: typeof _selectProperty;
     const not: typeof _not;
     const effect: typeof _effect;
-    const observe: typeof Ref.observe
-    const observeAndInit: typeof Ref.observeAndInit
-    const unobserve: typeof Ref.unobserve
+    const observe: typeof ReactiveValue.observe
+    const observeAndInit: typeof ReactiveValue.observeAndInit
+    const unobserve: typeof ReactiveValue.unobserve
     /**
      * Prevents any values accessed within the callback function from
      * being captured by a transform function (e.g. always)
      */
-    const isolate: typeof Ref.disableCapturing
+    const isolate: typeof ReactiveValue.disableCapturing
 
     /**
      * The local endpoint of the current runtime (alias for Datex.Runtime.endpoint)
@@ -323,7 +323,7 @@ export function pointer<T>(value:RefOrValue<T>, property?:unknown): unknown {
 export function prop<T extends Map<unknown, unknown>>(parent:RefOrValue<T>, propertyKey: T extends Map<infer K, infer V> ? K : unknown): PointerProperty<T extends Map<infer K, infer V> ? V : unknown>|(T extends Map<infer K, infer V> ? V : unknown)
 export function prop<T extends Record<PropertyKey, unknown>>(parent:RefOrValue<T>, propertyKey: keyof T): PointerProperty<T[keyof T]>|T[keyof T]
 export function prop(parent:Map<unknown, unknown>|Record<PropertyKey, unknown>, propertyKey: unknown): any {
-    if (Ref.isRef(parent)) return PointerProperty.get(parent, propertyKey);
+    if (ReactiveValue.isRef(parent)) return PointerProperty.get(parent, propertyKey);
     else if (parent instanceof Map) return parent.get(propertyKey);
     else return parent[propertyKey as keyof typeof parent];
 }
@@ -361,11 +361,10 @@ export function revokeAccess(value: any, endpoint: string|Endpoint) {
 
 export const $$ = pointer;
 
-interface $fn {
-    <const T>(value:T): MinimalJSRef<T>
-}
 
-type $type = (Record<string, Pointer<unknown>|Promise<Pointer<unknown>>>) & $fn;
+type $type = (Record<string, Pointer<unknown>|Promise<Pointer<unknown>>>) & {
+    <T>(value:T): MinimalJSRef<T>
+};
 
 /**
  * Compiled reactivity syntax ($()) - throws an error when called directly and not compiled to $$() or always()
@@ -385,10 +384,8 @@ export const $ = new Proxy(function(){} as unknown as $type, {
         }
     },
 
-    apply() {
-        // TODO: change errors, not UIX specific
-        if (client_type == "deno") throw new Error("Experimental $() syntax is currently not supported on the backend");
-        else throw new Error("Experimental $() syntax is not enabled per default. Add \"experimentalFeatures: ['embedded-reactivity']\" to your app.dx to enable this feature.");
+    apply(_target, _thisArg, args) {
+        return $$(...args as [any, any]);
     },
 })
 
@@ -399,23 +396,23 @@ export const $ = new Proxy(function(){} as unknown as $type, {
  * @returns 
  */
 export function val<T>(val: RefOrValue<T>):T  { // TODO: return inferred type instead of T (ts resolution error, too deep)
-    return Ref.collapseValue(val, true, true)
+    return ReactiveValue.collapseValue(val, true, true)
 }
 
 
 // generate primitive pointers
 export function decimal(value:RefOrValue<number|bigint|string> = 0): Pointer<number> {
-    if (value instanceof Ref) value = value.val; // collapse
+    if (value instanceof ReactiveValue) value = value.val; // collapse
     return Pointer.create(undefined, Number(value)) // adds pointer or returns existing pointer
 }
 export function integer(value:RefOrValue<bigint|number|string> = 0n): Pointer<bigint> {
-    if (value instanceof Ref) value = value.val; // collapse
+    if (value instanceof ReactiveValue) value = value.val; // collapse
     return Pointer.create(undefined, BigInt(Math.floor(Number(value)))) // adds pointer or returns existing pointer
 }
 export function text(string:TemplateStringsArray, ...vars:any[]):Promise<Pointer<string>>
 export function text(value?:RefOrValue<any>): Pointer<string>
 export function text(value:RefOrValue<string>|TemplateStringsArray = "", ...vars:any[]): Pointer<string>|Promise<Pointer<string>> {
-    if (value instanceof Ref) value = value.val; // collapse
+    if (value instanceof ReactiveValue) value = value.val; // collapse
     // template transform
     if (value instanceof Array) {
         return <Promise<Pointer<string>>>_datex(`always '${value.raw.map(s=>s.replace(/\(/g, '\\(').replace(/\'/g, "\\'")).join(INSERT_MARK)}'`, vars)
@@ -423,7 +420,7 @@ export function text(value:RefOrValue<string>|TemplateStringsArray = "", ...vars
     else return Pointer.create(undefined, String(value)) // adds pointer or returns existing pointer
 }
 export function boolean(value:RefOrValue<boolean> = false): Pointer<boolean> {
-    if (value instanceof Ref) value = value.val; // collapse
+    if (value instanceof ReactiveValue) value = value.val; // collapse
     return Pointer.create(undefined, Boolean(value)) // adds pointer or returns existing pointer
 }
 
@@ -433,7 +430,7 @@ export function md(string:TemplateStringsArray, ...vars:any[]):Promise<Markdown>
 export function md(value?:RefOrValue<string>): Markdown
 export function md(value:RefOrValue<string>|TemplateStringsArray = "", ...vars:any[]): Markdown|Promise<Markdown> {
     // transform string reference
-    if (value instanceof Ref) return <Promise<Markdown>> _datex `always <text/markdown> ${value}`
+    if (value instanceof ReactiveValue) return <Promise<Markdown>> _datex `always <text/markdown> ${value}`
     // template transform
     else if (value instanceof Array) return <Promise<Markdown>>_datex(`always <text/markdown>'${value.raw.map(s=>s.replace(/\(/g, '\\(').replace(/\'/g, "\\'")).join(INSERT_MARK)}'`, vars)
     // pointer from string
@@ -485,7 +482,7 @@ export function static_pointer<T>(value:RefOrValue<T>, endpoint:IdEndpoint, uniq
     const static_id = Pointer.getStaticPointerId(endpoint, unique_id);
     const pointer = Pointer.create(static_id, value)
     if (label) pointer.addLabel(typeof label == "string" ? label.replace(/^\$/, '') : label);
-    return Ref.collapseValue(pointer);
+    return ReactiveValue.collapseValue(pointer);
 }
 
 // similar to pointer(), but also adds a label
@@ -619,7 +616,7 @@ export function props<T extends object = object>(parent:RefOrValue<T>, strong_pa
             // other DatexValues can also be returned -> check if property already a DatexValue
             if (!strong_parent_bounding) {
                 const property = pointer.getProperty(key);
-                if (property instanceof Ref) return property;
+                if (property instanceof ReactiveValue) return property;
             }
             // create a DatexPointerProperty
             return PointerProperty.get(pointer, <keyof Pointer<T>>key);
@@ -688,10 +685,10 @@ Object.defineProperty(globalThis, 'equals', {value:_equals, configurable:false})
 Object.defineProperty(globalThis, 'selectProperty', {value:_selectProperty, configurable:false})
 Object.defineProperty(globalThis, 'not', {value:_not, configurable:false})
 Object.defineProperty(globalThis, 'effect', {value:_effect, configurable:false})
-Object.defineProperty(globalThis, 'observe', {value:Ref.observe.bind(Ref), configurable:false})
-Object.defineProperty(globalThis, 'observeAndInit', {value:Ref.observeAndInit.bind(Ref), configurable:false})
-Object.defineProperty(globalThis, 'unobserve', {value:Ref.unobserve.bind(Ref), configurable:false})
-Object.defineProperty(globalThis, 'isolate', {value:Ref.disableCapturing.bind(Ref), configurable:false})
+Object.defineProperty(globalThis, 'observe', {value:ReactiveValue.observe.bind(ReactiveValue), configurable:false})
+Object.defineProperty(globalThis, 'observeAndInit', {value:ReactiveValue.observeAndInit.bind(ReactiveValue), configurable:false})
+Object.defineProperty(globalThis, 'unobserve', {value:ReactiveValue.unobserve.bind(ReactiveValue), configurable:false})
+Object.defineProperty(globalThis, 'isolate', {value:ReactiveValue.disableCapturing.bind(ReactiveValue), configurable:false})
 
 Object.defineProperty(globalThis, 'grantAccess', {value:grantAccess, configurable:false})
 Object.defineProperty(globalThis, 'grantPublicAccess', {value:grantPublicAccess, configurable:false})

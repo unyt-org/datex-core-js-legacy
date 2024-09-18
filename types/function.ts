@@ -1,4 +1,4 @@
-import { Pointer, Ref } from "../runtime/pointers.ts";
+import { Pointer, ReactiveValue } from "../runtime/pointers.ts";
 import { Runtime } from "../runtime/runtime.ts";
 import { logger } from "../utils/global_values.ts";
 import type { StreamConsumer, ValueConsumer } from "./abstract_types.ts";
@@ -366,7 +366,7 @@ export class Function<T extends (...args: any) => any = (...args: any) => any> e
             throw new RuntimeError("Cannot apply values to a <Function> with no executable DATEX or valid native target");
         }
 
-        const context = (this.context instanceof Ref ? this.context.val : this.context);
+        const context = (this.context instanceof ReactiveValue ? this.context.val : this.context);
         let params:any[];
        
         // record

@@ -138,7 +138,7 @@ async function getValueTSCode(module_name:string, name:string, value: any, no_po
 	const is_datex_module = module_name.endsWith(".dx") || module_name.endsWith(".dxb")
 
 	const type = Datex.Type.ofValue(value)
-	const is_pointer = (value instanceof Datex.Ref) || !!(Datex.Pointer.getByValue(value));
+	const is_pointer = (value instanceof Datex.ReactiveValue) || !!(Datex.Pointer.getByValue(value));
 	const original_value = value;
 
 	// if (no_pointer) {

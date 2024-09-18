@@ -8,7 +8,7 @@ import { Runtime } from "./runtime.ts";
 import { Tuple } from "../types/tuple.ts";
 import { cache_path } from "./cache_path.ts";
 import { DatexObject } from "../types/object.ts";
-import { Ref } from "./pointers.ts";
+import { ReactiveValue } from "./pointers.ts";
 import { normalizePath } from "../utils/normalize-path.ts";
 
 type channel_type = 'websocket'|'http'
@@ -48,7 +48,7 @@ class EndpointConfig implements EndpointConfigData {
 	public publicNodes?: Map<Endpoint, node_config>
 
 	public get endpoint() {
-		return Ref.collapseValue(this.#endpoint, true, true)!;
+		return ReactiveValue.collapseValue(this.#endpoint, true, true)!;
 	}
 	public set endpoint(endpoint: Endpoint|string|undefined) {
 		this.#endpoint = typeof endpoint == "string" ? Endpoint.get(endpoint) as Endpoint : endpoint;

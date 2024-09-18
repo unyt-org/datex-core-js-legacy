@@ -4,7 +4,7 @@
 
 import type { Class } from "../utils/global_types.ts";
 import { Runtime } from "../runtime/runtime.ts";
-import { Ref } from "../runtime/pointers.ts";
+import { ReactiveValue } from "../runtime/pointers.ts";
 
 import { RuntimeError } from "./errors.ts";
 import { Assertion } from "./assertion.ts";
@@ -66,8 +66,8 @@ export class Logical<T> extends Set<T> {
 		// TODO: empty - does not match?
 		if (against === undefined) return false;
 
-		value = <clause<T>> Datex.Ref.collapseValue(value, true, true);
-		against = <clause<T>> Datex.Ref.collapseValue(against, true, true);
+		value = <clause<T>> Datex.ReactiveValue.collapseValue(value, true, true);
+		against = <clause<T>> Datex.ReactiveValue.collapseValue(against, true, true);
 
 		// auto infer atomic class
 		if (atomic_class === undefined) {
@@ -111,14 +111,14 @@ export class Logical<T> extends Set<T> {
 		}
         
 		// default
-		return this.matchesSingle(<T>Ref.collapseValue(value, true, true), against, atomic_class, assertionValue, throwInvalidAssertion);
+		return this.matchesSingle(<T>ReactiveValue.collapseValue(value, true, true), against, atomic_class, assertionValue, throwInvalidAssertion);
         
     }
 
     private static matchesSingle<T>(atomic_value:T, against: clause<T>, atomic_class:Class<T>&LogicalComparator<T>, assertionValue = atomic_value, throwInvalidAssertion = false): boolean {
 
-		atomic_value = <T> Datex.Ref.collapseValue(atomic_value, true, true);
-		against = <clause<T>> Datex.Ref.collapseValue(against, true, true);
+		atomic_value = <T> Datex.ReactiveValue.collapseValue(atomic_value, true, true);
+		against = <clause<T>> Datex.ReactiveValue.collapseValue(against, true, true);
 
 		// wrong atomic type for atomic_value at runtime
 		if (atomic_class && !(atomic_value instanceof atomic_class)) throw new RuntimeError(`Invalid match check: atomic value has wrong type (expected ${Type.getClassDatexType(atomic_class)}, found ${Type.ofValue(atomic_value)})`);
@@ -161,7 +161,7 @@ export class Logical<T> extends Set<T> {
 		}
 
 		// match
-		return atomic_class.logicalMatch(<T>Ref.collapseValue(atomic_value, true, true), <T>against);
+		return atomic_class.logicalMatch(<T>ReactiveValue.collapseValue(atomic_value, true, true), <T>against);
     }
 
 
@@ -206,7 +206,7 @@ export class Logical<T> extends Set<T> {
         
 		// default
 
-		value = <T>Ref.collapseValue(value, true, true)
+		value = <T>ReactiveValue.collapseValue(value, true, true)
 		if (!(value instanceof atomic_class)) throw new RuntimeError(`logical collapse: atomic value has wrong type (expected ${Type.getClassDatexType(atomic_class)}, found ${Type.ofValue(value)})`);
 
 		list.add(<T>value);

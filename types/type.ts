@@ -12,7 +12,7 @@ import { Quantity } from "./quantity.ts";
 import { Function as DatexFunction } from "./function.ts";
 import { logger, TypedArray } from "../utils/global_values.ts";
 import { BinaryCode } from "../compiler/binary_codes.ts"
-import { RefOrValue, Pointer, Ref, PointerProperty } from "../runtime/pointers.ts";
+import { RefOrValue, Pointer, ReactiveValue, PointerProperty } from "../runtime/pointers.ts";
 import { clause, Conjunction, Disjunction, Logical, Negation } from "./logic.ts";
 import { Debugger } from "../runtime/debugger.ts";
 import { Time } from "./time.ts";
@@ -755,7 +755,7 @@ export class Type<T = any> extends ExtensibleFunction {
 
     // check if root type of value matches exactly
     public static matches<T extends Type>(value:RefOrValue<any>, type:type_clause, throwInvalidAssertion = false): value is (T extends Type<infer TT> ? TT : any)  {
-        value = Ref.collapseValue(value, true, true);
+        value = ReactiveValue.collapseValue(value, true, true);
         // value has a matching DX_TEMPLATE
         if (type instanceof Type && type.template && value?.[DX_TEMPLATE] && this.matchesTemplate(value[DX_TEMPLATE], type.template)) return true;
         // compare types
@@ -833,7 +833,7 @@ export class Type<T = any> extends ExtensibleFunction {
             return value.type as Type<T>;
         }
 
-        value = Ref.collapseValue(value,true,true)
+        value = ReactiveValue.collapseValue(value,true,true)
 
         // // should not happen
         // else if (value instanceof Pointer) {
