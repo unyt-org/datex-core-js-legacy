@@ -28,7 +28,7 @@ export async function handleError(error: Error|string, logger = defaultLogger, e
 		logger.error(error.message);
 		if (error.solutions.length > 0) {
 			console.log();
-			logger.info(`Suggested Problem Solutions\n${error.solutions.map(s => `- ${s}`).join("\n")}`);
+			logger.info(`Suggested Problem Solutions:\n${error.solutions.map(s => `- ${s}`).join("\n")}\n`);
 		}
 		if (error.quickFixes) {
 			for (const fix of error.quickFixes) {

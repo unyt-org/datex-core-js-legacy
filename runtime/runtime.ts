@@ -603,7 +603,7 @@ export class Runtime {
     public static async getURLContent<T=unknown, RAW extends boolean = false>(url:URL, raw?:RAW, cached?:boolean, potentialDatexAsJsModule?:boolean):Promise<RAW extends false ? T : [data:unknown, type?:string]>
     public static async getURLContent<T=unknown, RAW extends boolean = false>(url_string:string|URL, raw:RAW=false, cached = false, potentialDatexAsJsModule = true):Promise<RAW extends false ? T : [data:unknown, type?:string]> {
 
-        if (url_string.toString().startsWith("route:") && window.location?.origin) url_string = new URL(url_string.toString().replace("route:", ""), window.location.origin)
+        if (url_string.toString().startsWith("route:") && globalThis.location?.origin) url_string = new URL(url_string.toString().replace("route:", ""), globalThis.location.origin)
 
         // catch fatal route errors here
         if (url_string.toString().startsWith("fatal:")) {

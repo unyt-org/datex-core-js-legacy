@@ -18,7 +18,7 @@ export async function sendReport(identifier: string, reportData:Record<string,an
 			denoVersion: globalThis.Deno?.version.deno,
 			tsVersion: globalThis.Deno?.version.typescript,
 			v8Version: globalThis.Deno?.version.v8,
-			userAgent: JSON.parse(JSON.stringify(window.navigator.userAgentData ?? window.navigator.userAgent))
+			userAgent: JSON.parse(JSON.stringify(globalThis.navigator.userAgentData ?? globalThis.navigator.userAgent))
 		},
 		reportData,
 		stack: getCallerInfo()

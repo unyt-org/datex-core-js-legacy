@@ -221,7 +221,7 @@ export function createFunctionWithDependencyInjections(source: string, dependenc
     const createStaticFn = `
     const freezedObjects = new WeakSet();
     function createStaticObject(val) {
-        if (val && typeof val == "object" && !globalThis.Datex?.Ref.isRef(val)) {
+        if (val && typeof val == "object" && !globalThis.Datex?.ReactiveValue.isRef(val)) {
             if (freezedObjects.has(val)) return val;
             freezedObjects.add(val);    
             for (const key of Object.keys(val)) val[key] = createStaticObject(val[key]);

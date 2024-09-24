@@ -9,6 +9,8 @@ import { Datex } from "./mod.ts";
 import { PointerError } from "./types/errors.ts";
 import { IterableHandler } from "./utils/iterable-handler.ts";
 import { AsyncSmartTransformFunction, MinimalJSRefWithIndirectRef, RestrictSameType } from "./runtime/pointers.ts";
+import { handleError } from "./utils/error-handling.ts";
+import { KnownError } from "./utils/error-handling.ts";
 
 /**
  * A generic transform function, creates a new pointer containing the result of the callback function.
@@ -41,18 +43,44 @@ export function always(scriptOrJSTransform:TemplateStringsArray|SmartTransformFu
         if (scriptOrJSTransform.constructor.name == "AsyncFunction") {
             throw new Error("Async functions are not allowed as always transforms")
         }
-        const ptr = Pointer.createSmartTransform(scriptOrJSTransform, undefined, undefined, undefined, vars[0]);
+        const options: SmartTransformOptions|undefined = typeof vars[0] == "object" ? vars[0] : undefined;
+        const ptr = Pointer.createSmartTransform(scriptOrJSTransform, undefined, undefined, undefined, options);
+        if (options?._allowAsync && !ptr.value_initialized && ptr.waiting_for_always_promise) {
+            return ptr.waiting_for_always_promise.then(()=>collapseTransformPointer(ptr, options?._collapseStatic));
+        }
         if (!ptr.value_initialized && ptr.waiting_for_always_promise) {
             throw new PointerError(`Promises cannot be returned from always transforms - use 'asyncAlways' instead`);
         }
         else {
-            return ReactiveValue.collapseValue(ptr);
+            return collapseTransformPointer(ptr, options?._collapseStatic);
         }
     }
     // datex script
-    else return (async ()=>ReactiveValue.collapseValue(await datex(`always (${scriptOrJSTransform.raw.join(INSERT_MARK)})`, vars)))()
+    else if (scriptOrJSTransform.raw instanceof Array) {
+        return (async ()=>collapseTransformPointer(await datex(`always (${scriptOrJSTransform.raw.join(INSERT_MARK)})`, vars)))()
+    }
+    else {
+        handleError(new KnownError("You called 'always' with invalid arguments. It seems like you are not using deno for UIX.", [
+            "Install deno for UIX, see https://docs.unyt.org/manual/uix/getting-started#install-deno",
+            "Call 'always' with a function: always(() => ...)"
+        ]))
+    }
 }
 
+
+function collapseTransformPointer(ptr: Pointer, collapseStatic = false) {
+    let collapse = false;
+    if (collapseStatic) {
+        // check if transform function is static and value is a js primitive
+        if (ptr.isStaticTransform && ptr.is_js_primitive) {
+            collapse = true;
+        }
+    }
+    
+    const val = ReactiveValue.collapseValue(ptr, false, collapse);
+    if (collapse) ptr.delete();
+    return val;
+}
 
 /**
  * A generic transform function, creates a new pointer containing the result of the callback function.

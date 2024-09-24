@@ -455,6 +455,19 @@ export abstract class ReactiveValue<T = any> extends EventTarget {
     #liveTransform = false;
     #forceLiveTransform = false;
     #transformSource?: TransformSource
+    #isStaticTransform = false;
+
+    /**
+     * if true, there are no dependencies and the value is never updated
+     * (only used when a transform source exists, e.g. for effects and always)
+     */
+    get isStaticTransform() {
+        return this.#isStaticTransform;
+    }
+    protected set _isStaticTransform(val: boolean) {
+        this.#isStaticTransform = val;
+    }
+
 
     get transformSource() {
         return this.#transformSource
@@ -563,6 +576,7 @@ export type TransformSource = {
     deps: IterableWeakSet<ReactiveValue>
     keyedDeps: IterableWeakMap<Pointer, Set<any>>
 }
+
 
 export type PointerPropertyParent<K,V> = Map<K,V> | Record<K & (string|symbol),V>;
 export type InferredPointerProperty<Parent, Key> = PointerProperty<Parent extends Map<unknown, infer MV> ? MV : Parent[Key&keyof Parent]>
@@ -1115,11 +1129,16 @@ export type SmartTransformOptions<T=unknown> = {
     initial?: T,
 	cache?: boolean,
     allowStatic?: boolean,
+    // allow async when using always instead of asyncAlways
+    _allowAsync?: boolean,
+    // collapse primitive pointer if value has no reactive dependencies and garbage-collect pointer
+    _collapseStatic: boolean,
 }
 
 type TransformState = {
     isLive: boolean;
     isFirst: boolean;
+    executingEffect: boolean;
     deps: IterableWeakSet<ReactiveValue<any>>;
     keyedDeps: AutoMap<any, Set<any>>;
     returnCache: Map<string, any>;
@@ -2735,14 +2754,16 @@ export class Pointer<T = any> extends ReactiveValue<T> {
         const val = <T> ReactiveValue.collapseValue(v,true,true);
         const newType = Type.ofValue(val);
 
+        const current_val = this.current_val;
+
         // not changed (relevant for primitive values)
-        if (this.current_val === val) {
+        if (Object.is(current_val, val)) {
             return;
         }
 
         // also check if array is equal
-        if (this.current_val instanceof Array && val instanceof Array) {
-            if (this.current_val.length == val.length && this.current_val.every((v,i)=>v===val[i])) {
+        if (current_val instanceof Array && val instanceof Array) {
+            if (current_val.length == val.length && current_val.every((v,i)=>v===val[i])) {
                 return;
             }
         }
@@ -2931,6 +2952,7 @@ export class Pointer<T = any> extends ReactiveValue<T> {
         const state: TransformState = {
             isLive: false,
             isFirst: true,
+            executingEffect: false,
             deps: new IterableWeakSet<ReactiveValue>(),
             keyedDeps: new IterableWeakMap<Pointer, Set<any>>().setAutoDefault(Set),
             returnCache: new Map<string, any>(),
@@ -2946,11 +2968,16 @@ export class Pointer<T = any> extends ReactiveValue<T> {
             },
 
             update: () => {
+                // currently executing effect, skip update
+                if (state.executingEffect) return;
+                
                 // no live transforms needed, just get current value
                 // capture getters in first update() call to check if there
                 // is a static transform and show a warning
                 if (!state.isLive && !state.isFirst) {
+                    state.executingEffect = true;
                     this.setVal(transform() as T, true, true);
+                    state.executingEffect = false;
                 }
                 // get transform value and update dependency observers
                 else {
@@ -2973,7 +3000,9 @@ export class Pointer<T = any> extends ReactiveValue<T> {
                         ReactiveValue.captureGetters();
         
                         try {
+                            state.executingEffect = true;
                             val = transform() as T;
+                            state.executingEffect = false;
                             // also trigger getter if pointer is returned
                             ReactiveValue.collapseValue(val, true, true); 
                         }
@@ -3157,8 +3186,9 @@ export class Pointer<T = any> extends ReactiveValue<T> {
         const gettersCount = (capturedGetters?.size??0) + (capturedGettersWithKeys?.size??0);
 
         // no dependencies, will never change, this is not the intention of the transform
-        if (!ignoreReturnValue && hasGetters && !gettersCount && !options?.allowStatic) {
-            logger.warn("The transform value for " + this.idString() + " is a static value:", val);
+        if (!ignoreReturnValue && hasGetters && !gettersCount) {
+            this._isStaticTransform = true
+            if (!options?.allowStatic) logger.warn("The transform value for " + this.idString() + " is a static value:", val);
             // TODO: cleanup stuff not needed if no reactive transform
         }
 
@@ -3640,6 +3670,7 @@ export class Pointer<T = any> extends ReactiveValue<T> {
         const high_priority_keys = new Set();// remember higher priority keys in prototype chain, don't override observer with older properties in the chain
 
         const value = this.shadow_object!;
+
         for (const name of this.visible_children ?? Object.keys(value)) {
             const type = Type.ofValue(value[name])
 
@@ -4533,6 +4564,16 @@ export class Pointer<T = any> extends ReactiveValue<T> {
 
 
     private callObservers(value:any, key:any, type:ReactiveValue.UPDATE_TYPE, is_transform = false, is_child_update = false, previous?: any, atomic_id?: symbol) {
+        // disable unintentional capturing of dependencies for smart transforms that are triggered by getters inside observer callbacks
+        
+        // @ReactiveValue.disableCapturing
+        ReactiveValue.freezeCapturing = true;
+        const res = this._callObservers(value, key, type, is_transform, is_child_update, previous, atomic_id);
+        ReactiveValue.freezeCapturing = false;
+        return res;
+    }
+
+    private _callObservers(value:any, key:any, type:ReactiveValue.UPDATE_TYPE, is_transform = false, is_child_update = false, previous?: any, atomic_id?: symbol) {
         const promises = [];
         // key specific observers
         if (key!=undefined) {
