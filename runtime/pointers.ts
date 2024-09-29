@@ -2795,7 +2795,7 @@ export class Pointer<T = any> extends ReactiveValue<T> {
         let updatePromise: Promise<any>|undefined;
 
         // set primitive value, reference not required
-        if (this.is_js_primitive) {
+        if (this.is_js_primitive || this.#any_type) {
             const didCustomUpdate = this.customTransformUpdate(val)
             if (!didCustomUpdate) updatePromise = super.setVal(val, trigger_observers, is_transform);
         }
