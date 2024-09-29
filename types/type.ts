@@ -293,7 +293,7 @@ export class Type<T = any> extends ExtensibleFunction {
     public cast(value: any, context?:any, origin:Endpoint = Runtime.endpoint, make_pointer = false, ignore_js_config = false, assigningPtrId?: string, strict = false):T {
         // unknown type (no template or config)
         //if (!this.interface_config && !this.template) return UNKNOWN_TYPE;
-        
+
         // has a JS configuration
         if (!ignore_js_config && this.interface_config){
             // generate default value
@@ -336,12 +336,13 @@ export class Type<T = any> extends ExtensibleFunction {
 
     /** returns an object with a [INIT_PROPS] function that can be passed to newJSInstance() or called manually */
     public getPropertyInitializer(value:any, useTemplate = true, strict = false) {
-        const initialized = {i:false};
+        // TODO: is it okay to call INIT_PROPS multiple times? required for inherited classes
+        //const initialized = {i:false};
         // property initializer - sets existing property for pointer object (is passed as first constructor argument when reconstructing)
         return Object.freeze({
             [INIT_PROPS]: (instance:any)=>{
-                if (initialized.i) return; 
-                initialized.i=true; 
+                // if (initialized.i) return; 
+                // initialized.i=true; 
                 this.initProperties(instance, value, useTemplate, strict)
             }
         })
