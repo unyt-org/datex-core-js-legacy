@@ -684,7 +684,7 @@ Object.defineProperty(globalThis, 'once', {value:once, configurable:false})
 Object.defineProperty(globalThis, 'always', {value:_always, configurable:false})
 Object.defineProperty(globalThis, 'asyncAlways', {value:_asyncAlways, configurable:false})
 // used internally for reactive $ syntax
-Object.defineProperty(globalThis, '_$', {value: (cb:SmartTransformFunction<unknown>) => _always(cb, {allowStatic: true, _allowAsync: true, _collapseStatic: true}), configurable:false})
+Object.defineProperty(globalThis, '_$', {value: (cb:SmartTransformFunction<unknown>) => _always(cb, {allowStatic: true, _allowAsync: true, _collapseStatic: true, _returnWrapper: true, _allowAnyType: true}), configurable:false})
 Object.defineProperty(globalThis, '_$method', {value: _$method, configurable:false})
 Object.defineProperty(globalThis, 'reactiveFn', {value:_reactiveFn, configurable:false})
 Object.defineProperty(globalThis, 'toggle', {value:_toggle, configurable:false})

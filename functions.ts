@@ -46,13 +46,13 @@ export function always(scriptOrJSTransform:TemplateStringsArray|SmartTransformFu
         const options: SmartTransformOptions|undefined = typeof vars[0] == "object" ? vars[0] : undefined;
         const ptr = Pointer.createSmartTransform(scriptOrJSTransform, undefined, undefined, undefined, options);
         if (options?._allowAsync && !ptr.value_initialized && ptr.waiting_for_always_promise) {
-            return ptr.waiting_for_always_promise.then(()=>collapseTransformPointer(ptr, options?._collapseStatic));
+            return ptr.waiting_for_always_promise.then(()=>collapseTransformPointer(ptr, options?._collapseStatic, options?._returnWrapper, options?._allowAnyType));
         }
         if (!ptr.value_initialized && ptr.waiting_for_always_promise) {
             throw new PointerError(`Promises cannot be returned from always transforms - use 'asyncAlways' instead`);
         }
         else {
-            return collapseTransformPointer(ptr, options?._collapseStatic);
+            return collapseTransformPointer(ptr, options?._collapseStatic, options?._returnWrapper, options?._allowAnyType);
         }
     }
     // datex script
@@ -68,13 +68,21 @@ export function always(scriptOrJSTransform:TemplateStringsArray|SmartTransformFu
 }
 
 
-function collapseTransformPointer(ptr: Pointer, collapseStatic = false) {
+function collapseTransformPointer(ptr: Pointer, collapseStatic = false, alwaysReturnWrapper = false, _allowAnyType = false) {
     let collapse = false;
     if (collapseStatic) {
         // check if transform function is static and value is a js primitive
         if (ptr.isStaticTransform && ptr.is_js_primitive) {
             collapse = true;
         }
+    }
+
+    if (_allowAnyType) {
+        ptr.allowAnyType(true);
+    }
+    
+    if (alwaysReturnWrapper && !collapse) {
+        return ptr;
     }
     
     const val = ReactiveValue.collapseValue(ptr, false, collapse);

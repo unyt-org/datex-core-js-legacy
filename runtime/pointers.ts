@@ -1133,6 +1133,10 @@ export type SmartTransformOptions<T=unknown> = {
     _allowAsync?: boolean,
     // collapse primitive pointer if value has no reactive dependencies and garbage-collect pointer
     _collapseStatic: boolean,
+    // always return the wrapper instead of the collapsed value, even for non-primitive pointers
+    _returnWrapper?: boolean,
+    // set the pointer type to allow any value
+    _allowAnyType?: boolean,
 }
 
 type TransformState = {
@@ -3335,8 +3339,15 @@ export class Pointer<T = any> extends ReactiveValue<T> {
         return (<WeakRef<any>>this.#shadow_object)?.deref()
     }
 
+    #any_type = false;
+
     get type():Type {
+        if (this.#any_type) return Type.std.Any;
         return this.#unwrapped_transform_type ?? this.#type;
+    }
+
+    allowAnyType(any_type = true) {
+        this.#any_type = any_type;
     }
 
 
