@@ -74,11 +74,12 @@ export async function init() {
 			})
 		}
 		else if (client_type == "deno") {
-			const { DenoKVStorageLocation } = await import("./storage/storage-locations/deno-kv.ts");
-			const denoKV = new DenoKVStorageLocation();
-			if (denoKV.isSupported()) {
-				console.log("Using DenoKV as primary storage location (experimental)")
-				await Storage.addLocation(denoKV, {
+			if (Deno.env.get("SQLITE_STORAGE") == "1") {
+				const { SqliteStorageLocation } = await import("./storage/storage-locations/sqlite-db.ts");
+				console.log("Using sqlite as primary storage location (experimental feature enabled via SQLITE_STORAGE env variable)")
+				await Storage.addLocation(new SqliteStorageLocation({
+					db: "storage"
+				}), {
 					modes: [Storage.Mode.SAVE_ON_CHANGE],
 					primary: true
 				})
@@ -86,7 +87,7 @@ export async function init() {
 			else {
 				await Storage.addLocation(new LocalStorageLocation(), {
 					modes: [Storage.Mode.SAVE_ON_EXIT, Storage.Mode.SAVE_ON_CHANGE],
-					primary: denoKV.isSupported() ? false : true
+					primary: true
 				})
 			}
 		}

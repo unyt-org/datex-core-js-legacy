@@ -280,7 +280,7 @@ export function pointer<Key, Parent extends PointerPropertyParent<Key,unknown>>(
  */
 export function pointer<T>(value:RefLike<T>): MinimalJSRef<T> // defined 2x with Ref<T> and T for correct type inference
 export function pointer<T>(value:T): MinimalJSRef<T>
-export function pointer<T>(value:RefOrValue<T>, property?:unknown): unknown {
+export function pointer<T>(value:RefOrValue<T>, property?:unknown, callStackIndex = 0): unknown {
 
     // pointer property
     if (property !== undefined) {
@@ -292,7 +292,7 @@ export function pointer<T>(value:RefOrValue<T>, property?:unknown): unknown {
         const pointer = <any> Pointer.createOrGet(value).js_value;
         // store as eternal?
         if (waitingEternals.size) {
-            const info = getCallerInfo()?.[0];
+            const info = getCallerInfo()?.[callStackIndex];
             if (!info) throw new Error("eternal values are not supported in this runtime environment");
             const unique = `${info.file}:${info.row}`;
             if (waitingEternals.has(unique)) {
@@ -301,7 +301,7 @@ export function pointer<T>(value:RefOrValue<T>, property?:unknown): unknown {
             }
         }
         if (waitingLazyEternals.size) {
-            const info = getCallerInfo()?.[0];
+            const info = getCallerInfo()?.[callStackIndex];
             if (!info) throw new Error("eternal values are not supported in this runtime environment");
             const unique = `${info.file}:${info.row}`;
             if (waitingLazyEternals.has(unique)) {
@@ -385,7 +385,7 @@ export const $ = new Proxy(function(){} as unknown as $type, {
     },
 
     apply(_target, _thisArg, args) {
-        return $$(...args as [any, any]);
+        return pointer(args[0], args[1], 1);
     },
 })
 
@@ -528,6 +528,9 @@ type revokeAccess = typeof revokeAccess
 declare global {
     const eternal: undefined
     const lazyEternal: undefined    
+    /**
+     * @deprecated use $()
+     */
     const $$: typeof pointer
     const $: $type
 
