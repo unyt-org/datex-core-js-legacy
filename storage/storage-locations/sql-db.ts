@@ -609,7 +609,8 @@ export abstract class SQLDBStorageLocation<Options extends {db: string}> extends
 							// normal value
 							ptrVal[key]
 					)
-			await this.#query('UPDATE ?? SET ?? = ? WHERE ?? = ?;', [table, key, val, this.#pointerMysqlColumnName, pointer.id])
+			//await this.#query('UPDATE ?? SET ?? = ? WHERE ?? = ?;', [table, key, val, this.#pointerMysqlColumnName, pointer.id])
+			await this.#query(`UPDATE \`${table}\` SET \`${key}\` = ? WHERE \`${this.#pointerMysqlColumnName}\` = ?`, [val, pointer.id])
 		}
 	}
 

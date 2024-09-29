@@ -10,7 +10,6 @@ export class SqliteStorageLocation extends SQLDBStorageLocation<{db: string}> {
     useSingleQuotes = true
     supportsInsertOrReplace = true
 
-
     #db?: DB
 
     protected connect() {
@@ -23,6 +22,11 @@ export class SqliteStorageLocation extends SQLDBStorageLocation<{db: string}> {
         return {
             rows: this.#db!.query(query_string, query_params)
         }
+    }
+
+    override async clear() {
+        // delete sqlite file
+        await Deno.remove(new URL(this.options.db + ".db", ptr_cache_path).pathname)
     }
 
 
