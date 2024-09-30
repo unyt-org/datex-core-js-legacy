@@ -10,8 +10,6 @@ import type { Class } from "../utils/global_types.ts";
 import { MatchOptions } from "../utils/match.ts";
 import { Type } from "./type.ts";
 
-const logger = new Logger("StorageSet");
-
 /**
  * WeakSet that outsources values to storage.
  * The API is similar to the JS WeakSet API, but all methods are async.
@@ -20,6 +18,26 @@ const logger = new Logger("StorageSet");
  * This means that the pointer of a value can be garbage collected.
  */
 export class StorageWeakSet<V> {
+
+	/**
+	 * Create a new StorageWeakSet instance with the given value type.
+	 * @param type Class or DATEX Type of the values
+	 * @returns 
+	 */
+	static of<V>(type: Class<V>|Type<V>) {
+		const storageSet = new this<V>();
+		storageSet.#_type = type instanceof Type ? type : Type.getClassDatexType(type);
+		storageSet._type = storageSet.#_type.namespace + ":" + storageSet.#_type.name;
+		return storageSet;
+	}
+
+	_type?: string
+	#_type?: Type<V>;
+
+	protected get type() {
+		if (!this.#_type) this.#_type = Type.get(this._type!);
+		return this.#_type;
+	}
 
 	/**
 	 * Time in milliseconds after which a value is removed from the in-memory cache
@@ -66,6 +84,11 @@ export class StorageWeakSet<V> {
 		return this;
 	}
 	protected _add(storage_key:string, value:V|null) {
+		// convert to correct type if not already
+		if (this.type && !(this.type.matches(value))) {
+			value = this.type.cast(value);
+		}
+		
 		// proxify value
 		if (!this.allowNonPointerObjectValues) {
 			value = this.#pointer.proxifyChild("", value);
@@ -119,6 +142,13 @@ export class StorageWeakSet<V> {
  */
 export class StorageSet<V> extends StorageWeakSet<V> {
 
+	/**
+	 * Create a new StorageSet instance with the given value type.
+	 * @param type Class or DATEX Type of the values
+	 */
+	static of<V>(type: Class<V>|Type<V>): StorageSet<V> {
+		return super.of(type) as StorageSet<V>;
+	}
 
 	#size?: number;
 
@@ -246,7 +276,9 @@ export class StorageSet<V> extends StorageWeakSet<V> {
 		}
 	}
 
-	match<Options extends MatchOptions, T extends V & object>(valueType:Class<T>|Type<T>, matchInput: MatchInput<T>, options?: Options): Promise<MatchResult<T, Options>> {
+	match<Options extends MatchOptions, T extends V & object>(matchInput: MatchInput<T>, options?: Options, valueType?:Class<T>|Type<T>): Promise<MatchResult<T, Options>> {
+		valueType ??= this.type;
+		if (!valueType) throw new Error("Cannot determine value type. Please provide a valueType parameter to match()");
 		return match(this as unknown as StorageSet<T>, valueType, matchInput, options)
 	}
 }

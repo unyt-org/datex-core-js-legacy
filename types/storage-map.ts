@@ -18,6 +18,27 @@ import { Type } from "./type.ts";
  */
 export class StorageWeakMap<K,V> {
 
+	/**
+	 * Create a new StorageWeakMap instance with the given key and value types.
+	 * @param keyType Class or DATEX Type of the keys
+	 * @param valueType	Class or DATEX Type of the values
+	 * @returns 
+	 */
+	static of<K,V>(keyType:Class<V>|Type<V>|undefined|null, valueType: Class<V>|Type<V>) {
+		const storageMap = new this<K,V>();
+		storageMap.#_type = valueType instanceof Type ? valueType : Type.getClassDatexType(valueType);
+		storageMap._type = storageMap.#_type.namespace + ":" + storageMap.#_type.name;
+		return storageMap;
+	}
+
+	_type?: string
+	#_type?: Type<V>;
+
+	protected get type() {
+		if (!this.#_type) this.#_type = Type.get(this._type!);
+		return this.#_type;
+	}
+
 	#prefix?: string;
 
 	/**
@@ -87,6 +108,11 @@ export class StorageWeakMap<K,V> {
 		return this._set(storage_key, value);
 	}
 	protected async _set(storage_key:string, value:V) {
+		// convert to correct type if not already
+		if (this.type && !(this.type.matches(value))) {
+			value = this.type.cast(value);
+		}
+
 		// proxify value
 		if (!this.allowNonPointerObjectValues) {
 			value = this.#pointer.proxifyChild("", value);
@@ -123,6 +149,16 @@ export class StorageWeakMap<K,V> {
  * The API is similar to the JS Map API, but all methods are async.
  */
 export class StorageMap<K,V> extends StorageWeakMap<K,V> {
+
+	/**
+	 * Create a new StorageMap instance with the given key and value types.
+	 * @param keyType Class or DATEX Type of the keys
+	 * @param valueType Class or DATEX Type of the values
+	 * @returns 
+	 */
+	static of<K, V>(keyType:Class<V>|Type<V>|undefined|null, valueType: Class<V>|Type<V>) {
+		return super.of(keyType, valueType) as StorageMap<K, V>;
+	}
 
 	static override async from<K,V>(entries: readonly (readonly [K, V])[]){
 		const map = $$(new StorageMap<K,V>());

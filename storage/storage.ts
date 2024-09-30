@@ -901,7 +901,7 @@ export class Storage {
 
 
     /**
-     * Run a pointer update after 1s on process exit and keep the dirty state until the update is finished
+     * Run a pointer update after 1s or on process exit and keep the dirty state until the update is finished
      */
     private static scheduleStorageUpdate(update:()=>void|Promise<void>, location: StorageLocation, metadata?: string) {
         
@@ -913,7 +913,7 @@ export class Storage {
                 return res.then(()=>{
                     this.setDirty(location, false, metadata);
                     this.#scheduledUpdates.delete(updateFn);
-                })
+                }).catch(e => console.error(e));
             }
             else {
                 this.#scheduledUpdates.delete(updateFn);

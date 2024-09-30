@@ -39,7 +39,7 @@ export abstract class SQLDBStorageLocation<Options extends {db: string}> extends
 	protected abstract getTableColumnInfoQuery(tableName: string): string
 	protected abstract getTableConstraintsQuery(tableName: string): string
 	protected abstract getClearTableQuery(tableName: string): string;
-
+	protected abstract affectedRowsQuery?: string;
 
 	static #debugMode = false;
 
@@ -54,6 +54,8 @@ export abstract class SQLDBStorageLocation<Options extends {db: string}> extends
 	supportsPrefixSelection = true;
 	supportsMatchSelection = true;
 	supportsPartialUpdates = true;
+	supportsBinaryIO = false;
+	supportsSQLCalcFoundRows = true;
 
 	#connected = false;
 	#initializing = false
@@ -187,7 +189,9 @@ export abstract class SQLDBStorageLocation<Options extends {db: string}> extends
 	async #query<row=object>(query_string:string, query_params?:any[], returnRawResult?: boolean, columnNames?:string[]): Promise<row[]|{rows:row[], result:ExecuteResult}> {
 		
 		// TODO: only workaround for sqlite, replace all " with ' in queries
-		if (this.useSingleQuotes) query_string = query_string.replace(/"/g, "'");
+		if (this.useSingleQuotes) {
+			query_string = query_string.replace(/"/g, "'");
+		}
 		
 		// prevent infinite recursion if calling query from within init()
 		if (!this.#initializing) await this.#init();
@@ -241,10 +245,13 @@ export abstract class SQLDBStorageLocation<Options extends {db: string}> extends
     }
 
 
-	#stringToBinary(value: string){
+	#stringToBinary(value: string|Uint8Array|ArrayBuffer): ArrayBuffer {
+		if (value instanceof Uint8Array) return value.buffer;
+		if (value instanceof ArrayBuffer) return value;
 		return Uint8Array.from(value, x => x.charCodeAt(0)).buffer
 	}
 	#binaryToString(value: ArrayBuffer){
+		if (this.supportsBinaryIO) return new Uint8Array(value);
 		return String.fromCharCode.apply(null, new Uint8Array(value) as unknown as number[])
 	}
 
@@ -492,21 +499,21 @@ export abstract class SQLDBStorageLocation<Options extends {db: string}> extends
 			this.#tableColumnTasks.set(tableName, promise);
 
 			const columnData = new Map<string, {foreignPtr: boolean, foreignTable?: string, type: string}>()
-			const columns = await this.#query<{_id: string, COLUMN_NAME:string, DATA_TYPE:string}>(
-				this.getTableColumnInfoQuery(tableName), [], false, ["_id", "COLUMN_NAME", "DATA_TYPE"]
+			const columns = await this.#query<{_id: string, name:string, type:string}>(
+				this.getTableColumnInfoQuery(tableName), [], false, ["_id", "name", "type"]
 			)
 
-			const constraints = (await this.#query<{_id:string, COLUMN_NAME:string, REFERENCED_TABLE_NAME:string}>(
-				this.getTableConstraintsQuery(tableName), [], false, ["_id", "COLUMN_NAME", "REFERENCED_TABLE_NAME"]
+			const constraints = (await this.#query<{_id:string, name:string, ref_table:string}>(
+				this.getTableConstraintsQuery(tableName), [], false, ["_id", "name", "ref_table"]
 			));
 			const columnTables = new Map<string, string>()
-			for (const {COLUMN_NAME, REFERENCED_TABLE_NAME} of constraints) {
-				columnTables.set(COLUMN_NAME, REFERENCED_TABLE_NAME)
+			for (const {name, ref_table} of constraints) {
+				columnTables.set(name, ref_table)
 			}
 
 			for (const col of columns) {
-				const columnName = col.COLUMN_NAME
-				const dataType = col.DATA_TYPE
+				const columnName = col.name
+				const dataType = col.type
 				if (columnName == this.#pointerMysqlColumnName) continue;
 				columnData.set(columnName, {foreignPtr: columnTables.has(columnName), foreignTable: columnTables.get(columnName), type: dataType})
 			}
@@ -923,7 +930,7 @@ export abstract class SQLDBStorageLocation<Options extends {db: string}> extends
 			joins.forEach(join => builder.join(join));
 
 			const outerBuilder = new Query()
-				.select(options.returnRaw ? `*` :`DISTINCT SQL_CALC_FOUND_ROWS ${this.#pointerMysqlColumnName} as ${this.#pointerMysqlColumnName}` + (
+				.select(options.returnRaw ? `*` :`DISTINCT ${this.supportsSQLCalcFoundRows?'SQL_CALC_FOUND_ROWS ' : ''}${this.#pointerMysqlColumnName} as ${this.#pointerMysqlColumnName}` + (
 					options.returnKeys ? `, ${this.#metaTables.items.name}.key as map_key` : ''
 				))
 				.table('__placeholder__');
@@ -937,7 +944,7 @@ export abstract class SQLDBStorageLocation<Options extends {db: string}> extends
 
 		// no computed properties
 		else {
-			builder.select(`DISTINCT SQL_CALC_FOUND_ROWS ${this.#typeToTableName(valueType)}.${this.#pointerMysqlColumnName} as ${this.#pointerMysqlColumnName}` + (
+			builder.select(`DISTINCT ${this.supportsSQLCalcFoundRows?'SQL_CALC_FOUND_ROWS ' : ''}\`${this.#typeToTableName(valueType)}\`.${this.#pointerMysqlColumnName} as ${this.#pointerMysqlColumnName}` + (
 				options.returnKeys ? `, ${this.#metaTables.items.name}.key as map_key` : ''
 			));
 			this.appendBuilderConditions(builder, options, where)
@@ -1429,12 +1436,11 @@ export abstract class SQLDBStorageLocation<Options extends {db: string}> extends
 		else return null;
 	}
 	async setItemValueDXB(key: string, value: ArrayBuffer) {
-		const stringBinary = this.#binaryToString(value)
 		if (this.supportsInsertOrReplace) {
-			await this.#query(`INSERT OR REPLACE INTO \`${this.#metaTables.items.name}\` (\`key\`, \`value\`) VALUES (?, ?);`, [key, stringBinary])
+			await this.#query(`INSERT OR REPLACE INTO \`${this.#metaTables.items.name}\` (\`key\`, \`value\`) VALUES (?, ?);`, [key, value])
 		}
 		else {
-			await this.#query('INSERT INTO ?? ?? VALUES ? ON DUPLICATE KEY UPDATE value=?;', [this.#metaTables.items.name, ["key", "value"], [key, stringBinary], stringBinary])
+			await this.#query('INSERT INTO ?? ?? VALUES ? ON DUPLICATE KEY UPDATE value=?;', [this.#metaTables.items.name, ["key", "value"], [key, value], value])
 		}
 	}
 
@@ -1666,9 +1672,14 @@ export abstract class SQLDBStorageLocation<Options extends {db: string}> extends
 		const table = this.#metaTables.rawPointers.name;
 		const {result} = 
 			this.supportsInsertOrReplace ?
-				await this.#query(`INSERT OR REPLACE INTO \`${table}\` (\`${this.#pointerMysqlColumnName}\`, \`value\`) VALUES (?, ?);`, [pointerId, this.#binaryToString(encoded)], true) :
+				await this.#query(`INSERT OR REPLACE INTO \`${table}\` (\`${this.#pointerMysqlColumnName}\`, \`value\`) VALUES (?, ?);`, [pointerId, encoded], true) :
 				await this.#query('INSERT INTO ?? ?? VALUES ? ON DUPLICATE KEY UPDATE value=?;', [table, [this.#pointerMysqlColumnName, "value"], [pointerId, encoded], encoded], true)
 		// is newly inserted, add to pointer mapping
+		if (!('affectedRows' in result) && this.affectedRowsQuery) {
+			// query affected rows
+			const {affectedRows} = await this.#queryFirst<{affectedRows:number}>(this.affectedRowsQuery, undefined, ['affectedRows']) ?? {};
+			result.affectedRows = affectedRows;
+		}
 		if (result.affectedRows == 1) await this.#updatePointerMapping(pointerId, table)
 	}
 

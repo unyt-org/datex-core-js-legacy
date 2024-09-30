@@ -755,6 +755,7 @@ export class PointerProperty<T=any> extends ReactiveValue<T> {
         if (type != Type.std.Any) return type; // TODO: returning Any makes problems
         else return undefined;
     }
+        
 }
 
 
@@ -2513,7 +2514,7 @@ export class Pointer<T = any> extends ReactiveValue<T> {
     override get val():T {
         if (this.#garbage_collected) throw new PointerError("Pointer "+this.idString()+" was garbage collected");
         else if (!this.#loaded) {
-            throw new PointerError("Cannot get value of uninitialized pointer")
+            throw new PointerError("Cannot get value of uninitialized pointer ("+this.idString()+")")
         }
         // deref and check if not garbage collected
         if (!this.is_persistent && !this.is_js_primitive && super.val instanceof WeakRef && this.type !== Type.std.WeakRef) {
@@ -2541,7 +2542,7 @@ export class Pointer<T = any> extends ReactiveValue<T> {
     override get current_val():T|undefined {
         if (this.#garbage_collected) throw new PointerError("Pointer "+this.idString()+" was garbage collected");
         else if (!this.#loaded) {
-            throw new PointerError("Cannot get value of uninitialized pointer")
+            throw new PointerError("Cannot get value of uninitialized pointer ("+this.idString()+")")
         }
         // deref and check if not garbage collected
         if (!this.is_persistent && !this.is_js_primitive && super.current_val instanceof WeakRef && this.type !== Type.std.WeakRef) {
@@ -3341,10 +3342,18 @@ export class Pointer<T = any> extends ReactiveValue<T> {
 
     #any_type = false;
 
+    /**
+     * gets the current type of the pointer, or any if pointer is explicitly set to any
+     */
     get type():Type {
         if (this.#any_type) return Type.std.Any;
+        return this.current_type;
+    }
+
+    get current_type():Type {
         return this.#unwrapped_transform_type ?? this.#type;
     }
+
 
     allowAnyType(any_type = true) {
         this.#any_type = any_type;

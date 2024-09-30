@@ -828,7 +828,7 @@ export class Type<T = any> extends ExtensibleFunction {
     public static ofValue<T=any>(value:RefOrValue<T>):Type<T> {
 
         if (value instanceof Pointer) {
-            return value.type ?? Type.std.void;
+            return value.current_type ?? Type.std.void;
         }
         else if (value instanceof PointerProperty && value.type) {
             return value.type as Type<T>;
@@ -855,7 +855,7 @@ export class Type<T = any> extends ExtensibleFunction {
 
         // get type from pointer
         let type:Type|undefined
-        if ((type = Pointer.getByValue(value)?.type)) return type;
+        if ((type = Pointer.getByValue(value)?.current_type)) return type;
 
         // get custom type
         const custom_type = JSInterface.getValueDatexType(value);
@@ -1214,28 +1214,28 @@ Type.std.StorageWeakMap.setJSInterface({
     class: StorageWeakMap,
     is_normal_object: true,
     proxify_children: true,
-    visible_children: new Set(),
+    visible_children: new Set(['_type']),
 })
 
 Type.std.StorageMap.setJSInterface({
     class: StorageMap,
     is_normal_object: true,
     proxify_children: true,
-    visible_children: new Set(),
+    visible_children: new Set(['_type']),
 })
 
 Type.std.StorageWeakSet.setJSInterface({
     class: StorageWeakSet,
     is_normal_object: true,
     proxify_children: true,
-    visible_children: new Set(),
+    visible_children: new Set(['_type']),
 })
 
 Type.std.StorageSet.setJSInterface({
     class: StorageSet,
     is_normal_object: true,
     proxify_children: true,
-    visible_children: new Set(),
+    visible_children: new Set(['_type']),
 })
 
 // proxify_children leads to problems with native types - use plain objects for pointer propagation + don't propagate proxification

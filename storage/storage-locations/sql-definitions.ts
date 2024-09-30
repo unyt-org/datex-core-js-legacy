@@ -48,7 +48,7 @@ type _mysql_data_type = 'int'|'bigint'|'smallint'|'mediumint'|'tinyint'|'tiny'|'
                        'timestamp'|'date'|'datetime'|
                        'time'|'varchar'|'char'|'text'|'tinytext'|'mediumtext'|'longtext'|'enum'|
                        'set'|'geometry'|
-                       'tinyblob'|'blob'|'mediumblob'|'longblob'|'binary'|'varbinary'|'bit'|
+                       'tinyblob'|'BLOB'|'mediumblob'|'longblob'|'binary'|'varbinary'|'bit'|
                        'boolean'|'json';
 
 export type mysql_data_type = _mysql_data_type | `${_mysql_data_type}(${number})`;

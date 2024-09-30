@@ -19,6 +19,8 @@ export class MySQLStorageLocation extends SQLDBStorageLocation<ConnectionOptions
     #sqlClient: Client|undefined
 
     supportsInvisibleColumns = true
+    affectedRowsQuery = undefined
+    supportsSQLCalcFoundRows = true
 
     protected async connect(): Promise<boolean> {
         this.#sqlClient = await new Client().connect({poolSize: 20, ...this.options});
@@ -44,7 +46,7 @@ export class MySQLStorageLocation extends SQLDBStorageLocation<ConnectionOptions
     protected getTableColumnInfoQuery(tableName: string): string {
         return new Query()
             .table("information_schema.key_column_usage")
-            .select("COLUMN_NAME", "REFERENCED_TABLE_NAME")
+            .select("COLUMN_NAME as name", "COLUMN_TYPE as type")
             .where(Where.eq("table_schema", this.options.db))
             .where(Where.eq("table_name", tableName))
             .build()
@@ -53,7 +55,7 @@ export class MySQLStorageLocation extends SQLDBStorageLocation<ConnectionOptions
     protected getTableConstraintsQuery(tableName: string): string {
         return new Query()
             .table("information_schema.key_column_usage")
-            .select("COLUMN_NAME", "REFERENCED_TABLE_NAME")
+            .select("COLUMN_NAME as name ", "REFERENCED_TABLE_NAME as ref_table")
             .where(Where.eq("table_schema", this.options.db))
             .where(Where.eq("table_name", tableName))
             .build()
