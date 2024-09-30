@@ -24,7 +24,7 @@ export class StorageWeakMap<K,V> {
 	 * @param valueType	Class or DATEX Type of the values
 	 * @returns 
 	 */
-	static of<K,V>(keyType:Class<V>|Type<V>|undefined|null, valueType: Class<V>|Type<V>) {
+	static of<K,V>(keyType:Class<K>|Type<K>|undefined|null, valueType: Class<V>|Type<V>): StorageWeakMap<K,V> {
 		const storageMap = new this<K,V>();
 		storageMap.#_type = valueType instanceof Type ? valueType : Type.getClassDatexType(valueType);
 		storageMap._type = storageMap.#_type.namespace + ":" + storageMap.#_type.name;
@@ -156,7 +156,7 @@ export class StorageMap<K,V> extends StorageWeakMap<K,V> {
 	 * @param valueType Class or DATEX Type of the values
 	 * @returns 
 	 */
-	static of<K, V>(keyType:Class<V>|Type<V>|undefined|null, valueType: Class<V>|Type<V>) {
+	static of<K, V>(keyType:Class<K>|Type<K>, valueType: Class<V>|Type<V>): StorageMap<K, V> {
 		return super.of(keyType, valueType) as StorageMap<K, V>;
 	}
 
@@ -319,7 +319,9 @@ export class StorageMap<K,V> extends StorageWeakMap<K,V> {
 		await Promise.all(promises);
 	}
 
-	match<Options extends MatchOptions, T extends V & object>(valueType:Class<T>|Type<T>, matchInput: MatchInput<T>, options?: Options): Promise<MatchResult<Options['returnKeys'] extends true ? K : T, Options>> {
+	match<Options extends MatchOptions, T extends V & object>(matchInput: MatchInput<T>, options?: Options, valueType?: Class<T>|Type<T>): Promise<MatchResult<Options['returnKeys'] extends true ? K : T, Options>> {
+		valueType ??= this.type;
+		if (!valueType) throw new Error("Cannot determine value type. Please provide a valueType parameter to match()");
 		return match(this as unknown as StorageMap<unknown, T>, valueType, matchInput, options) as any;
 	}
 

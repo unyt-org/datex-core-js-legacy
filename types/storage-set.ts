@@ -24,7 +24,7 @@ export class StorageWeakSet<V> {
 	 * @param type Class or DATEX Type of the values
 	 * @returns 
 	 */
-	static of<V>(type: Class<V>|Type<V>) {
+	static of<V>(type: Class<V>|Type<V>): StorageWeakSet<V> {
 		const storageSet = new this<V>();
 		storageSet.#_type = type instanceof Type ? type : Type.getClassDatexType(type);
 		storageSet._type = storageSet.#_type.namespace + ":" + storageSet.#_type.name;
@@ -88,7 +88,7 @@ export class StorageWeakSet<V> {
 		if (this.type && !(this.type.matches(value))) {
 			value = this.type.cast(value);
 		}
-		
+
 		// proxify value
 		if (!this.allowNonPointerObjectValues) {
 			value = this.#pointer.proxifyChild("", value);
