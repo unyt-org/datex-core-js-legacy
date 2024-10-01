@@ -40,6 +40,8 @@ export abstract class SQLDBStorageLocation<Options extends {db: string}> extends
 	protected abstract getTableConstraintsQuery(tableName: string): string
 	protected abstract getClearTableQuery(tableName: string): string;
 	protected abstract affectedRowsQuery?: string;
+	protected abstract disableForeignKeyChecksQuery: string;
+    protected abstract enableForeignKeyChecksQuery: string;
 
 	static #debugMode = false;
 
@@ -56,6 +58,10 @@ export abstract class SQLDBStorageLocation<Options extends {db: string}> extends
 	supportsPartialUpdates = true;
 	supportsBinaryIO = false;
 	supportsSQLCalcFoundRows = true;
+	supportsInsertOrIgnore = false;
+	supportsPartialForeignKeys() {
+		return true;
+	}
 
 	#connected = false;
 	#initializing = false
@@ -98,7 +104,7 @@ export abstract class SQLDBStorageLocation<Options extends {db: string}> extends
 			name: "__datex_sets",
 			columns: [
 				[this.#pointerMysqlColumnName, this.#pointerMysqlType, "PRIMARY KEY"],
-				["hash", "varchar(50)", "PRIMARY KEY"],
+				this.supportsPartialForeignKeys() ? ["hash", "varchar(50)", "PRIMARY KEY"] : ["hash", "varchar(50)"],
 				["value_dxb", "blob"],
 				["value_text", "text"],
 				["value_integer", "int"],
@@ -196,18 +202,24 @@ export abstract class SQLDBStorageLocation<Options extends {db: string}> extends
 		// prevent infinite recursion if calling query from within init()
 		if (!this.#initializing) await this.#init();
 
-		// handle arraybuffers
+		// handle arraybuffers, convert undefined to null
 		if (query_params) {
 			for (let i = 0; i < query_params.length; i++) {
 				const param = query_params[i];
 				if (param instanceof ArrayBuffer) {
 					query_params[i] = this.#binaryToString(param)
 				}
+				if (param === undefined) query_params[i] = null;
 				if (param instanceof Array) {
-					query_params[i] = param.map(p => p instanceof ArrayBuffer ? this.#binaryToString(p) : p)
+					query_params[i] = param.map(p => {
+						if (p instanceof ArrayBuffer) return this.#binaryToString(p);
+						else if (p === undefined) return null;
+						return p;
+					})
 				}
 			}
 		}
+
 		
     	if (SQLDBStorageLocation.#debugMode) console.log("QUERY: " + query_string, query_params)
 
@@ -503,11 +515,14 @@ export abstract class SQLDBStorageLocation<Options extends {db: string}> extends
 				this.getTableColumnInfoQuery(tableName), [], false, ["_id", "name", "type"]
 			)
 
-			const constraints = (await this.#query<{_id:string, name:string, ref_table:string}>(
+			const constraints = (await this.#query<{_id:string, name:string, ref_table:string, table:string, from:string}>(
 				this.getTableConstraintsQuery(tableName), [], false, ["_id", "name", "ref_table"]
 			));
+
 			const columnTables = new Map<string, string>()
-			for (const {name, ref_table} of constraints) {
+			for (const constraint of constraints) {
+				const name = constraint.name ?? constraint.from; // mysql/sqlite
+				const ref_table = constraint.ref_table ?? constraint.table; // mysql/sqlite
 				columnTables.set(name, ref_table)
 			}
 
@@ -566,7 +581,7 @@ export abstract class SQLDBStorageLocation<Options extends {db: string}> extends
 					dependencies.add(propPointer)
 				}
 			}
-			// is raw dxb value (exception for blob <->A rrayBuffer, TODO: better solution, can lead to issues)
+			// is raw dxb value (exception for blob <-> ArrayBuffer, TODO: better solution, can lead to issues)
 			else if (type == "blob" && !(value instanceof ArrayBuffer || value instanceof TypedArray)) {
 				insertData[name] = Compiler.encodeValue(value, dependencies, true, false, false);
 			}
@@ -802,17 +817,17 @@ export abstract class SQLDBStorageLocation<Options extends {db: string}> extends
 
 		// first delete all existing entries for this pointer (except the default entry)
 		try {
-			await this.#query('SET FOREIGN_KEY_CHECKS=0;');
+			await this.#query(this.disableForeignKeyChecksQuery);
 			//await this.#query('DELETE FROM ?? WHERE ?? = ? AND `hash` != "";', [this.#metaTables.sets.name, this.#pointerMysqlColumnName, pointer.id])
 			await this.#query(`DELETE FROM \`${this.#metaTables.sets.name}\` WHERE \`${this.#pointerMysqlColumnName}\` = ? AND \`hash\` != "";`, [pointer.id])
-			await this.#query('SET FOREIGN_KEY_CHECKS=1;');
+			await this.#query(this.enableForeignKeyChecksQuery);
 		}
 		catch (e) {
 			console.error("Error deleting old set entries", e)
 		}
 
 		// replace INSERT with INSERT IGNORE to prevent duplicate key errors
-		const {result} = await this.#query(builder.build().replace("INSERT", "INSERT IGNORE"), undefined, true)
+		const {result} = await this.#query(builder.build().replace("INSERT", this.supportsInsertOrIgnore ? "INSERT OR IGNORE" : "INSERT IGNORE"), undefined, true)
 		// add to pointer mapping TODO: better decision if to add to pointer mapping
 		if (result.affectedRows) await this.#updatePointerMapping(pointer.id, this.#metaTables.sets.name)
 		return dependencies;
@@ -1324,7 +1339,7 @@ export abstract class SQLDBStorageLocation<Options extends {db: string}> extends
 		const ptr = Pointer.pointerifyValue(value);
 		if (ptr instanceof Pointer) {
 			dependencies.add(ptr);
-			this.#setItemPointer(key, ptr)
+			await this.#setItemPointer(key, ptr)
 		}
 		else {
 			const encoded = Compiler.encodeValue(value, dependencies);

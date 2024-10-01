@@ -35,7 +35,8 @@ export class StorageWeakMap<K,V> {
 	#_type?: Type<V>;
 
 	protected get type() {
-		if (!this.#_type) this.#_type = Type.get(this._type!);
+		if (!this._type) return undefined;
+		if (!this.#_type) this.#_type = Type.get(this._type);
 		return this.#_type;
 	}
 
@@ -108,11 +109,6 @@ export class StorageWeakMap<K,V> {
 		return this._set(storage_key, value);
 	}
 	protected async _set(storage_key:string, value:V) {
-		// convert to correct type if not already
-		if (this.type && !(this.type.matches(value))) {
-			value = this.type.cast(value);
-		}
-
 		// proxify value
 		if (!this.allowNonPointerObjectValues) {
 			value = this.#pointer.proxifyChild("", value);

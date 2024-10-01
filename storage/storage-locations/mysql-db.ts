@@ -22,6 +22,9 @@ export class MySQLStorageLocation extends SQLDBStorageLocation<ConnectionOptions
     affectedRowsQuery = undefined
     supportsSQLCalcFoundRows = true
 
+    disableForeignKeyChecksQuery = "SET FOREIGN_KEY_CHECKS = 0"
+    enableForeignKeyChecksQuery = "SET FOREIGN_KEY_CHECKS = 1"
+
     protected async connect(): Promise<boolean> {
         this.#sqlClient = await new Client().connect({poolSize: 20, ...this.options});
 		logger.info("Using SQL database " + this.options.db + " on " + this.options.hostname + ":" + this.options.port + " as storage location")

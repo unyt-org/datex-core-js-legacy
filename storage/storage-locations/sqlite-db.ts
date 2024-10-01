@@ -3,9 +3,9 @@ import { SQLDBStorageLocation } from "./sql-db.ts";
 
 import { Database } from "jsr:@db/sqlite@0.11";
 
-
 import { logger } from "../../datex_all.ts";
 import { ptr_cache_path } from "../../runtime/cache_path.ts";
+import { Path } from "../../utils/path.ts";
 
 export class SqliteStorageLocation extends SQLDBStorageLocation<{db: string}> {
 
@@ -14,13 +14,25 @@ export class SqliteStorageLocation extends SQLDBStorageLocation<{db: string}> {
     supportsInsertOrReplace = true
     supportsBinaryIO = true
     supportsSQLCalcFoundRows = false
+    supportsInsertOrIgnore = true;
+    supportsPartialForeignKeys() {
+		return false;
+	}
 
     affectedRowsQuery = "SELECT changes() as affectedRows"
+    disableForeignKeyChecksQuery = "PRAGMA foreign_keys = OFF"
+    enableForeignKeyChecksQuery = "PRAGMA foreign_keys = ON"
 
     #db?: Database
 
     protected connect() {
-        this.#db = new Database(new URL(this.options.db + ".db", ptr_cache_path));
+        const path = new Path(this.options.db + ".db", ptr_cache_path)
+
+        if (!path.parent_dir.fs_exists) {
+            Deno.mkdirSync(path.parent_dir.normal_pathname, {recursive:true});
+        }
+
+        this.#db = new Database(path);
         logger.info("Using SQLite database " + this.options.db + " as storage location")
         return true;
     }
