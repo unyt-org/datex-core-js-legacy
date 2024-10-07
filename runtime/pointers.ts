@@ -2,7 +2,7 @@
 import { Endpoint, endpoints, endpoint_name, IdEndpoint, Person, Target, target_clause, LOCAL_ENDPOINT, BROADCAST } from "../types/addressing.ts";
 import { NetworkError, PermissionError, PointerError, RuntimeError, ValueError } from "../types/errors.ts";
 import { Compiler, PrecompiledDXB } from "../compiler/compiler.ts";
-import { DX_PTR, DX_REACTIVE_METHODS, DX_VALUE, INVALID, NOT_EXISTING, SET_PROXY, SHADOW_OBJECT, UNKNOWN_TYPE, VOID } from "./constants.ts";
+import { DX_NOT_TRANSFERABLE, DX_PTR, DX_REACTIVE_METHODS, DX_VALUE, INVALID, NOT_EXISTING, SET_PROXY, SHADOW_OBJECT, UNKNOWN_TYPE, VOID } from "./constants.ts";
 import { Runtime, UnresolvedValue } from "./runtime.ts";
 import { DEFAULT_HIDDEN_OBJECT_PROPERTIES, logger, TypedArray } from "../utils/global_values.ts";
 import type { compile_info, datex_scope, Equals, PointerSource } from "../utils/global_types.ts";
@@ -50,6 +50,8 @@ export type RefLikeOut<T = any> = PointerWithPrimitive<T>|PointerProperty<T>
 
 // root class for pointers and pointer properties, value changes can be observed
 export abstract class ReactiveValue<T = any> extends EventTarget {
+
+    static [DX_NOT_TRANSFERABLE] = true
 
     #observerCount = 0;
 

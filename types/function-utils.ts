@@ -1,3 +1,4 @@
+import { DX_NOT_TRANSFERABLE } from "../runtime/constants.ts";
 import { LazyPointer } from "../runtime/lazy-pointer.ts";
 import { callWithMetadata, callWithMetadataAsync, getMeta } from "../utils/caller_metadata.ts";
 
@@ -138,7 +139,7 @@ function captureVariables(e: unknown, usedVars: string[], flags: Flag[]) {
         // for each variable: remove if global variable
         if (!flags.includes("allow-globals")) {
             for (const [key, value] of Object.entries(vars)) {
-                if ((globalThis as any)[key] === value && !allowedGlobalVars.has(key)) {
+                if (((globalThis as any)[key] === value || value?.[DX_NOT_TRANSFERABLE]) && !allowedGlobalVars.has(key)) {
                     if (!flags.includes("silent-errors")) {
                         throw new Error("The global variable '"+key+"' cannot be transferred to a different context. Remove the 'use("+key+")' declaration.")
                     }
@@ -173,7 +174,7 @@ const isNormalFunction = (fnSrc:string) => {
 	return !!fnSrc.match(/^(async\s+)?function(\(| |\*)/)
 }
 const isArrowFunction = (fnSrc:string) => {
-	return !!fnSrc.match(/^(async\s+)?(\([^)]*\)|\w+)\s*=>/)
+	return !!fnSrc.match(/^(async\s*)?(\([^)]*\)|\w+)\s*=>/)
 }
 
 const isNativeFunction = (fnSrc:string) => {
@@ -241,7 +242,7 @@ export function createFunctionWithDependencyInjectionsResolveLazyPointers(source
  * @deprecated use createFunctionWithDependencyInjectionsResolveLazyPointers
  */
 export function createFunctionWithDependencyInjections(source: string, dependencies: Record<string, unknown>, allowValueMutations = true): ((...args:unknown[]) => unknown) {
-	const hasThis = Object.keys(dependencies).includes('this');
+    const hasThis = Object.keys(dependencies).includes('this');
     let ignoreVarCounter = 0;
     const renamedVars = Object.keys(dependencies).filter(d => d!=='this').map(k => k.startsWith("#") ? '_ignore_'+(ignoreVarCounter++) : '_'+k);
     const varMapping = renamedVars.filter(v=>!v.startsWith("_ignore_")).map(k=>`const ${k.slice(1)} = ${allowValueMutations ? 'createStaticObject' : ''}(${k});`).join("\n");
@@ -276,7 +277,6 @@ export function createFunctionWithDependencyInjections(source: string, dependenc
     }
     catch (e) {
         console.error(creatorSource)
-        console.error(e);
         throw e;
     }
     
