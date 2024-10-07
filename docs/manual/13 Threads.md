@@ -52,6 +52,10 @@ disposeThread(thread)
 Instead of declaring a thread module in a separate file, a task function can be passed to `run` to be executed in a new thread immediately.
 Values from the parent scope can be passed to the thread by explicitly adding them to the `use()` declaration at the beginning of the function body.
 
+> [!NOTE]
+> When you are using transferable functions within a [UIX](https://docs.unyt.org/manual/uix) project, dependencies from the parent scope are automatically detected and transferred.
+> You don't need to explicitly declare them with `use()`.
+
 In the following example, a function calculates the nth fibonacci number in a thread.
 The `n` index variable is accessed from the parent scope.
 
