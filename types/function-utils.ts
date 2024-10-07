@@ -22,7 +22,7 @@ const EXTRACT_USED_VARS = Symbol("EXTRACT_USED_VARS")
  * ```
  * @param variables 
  */
-export function use(noDatex: 'standalone', ...variables: unknown[]): true 
+export function use(flags: 'standalone'|'silent-errors', ...variables: unknown[]): true 
 /**
  * Used to declare all variables from the parent scope that are used inside the current function.
  * This is required for functions that are transferred to a different context or restored from eternal pointers.
@@ -69,6 +69,7 @@ function getUsedVars(fn: (...args:unknown[])=>unknown) {
     let ignoreVarCounter = 0;
     for (const usedVar of _usedVars) {
         if (usedVar == `"standalone"` || usedVar == `'standalone'`) flags.push("standalone");
+        else if (usedVar == `"silent-errors"` || usedVar == `'silent-errors'`) flags.push("silent-errors");
         else if (!usedVar.match(/^[a-zA-Z_$][0-9a-zA-Z_$\u0080-\uFFFF]*$/)) {
             usedVars.push("#" + (ignoreVarCounter++)); // ignore variables start with #
             // TODO: only warn if not artifact from minification
