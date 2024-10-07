@@ -53,7 +53,7 @@ export class IterableHandler<T, U = T> {
 		weakAction(
 			{self}, 
 			({self}) => {
-				use (iterableRef, Datex);
+				use ("allow-globals", iterableRef, Datex);
 
 				const iterable = iterableRef.deref()! // only here to fix closure scope bug, should always exist at this point
 				const callback = (v:any, k:any, t:any) => {
@@ -68,7 +68,7 @@ export class IterableHandler<T, U = T> {
 				return callback;
 			},
 			(callback) => {
-				use (iterableRef, Datex);
+				use ("allow-globals", iterableRef, Datex);
 
 				const deref = iterableRef.deref()
 				if (deref) Datex.ReactiveValue.unobserve(deref, callback);
