@@ -830,7 +830,7 @@ export class Type<T = any> extends ExtensibleFunction {
         if (value instanceof Pointer) {
             return value.current_type ?? Type.std.void;
         }
-        else if (value instanceof PointerProperty && value.type) {
+        else if (value instanceof PointerProperty && value.type instanceof Type) {
             return value.type as Type<T>;
         }
 

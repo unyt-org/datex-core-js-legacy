@@ -111,6 +111,10 @@ export class Decorators {
         }  
     }
 
+    public static getMetadata(context:DecoratorContext, key:string|symbol) {
+        return context.metadata[key]?.public?.[context.name] ?? context.metadata[key]?.constructor
+    }
+
 
     /** @endpoint(endpoint?:string|Datex.Endpoint, namespace?:string): declare a class as a #public property */
     static endpoint(endpoint:target_clause|endpoint_name, scope_name:string|undefined, value: Class, context: ClassDecoratorContext) {
@@ -207,6 +211,20 @@ export class Decorators {
         }
     }
 
+    static assignType<T>(type:string|Type<T>, context: ClassFieldDecoratorContext|ClassGetterDecoratorContext|ClassMethodDecoratorContext, forceConjunction) {
+        let newType = this.getMetadata(context, Decorators.FORCE_TYPE);
+        if (newType instanceof Conjunction) {
+            newType.add(type)
+        }
+        else if (newType) {
+            newType = new Conjunction(newType, type)
+        }
+        else {
+            newType = forceConjunction ? new Conjunction(type) : type
+        }
+        this.setMetadata(context, Decorators.FORCE_TYPE, newType)
+    }
+
 
     /** @property: add a field as a template property */
     static property<T>(type:string|Type<T>|Class<T>, context: ClassFieldDecoratorContext|ClassGetterDecoratorContext|ClassMethodDecoratorContext) {
@@ -221,7 +239,7 @@ export class Decorators {
         // type
         if (type) {
             const normalizedType = normalizeType(type);
-            this.setMetadata(context, Decorators.FORCE_TYPE, normalizedType)
+            this.assignType(normalizedType, context)
         }
     }
 
@@ -230,8 +248,8 @@ export class Decorators {
     static assert<T>(assertion: (val:T) => boolean|string|undefined, context: ClassFieldDecoratorContext) {
         if (context.static) logger.error("Cannot use @assert with static fields");
         else {
-            const assertionType = new Conjunction(Assertion.get(undefined, assertion, false));
-            this.setMetadata(context, Decorators.FORCE_TYPE, assertionType)
+            const assertionType = Assertion.get(undefined, assertion, false);
+            this.assignType(assertionType, context, true)
         }
     }
 
@@ -572,6 +590,10 @@ function getStaticClassData(original_class:Class, staticScope = true, expose = t
 
 const templated_classes = new Map<Function, Function>() // original class, templated class
 
+function getInferredType(metadataConstructor: any) {
+    return (metadataConstructor && Type.getClassDatexType(metadataConstructor)) ?? Type.std.Any;
+}
+
 export function createTemplateClass(original_class: Class, type:Type, sync = true, add_js_interface = true, callerFile?:string, metadata?:Record<string,any>){
 
     if (templated_classes.has(original_class)) return templated_classes.get(original_class)!;
@@ -621,15 +643,15 @@ export function createTemplateClass(original_class: Class, type:Type, sync = tru
         if (prototype[DX_ROOT]) break;
     }
 
-
-
     // iterate over all properties TODO different dx_name?
     for (const [name, dx_name] of Object.entries(metadata?.[Decorators.PROPERTY]?.public??{})) {
         let metadataConstructor = MetadataReflect.getMetadata && MetadataReflect.getMetadata("design:type", original_class.prototype, name);
         // if type is Object -> std:Any
         if (metadataConstructor == Object) metadataConstructor = null;
         // set best guess for property type
-        template[name] = property_types?.[name] ?? (metadataConstructor && Type.getClassDatexType(metadataConstructor)) ?? Type.std.Any; // add type
+        const existingType = property_types?.[name];
+        template[name] = existingType ?? getInferredType(metadataConstructor); // add type
+
         if (allow_filters?.[name]) template[DX_PERMISSIONS][name] = allow_filters[name]; // add filter
     }
 

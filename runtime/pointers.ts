@@ -2236,6 +2236,8 @@ export class Pointer<T = any> extends ReactiveValue<T> {
         if (!this.is_js_primitive) throw new PointerError("Assertions are not yet supported for non-primitive pointer")
         if (!this.#typeAssertions) this.#typeAssertions = new Conjunction();
         this.#typeAssertions.add(Assertion.get(undefined, assertion, false));
+        
+        this.validateTypeAssertions(this.val)
         return this;
     }
 
@@ -2752,6 +2754,12 @@ export class Pointer<T = any> extends ReactiveValue<T> {
         }
     }
 
+    private validateTypeAssertions(val:T, type?:Type) {
+        type ??= Type.ofValue(val);
+        return this.#typeAssertions && 
+            !Type.matchesType(type, this.#typeAssertions, val, true)
+    }
+
     /**
      * Overrides the current value of the pointer (only if the value has the correct type)
      * @param v new value
@@ -2787,8 +2795,7 @@ export class Pointer<T = any> extends ReactiveValue<T> {
                 !Type.matchesType(newType, this.type, val, true) ||
                 // validate custom type assertions
                 (
-                    this.#typeAssertions && 
-                    !Type.matchesType(newType, this.#typeAssertions, val, true)
+                    this.#typeAssertions && this.validateTypeAssertions(val, newType)
                 )
             ) {
                 throw new ValueError("Invalid value type for pointer "+this.idString()+": " + newType + " - must be " + this.type);
@@ -3695,6 +3702,16 @@ export class Pointer<T = any> extends ReactiveValue<T> {
 
         for (const name of this.visible_children ?? Object.keys(value)) {
             const type = Type.ofValue(value[name])
+
+            // run assertions for property if defined in template
+            const templatePropType = this.type?.template?.[name];
+            if (templatePropType instanceof Conjunction) {
+                Type.matchesType(type, templatePropType, value[name], true)
+                // for (const type of templatePropType) {
+                //     if (type instanceof)
+                // }
+
+            }
 
             // non primitive value - proxify always
             if (!type.is_primitive) {
