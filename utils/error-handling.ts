@@ -8,7 +8,7 @@ import { logger as defaultLogger } from "./global_values.ts";
  * The user might be able to fix it or ask for help.
  */
 export class KnownError extends Error {
-	constructor(message: string, public solutions: string[], public quickFixes: {description: string, fix: () => void}[] = []) {
+	constructor(message: string, public solutions: string[] = [], public quickFixes: {description: string, fix: () => void}[] = []) {
 		super(message);
 	}
 }
