@@ -2654,7 +2654,7 @@ export class Pointer<T = any> extends ReactiveValue<T> {
 
                 // TODO: is this required somewhere?
                 // add reference to this DatexPointer to the original value
-                if (!this.is_anonymous) {
+                if (!this.is_anonymous && !this.isStaticTransform) {
                     try {
                         Object.defineProperty(val, DX_PTR, {value: this, enumerable: false, writable: true, configurable: true})
                     } catch(e) {}
@@ -2667,9 +2667,9 @@ export class Pointer<T = any> extends ReactiveValue<T> {
                 Pointer.pointer_value_map.set(val, this);
                 // create proxy
 
-                const value = alreadyProxy ? val : this.addObjProxy((val instanceof UnresolvedValue) ? val[DX_VALUE] : val); 
+                const value = alreadyProxy||this.isStaticTransform ? val : this.addObjProxy((val instanceof UnresolvedValue) ? val[DX_VALUE] : val); 
                 // add $, $$
-                if (!alreadyProxy && typeof value !== "symbol") this.add$Properties(value);
+                if (!(alreadyProxy||this.isStaticTransform) && typeof value !== "symbol") this.add$Properties(value);
 
                 this.#loaded = true; // this.value exists (must be set to true before the super.value getter is called)
     
@@ -2685,7 +2685,7 @@ export class Pointer<T = any> extends ReactiveValue<T> {
                 this.updateGarbageCollection(); 
     
                 // proxify children, if not anonymous
-                if (this.type.proxify_children) this.proxifyChildren();
+                if (this.type.proxify_children && !this.isStaticTransform) this.proxifyChildren();
     
                 // save proxy + original value in map to find the right pointer for this value in the future
                 Pointer.pointer_value_map.set(value, this);
@@ -3188,9 +3188,6 @@ export class Pointer<T = any> extends ReactiveValue<T> {
             this._liveTransform = true
         }
 
-        // update value
-        if (!ignoreReturnValue) this.setVal(val, true, true);
-
         // remove return value if captured by getters
         // TODO: this this work as intended?
         capturedGetters?.delete(val instanceof Pointer ? val : Pointer.getByValue(val)!);
@@ -3205,6 +3202,9 @@ export class Pointer<T = any> extends ReactiveValue<T> {
             if (!options?.allowStatic) logger.warn("The transform value for " + this.idString() + " is a static value:", val);
             // TODO: cleanup stuff not needed if no reactive transform
         }
+
+        // update value
+        if (!ignoreReturnValue) this.setVal(val, true, true);
 
         if (state.isLive) {
 

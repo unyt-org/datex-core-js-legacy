@@ -1,6 +1,7 @@
 import { DX_NOT_TRANSFERABLE } from "../runtime/constants.ts";
 import { LazyPointer } from "../runtime/lazy-pointer.ts";
 import { callWithMetadata, callWithMetadataAsync, getMeta } from "../utils/caller_metadata.ts";
+import { Type } from "./type.ts";
 
 const EXTRACT_USED_VARS = Symbol("EXTRACT_USED_VARS")
 
@@ -139,7 +140,7 @@ function captureVariables(e: unknown, usedVars: string[], flags: Flag[]) {
         // for each variable: remove if global variable
         if (!flags.includes("allow-globals")) {
             for (const [key, value] of Object.entries(vars)) {
-                if (((globalThis as any)[key] === value || value?.[DX_NOT_TRANSFERABLE]) && !allowedGlobalVars.has(key)) {
+                if (((key in globalThis && (globalThis as any)[key] === value) || value?.[DX_NOT_TRANSFERABLE] || value instanceof Type) && !allowedGlobalVars.has(key)) {
                     if (!flags.includes("silent-errors")) {
                         throw new Error("The global variable '"+key+"' cannot be transferred to a different context. Remove the 'use("+key+")' declaration.")
                     }

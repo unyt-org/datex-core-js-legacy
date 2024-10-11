@@ -39,11 +39,11 @@ export function always<T=unknown>(script:TemplateStringsArray, ...vars:any[]): P
 export function always(scriptOrJSTransform:TemplateStringsArray|SmartTransformFunction<any>, ...vars:any[]) {
     // js function
     if (typeof scriptOrJSTransform == "function") {
+        const options: SmartTransformOptions|undefined = typeof vars[0] == "object" ? vars[0] : undefined;
         // make sure handler is not an async function
-        if (scriptOrJSTransform.constructor.name == "AsyncFunction") {
+        if (scriptOrJSTransform.constructor.name == "AsyncFunction" && !options?._allowAsync) {
             throw new Error("Async functions are not allowed as always transforms")
         }
-        const options: SmartTransformOptions|undefined = typeof vars[0] == "object" ? vars[0] : undefined;
         const ptr = Pointer.createSmartTransform(scriptOrJSTransform, undefined, undefined, undefined, options);
         if (options?._allowAsync && !ptr.value_initialized && ptr.waiting_for_always_promise) {
             return ptr.waiting_for_always_promise.then(()=>collapseTransformPointer(ptr, options?._collapseStatic, options?._returnWrapper, options?._allowAnyType));
@@ -69,13 +69,8 @@ export function always(scriptOrJSTransform:TemplateStringsArray|SmartTransformFu
 
 
 function collapseTransformPointer(ptr: Pointer, collapseStatic = false, alwaysReturnWrapper = false, _allowAnyType = false) {
-    let collapse = false;
-    if (collapseStatic) {
-        // check if transform function is static and value is a js primitive
-        if (ptr.isStaticTransform && ptr.is_js_primitive) {
-            collapse = true;
-        }
-    }
+    // collapse if transform function is static
+    const collapse = collapseStatic && ptr.isStaticTransform;
 
     if (_allowAnyType) {
         ptr.allowAnyType(true);
@@ -87,6 +82,7 @@ function collapseTransformPointer(ptr: Pointer, collapseStatic = false, alwaysRe
     
     const val = ReactiveValue.collapseValue(ptr, false, collapse);
     if (collapse) ptr.delete();
+    // TODO: deproxify static non-primitive objects to garbage-collect pointer and associated data
     return val;
 }
 
