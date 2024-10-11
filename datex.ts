@@ -12,4 +12,7 @@ import { Blockchain } from "./network/blockchain_adapter.ts"
 import { Runtime } from "./runtime/runtime.ts";
 Runtime.Blockchain = Blockchain;
 
+// workaround for backwards compatibility with Deno < 2.0.0
+globalThis.window = globalThis;
+
 await init();
