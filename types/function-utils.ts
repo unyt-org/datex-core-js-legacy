@@ -67,7 +67,7 @@ type Flag = 'standalone'|'silent-errors'|'allow-globals'
 
 function getUsedVars(fn: (...args:unknown[])=>unknown) {
     const source = fn.toString();
-    const usedVarsSource = source.match(/^(?:(?:[\w\s*])+\(.*?\)\s*{|\(.*?\)\s*=>\s*[{(]?|.*?\s*=>\s*[{(]?)\s*use\s*\(([\s\S]*?)\)/)?.[1]
+    const usedVarsSource = source.match(/^(?:(?:[\w\s*])+\(.*?\)\s*{|\(.*?\)\s*=>\s*[{(]?|.*?\s*=>\s*[{(]?)\s*(?:return *)?use\s*\(([\s\S]*?)\)/)?.[1]
     if (!usedVarsSource) return {};
 
     const _usedVars = usedVarsSource.split(",").map(v=>v.trim()).filter(v=>!!v)
@@ -165,7 +165,7 @@ export function getSourceWithoutUsingDeclaration(fn: (...args:unknown[])=>unknow
 	}
 
     return fnSource
-        .replace(/(?<=(?:(?:[\w\s*])+\(.*\)\s*{|\(.*\)\s*=>\s*{?|.*\s*=>\s*{?)\s*)(use\s*\((?:[\s\S]*?)\))/, 'true /*$1*/')
+        .replace(/(?<=(?:(?:[\w\s*])+\(.*\)\s*{|\(.*\)\s*=>\s*{?|.*\s*=>\s*{?)\s*)(?:return *)?(use\s*\((?:[\s\S]*?)\))/, 'true /*$1*/')
 }
 
 const isObjectMethod = (fnSrc:string) => {

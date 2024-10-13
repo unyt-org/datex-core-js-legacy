@@ -8,7 +8,6 @@ import { NOT_EXISTING } from "../runtime/constants.ts";
 import { Pointer, type MinimalJSRef, ReactiveValue } from "../runtime/pointers.ts";
 import { localStorage } from "./storage-locations/local-storage-compat.ts";
 import { MessageLogger } from "../utils/message_logger.ts";
-import { displayFatalError } from "../runtime/display.ts"
 import { Type } from "../types/type.ts";
 import { addPersistentListener } from "../utils/persistent-listeners.ts";
 import { Endpoint, LOCAL_ENDPOINT } from "../types/addressing.ts";
