@@ -49,7 +49,7 @@ export class MySQLStorageLocation extends SQLDBStorageLocation<ConnectionOptions
     protected getTableColumnInfoQuery(tableName: string): string {
         return new Query()
             .table("information_schema.columns")
-            .select("COLUMN_NAME as name", "COLUMN_TYPE as type")
+            .select("COLUMN_NAME as name", "DATA_TYPE as type")
             .where(Where.eq("table_schema", this.options.db))
             .where(Where.eq("table_name", tableName))
             .build()

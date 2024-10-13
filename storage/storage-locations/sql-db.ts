@@ -189,10 +189,10 @@ export abstract class SQLDBStorageLocation<Options extends {db: string}> extends
 	}
 
 
-	async #query<row=object>(query_string:string, query_params:any[]|undefined, returnRawResult: true, columnNames?:(keyof row)[]): Promise<{rows:row[], result:ExecuteResult}>
-	async #query<row=object>(query_string:string, query_params:any[]|undefined, returnRawResult: false, columnNames?:(keyof row)[]): Promise<row[]>
+	async #query<row=object>(query_string:string, query_params:any[]|undefined, returnRawResult: true): Promise<{rows:row[], result:ExecuteResult}>
+	async #query<row=object>(query_string:string, query_params:any[]|undefined, returnRawResult: false): Promise<row[]>
 	async #query<row=object>(query_string:string, query_params?:any[]): Promise<row[]>
-	async #query<row=object>(query_string:string, query_params?:any[], returnRawResult?: boolean, columnNames?:string[]): Promise<row[]|{rows:row[], result:ExecuteResult}> {
+	async #query<row=object>(query_string:string, query_params?:any[], returnRawResult?: boolean): Promise<row[]|{rows:row[], result:ExecuteResult}> {
 		
 		// TODO: only workaround for sqlite, replace all " with ' in queries
 		if (this.useSingleQuotes) {
@@ -227,15 +227,6 @@ export abstract class SQLDBStorageLocation<Options extends {db: string}> extends
         if (!query_string) throw new Error("empty query");
         try {
             const result = await this.executeQuery(query_string, query_params);
-			if (result.rows?.[0] instanceof Array && columnNames) {
-				result.rows = result.rows.map(row => {
-					const obj:Record<string,unknown> = {}
-					for (let i = 0; i < columnNames.length; i++) {
-						obj[columnNames[i]] = row[i]
-					}
-					return obj
-				})
-			}
 			if (returnRawResult) return {rows: result.rows ?? [], result};
 			else return result.rows ?? [];
         } catch (e) {
@@ -267,8 +258,8 @@ export abstract class SQLDBStorageLocation<Options extends {db: string}> extends
 		return String.fromCharCode.apply(null, new Uint8Array(value) as unknown as number[])
 	}
 
-    async #queryFirst<row=object>(query_string:string, query_params?:any[], column_names?: (keyof row)[]): Promise<row|undefined> {
-        return (await this.#query<row>(query_string, query_params, false, column_names))?.[0]
+    async #queryFirst<row=object>(query_string:string, query_params?:any[]): Promise<row|undefined> {
+        return (await this.#query<row>(query_string, query_params, false))?.[0]
     }
 
 	async #createTableIfNotExists(definition: TableDefinition) {
@@ -945,7 +936,7 @@ export abstract class SQLDBStorageLocation<Options extends {db: string}> extends
 			joins.forEach(join => builder.join(join));
 
 			const outerBuilder = new Query()
-				.select(options.returnRaw ? `*` :`DISTINCT ${this.supportsSQLCalcFoundRows?'SQL_CALC_FOUND_ROWS ' : ''}${this.#pointerMysqlColumnName} as ${this.#pointerMysqlColumnName}` + (
+				.select(options.returnRaw ? `*` :`DISTINCT ${this.supportsSQLCalcFoundRows?'SQL_CALC_FOUND_ROWS ' : 'COUNT(*) OVER () AS foundRows, '}${this.#pointerMysqlColumnName} as ${this.#pointerMysqlColumnName}` + (
 					options.returnKeys ? `, ${this.#metaTables.items.name}.key as map_key` : ''
 				))
 				.table('__placeholder__');
@@ -959,7 +950,7 @@ export abstract class SQLDBStorageLocation<Options extends {db: string}> extends
 
 		// no computed properties
 		else {
-			builder.select(`DISTINCT ${this.supportsSQLCalcFoundRows?'SQL_CALC_FOUND_ROWS ' : ''}\`${this.#typeToTableName(valueType)}\`.${this.#pointerMysqlColumnName} as ${this.#pointerMysqlColumnName}` + (
+			builder.select(`DISTINCT ${this.supportsSQLCalcFoundRows?'SQL_CALC_FOUND_ROWS ' : 'COUNT(*) OVER () AS foundRows, '}\`${this.#typeToTableName(valueType)}\`.${this.#pointerMysqlColumnName} as ${this.#pointerMysqlColumnName}` + (
 				options.returnKeys ? `, ${this.#metaTables.items.name}.key as map_key` : ''
 			));
 			this.appendBuilderConditions(builder, options, where)
@@ -972,7 +963,10 @@ export abstract class SQLDBStorageLocation<Options extends {db: string}> extends
 			await this.#getTableForType(type)
 		}
 
-		const queryResult = await this.#query<{_ptr_id:string, map_key: string}>(query, undefined, false, ['_ptr_id', 'map_key']);
+		SQLDBStorageLocation.debug(true);
+		const queryResult = await this.#query<{_ptr_id:string, map_key: string}>(query);
+		SQLDBStorageLocation.debug(false);
+
 		const ptrIds = options.returnKeys ? queryResult.map(({map_key}) => map_key.split(".")[1].slice(1)) : queryResult.map(({_ptr_id}) => _ptr_id)
 		const limitedPtrIds = options.returnPointerIds ? 
 			// offset and limit manually after query
@@ -980,8 +974,17 @@ export abstract class SQLDBStorageLocation<Options extends {db: string}> extends
 			// use ptrIds returned from query (already limited)
 			ptrIds	
 
-		// TODO: atomic operations for multiple queries
-		const {foundRows} = (options?.returnAdvanced ? await this.#queryFirst<{foundRows: number}>("SELECT FOUND_ROWS() as foundRows") : null, undefined, ['foundRows']) ?? {foundRows: -1}
+		let foundRows = -1;
+
+		if (options?.returnAdvanced) {
+			if (this.supportsSQLCalcFoundRows) {
+				const res = await this.#queryFirst<{foundRows: number}>("SELECT FOUND_ROWS() as foundRows");
+				if (res?.foundRows != undefined) foundRows = res.foundRows;
+			}
+			else {
+				foundRows = (queryResult[0] as any)?.foundRows ?? 0;
+			}
+		}
 
 		// remember pointer table
 		for (const ptrId of ptrIds) {
@@ -1571,18 +1574,19 @@ export abstract class SQLDBStorageLocation<Options extends {db: string}> extends
 			)
 
 			this.#existingPointersCache.add(pointerId);
-			return type.cast(object, undefined, undefined, false);
+			return type.cast(object, undefined, undefined, false, undefined, undefined, true);
 		}
 	}
 
 	private async assignPointerProperty(object:Record<string,unknown>, colName:string, type:string, foreignPtr:boolean, foreignTable?:string) {
+
 		// custom conversions:
 		// convert blob strings to ArrayBuffer
 		if (type == "blob" && typeof object[colName] == "string") {
 			object[colName] = this.#stringToBinary(object[colName] as string)
 		}
 		// convert Date ot Time
-		else if (object[colName] instanceof Date) {
+		else if (object[colName] instanceof Date || type == "datetime") {
 			object[colName] = new Time(object[colName] as Date)
 		}
 
@@ -1590,7 +1594,7 @@ export abstract class SQLDBStorageLocation<Options extends {db: string}> extends
 		else if (typeof object[colName] == "number" && (type == "tinyint" || type == "boolean")) {
 			object[colName] = Boolean(object[colName])
 		}
-		
+
 		// is an object type with a template
 		if (foreignPtr) {
 			if (typeof object[colName] == "string") {

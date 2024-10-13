@@ -7,6 +7,12 @@ import { logger } from "../../datex_all.ts";
 import { ptr_cache_path } from "../../runtime/cache_path.ts";
 import { Path } from "../../utils/path.ts";
 
+function regexp(pattern: string, value: string): boolean {
+    console.log("REGEXP", pattern, value)
+    const regex = new RegExp(pattern, "i");
+    return regex.test(value);
+}
+
 export class SqliteStorageLocation extends SQLDBStorageLocation<{db: string}> {
 
     name = "SQLITE_DB"
@@ -33,6 +39,8 @@ export class SqliteStorageLocation extends SQLDBStorageLocation<{db: string}> {
         }
 
         this.#db = new Database(path);
+        this.#db.function("REGEXP", regexp);
+
         logger.info("Using SQLite database " + this.options.db + " as storage location")
         return true;
     }
