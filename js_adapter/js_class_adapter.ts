@@ -112,7 +112,8 @@ export class Decorators {
     }
 
     public static getMetadata(context:DecoratorContext, key:string|symbol) {
-        return context.metadata[key]?.public?.[context.name] ?? context.metadata[key]?.constructor
+        const data = context.metadata[key]?.public?.[context.name] ?? context.metadata[key]?.constructor;
+        if (data !== Object) return data;
     }
 
 
@@ -211,8 +212,9 @@ export class Decorators {
         }
     }
 
-    static assignType<T>(type:string|Type<T>, context: ClassFieldDecoratorContext|ClassGetterDecoratorContext|ClassMethodDecoratorContext, forceConjunction) {
+    static assignType<T>(type:string|Type<T>, context: ClassFieldDecoratorContext|ClassGetterDecoratorContext|ClassMethodDecoratorContext, forceConjunction = false) {
         let newType = this.getMetadata(context, Decorators.FORCE_TYPE);
+
         if (newType instanceof Conjunction) {
             newType.add(type)
         }
