@@ -1,7 +1,8 @@
-import { ESCAPE_SEQUENCES } from "./logger.ts";
+import { ESCAPE_SEQUENCES, Logger } from "./logger.ts";
 import DATEX_VERSION from "../VERSION.ts"
 import { sendReport } from "./error-reporting.ts";
-import { logger as defaultLogger } from "./global_values.ts";
+
+const errorLogger = new Logger("Error");
 
 /**
  * Represents an error that the UIX developer community knows about.
@@ -21,13 +22,13 @@ export class KnownError extends Error {
  * @param [exit=true] Specifies whether the process should exit, defaults to `true`
  * @param [exitCode=1] Code to exit with if `exit` is set to true, defaults to `1`
  */
-export async function handleError(error: Error|string, logger = defaultLogger, exit = true, exitCode = 1) {
+export async function handleError(error: Error|string, logger = errorLogger, exit = true, exitCode = 1) {
+	console.log();
 	if (typeof error === "string" || error instanceof String) {
 		logger.error(error);
 	} else if (error instanceof KnownError) {
 		logger.error(error.message);
 		if (error.solutions.length > 0) {
-			console.log();
 			logger.info(`Suggested Problem Solutions:\n${error.solutions.map(s => `- ${s}`).join("\n")}\n`);
 		}
 		if (error.quickFixes) {
@@ -45,7 +46,7 @@ export async function handleError(error: Error|string, logger = defaultLogger, e
 			details = stack.join("\n");
 		} else details = error.toString();
 
-		logger.error(`An unexpected error occured.\n${ESCAPE_SEQUENCES.BOLD}DATEX${ESCAPE_SEQUENCES.DEFAULT} Version: ${DATEX_VERSION}\n${ESCAPE_SEQUENCES.BOLD}Deno${ESCAPE_SEQUENCES.DEFAULT} Version: ${Deno.version.deno}\n\n${details}`);
+		logger.error(`An unexpected error occured.\n${ESCAPE_SEQUENCES.BOLD}DATEX${ESCAPE_SEQUENCES.DEFAULT} Version: ${DATEX_VERSION}\n${ESCAPE_SEQUENCES.BOLD}Deno${ESCAPE_SEQUENCES.DEFAULT} Version: ${Deno.version.deno}${(Deno as any).uix ? ' (Deno for UIX)' : ''}\n\n${details}`);
 		await sendReport("unexpectederror", {
 			name: error.name,
 			message: error.message,
@@ -53,7 +54,7 @@ export async function handleError(error: Error|string, logger = defaultLogger, e
 		});
 	}
 
-	if (exit) Deno.exit(exitCode);
+	if (exit && globalThis.Deno) Deno.exit(exitCode);
 }
 
 
@@ -64,7 +65,7 @@ let unhandledRejectionHandlerEnabled = false;
  * and prevents the program from crashing.
  * @param customLogger a custom logger to use for logging unhandled rejections
  */
-export function enableUnhandledRejectionHandler(customLogger = defaultLogger) {
+export function enableUnhandledRejectionHandler(customLogger = errorLogger) {
 	if (unhandledRejectionHandlerEnabled) return;
 	unhandledRejectionHandlerEnabled = true;
 	// clean error presentation

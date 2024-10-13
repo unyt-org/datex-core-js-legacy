@@ -209,7 +209,6 @@ export class Type<T = any> extends ExtensibleFunction {
         for (const key of Object.keys(this.#template)) {
             // @ts-ignore this.#template is always a Tuple
             const required_type = this.#template[key];
-
  
             // check if can set property (has setter of value)
             const desc = Object.getOwnPropertyDescriptor(assign_to_object, key);
