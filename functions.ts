@@ -60,8 +60,8 @@ export function always(scriptOrJSTransform:TemplateStringsArray|SmartTransformFu
         return (async ()=>collapseTransformPointer(await datex(`always (${scriptOrJSTransform.raw.join(INSERT_MARK)})`, vars)))()
     }
     else {
-        handleError(new KnownError("You called 'always' with invalid arguments. It seems like you are not using deno for UIX.", [
-            "Install deno for UIX, see https://docs.unyt.org/manual/uix/getting-started#install-deno",
+        handleError(new KnownError("You called 'always' with invalid arguments. It seems like you are not using Deno for UIX.", [
+            "Install Deno for UIX, see https://docs.unyt.org/manual/uix/getting-started#install-deno",
             "Call 'always' with a function: always(() => ...)"
         ]))
     }
@@ -81,6 +81,7 @@ function collapseTransformPointer(ptr: Pointer, collapseStatic = false, alwaysRe
     }
     
     const val = ReactiveValue.collapseValue(ptr, false, collapse);
+
     if (collapse) ptr.delete();
     // TODO: deproxify static non-primitive objects to garbage-collect pointer and associated data
     return val;

@@ -336,7 +336,17 @@ export abstract class ReactiveValue<T = any> extends EventTarget {
                 !(value instanceof PointerProperty || value.indirectReference)
             )
         ) {
-            return value.val
+            // is a static transform
+            if (value instanceof Pointer && value.isStaticTransform) {
+                return value.staticTransformValue;
+            }
+            // unwrap previously wrapped value
+            if (value instanceof Pointer && value.current_type?.interface_config?.unwrap_transform) {
+                return value.current_type.interface_config.unwrap_transform(value.val);
+            }
+            else {
+                return value.val
+            }
         }
         else return <CollapsedValueAdvanced<V, P1, P2>> value;
     }
@@ -458,6 +468,7 @@ export abstract class ReactiveValue<T = any> extends EventTarget {
     #forceLiveTransform = false;
     #transformSource?: TransformSource
     #isStaticTransform = false;
+    #staticTransformValue?: unknown
 
     /**
      * if true, there are no dependencies and the value is never updated
@@ -466,8 +477,14 @@ export abstract class ReactiveValue<T = any> extends EventTarget {
     get isStaticTransform() {
         return this.#isStaticTransform;
     }
-    protected set _isStaticTransform(val: boolean) {
-        this.#isStaticTransform = val;
+
+    get staticTransformValue() {
+        return this.#staticTransformValue;
+    }
+
+    protected set _staticTransformValue(val: unknown) {
+        this.#isStaticTransform = true;
+        this.#staticTransformValue = val;
     }
 
 
@@ -661,6 +678,22 @@ export class PointerProperty<T=any> extends ReactiveValue<T> {
         }
 
         return new PointerProperty(pointer, key, leak_js_properties);
+    }
+
+    public static getIfExists<const Key, Parent extends PointerPropertyParent<Key,unknown>>(parent: Parent|Pointer<Parent>|LazyPointer<Parent>, key: Key, leak_js_properties = false): PointerProperty<Parent extends Map<unknown, infer MV> ? MV : Parent[Key&keyof Parent]>|typeof NOT_EXISTING {
+        
+        parent = Pointer.pointerifyValue(parent);
+        if (parent instanceof Pointer && parent.type.template){
+            if ((typeof key == "string" || typeof key == "symbol" || typeof key == "number") && !(key in parent.type.template)) return NOT_EXISTING;
+        }
+        // normal html node without custom template, does not support pointer properties
+        else if (parent instanceof Pointer && parent.val instanceof Node && !parent.type.template) {
+            return NOT_EXISTING;
+        }
+        
+        const prop = this.get(parent, key, leak_js_properties);
+        if (prop.current_val === NOT_EXISTING) return NOT_EXISTING;
+        else return prop;
     }
 
     // get current pointer property
@@ -1738,7 +1771,9 @@ export class Pointer<T = any> extends ReactiveValue<T> {
             return ptr;
         }
         // create new pointer
-        else return <Pointer<T>>Pointer.create(id, value, sealed, undefined, persistant, anonymous, false, allowed_access); 
+        else {
+            return <Pointer<T>>Pointer.create(id, value, sealed, undefined, persistant, anonymous, false, allowed_access); 
+        }
     }
 
     // same as createOrGet, but also return lazy pointer if it exists
@@ -2620,7 +2655,10 @@ export class Pointer<T = any> extends ReactiveValue<T> {
         if (is_transform) val = this.getInitialTransformValue(val)
 
         // Get type from initial value, keep as <any> if initial value is null/undefined or indirect reference
-        if (val!==undefined && val !== null && !this.#indirectReference) this.#type = Type.ofValue(val);
+        if (val!==undefined && val !== null && 
+            // allow false (workaround for UIX DOM elements)
+            !(val === false)
+            && !this.#indirectReference) this.#type = Type.ofValue(val);
 
         // console.log("loaded : "+ this.id + " - " + this.#type, val)
 
@@ -2657,7 +2695,9 @@ export class Pointer<T = any> extends ReactiveValue<T> {
                 if (!this.is_anonymous && !this.isStaticTransform) {
                     try {
                         Object.defineProperty(val, DX_PTR, {value: this, enumerable: false, writable: true, configurable: true})
-                    } catch(e) {}
+                    } catch {
+                        logger.error("Cannot set DX_PTR for " + this.idString())
+                    }
                 }
     
                 if (this.sealed) this.visible_children = new Set(Object.keys(val)); // get current keys and don't allow any other children
@@ -2750,6 +2790,8 @@ export class Pointer<T = any> extends ReactiveValue<T> {
             })
         }
         catch(e) {
+            console.error(e);
+            console.log(val.$);
             logger.error("Cannot set $ properties for " + this.idString())
         }
     }
@@ -3198,9 +3240,10 @@ export class Pointer<T = any> extends ReactiveValue<T> {
 
         // no dependencies, will never change, this is not the intention of the transform
         if (!ignoreReturnValue && hasGetters && !gettersCount) {
-            this._isStaticTransform = true
+            this._staticTransformValue = val;
             if (!options?.allowStatic) logger.warn("The transform value for " + this.idString() + " is a static value:", val);
-            // TODO: cleanup stuff not needed if no reactive transform
+            // cleanup stuff not needed if no reactive transform
+            if (options?.allowStatic) return;
         }
 
         // update value
@@ -3773,6 +3816,11 @@ export class Pointer<T = any> extends ReactiveValue<T> {
 
         // fake primitives TODO: dynamic mime types
         if (obj instanceof Quantity || obj instanceof Time || obj instanceof Type || obj instanceof URL  || obj instanceof Target || obj instanceof Blob || (globalThis.MediaStream && obj instanceof MediaStream) || (globalThis.HTMLImageElement && obj instanceof HTMLImageElement)) {
+            return obj;
+        }
+
+        // don't proxyify Text nodes
+        if (globalThis.Text && obj instanceof Text) {
             return obj;
         }
 
@@ -4559,8 +4607,11 @@ export class Pointer<T = any> extends ReactiveValue<T> {
         // observe specific property
         else {
             // make sure the array index is a number
-            if (this.current_val instanceof Array) key = <K><unknown>Number(key);
-
+            if (this.current_val instanceof Array) {
+                if (!(typeof key == "number" || typeof key == "bigint" || typeof key == "string")) return;
+                key = <K><unknown>Number(key);
+            }
+     
             if (bound_object) {
                 if (!this.bound_change_observers.has(bound_object)) {
                     this.bound_change_observers.set(bound_object, new Map());

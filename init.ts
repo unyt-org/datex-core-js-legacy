@@ -75,8 +75,7 @@ export async function init() {
 		}
 		else if (client_type == "deno") {
 			if (Deno.env.get("SQLITE_STORAGE") == "1") {
-				const { SqliteStorageLocation } = await import("./storage/storage-locations/sqlite-db.ts");
-				console.log("Using sqlite as primary storage location (experimental feature enabled via SQLITE_STORAGE env variable)")
+				const { SqliteStorageLocation } = await import("./storage/storage-locations/sqlite-db.ts" /* lazy */);
 				await Storage.addLocation(new SqliteStorageLocation({
 					db: "storage"
 				}), {
