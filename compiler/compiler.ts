@@ -15,7 +15,7 @@ const logger = new Logger("datex compiler");
 
 import { ReadableStream, Runtime } from "../runtime/runtime.ts";
 import { Endpoint, IdEndpoint, Target, WildcardTarget, Institution, Person, BROADCAST, target_clause, endpoints, LOCAL_ENDPOINT } from "../types/addressing.ts";
-import { Pointer, PointerProperty, Ref } from "../runtime/pointers.ts";
+import { Pointer, PointerProperty, ReactiveValue } from "../runtime/pointers.ts";
 import { CompilerError, RuntimeError, Error as DatexError, ValueError } from "../types/errors.ts";
 import { Function as DatexFunction } from "../types/function.ts";
 
@@ -2764,7 +2764,7 @@ export class Compiler {
 
             // make sure normal pointers are collapsed (ignore error if uninitialized pointer is passed in)
             try {
-                value = Ref.collapseValue(value);
+                value = ReactiveValue.collapseValue(value);
             }
             catch {}
 
@@ -2864,7 +2864,7 @@ export class Compiler {
             const skip_first_collapse = !SCOPE.options._first_insert_done&&SCOPE.options.collapse_first_inserted;
 
             const option_collapse = SCOPE.options.collapse_pointers && !(SCOPE.options.keep_external_pointers && value instanceof Pointer && !value.is_origin);
-            const no_proxify = value instanceof Ref && (((value instanceof Pointer && value.is_anonymous) || option_collapse) || skip_first_collapse);
+            const no_proxify = value instanceof ReactiveValue && (((value instanceof Pointer && value.is_anonymous) || option_collapse) || skip_first_collapse);
 
             // proxify pointer exceptions:
             if (no_proxify) {
@@ -2903,7 +2903,7 @@ export class Compiler {
                 // indirect reference pointer
                 if (indirectReferencePtr) {
                     SCOPE.options._first_insert_done = true;
-                    Compiler.builder.insert(Ref.collapseValue(value, true), SCOPE, is_root, parents, unassigned_children);
+                    Compiler.builder.insert(ReactiveValue.collapseValue(value, true), SCOPE, is_root, parents, unassigned_children);
                     return;
                 }
 

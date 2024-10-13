@@ -1,10 +1,10 @@
 import { NOT_EXISTING } from "../runtime/constants.ts";
-import { Pointer, Ref, RefOrValue } from "../runtime/pointers.ts";
+import { Pointer, ReactiveValue, RefOrValue } from "../runtime/pointers.ts";
 import { logger } from "./global_values.ts";
 
 type HistoryStateChange = {
 	pointer: Pointer,
-	type: Ref.UPDATE_TYPE,
+	type: ReactiveValue.UPDATE_TYPE,
 	value: unknown,
 	previous: unknown,
 	key?: unknown,
@@ -49,7 +49,7 @@ export class History {
 		const pointer = Pointer.pointerifyValue(val);
 		if (!(pointer instanceof Pointer)) throw new Error("Cannot include non-pointer value in history");
 
-		Ref.observe(pointer, (value, key, type, _transform, _isChildUpdate, previous, atomicId) => {
+		ReactiveValue.observe(pointer, (value, key, type, _transform, _isChildUpdate, previous, atomicId) => {
 
 			if (type == Pointer.UPDATE_TYPE.BEFORE_DELETE) return; // ignore
 			if (type == Pointer.UPDATE_TYPE.BEFORE_REMOVE) return; // ignore

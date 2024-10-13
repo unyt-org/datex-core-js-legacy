@@ -135,6 +135,8 @@ export class Unyt {
 
         if (info.datex_version == "0.0.0") content += `${ESCAPE_SEQUENCES.UNYT_GREY}DATEX VERSION${ESCAPE_SEQUENCES.COLOR_DEFAULT}${ESCAPE_SEQUENCES.ITALIC} unmarked${ESCAPE_SEQUENCES.RESET}\n`
         else if (info.datex_version) content += `${ESCAPE_SEQUENCES.UNYT_GREY}DATEX VERSION${ESCAPE_SEQUENCES.COLOR_DEFAULT} ${info.datex_version.replaceAll('\n','')}\n`
+
+        if (globalThis.Deno) content += `${ESCAPE_SEQUENCES.UNYT_GREY}DENO VERSION${ESCAPE_SEQUENCES.COLOR_DEFAULT}  ${Deno.version.deno}\n`
         content += `\n`
 
         // if (info.app?.stage == "dev" && info.app.backend) content += `Worbench Access for this App: https://workbench.unyt.org/\?e=${info.app.backend.toString()}\n`

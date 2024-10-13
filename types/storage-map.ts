@@ -18,6 +18,28 @@ import { Type } from "./type.ts";
  */
 export class StorageWeakMap<K,V> {
 
+	/**
+	 * Create a new StorageWeakMap instance with the given key and value types.
+	 * @param keyType Class or DATEX Type of the keys
+	 * @param valueType	Class or DATEX Type of the values
+	 * @returns 
+	 */
+	static of<K,V>(keyType:Class<K>|Type<K>|undefined|null, valueType: Class<V>|Type<V>): StorageWeakMap<K,V> {
+		const storageMap = new this<K,V>();
+		storageMap.#_type = valueType instanceof Type ? valueType : Type.getClassDatexType(valueType);
+		storageMap._type = storageMap.#_type.namespace + ":" + storageMap.#_type.name;
+		return storageMap;
+	}
+
+	_type?: string
+	#_type?: Type<V>;
+
+	protected get type() {
+		if (!this._type) return undefined;
+		if (!this.#_type) this.#_type = Type.get(this._type);
+		return this.#_type;
+	}
+
 	#prefix?: string;
 
 	/**
@@ -123,6 +145,16 @@ export class StorageWeakMap<K,V> {
  * The API is similar to the JS Map API, but all methods are async.
  */
 export class StorageMap<K,V> extends StorageWeakMap<K,V> {
+
+	/**
+	 * Create a new StorageMap instance with the given key and value types.
+	 * @param keyType Class or DATEX Type of the keys
+	 * @param valueType Class or DATEX Type of the values
+	 * @returns 
+	 */
+	static of<K, V>(keyType:Class<K>|Type<K>, valueType: Class<V>|Type<V>): StorageMap<K, V> {
+		return super.of(keyType, valueType) as StorageMap<K, V>;
+	}
 
 	static override async from<K,V>(entries: readonly (readonly [K, V])[]){
 		const map = $$(new StorageMap<K,V>());
@@ -283,7 +315,9 @@ export class StorageMap<K,V> extends StorageWeakMap<K,V> {
 		await Promise.all(promises);
 	}
 
-	match<Options extends MatchOptions, T extends V & object>(valueType:Class<T>|Type<T>, matchInput: MatchInput<T>, options?: Options): Promise<MatchResult<Options['returnKeys'] extends true ? K : T, Options>> {
+	match<Options extends MatchOptions, T extends V & object>(matchInput: MatchInput<T>, options?: Options, valueType?: Class<T>|Type<T>): Promise<MatchResult<Options['returnKeys'] extends true ? K : T, Options>> {
+		valueType ??= this.type;
+		if (!valueType) throw new Error("Cannot determine value type. Please provide a valueType parameter to match()");
 		return match(this as unknown as StorageMap<unknown, T>, valueType, matchInput, options) as any;
 	}
 

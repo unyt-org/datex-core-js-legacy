@@ -12,7 +12,7 @@ import { Quantity } from "./quantity.ts";
 import { Function as DatexFunction } from "./function.ts";
 import { logger, TypedArray } from "../utils/global_values.ts";
 import { BinaryCode } from "../compiler/binary_codes.ts"
-import { RefOrValue, Pointer, Ref, PointerProperty } from "../runtime/pointers.ts";
+import { RefOrValue, Pointer, ReactiveValue, PointerProperty } from "../runtime/pointers.ts";
 import { clause, Conjunction, Disjunction, Logical, Negation } from "./logic.ts";
 import { Debugger } from "../runtime/debugger.ts";
 import { Time } from "./time.ts";
@@ -209,7 +209,6 @@ export class Type<T = any> extends ExtensibleFunction {
         for (const key of Object.keys(this.#template)) {
             // @ts-ignore this.#template is always a Tuple
             const required_type = this.#template[key];
-
  
             // check if can set property (has setter of value)
             const desc = Object.getOwnPropertyDescriptor(assign_to_object, key);
@@ -293,7 +292,7 @@ export class Type<T = any> extends ExtensibleFunction {
     public cast(value: any, context?:any, origin:Endpoint = Runtime.endpoint, make_pointer = false, ignore_js_config = false, assigningPtrId?: string, strict = false):T {
         // unknown type (no template or config)
         //if (!this.interface_config && !this.template) return UNKNOWN_TYPE;
-        
+
         // has a JS configuration
         if (!ignore_js_config && this.interface_config){
             // generate default value
@@ -336,12 +335,13 @@ export class Type<T = any> extends ExtensibleFunction {
 
     /** returns an object with a [INIT_PROPS] function that can be passed to newJSInstance() or called manually */
     public getPropertyInitializer(value:any, useTemplate = true, strict = false) {
-        const initialized = {i:false};
+        // TODO: is it okay to call INIT_PROPS multiple times? required for inherited classes
+        //const initialized = {i:false};
         // property initializer - sets existing property for pointer object (is passed as first constructor argument when reconstructing)
         return Object.freeze({
             [INIT_PROPS]: (instance:any)=>{
-                if (initialized.i) return; 
-                initialized.i=true; 
+                // if (initialized.i) return; 
+                // initialized.i=true; 
                 this.initProperties(instance, value, useTemplate, strict)
             }
         })
@@ -755,7 +755,7 @@ export class Type<T = any> extends ExtensibleFunction {
 
     // check if root type of value matches exactly
     public static matches<T extends Type>(value:RefOrValue<any>, type:type_clause, throwInvalidAssertion = false): value is (T extends Type<infer TT> ? TT : any)  {
-        value = Ref.collapseValue(value, true, true);
+        value = ReactiveValue.collapseValue(value, true, true);
         // value has a matching DX_TEMPLATE
         if (type instanceof Type && type.template && value?.[DX_TEMPLATE] && this.matchesTemplate(value[DX_TEMPLATE], type.template)) return true;
         // compare types
@@ -827,13 +827,13 @@ export class Type<T = any> extends ExtensibleFunction {
     public static ofValue<T=any>(value:RefOrValue<T>):Type<T> {
 
         if (value instanceof Pointer) {
-            return value.type ?? Type.std.void;
+            return value.current_type ?? Type.std.void;
         }
-        else if (value instanceof PointerProperty && value.type) {
+        else if (value instanceof PointerProperty && value.type instanceof Type) {
             return value.type as Type<T>;
         }
 
-        value = Ref.collapseValue(value,true,true)
+        value = ReactiveValue.collapseValue(value,true,true)
 
         // // should not happen
         // else if (value instanceof Pointer) {
@@ -854,7 +854,7 @@ export class Type<T = any> extends ExtensibleFunction {
 
         // get type from pointer
         let type:Type|undefined
-        if ((type = Pointer.getByValue(value)?.type)) return type;
+        if ((type = Pointer.getByValue(value)?.current_type)) return type;
 
         // get custom type
         const custom_type = JSInterface.getValueDatexType(value);
@@ -1213,28 +1213,28 @@ Type.std.StorageWeakMap.setJSInterface({
     class: StorageWeakMap,
     is_normal_object: true,
     proxify_children: true,
-    visible_children: new Set(),
+    visible_children: new Set(['_type']),
 })
 
 Type.std.StorageMap.setJSInterface({
     class: StorageMap,
     is_normal_object: true,
     proxify_children: true,
-    visible_children: new Set(),
+    visible_children: new Set(['_type']),
 })
 
 Type.std.StorageWeakSet.setJSInterface({
     class: StorageWeakSet,
     is_normal_object: true,
     proxify_children: true,
-    visible_children: new Set(),
+    visible_children: new Set(['_type']),
 })
 
 Type.std.StorageSet.setJSInterface({
     class: StorageSet,
     is_normal_object: true,
     proxify_children: true,
-    visible_children: new Set(),
+    visible_children: new Set(['_type']),
 })
 
 // proxify_children leads to problems with native types - use plain objects for pointer propagation + don't propagate proxification

@@ -5,10 +5,9 @@ import type { ExecConditions, PointerSource } from "../utils/global_types.ts";
 import { logger } from "../utils/global_values.ts";
 import { client_type } from "../utils/constants.ts";
 import { NOT_EXISTING } from "../runtime/constants.ts";
-import { Pointer, type MinimalJSRef, Ref } from "../runtime/pointers.ts";
+import { Pointer, type MinimalJSRef, ReactiveValue } from "../runtime/pointers.ts";
 import { localStorage } from "./storage-locations/local-storage-compat.ts";
 import { MessageLogger } from "../utils/message_logger.ts";
-import { displayFatalError } from "../runtime/display.ts"
 import { Type } from "../types/type.ts";
 import { addPersistentListener } from "../utils/persistent-listeners.ts";
 import { Endpoint, LOCAL_ENDPOINT } from "../types/addressing.ts";
@@ -863,7 +862,7 @@ export class Storage {
         let saving = false;
 
 
-        const handler = (v:unknown,key:unknown,t?:Ref.UPDATE_TYPE)=>{
+        const handler = (v:unknown,key:unknown,t?:ReactiveValue.UPDATE_TYPE)=>{
             if (saving) return;
 
             // don't block saving if only partial update
@@ -901,7 +900,7 @@ export class Storage {
 
 
     /**
-     * Run a pointer update after 1s on process exit and keep the dirty state until the update is finished
+     * Run a pointer update after 1s or on process exit and keep the dirty state until the update is finished
      */
     private static scheduleStorageUpdate(update:()=>void|Promise<void>, location: StorageLocation, metadata?: string) {
         
@@ -913,7 +912,7 @@ export class Storage {
                 return res.then(()=>{
                     this.setDirty(location, false, metadata);
                     this.#scheduledUpdates.delete(updateFn);
-                })
+                }).catch(e => console.error(e));
             }
             else {
                 this.#scheduledUpdates.delete(updateFn);
@@ -1513,7 +1512,7 @@ export class Storage {
         Storage.allowExitWithoutSave();
         if (client_type === "deno") Deno.exit(1);
         else if (globalThis.window?.location) {
-            window.location.reload();
+            globalThis.location.reload();
         }
         else logger.error("Could not reload in non-browser or Deno context")
     }

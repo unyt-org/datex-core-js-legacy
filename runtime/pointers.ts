@@ -2,7 +2,7 @@
 import { Endpoint, endpoints, endpoint_name, IdEndpoint, Person, Target, target_clause, LOCAL_ENDPOINT, BROADCAST } from "../types/addressing.ts";
 import { NetworkError, PermissionError, PointerError, RuntimeError, ValueError } from "../types/errors.ts";
 import { Compiler, PrecompiledDXB } from "../compiler/compiler.ts";
-import { DX_PTR, DX_REACTIVE_METHODS, DX_VALUE, INVALID, NOT_EXISTING, SET_PROXY, SHADOW_OBJECT, UNKNOWN_TYPE, VOID } from "./constants.ts";
+import { DX_NOT_TRANSFERABLE, DX_PTR, DX_REACTIVE_METHODS, DX_VALUE, INVALID, NOT_EXISTING, SET_PROXY, SHADOW_OBJECT, UNKNOWN_TYPE, VOID } from "./constants.ts";
 import { Runtime, UnresolvedValue } from "./runtime.ts";
 import { DEFAULT_HIDDEN_OBJECT_PROPERTIES, logger, TypedArray } from "../utils/global_values.ts";
 import type { compile_info, datex_scope, Equals, PointerSource } from "../utils/global_types.ts";
@@ -33,8 +33,8 @@ import { Storage } from "../storage/storage.ts";
 import { client_type } from "../utils/constants.ts";
 import { BACKEND_EXPORT } from "../utils/interface-generator.ts";
 
-export type observe_handler<K=any, V extends RefLike = any> = (value:V extends RefLike<infer T> ? T : V, key?:K, type?:Ref.UPDATE_TYPE, transform?:boolean, is_child_update?:boolean, previous?: any, atomic_id?:symbol)=>void|boolean
-export type observe_options = {types?:Ref.UPDATE_TYPE[], ignore_transforms?:boolean, recursive?:boolean}
+export type observe_handler<K=any, V extends RefLike = any> = (value:V extends RefLike<infer T> ? T : V, key?:K, type?:ReactiveValue.UPDATE_TYPE, transform?:boolean, is_child_update?:boolean, previous?: any, atomic_id?:symbol)=>void|boolean
+export type observe_options = {types?:ReactiveValue.UPDATE_TYPE[], ignore_transforms?:boolean, recursive?:boolean}
 
 const arrayProtoNames = Object.getOwnPropertyNames(Array.prototype);
 const objectProtoNames = Object.getOwnPropertyNames(Object.prototype)
@@ -49,7 +49,9 @@ export type RefLike<T = any> = Pointer<T>|PointerProperty<T>
 export type RefLikeOut<T = any> = PointerWithPrimitive<T>|PointerProperty<T>
 
 // root class for pointers and pointer properties, value changes can be observed
-export abstract class Ref<T = any> extends EventTarget {
+export abstract class ReactiveValue<T = any> extends EventTarget {
+
+    static [DX_NOT_TRANSFERABLE] = true
 
     #observerCount = 0;
 
@@ -63,7 +65,7 @@ export abstract class Ref<T = any> extends EventTarget {
 
     constructor(value?:RefOrValue<T>) {
         super();
-        value = Ref.collapseValue(value);
+        value = ReactiveValue.collapseValue(value);
         if (value!=undefined) this.val = value;
     }
 
@@ -74,7 +76,7 @@ export abstract class Ref<T = any> extends EventTarget {
     }
     public set val(value: T|undefined) {
         const previous = this.#val;
-        this.#val = <T> Ref.collapseValue(value, true, true);
+        this.#val = <T> ReactiveValue.collapseValue(value, true, true);
         if (previous !== this.#val) this.triggerValueInitEvent(false, previous)
     }
 
@@ -90,7 +92,7 @@ export abstract class Ref<T = any> extends EventTarget {
     // same as val setter, but can be awaited
     public setVal(value:T, trigger_observers = true, is_transform?:boolean) {
         const previous = this.#val;
-        this.#val = <T> Ref.collapseValue(value, true, true);
+        this.#val = <T> ReactiveValue.collapseValue(value, true, true);
         if (trigger_observers && previous !== this.#val) return this.triggerValueInitEvent(is_transform, previous)
     }
     
@@ -98,11 +100,11 @@ export abstract class Ref<T = any> extends EventTarget {
         const value = this.current_val;
         const promises = [];
         for (const [o, options] of this.#observers??[]) {
-            if ((!options?.types || options.types.includes(Ref.UPDATE_TYPE.INIT)) && !(is_transform && options?.ignore_transforms)) promises.push(o(value, VOID, Ref.UPDATE_TYPE.INIT, is_transform, undefined, previous));
+            if ((!options?.types || options.types.includes(ReactiveValue.UPDATE_TYPE.INIT)) && !(is_transform && options?.ignore_transforms)) promises.push(o(value, VOID, ReactiveValue.UPDATE_TYPE.INIT, is_transform, undefined, previous));
         }
         for (const [object, observers] of this.#observers_bound_objects??[]) {
             for (const [o, options] of observers??[]) {
-                if ((!options?.types || options.types.includes(Ref.UPDATE_TYPE.INIT)) && !(is_transform && options?.ignore_transforms)) promises.push(o.call(object, value, VOID, Ref.UPDATE_TYPE.INIT, is_transform, undefined, previous));
+                if ((!options?.types || options.types.includes(ReactiveValue.UPDATE_TYPE.INIT)) && !(is_transform && options?.ignore_transforms)) promises.push(o.call(object, value, VOID, ReactiveValue.UPDATE_TYPE.INIT, is_transform, undefined, previous));
             }
         }
         return Promise.allSettled(promises);
@@ -175,7 +177,7 @@ export abstract class Ref<T = any> extends EventTarget {
                 if (!(pointer.val instanceof Array) && ![...pointer.getKeys()].includes(key)) {
                     throw new ValueError("Property "+key.toString()+" does not exist in value");
                 }
-                if (pointer instanceof Pointer && Pointer.pointerifyValue(pointer.shadow_object?.[key]) instanceof Ref) return Pointer.pointerifyValue(pointer.shadow_object?.[key]);
+                if (pointer instanceof Pointer && Pointer.pointerifyValue(pointer.shadow_object?.[key]) instanceof ReactiveValue) return Pointer.pointerifyValue(pointer.shadow_object?.[key]);
                 else return PointerProperty.get(pointer, <keyof typeof pointer>key, true);
             } 
         }
@@ -184,11 +186,11 @@ export abstract class Ref<T = any> extends EventTarget {
         // handle function as transform
         if (useFunction) {
             handler.apply = (_target, thisRef, args) => {
-                const thisVal = Ref.collapseValue(thisRef, true, true);
+                const thisVal = ReactiveValue.collapseValue(thisRef, true, true);
                 if (typeof thisVal != "function") throw new Error("Cannot create a reference transform, not a function"); 
     
                 if (thisRef instanceof PointerProperty) {
-                    return Ref.collapseValue(Pointer.createTransform([thisRef.pointer], ()=>{
+                    return ReactiveValue.collapseValue(Pointer.createTransform([thisRef.pointer], ()=>{
                         return thisVal(...args);
                     }));
                 }
@@ -223,7 +225,7 @@ export abstract class Ref<T = any> extends EventTarget {
     public static observe<V=unknown, K=unknown>(value: V, handler:observe_handler<K, V>, bound_object?:object, key?:K, options?:observe_options):void {
         const pointer = Pointer.pointerifyValue(value);
         if (pointer instanceof Pointer) pointer.observe(handler, bound_object, key, options);
-        else if (pointer instanceof Ref) pointer.observe(<observe_handler>handler, bound_object, options);
+        else if (pointer instanceof ReactiveValue) pointer.observe(<observe_handler>handler, bound_object, options);
         else throw new ValueError("Cannot observe this value because it has no pointer")
     }
 
@@ -235,15 +237,15 @@ export abstract class Ref<T = any> extends EventTarget {
             this.observe(value, handler, bound_object, key, options);
         } catch {} // throws if value does not have a DATEX reference, can be ignored - in this case no observer is set, only the initial handler call is triggered
         const val = this.collapseValue(value, true, true);
-        if (handler.call) handler.call(bound_object, val, undefined, Ref.UPDATE_TYPE.INIT);
-        else handler(val, undefined, Ref.UPDATE_TYPE.INIT);
+        if (handler.call) handler.call(bound_object, val, undefined, ReactiveValue.UPDATE_TYPE.INIT);
+        else handler(val, undefined, ReactiveValue.UPDATE_TYPE.INIT);
     }
 
     // call handler when value changes
     public static unobserve<V=unknown, K=unknown>(value: V, handler:observe_handler<K, V>, bound_object?:object, key?:K):void {
         const pointer = Pointer.pointerifyValue(value);
         if (pointer instanceof Pointer) pointer.unobserve(handler, bound_object, key);
-        else if (pointer instanceof Ref) pointer.unobserve(<observe_handler>handler, <object>bound_object);
+        else if (pointer instanceof ReactiveValue) pointer.unobserve(<observe_handler>handler, <object>bound_object);
         else throw new ValueError("Cannot unobserve this value because it has no pointer")
     }
 
@@ -325,7 +327,7 @@ export abstract class Ref<T = any> extends EventTarget {
         if (collapse_indirect_references == undefined) collapse_indirect_references = <P1>false;
 
         if (
-            value instanceof Ref && 
+            value instanceof ReactiveValue && 
             (
                 collapse_primitive_pointers || 
                 !(value instanceof Pointer && value.is_js_primitive)
@@ -334,7 +336,17 @@ export abstract class Ref<T = any> extends EventTarget {
                 !(value instanceof PointerProperty || value.indirectReference)
             )
         ) {
-            return value.val
+            // is a static transform
+            if (value instanceof Pointer && value.isStaticTransform) {
+                return value.staticTransformValue;
+            }
+            // unwrap previously wrapped value
+            if (value instanceof Pointer && value.current_type?.interface_config?.unwrap_transform) {
+                return value.current_type.interface_config.unwrap_transform(value.val);
+            }
+            else {
+                return value.val
+            }
         }
         else return <CollapsedValueAdvanced<V, P1, P2>> value;
     }
@@ -367,7 +379,7 @@ export abstract class Ref<T = any> extends EventTarget {
      * Returns true if the value has a bound pointer or is a Datex.Ref
      */
     public static isRef(value: unknown) {
-        return (value instanceof Ref || Pointer.pointer_value_map.has(value));
+        return (value instanceof ReactiveValue || Pointer.pointer_value_map.has(value));
     }
 
     // copy the value of a primitive datex value to another primitive value
@@ -377,7 +389,7 @@ export abstract class Ref<T = any> extends EventTarget {
 
 
 
-    protected static capturedGetters? = new Set<Ref>()
+    protected static capturedGetters? = new Set<ReactiveValue>()
     protected static capturedGettersWithKeys? = new Map<Pointer, Set<any>>().setAutoDefault(Set)
 
     /**
@@ -426,26 +438,26 @@ export abstract class Ref<T = any> extends EventTarget {
      *  * toString() for any value
      */
     handleBeforeNonReferencableGet(key:any = NOT_EXISTING) {
-        if (Ref.freezeCapturing) return;
+        if (ReactiveValue.freezeCapturing) return;
 
         // remember previous capture state
-        const previousGetters = Ref.capturedGetters;
-        const previousGettersWithKeys = Ref.capturedGettersWithKeys;
-        const previousCapturing = Ref.isCapturing;
+        const previousGetters = ReactiveValue.capturedGetters;
+        const previousGettersWithKeys = ReactiveValue.capturedGettersWithKeys;
+        const previousCapturing = ReactiveValue.isCapturing;
 
         // trigger transform update if not live
         if (this.#transformSource && !this.#liveTransform && !this.#forceLiveTransform) {
-            Ref.capturedGetters = new Set();
-            Ref.capturedGettersWithKeys = new Map().setAutoDefault(Set);
+            ReactiveValue.capturedGetters = new Set();
+            ReactiveValue.capturedGettersWithKeys = new Map().setAutoDefault(Set);
             this.#transformSource.update();
         }
         if (previousCapturing) {
-            Ref.isCapturing = true;
-            Ref.capturedGetters = previousGetters ?? new Set();
-            Ref.capturedGettersWithKeys = previousGettersWithKeys ?? new Map().setAutoDefault(Set);
+            ReactiveValue.isCapturing = true;
+            ReactiveValue.capturedGetters = previousGetters ?? new Set();
+            ReactiveValue.capturedGettersWithKeys = previousGettersWithKeys ?? new Map().setAutoDefault(Set);
 
-            if (key === NOT_EXISTING) Ref.capturedGetters.add(this);
-            else if (this instanceof Pointer) Ref.capturedGettersWithKeys.getAuto(this).add(key)
+            if (key === NOT_EXISTING) ReactiveValue.capturedGetters.add(this);
+            else if (this instanceof Pointer) ReactiveValue.capturedGettersWithKeys.getAuto(this).add(key)
             else {
                 logger.warn("invalid capture, must be a pointer or property")
             }
@@ -455,6 +467,26 @@ export abstract class Ref<T = any> extends EventTarget {
     #liveTransform = false;
     #forceLiveTransform = false;
     #transformSource?: TransformSource
+    #isStaticTransform = false;
+    #staticTransformValue?: unknown
+
+    /**
+     * if true, there are no dependencies and the value is never updated
+     * (only used when a transform source exists, e.g. for effects and always)
+     */
+    get isStaticTransform() {
+        return this.#isStaticTransform;
+    }
+
+    get staticTransformValue() {
+        return this.#staticTransformValue;
+    }
+
+    protected set _staticTransformValue(val: unknown) {
+        this.#isStaticTransform = true;
+        this.#staticTransformValue = val;
+    }
+
 
     get transformSource() {
         return this.#transformSource
@@ -536,7 +568,7 @@ export abstract class Ref<T = any> extends EventTarget {
 /**
  * @deprecated use Datex.Ref instead
  */
-export const Value = Ref;
+export const Value = ReactiveValue;
 /**
  * @deprecated use Datex.RefLike instead
  */
@@ -560,15 +592,16 @@ export type TransformSource = {
     update: ()=>void
 
     // dependency values
-    deps: IterableWeakSet<Ref>
+    deps: IterableWeakSet<ReactiveValue>
     keyedDeps: IterableWeakMap<Pointer, Set<any>>
 }
+
 
 export type PointerPropertyParent<K,V> = Map<K,V> | Record<K & (string|symbol),V>;
 export type InferredPointerProperty<Parent, Key> = PointerProperty<Parent extends Map<unknown, infer MV> ? MV : Parent[Key&keyof Parent]>
 
 // interface to access (read/write) pointer value properties
-export class PointerProperty<T=any> extends Ref<T> {
+export class PointerProperty<T=any> extends ReactiveValue<T> {
 
     // override hasInstance from Ref
     static [Symbol.hasInstance]: (val: unknown) => val is PointerProperty
@@ -647,6 +680,22 @@ export class PointerProperty<T=any> extends Ref<T> {
         return new PointerProperty(pointer, key, leak_js_properties);
     }
 
+    public static getIfExists<const Key, Parent extends PointerPropertyParent<Key,unknown>>(parent: Parent|Pointer<Parent>|LazyPointer<Parent>, key: Key, leak_js_properties = false): PointerProperty<Parent extends Map<unknown, infer MV> ? MV : Parent[Key&keyof Parent]>|typeof NOT_EXISTING {
+        
+        parent = Pointer.pointerifyValue(parent);
+        if (parent instanceof Pointer && parent.type.template){
+            if ((typeof key == "string" || typeof key == "symbol" || typeof key == "number") && !(key in parent.type.template)) return NOT_EXISTING;
+        }
+        // normal html node without custom template, does not support pointer properties
+        else if (parent instanceof Pointer && parent.val instanceof Node && !parent.type.template) {
+            return NOT_EXISTING;
+        }
+        
+        const prop = this.get(parent, key, leak_js_properties);
+        if (prop.current_val === NOT_EXISTING) return NOT_EXISTING;
+        else return prop;
+    }
+
     // get current pointer property
     public override get val():T {
         if (this.lazy_pointer) return undefined as T
@@ -668,7 +717,7 @@ export class PointerProperty<T=any> extends Ref<T> {
             console.warn("Cannot set value of lazy pointer property");
             return;
         }
-        this.pointer!.handleSet(this.key, Ref.collapseValue(value, true, true));
+        this.pointer!.handleSet(this.key, ReactiveValue.collapseValue(value, true, true));
     }
 
     public override get current_val():T {
@@ -683,7 +732,7 @@ export class PointerProperty<T=any> extends Ref<T> {
             console.warn("Cannot set value of lazy pointer property");
             return;
         }
-        return this.pointer!.handleSet(this.key, Ref.collapseValue(value, true, true));
+        return this.pointer!.handleSet(this.key, ReactiveValue.collapseValue(value, true, true));
     }
 
     #observer_internal_handlers = new WeakMap<observe_handler, observe_handler>()
@@ -696,14 +745,14 @@ export class PointerProperty<T=any> extends Ref<T> {
             return;
         }
         const value_pointer = Pointer.pointerifyValue(this.current_val);
-        if (value_pointer instanceof Ref) value_pointer.observe(handler, bound_object, options); // also observe internal value changes
+        if (value_pointer instanceof ReactiveValue) value_pointer.observe(handler, bound_object, options); // also observe internal value changes
 
         const internal_handler = (v:unknown)=>{
             const value_pointer = Pointer.pointerifyValue(v);
-            if (value_pointer instanceof Ref) value_pointer.observe(handler, bound_object, options); // also update observe for internal value changes
-            if (handler.call) handler.call(bound_object, v,undefined,Ref.UPDATE_TYPE.INIT)
+            if (value_pointer instanceof ReactiveValue) value_pointer.observe(handler, bound_object, options); // also update observe for internal value changes
+            if (handler.call) handler.call(bound_object, v,undefined,ReactiveValue.UPDATE_TYPE.INIT)
             // if arrow function
-            else handler(v,undefined,Ref.UPDATE_TYPE.INIT)
+            else handler(v,undefined,ReactiveValue.UPDATE_TYPE.INIT)
         };
         this.pointer!.observe(internal_handler, bound_object, this.key, options)
 
@@ -720,7 +769,7 @@ export class PointerProperty<T=any> extends Ref<T> {
             return;
         }
         const value_pointer = Pointer.pointerifyValue(this.current_val);
-        if (value_pointer instanceof Ref) value_pointer.unobserve(handler, bound_object); // also unobserve internal value changes
+        if (value_pointer instanceof ReactiveValue) value_pointer.unobserve(handler, bound_object); // also unobserve internal value changes
 
         let internal_handler:observe_handler|undefined
 
@@ -741,6 +790,7 @@ export class PointerProperty<T=any> extends Ref<T> {
         if (type != Type.std.Any) return type; // TODO: returning Any makes problems
         else return undefined;
     }
+        
 }
 
 
@@ -750,7 +800,9 @@ export type ReadonlyRef<T> = Readonly<RefLike<T>>;
  * @deprecated Use Datex.RefOrValue instead
  */
 export type CompatValue<T> = RefLike<T|undefined>|T;
-export type RefOrValue<T> = RefLike<T>|T; // TODO: remove RefLike<T|undefined>, only workaround
+export type RefOrValue<T> = RefLike<T>|T;
+
+
 /**
  * object with refs or values as properties
  */
@@ -767,7 +819,7 @@ export type CollapsedValue<T extends RefOrValue<unknown>> =
     // generic value classes 
     T extends PointerProperty<infer TT> ? TT : 
     T extends Pointer<infer TT> ? TT : 
-    T extends Ref<infer TT> ? TT : 
+    T extends ReactiveValue<infer TT> ? TT : 
     T;
 
 // collapsed value that still has a reference in JS
@@ -776,7 +828,7 @@ export type CollapsedValueJSCompatible<T extends RefOrValue<unknown>> =
     // generic value classes
     T extends PointerProperty<infer TT> ? (TT extends primitive ? T : TT) :
     T extends Pointer<infer TT> ? (TT extends primitive ? T : TT) : 
-    T extends Ref<infer TT> ? (TT extends primitive ? T : TT) : 
+    T extends ReactiveValue<infer TT> ? (TT extends primitive ? T : TT) : 
     T;
 
 // number -> Number, ..., get prototype methods
@@ -876,12 +928,25 @@ export type MinimalJSRefWithIndirectRef<T, _C = CollapsedValue<T>> =
                 ObjectRef<_C> // collapsed object
     )
 
-export type MinimalJSRef<T, _C = CollapsedValue<T>> =
+export type Ref<T, _C = CollapsedValue<T>> =
     _C&{} extends symbol ? symbol : (
         _C&{} extends WrappedPointerValue ?
             PointerWithPrimitive<_C>: // keep pointer reference
             ObjectRef<_C> // collapsed object
     )
+
+/**
+ * @deprecated use Ref
+ */
+export type MinimalJSRef<T, _C = CollapsedValue<T>> = Ref<T, _C>
+
+// same as MinimalJSRef, but objects don't have $ and $$ properties
+export type MinimalJSRefNoObjRef<T, _C = CollapsedValue<T>> =
+_C&{} extends symbol ? symbol : (
+    _C&{} extends WrappedPointerValue ?
+        PointerWithPrimitive<_C>: // keep pointer reference
+        _C // collapsed object
+)
 
 // return Pointer<T>&T for primitives (excluding boolean) and Pointer<T> otherwise
 export type PointerWithPrimitive<T> = T&{} extends WrappedPointerValue ? 
@@ -889,9 +954,6 @@ export type PointerWithPrimitive<T> = T&{} extends WrappedPointerValue ?
             Pointer<T>&T : // e.g. Pointer<number>&number
             Pointer<T> : // e.g. Pointer<URL>
     Pointer<T> // e.g. Pointer<Record<string, unknown>>
-
-
-type a = MinimalJSRef<boolean>
 
 
 export type CollapsedValueAdvanced<T extends RefOrValue<unknown>, COLLAPSE_POINTER_PROPERTY extends boolean|undefined = true, COLLAPSE_PRIMITIVE_POINTER extends boolean|undefined = true, _C = CollapsedValue<T>> = 
@@ -911,7 +973,7 @@ export type ProxifiedValue<T extends RefOrValue<unknown>> =
     // already a proxified value
     T extends PointerProperty ? T :
     T extends Pointer? T :
-    T extends Ref ? T :
+    T extends ReactiveValue ? T :
     // proxify
     RefLike<T>
 
@@ -1103,12 +1165,21 @@ export type SmartTransformOptions<T=unknown> = {
     initial?: T,
 	cache?: boolean,
     allowStatic?: boolean,
+    // allow async when using always instead of asyncAlways
+    _allowAsync?: boolean,
+    // collapse primitive pointer if value has no reactive dependencies and garbage-collect pointer
+    _collapseStatic: boolean,
+    // always return the wrapper instead of the collapsed value, even for non-primitive pointers
+    _returnWrapper?: boolean,
+    // set the pointer type to allow any value
+    _allowAnyType?: boolean,
 }
 
 type TransformState = {
     isLive: boolean;
     isFirst: boolean;
-    deps: IterableWeakSet<Ref<any>>;
+    executingEffect: boolean;
+    deps: IterableWeakSet<ReactiveValue<any>>;
     keyedDeps: AutoMap<any, Set<any>>;
     returnCache: Map<string, any>;
     getDepsHash: () => string;
@@ -1147,7 +1218,7 @@ const observableArrayMethods = new Set<string>([
 
 
 /** Wrapper class for all pointer values ($xxxxxxxx) */
-export class Pointer<T = any> extends Ref<T> {
+export class Pointer<T = any> extends ReactiveValue<T> {
 
     // override hasInstance from Ref
     static [Symbol.hasInstance]: (val: unknown) => val is Pointer
@@ -1405,7 +1476,7 @@ export class Pointer<T = any> extends Ref<T> {
      * @deprecated use Ref.isRef
      */
     public static isReference(value:unknown) {
-        return Ref.isRef(value);
+        return ReactiveValue.isRef(value);
     }
 
     // returns the existing pointer for a value, or the value, if no pointer exists
@@ -1672,9 +1743,9 @@ export class Pointer<T = any> extends Ref<T> {
     // create/get DatexPointer for value if possible (not primitive) and return value
     static proxifyValue(value:unknown, sealed = false, allowed_access?:target_clause, anonymous = false, persistant= false, check_proxify_as_child = false) {
         if ((value instanceof Pointer && value.is_js_primitive) || value instanceof PointerProperty) return value; // return by reference
-        else if (value instanceof Ref) return value.val; // return by value
+        else if (value instanceof ReactiveValue) return value.val; // return by value
         const type = Type.ofValue(value)
-        const collapsed_value = Ref.collapseValue(value,true,true)
+        const collapsed_value = ReactiveValue.collapseValue(value,true,true)
     // if proxify_as_child=false: don't create pointer for this value, return original value
         // e.g.: primitive values
         if ((check_proxify_as_child && !type.proxify_as_child) || type.is_primitive) {
@@ -1690,7 +1761,7 @@ export class Pointer<T = any> extends Ref<T> {
         if (value instanceof LazyPointer) throw new PointerError("Lazy Pointer not supported in this context");
         if (value instanceof Pointer) return <Pointer<T>>value; // return pointer by reference
         //if (value instanceof PointerProperty) return value; // return pointerproperty TODO: handle pointer properties?
-        value = Ref.collapseValue(value, true, true);
+        value = ReactiveValue.collapseValue(value, true, true);
 
         const ptr = Pointer.getByValue(value); // try proxify
 
@@ -1700,7 +1771,9 @@ export class Pointer<T = any> extends Ref<T> {
             return ptr;
         }
         // create new pointer
-        else return <Pointer<T>>Pointer.create(id, value, sealed, undefined, persistant, anonymous, false, allowed_access); 
+        else {
+            return <Pointer<T>>Pointer.create(id, value, sealed, undefined, persistant, anonymous, false, allowed_access); 
+        }
     }
 
     // same as createOrGet, but also return lazy pointer if it exists
@@ -1740,7 +1813,7 @@ export class Pointer<T = any> extends Ref<T> {
         let p:Pointer<T>;
 
         // DatexValue: DatexPointer or DatexPointerProperty not valid as object, get the actual value instead
-        value = <T|typeof NOT_EXISTING> Ref.collapseValue(value,true,true)
+        value = <T|typeof NOT_EXISTING> ReactiveValue.collapseValue(value,true,true)
 
         // is js primitive value
         if (Object(value) !== value && typeof value !== "symbol") {
@@ -1963,7 +2036,7 @@ export class Pointer<T = any> extends Ref<T> {
 
         // remove property observers
         for (const [value, handler] of this.#active_property_observers.values()) {
-            Ref.unobserve(value, handler, this.#unique);
+            ReactiveValue.unobserve(value, handler, this.#unique);
         }
 
         // delete labels
@@ -2111,7 +2184,7 @@ export class Pointer<T = any> extends Ref<T> {
         endpoint = endpoint?.main;
         if (
             Runtime.OPTIONS.PROTECT_POINTERS 
-            && !(endpoint == Runtime.endpoint)
+            && !(endpoint == Runtime.endpoint.main)
             && this.is_origin
             && (
                 !endpoint || 
@@ -2198,6 +2271,8 @@ export class Pointer<T = any> extends Ref<T> {
         if (!this.is_js_primitive) throw new PointerError("Assertions are not yet supported for non-primitive pointer")
         if (!this.#typeAssertions) this.#typeAssertions = new Conjunction();
         this.#typeAssertions.add(Assertion.get(undefined, assertion, false));
+        
+        this.validateTypeAssertions(this.val)
         return this;
     }
 
@@ -2252,14 +2327,14 @@ export class Pointer<T = any> extends Ref<T> {
      * create a new transformed pointer from an existing pointer
      */
     public transform<R>(transform:TransformFunction<[this],R>) {
-        return Ref.collapseValue(Pointer.createTransform([this], transform));
+        return ReactiveValue.collapseValue(Pointer.createTransform([this], transform));
     }
 
     /**
      * create a new transformed pointer from an existing pointer (Async transform function)
      */
     public transformAsync<R>(transform:AsyncTransformFunction<[this],R>) {
-        return Ref.collapseValue(Pointer.createTransformAsync([this], transform));
+        return ReactiveValue.collapseValue(Pointer.createTransformAsync([this], transform));
     }
 
 
@@ -2478,7 +2553,7 @@ export class Pointer<T = any> extends Ref<T> {
     override get val():T {
         if (this.#garbage_collected) throw new PointerError("Pointer "+this.idString()+" was garbage collected");
         else if (!this.#loaded) {
-            throw new PointerError("Cannot get value of uninitialized pointer")
+            throw new PointerError("Cannot get value of uninitialized pointer ("+this.idString()+")")
         }
         // deref and check if not garbage collected
         if (!this.is_persistent && !this.is_js_primitive && super.val instanceof WeakRef && this.type !== Type.std.WeakRef) {
@@ -2506,7 +2581,7 @@ export class Pointer<T = any> extends Ref<T> {
     override get current_val():T|undefined {
         if (this.#garbage_collected) throw new PointerError("Pointer "+this.idString()+" was garbage collected");
         else if (!this.#loaded) {
-            throw new PointerError("Cannot get value of uninitialized pointer")
+            throw new PointerError("Cannot get value of uninitialized pointer ("+this.idString()+")")
         }
         // deref and check if not garbage collected
         if (!this.is_persistent && !this.is_js_primitive && super.current_val instanceof WeakRef && this.type !== Type.std.WeakRef) {
@@ -2539,14 +2614,14 @@ export class Pointer<T = any> extends Ref<T> {
         // TODO: await promises?
         for (const [key, entry] of this.change_observers) {
             for (const [o, options] of entry) {
-                if ((!options?.types || options.types.includes(Ref.UPDATE_TYPE.INIT))) o(value, key, Ref.UPDATE_TYPE.INIT); 
+                if ((!options?.types || options.types.includes(ReactiveValue.UPDATE_TYPE.INIT))) o(value, key, ReactiveValue.UPDATE_TYPE.INIT); 
             }
         }
         for (const [object, entries] of this.bound_change_observers) {
             for (const [key, handlers] of entries) {
                 for (const [handler, options] of handlers) {
-                    if ((!options?.types || options.types.includes(Ref.UPDATE_TYPE.INIT))) {
-                        const res = handler.call(object, value, key, Ref.UPDATE_TYPE.INIT);
+                    if ((!options?.types || options.types.includes(ReactiveValue.UPDATE_TYPE.INIT))) {
+                        const res = handler.call(object, value, key, ReactiveValue.UPDATE_TYPE.INIT);
                         if (res === false) this.unobserve(handler, object, key);
                     }
                 }
@@ -2570,7 +2645,7 @@ export class Pointer<T = any> extends Ref<T> {
      * @param v initial value
      */
     protected initializeValue(v:RefOrValue<T>, is_transform?:boolean) {
-        let val = Ref.collapseValue(v,true,true);
+        let val = ReactiveValue.collapseValue(v,true,true);
 
         if (typeof val == "symbol" && Symbol.keyFor(val) !== undefined) {
             throw new Error("Global and well-known symbols (e.g. Symbol.for('name') or Symbol.iterator) are no yet supported as pointer values")
@@ -2580,7 +2655,10 @@ export class Pointer<T = any> extends Ref<T> {
         if (is_transform) val = this.getInitialTransformValue(val)
 
         // Get type from initial value, keep as <any> if initial value is null/undefined or indirect reference
-        if (val!==undefined && val !== null && !this.#indirectReference) this.#type = Type.ofValue(val);
+        if (val!==undefined && val !== null && 
+            // allow false (workaround for UIX DOM elements)
+            !(val === false)
+            && !this.#indirectReference) this.#type = Type.ofValue(val);
 
         // console.log("loaded : "+ this.id + " - " + this.#type, val)
 
@@ -2614,10 +2692,12 @@ export class Pointer<T = any> extends Ref<T> {
 
                 // TODO: is this required somewhere?
                 // add reference to this DatexPointer to the original value
-                if (!this.is_anonymous) {
+                if (!this.is_anonymous && !this.isStaticTransform) {
                     try {
                         Object.defineProperty(val, DX_PTR, {value: this, enumerable: false, writable: true, configurable: true})
-                    } catch(e) {}
+                    } catch {
+                        logger.error("Cannot set DX_PTR for " + this.idString())
+                    }
                 }
     
                 if (this.sealed) this.visible_children = new Set(Object.keys(val)); // get current keys and don't allow any other children
@@ -2627,9 +2707,9 @@ export class Pointer<T = any> extends Ref<T> {
                 Pointer.pointer_value_map.set(val, this);
                 // create proxy
 
-                const value = alreadyProxy ? val : this.addObjProxy((val instanceof UnresolvedValue) ? val[DX_VALUE] : val); 
+                const value = alreadyProxy||this.isStaticTransform ? val : this.addObjProxy((val instanceof UnresolvedValue) ? val[DX_VALUE] : val); 
                 // add $, $$
-                if (!alreadyProxy && typeof value !== "symbol") this.add$Properties(value);
+                if (!(alreadyProxy||this.isStaticTransform) && typeof value !== "symbol") this.add$Properties(value);
 
                 this.#loaded = true; // this.value exists (must be set to true before the super.value getter is called)
     
@@ -2645,7 +2725,7 @@ export class Pointer<T = any> extends Ref<T> {
                 this.updateGarbageCollection(); 
     
                 // proxify children, if not anonymous
-                if (this.type.proxify_children) this.proxifyChildren();
+                if (this.type.proxify_children && !this.isStaticTransform) this.proxifyChildren();
     
                 // save proxy + original value in map to find the right pointer for this value in the future
                 Pointer.pointer_value_map.set(value, this);
@@ -2710,8 +2790,16 @@ export class Pointer<T = any> extends Ref<T> {
             })
         }
         catch(e) {
+            console.error(e);
+            console.log(val.$);
             logger.error("Cannot set $ properties for " + this.idString())
         }
+    }
+
+    private validateTypeAssertions(val:T, type?:Type) {
+        type ??= Type.ofValue(val);
+        return this.#typeAssertions && 
+            !Type.matchesType(type, this.#typeAssertions, val, true)
     }
 
     /**
@@ -2720,17 +2808,19 @@ export class Pointer<T = any> extends Ref<T> {
      * @returns promise which resolves when all update side effects are resolved
      */
     protected updateValue(v:RefOrValue<T>, trigger_observers = true, is_transform?:boolean) {
-        const val = <T> Ref.collapseValue(v,true,true);
+        const val = <T> ReactiveValue.collapseValue(v,true,true);
         const newType = Type.ofValue(val);
 
+        const current_val = this.current_val;
+
         // not changed (relevant for primitive values)
-        if (this.current_val === val) {
+        if (Object.is(current_val, val)) {
             return;
         }
 
         // also check if array is equal
-        if (this.current_val instanceof Array && val instanceof Array) {
-            if (this.current_val.length == val.length && this.current_val.every((v,i)=>v===val[i])) {
+        if (current_val instanceof Array && val instanceof Array) {
+            if (current_val.length == val.length && current_val.every((v,i)=>v===val[i])) {
                 return;
             }
         }
@@ -2747,8 +2837,7 @@ export class Pointer<T = any> extends Ref<T> {
                 !Type.matchesType(newType, this.type, val, true) ||
                 // validate custom type assertions
                 (
-                    this.#typeAssertions && 
-                    !Type.matchesType(newType, this.#typeAssertions, val, true)
+                    this.#typeAssertions && this.validateTypeAssertions(val, newType)
                 )
             ) {
                 throw new ValueError("Invalid value type for pointer "+this.idString()+": " + newType + " - must be " + this.type);
@@ -2758,7 +2847,7 @@ export class Pointer<T = any> extends Ref<T> {
         let updatePromise: Promise<any>|undefined;
 
         // set primitive value, reference not required
-        if (this.is_js_primitive) {
+        if (this.is_js_primitive || this.#any_type) {
             const didCustomUpdate = this.customTransformUpdate(val)
             if (!didCustomUpdate) updatePromise = super.setVal(val, trigger_observers, is_transform);
         }
@@ -2768,7 +2857,7 @@ export class Pointer<T = any> extends Ref<T> {
 
             if (!didCustomUpdate) {
                 // is indirect reference, set new value
-                if (this.supportsIndirectRefs && (this.#indirectReference || Ref.isRef(val))) {
+                if (this.supportsIndirectRefs && (this.#indirectReference || ReactiveValue.isRef(val))) {
                     this.#indirectReference = Pointer.getByValue(val);
                     super.setVal(val, trigger_observers, is_transform);
                 }
@@ -2847,7 +2936,7 @@ export class Pointer<T = any> extends Ref<T> {
         
         const transformMethod = transform instanceof Function ? transform : ()=>transform.execute(Runtime.endpoint);
 
-        const initialValue = await (observe_values.length==1 ? transformMethod(...<CollapsedDatexObjectWithRequiredProperties<V>>[Ref.collapseValue(observe_values[0], true, true)]) : transformMethod(...<CollapsedDatexObjectWithRequiredProperties<V>>observe_values.map(v=>Ref.collapseValue(v, true, true)))); // transform current value
+        const initialValue = await (observe_values.length==1 ? transformMethod(...<CollapsedDatexObjectWithRequiredProperties<V>>[ReactiveValue.collapseValue(observe_values[0], true, true)]) : transformMethod(...<CollapsedDatexObjectWithRequiredProperties<V>>observe_values.map(v=>ReactiveValue.collapseValue(v, true, true)))); // transform current value
         if (initialValue === VOID) throw new ValueError("initial tranform value cannot be void");
         this.setVal(initialValue, true, true);
         
@@ -2859,8 +2948,8 @@ export class Pointer<T = any> extends Ref<T> {
 
         // transform updates
         for (const value of observe_values) {
-            if (value instanceof Ref) value.observe(async ()=>{
-                const newValue = await (observe_values.length==1 ? transformMethod(...<CollapsedDatexObjectWithRequiredProperties<V>>[Ref.collapseValue(observe_values[0], true, true)]) : transformMethod(...<CollapsedDatexObjectWithRequiredProperties<V>>observe_values.map(v=>Ref.collapseValue(v, true, true)))); // update value
+            if (value instanceof ReactiveValue) value.observe(async ()=>{
+                const newValue = await (observe_values.length==1 ? transformMethod(...<CollapsedDatexObjectWithRequiredProperties<V>>[ReactiveValue.collapseValue(observe_values[0], true, true)]) : transformMethod(...<CollapsedDatexObjectWithRequiredProperties<V>>observe_values.map(v=>ReactiveValue.collapseValue(v, true, true)))); // update value
                 if (newValue !== VOID) this.setVal(newValue, true, true)
             });
         }
@@ -2868,7 +2957,7 @@ export class Pointer<T = any> extends Ref<T> {
     }
 
     protected handleTransform<R,V extends TransformFunctionInputs>(observe_values:V, transform:TransformFunction<V,T&R>, persistent_datex_transform?:string): Pointer<R> {     
-        const initialValue = observe_values.length==1 ? transform(...<CollapsedDatexObjectWithRequiredProperties<V>>[Ref.collapseValue(observe_values[0], true, true)]) : transform(...<CollapsedDatexObjectWithRequiredProperties<V>>observe_values.map(v=>Ref.collapseValue(v, true, true))); // transform current value
+        const initialValue = observe_values.length==1 ? transform(...<CollapsedDatexObjectWithRequiredProperties<V>>[ReactiveValue.collapseValue(observe_values[0], true, true)]) : transform(...<CollapsedDatexObjectWithRequiredProperties<V>>observe_values.map(v=>ReactiveValue.collapseValue(v, true, true))); // transform current value
         if (initialValue === VOID) throw new ValueError("initial tranform value cannot be void");
         this.setVal(initialValue, true, true);
         
@@ -2878,8 +2967,8 @@ export class Pointer<T = any> extends Ref<T> {
 
         // transform updates
         for (const value of observe_values) {
-            if (value instanceof Ref) value.observe(()=>{
-                const newValue = observe_values.length==1 ? transform(...<CollapsedDatexObjectWithRequiredProperties<V>>[Ref.collapseValue(observe_values[0], true, true)]) : transform(...<CollapsedDatexObjectWithRequiredProperties<V>>observe_values.map(v=>Ref.collapseValue(v, true, true))); // update value
+            if (value instanceof ReactiveValue) value.observe(()=>{
+                const newValue = observe_values.length==1 ? transform(...<CollapsedDatexObjectWithRequiredProperties<V>>[ReactiveValue.collapseValue(observe_values[0], true, true)]) : transform(...<CollapsedDatexObjectWithRequiredProperties<V>>observe_values.map(v=>ReactiveValue.collapseValue(v, true, true))); // update value
                 // await promise (should avoid in non-async transform)
                 if (newValue instanceof Promise) newValue.then((val)=>this.setVal(val, true, true));
                 else if (newValue !== VOID) this.setVal(newValue, true, true);
@@ -2919,7 +3008,8 @@ export class Pointer<T = any> extends Ref<T> {
         const state: TransformState = {
             isLive: false,
             isFirst: true,
-            deps: new IterableWeakSet<Ref>(),
+            executingEffect: false,
+            deps: new IterableWeakSet<ReactiveValue>(),
             keyedDeps: new IterableWeakMap<Pointer, Set<any>>().setAutoDefault(Set),
             returnCache: new Map<string, any>(),
 
@@ -2934,18 +3024,23 @@ export class Pointer<T = any> extends Ref<T> {
             },
 
             update: () => {
+                // currently executing effect, skip update
+                if (state.executingEffect) return;
+                
                 // no live transforms needed, just get current value
                 // capture getters in first update() call to check if there
                 // is a static transform and show a warning
                 if (!state.isLive && !state.isFirst) {
+                    state.executingEffect = true;
                     this.setVal(transform() as T, true, true);
+                    state.executingEffect = false;
                 }
                 // get transform value and update dependency observers
                 else {
                     state.isFirst = false;
     
                     let val!: T
-                    let capturedGetters: Set<Ref<any>> | undefined;
+                    let capturedGetters: Set<ReactiveValue<any>> | undefined;
                     let capturedGettersWithKeys: AutoMap<Pointer<any>, Set<any>> | undefined;
     
                     if (options?.cache) {
@@ -2958,12 +3053,14 @@ export class Pointer<T = any> extends Ref<T> {
     
                     // no cached value found, run transform function
                     if (val === undefined) {
-                        Ref.captureGetters();
+                        ReactiveValue.captureGetters();
         
                         try {
+                            state.executingEffect = true;
                             val = transform() as T;
+                            state.executingEffect = false;
                             // also trigger getter if pointer is returned
-                            Ref.collapseValue(val, true, true); 
+                            ReactiveValue.collapseValue(val, true, true); 
                         }
                         catch (e) {
                             if (e !== Pointer.WEAK_EFFECT_DISPOSED) console.error(e);
@@ -2972,7 +3069,7 @@ export class Pointer<T = any> extends Ref<T> {
                         }
                         // always cleanup capturing
                         finally {
-                            ({capturedGetters, capturedGettersWithKeys} = Ref.getCapturedGetters());
+                            ({capturedGetters, capturedGettersWithKeys} = ReactiveValue.getCapturedGetters());
                         }
                     }
         
@@ -3116,7 +3213,7 @@ export class Pointer<T = any> extends Ref<T> {
 
     private handleTransformValue(
         val: T,
-        capturedGetters: Set<Ref<any>>|undefined,
+        capturedGetters: Set<ReactiveValue<any>>|undefined,
         capturedGettersWithKeys: AutoMap<Pointer<any>, Set<any>>|undefined,
         state: TransformState,
         ignoreReturnValue: boolean,
@@ -3124,7 +3221,7 @@ export class Pointer<T = any> extends Ref<T> {
     ) {
         if (!ignoreReturnValue && !this.value_initialized) {
             if (val == undefined) this.#is_js_primitive = true;
-            else this.#updateIsJSPrimitive(Ref.collapseValue(val,true,true));
+            else this.#updateIsJSPrimitive(ReactiveValue.collapseValue(val,true,true));
         }
         
         // set isLive to true, if not primitive
@@ -3132,9 +3229,6 @@ export class Pointer<T = any> extends Ref<T> {
             state.isLive = true;
             this._liveTransform = true
         }
-
-        // update value
-        if (!ignoreReturnValue) this.setVal(val, true, true);
 
         // remove return value if captured by getters
         // TODO: this this work as intended?
@@ -3145,10 +3239,15 @@ export class Pointer<T = any> extends Ref<T> {
         const gettersCount = (capturedGetters?.size??0) + (capturedGettersWithKeys?.size??0);
 
         // no dependencies, will never change, this is not the intention of the transform
-        if (!ignoreReturnValue && hasGetters && !gettersCount && !options?.allowStatic) {
-            logger.warn("The transform value for " + this.idString() + " is a static value:", val);
-            // TODO: cleanup stuff not needed if no reactive transform
+        if (!ignoreReturnValue && hasGetters && !gettersCount) {
+            this._staticTransformValue = val;
+            if (!options?.allowStatic) logger.warn("The transform value for " + this.idString() + " is a static value:", val);
+            // cleanup stuff not needed if no reactive transform
+            if (options?.allowStatic) return;
         }
+
+        // update value
+        if (!ignoreReturnValue) this.setVal(val, true, true);
 
         if (state.isLive) {
 
@@ -3293,8 +3392,23 @@ export class Pointer<T = any> extends Ref<T> {
         return (<WeakRef<any>>this.#shadow_object)?.deref()
     }
 
+    #any_type = false;
+
+    /**
+     * gets the current type of the pointer, or any if pointer is explicitly set to any
+     */
     get type():Type {
+        if (this.#any_type) return Type.std.Any;
+        return this.current_type;
+    }
+
+    get current_type():Type {
         return this.#unwrapped_transform_type ?? this.#type;
+    }
+
+
+    allowAnyType(any_type = true) {
+        this.#any_type = any_type;
     }
 
 
@@ -3628,8 +3742,19 @@ export class Pointer<T = any> extends Ref<T> {
         const high_priority_keys = new Set();// remember higher priority keys in prototype chain, don't override observer with older properties in the chain
 
         const value = this.shadow_object!;
+
         for (const name of this.visible_children ?? Object.keys(value)) {
             const type = Type.ofValue(value[name])
+
+            // run assertions for property if defined in template
+            const templatePropType = this.type?.template?.[name];
+            if (templatePropType instanceof Conjunction) {
+                Type.matchesType(type, templatePropType, value[name], true)
+                // for (const type of templatePropType) {
+                //     if (type instanceof)
+                // }
+
+            }
 
             // non primitive value - proxify always
             if (!type.is_primitive) {
@@ -3642,7 +3767,7 @@ export class Pointer<T = any> extends Ref<T> {
             }
 
             // already proxified child - set observers
-            else if (value[name] instanceof Ref) {
+            else if (value[name] instanceof ReactiveValue) {
                 this.initShadowObjectPropertyObserver(name, value[name]);
             }
             high_priority_keys.add(name);
@@ -3654,8 +3779,8 @@ export class Pointer<T = any> extends Ref<T> {
         while ((prototype = Object.getPrototypeOf(prototype)) != Object.prototype) {
             for (const name of this.visible_children ?? Object.keys(prototype)) {
                 try {
-                    if (prototype[name] instanceof Ref && !high_priority_keys.has(name)) { // only observer Values, and ignore if already observed higher up in prototype chain
-                        this.initShadowObjectPropertyObserver(name, <Ref>prototype[name]);
+                    if (prototype[name] instanceof ReactiveValue && !high_priority_keys.has(name)) { // only observer Values, and ignore if already observed higher up in prototype chain
+                        this.initShadowObjectPropertyObserver(name, <ReactiveValue>prototype[name]);
                     }
                 } catch (e) {
                     logger.warn("could not check prototype property:",name)
@@ -3691,6 +3816,11 @@ export class Pointer<T = any> extends Ref<T> {
 
         // fake primitives TODO: dynamic mime types
         if (obj instanceof Quantity || obj instanceof Time || obj instanceof Type || obj instanceof URL  || obj instanceof Target || obj instanceof Blob || (globalThis.MediaStream && obj instanceof MediaStream) || (globalThis.HTMLImageElement && obj instanceof HTMLImageElement)) {
+            return obj;
+        }
+
+        // don't proxyify Text nodes
+        if (globalThis.Text && obj instanceof Text) {
             return obj;
         }
 
@@ -3768,7 +3898,7 @@ export class Pointer<T = any> extends Ref<T> {
                     get: () => { 
                         this.handleBeforeNonReferencableGet(name);
                         // important: reference shadow_object, not this.shadow_object here, otherwise it might get garbage collected
-                        return Ref.collapseValue(shadow_object[name], true, true);
+                        return ReactiveValue.collapseValue(shadow_object[name], true, true);
                     }
                 });
             
@@ -3816,7 +3946,7 @@ export class Pointer<T = any> extends Ref<T> {
                 get: (_target, key) => {
                     if (key == DX_PTR) return this;
                     if (this.#custom_prop_getter && (!this.shadow_object || !(key in this.shadow_object)) && !(typeof key == "symbol")) return this.#custom_prop_getter(key);
-                    const val:any = Ref.collapseValue(this.shadow_object?.[key], true, true);
+                    const val:any = ReactiveValue.collapseValue(this.shadow_object?.[key], true, true);
 
                     if (key != "$" && key != "$$") {
                         if (is_array) this.handleBeforeNonReferenceableGetArray(key);
@@ -3959,7 +4089,7 @@ export class Pointer<T = any> extends Ref<T> {
                 return (typeof property_value == "function") ? (...args:unknown[])=>(<Function>property_value).apply(this.current_val, args) : property_value;
             }
             // restricted to DATEX properties
-            else if (this.shadow_object && key in this.shadow_object) property_value = Ref.collapseValue(this.shadow_object[key], true, true)
+            else if (this.shadow_object && key in this.shadow_object) property_value = ReactiveValue.collapseValue(this.shadow_object[key], true, true)
         }
         return property_value;
     }
@@ -4070,7 +4200,7 @@ export class Pointer<T = any> extends Ref<T> {
         }
 
         // inform observers
-        return this.callObservers(value, key, Ref.UPDATE_TYPE.SET, false, false, previous)
+        return this.callObservers(value, key, ReactiveValue.UPDATE_TYPE.SET, false, false, previous)
     }
 
 
@@ -4114,7 +4244,7 @@ export class Pointer<T = any> extends Ref<T> {
 
 
         // inform observers
-        return this.callObservers(value, VOID, Ref.UPDATE_TYPE.ADD)
+        return this.callObservers(value, VOID, ReactiveValue.UPDATE_TYPE.ADD)
 
     }
 
@@ -4198,7 +4328,7 @@ export class Pointer<T = any> extends Ref<T> {
         }
 
         // inform observers
-        this.callObservers(VOID, VOID, Ref.UPDATE_TYPE.CLEAR)
+        this.callObservers(VOID, VOID, ReactiveValue.UPDATE_TYPE.CLEAR)
     }
 
     /** all values are removed */
@@ -4228,7 +4358,7 @@ export class Pointer<T = any> extends Ref<T> {
         // array splice
         // trigger BEFORE_DELETE
         for (let i = obj.length - netDeleteCount; i < obj.length; i++) {
-            this.callObservers(obj[i], i, Ref.UPDATE_TYPE.BEFORE_DELETE)
+            this.callObservers(obj[i], i, ReactiveValue.UPDATE_TYPE.BEFORE_DELETE)
         }
 
         // previous entries
@@ -4275,11 +4405,11 @@ export class Pointer<T = any> extends Ref<T> {
         for (let i = originalLength-1; i>=start_index; i--) {
             // element moved here?
             if (i < obj.length) {
-                this.callObservers(obj[i], i, Ref.UPDATE_TYPE.SET, undefined, undefined, previous[i], atomicId)
+                this.callObservers(obj[i], i, ReactiveValue.UPDATE_TYPE.SET, undefined, undefined, previous[i], atomicId)
             }
             // end of array, trigger delete
             else {
-                this.callObservers(VOID, i, Ref.UPDATE_TYPE.DELETE, undefined, undefined, previous[i], atomicId)
+                this.callObservers(VOID, i, ReactiveValue.UPDATE_TYPE.DELETE, undefined, undefined, previous[i], atomicId)
             }
         }
        
@@ -4300,7 +4430,7 @@ export class Pointer<T = any> extends Ref<T> {
 
         const previous = this.getProperty(key);
         // inform observers before delete
-        this.callObservers(previous, key, Ref.UPDATE_TYPE.BEFORE_DELETE)
+        this.callObservers(previous, key, ReactiveValue.UPDATE_TYPE.BEFORE_DELETE)
 
         const res = JSInterface.handleDeletePropertySilently(obj, key, this, this.type);
         if (res == INVALID || res == NOT_EXISTING) {
@@ -4331,7 +4461,7 @@ export class Pointer<T = any> extends Ref<T> {
         }
         
         // inform observers
-        return this.callObservers(VOID, key, Ref.UPDATE_TYPE.DELETE, undefined, undefined, previous)
+        return this.callObservers(VOID, key, ReactiveValue.UPDATE_TYPE.DELETE, undefined, undefined, previous)
 
     }
 
@@ -4342,7 +4472,7 @@ export class Pointer<T = any> extends Ref<T> {
         let obj = this.current_val;
 
         // inform observers before remove
-        this.callObservers(value, undefined, Ref.UPDATE_TYPE.BEFORE_REMOVE)
+        this.callObservers(value, undefined, ReactiveValue.UPDATE_TYPE.BEFORE_REMOVE)
 
         // try set on custom pseudo class
         try {
@@ -4370,7 +4500,7 @@ export class Pointer<T = any> extends Ref<T> {
         }
 
         // inform observers
-        return this.callObservers(value, VOID, Ref.UPDATE_TYPE.REMOVE)
+        return this.callObservers(value, VOID, ReactiveValue.UPDATE_TYPE.REMOVE)
 
     }
 
@@ -4409,7 +4539,7 @@ export class Pointer<T = any> extends Ref<T> {
         this.shadow_object[key] = value;
 
         // add observer for internal changes
-        if (value instanceof Ref) {
+        if (value instanceof ReactiveValue) {
             this.initShadowObjectPropertyObserver(key, value);
         }
 
@@ -4425,21 +4555,21 @@ export class Pointer<T = any> extends Ref<T> {
         // remove previous observer for property
         if (this.#active_property_observers.has(key)) {
             const [value, handler] = this.#active_property_observers.get(key)!;
-            Ref.unobserve(value, handler, this.#unique); // xxxxxx
+            ReactiveValue.unobserve(value, handler, this.#unique); // xxxxxx
         }
 
         // new observer 
         // TODO: is weak pointer reference correct here?
         const ref = new WeakRef(this);
-        const handler = (_value: unknown, _key?: unknown, _type?: Ref.UPDATE_TYPE, _is_transform?: boolean, _is_child_update?: boolean, previous?: any) => {
+        const handler = (_value: unknown, _key?: unknown, _type?: ReactiveValue.UPDATE_TYPE, _is_transform?: boolean, _is_child_update?: boolean, previous?: any) => {
             const self = ref.deref();
             if (!self) return;
             // console.warn(_value,_key,_type,_is_transform)
             // inform observers (TODO: more update event info?, currently just acting as if it was a SET)
-            self.callObservers(_value, key, Ref.UPDATE_TYPE.SET, _is_transform, true, previous)
+            self.callObservers(_value, key, ReactiveValue.UPDATE_TYPE.SET, _is_transform, true, previous)
         };
 
-        Ref.observeAndInit(value, handler, this.#unique);
+        ReactiveValue.observeAndInit(value, handler, this.#unique);
         this.#active_property_observers.set(key, [value, handler]);
     }
 
@@ -4477,8 +4607,11 @@ export class Pointer<T = any> extends Ref<T> {
         // observe specific property
         else {
             // make sure the array index is a number
-            if (this.current_val instanceof Array) key = <K><unknown>Number(key);
-
+            if (this.current_val instanceof Array) {
+                if (!(typeof key == "number" || typeof key == "bigint" || typeof key == "string")) return;
+                key = <K><unknown>Number(key);
+            }
+     
             if (bound_object) {
                 if (!this.bound_change_observers.has(bound_object)) {
                     this.bound_change_observers.set(bound_object, new Map());
@@ -4496,7 +4629,7 @@ export class Pointer<T = any> extends Ref<T> {
 
 
 
-    public override unobserve<K=any>(handler:(value:any, key?:K, type?:Ref.UPDATE_TYPE)=>void, bound_object?:object, key?:K):void {
+    public override unobserve<K=any>(handler:(value:any, key?:K, type?:ReactiveValue.UPDATE_TYPE)=>void, bound_object?:object, key?:K):void {
         // unobserve all changes
         if (key == undefined) {
             super.unobserve(handler, bound_object); // default observer
@@ -4520,7 +4653,17 @@ export class Pointer<T = any> extends Ref<T> {
     }
 
 
-    private callObservers(value:any, key:any, type:Ref.UPDATE_TYPE, is_transform = false, is_child_update = false, previous?: any, atomic_id?: symbol) {
+    private callObservers(value:any, key:any, type:ReactiveValue.UPDATE_TYPE, is_transform = false, is_child_update = false, previous?: any, atomic_id?: symbol) {
+        // disable unintentional capturing of dependencies for smart transforms that are triggered by getters inside observer callbacks
+        
+        // @ReactiveValue.disableCapturing
+        ReactiveValue.freezeCapturing = true;
+        const res = this._callObservers(value, key, type, is_transform, is_child_update, previous, atomic_id);
+        ReactiveValue.freezeCapturing = false;
+        return res;
+    }
+
+    private _callObservers(value:any, key:any, type:ReactiveValue.UPDATE_TYPE, is_transform = false, is_child_update = false, previous?: any, atomic_id?: symbol) {
         const promises = [];
         // key specific observers
         if (key!=undefined) {
@@ -4570,7 +4713,7 @@ export class Pointer<T = any> extends Ref<T> {
 }
 
 
-export namespace Ref {
+export namespace ReactiveValue {
     export enum UPDATE_TYPE {
         INIT, // set (initial) reference
         UPDATE, // update value

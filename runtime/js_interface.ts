@@ -23,6 +23,7 @@ export type js_interface_configuration<T=any> = {
     override_silently?: (ref:T, value:T)=>void, // reset the reference, copy the value to the ref silently
 
     wrap_transform?: (value: T) => any, // returns a special wrapper value to use instead of the initial value of a transform pointer,
+    unwrap_transform?: (value: any) => T, // returns the original value from a wrapped value
     handle_transform?: (value: T, pointer: Pointer<T>) => void, // gets called when a transform function produces a new value, default override behaviour is ignored
     allow_transform_value?: (type: Type<T>, pointer: Pointer<T>) => string|true, // returns true if the value can be wrapped with wrap transform, allows pointer union types
     class?: Class<T>, // the corresponding JS class or a prototype

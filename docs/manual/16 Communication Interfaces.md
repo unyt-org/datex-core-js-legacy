@@ -37,9 +37,9 @@ The interface constructor signature can be different for other communication int
 -
 ### Window
 
-DATEX provides a simple communication interface that makes use of the [window.postMessage()](https://developer.mozilla.org/en-US/docs/Web/API/Window/postMessage) API to enable cross-origin communication between Window objects; e.g., between a page and a pop-up that it spawned, or between a page and an iframe embedded within it.
+DATEX provides a simple communication interface that makes use of the [globalThis.postMessage()](https://developer.mozilla.org/en-US/docs/Web/API/Window/postMessage) API to enable cross-origin communication between Window objects; e.g., between a page and a pop-up that it spawned, or between a page and an iframe embedded within it.
 
-The `WindowInterface.createWindow` method can open a window (page, popup or tab) and behaves similar to the [window.open](https://developer.mozilla.org/en-US/docs/Web/API/Window/open) API with the difference that it is asynchronously and returns an object including the remote endpoint (the endpoint of the popup) and the actual [Window](https://developer.mozilla.org/en-US/docs/Web/API/Window) containing the DOM document.
+The `WindowInterface.createWindow` method can open a window (page, popup or tab) and behaves similar to the [globalThis.open](https://developer.mozilla.org/en-US/docs/Web/API/Window/open) API with the difference that it is asynchronously and returns an object including the remote endpoint (the endpoint of the popup) and the actual [Window](https://developer.mozilla.org/en-US/docs/Web/API/Window) containing the DOM document.
 
 ```ts
 import { WindowInterface } from "datex-core-legacy/network/communication-interfaces/window-interface.ts";
@@ -72,7 +72,7 @@ The `createWindow` utility is a wrapper method that opens the new window by pass
 
 ```ts
 const url = new URL("https://popup.com");
-const myWindow = window.open(url);
+const myWindow = globalThis.open(url);
 const windowInterface = WindowInterface.createChildWindowInterface(myWindow, url);
 
 const connected = await communicationHub.addInterface(windowInterface);

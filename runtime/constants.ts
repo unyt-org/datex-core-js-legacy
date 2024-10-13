@@ -35,6 +35,8 @@ export const DX_SLOTS: unique symbol = Symbol("DX_SLOTS");
 export const DX_EXTERNAL_SCOPE_NAME: unique symbol = Symbol("DX_EXTERNAL_SCOPE_NAME"); // string name of the external scope
 export const DX_EXTERNAL_FUNCTION_NAME: unique symbol = Symbol("DX_EXTERNAL_FUNCTION_NAME"); // string name for an external function
 
+export const DX_NOT_TRANSFERABLE: unique symbol = Symbol("DX_NOT_TRANSFERABLE"); // marks a value that should never be transferred between scopes because it is not serializabe
+
 export const SLOT_WRITE = 0xfef0;
 export const SLOT_READ  = 0xfef1;
 export const SLOT_EXEC  = 0xfef2;

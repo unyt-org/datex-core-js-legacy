@@ -66,15 +66,13 @@ const User = struct({
 })
 type User = inferType<typeof User>
 
-const users = new StorageSet<User>();
+// using StorageSet.of instead of new StorageSet to get a typed StorageSet
+const users = StorageSet.of(User);
 
 // get all users with age == 18
-const usersAge18 = await users.match(
-    User, 
-    {
-        age: 18
-    }
-);
+const usersAge18 = await users.match({
+    age: 18
+});
 ```
 
 ### Match Conditions
@@ -86,26 +84,20 @@ Match between to numbers/dates:
 import { MatchCondition } from "unyt_core/storage/storage.ts";
 
 // all users where the "created" timestamp is between now and 7 days ago:
-const newUsersLastWeek = users.match(
-    User,
-    {
-        created: MatchCondition.between(
-            new Time().minus(7, "d"),
-            new Time()
-        )
-    }
-)
+const newUsersLastWeek = users.match({
+    created: MatchCondition.between(
+        new Time().minus(7, "d"),
+        new Time()
+    )
+})
 ```
 
 Match not equal:
 ```ts
 // all users which do not have the name "John":
-const notJohn = users.match(
-    User, 
-    {
-        name: MatchCondition.notEqual("John")
-    }
-)
+const notJohn = users.match({
+    name: MatchCondition.notEqual("John")
+})
 ```
 
 
@@ -118,7 +110,6 @@ You can limit the maximum number of returned entries by setting the `limit` opti
 ```ts
 // get all users with name "Josh", limit to 10
 const joshes = await users.match(
-    User, 
     {
         name: "Josh"
     }, 
@@ -133,7 +124,6 @@ You can sort the returned entries by setting the `sortBy` option to a property p
 ```ts
 // get all users with age == 18, sorted by their creation timestamp
 const usersAge18 = await users.match(
-    User, 
     {
         age: 18
     }, 
@@ -153,7 +143,6 @@ When the `returnAdvanced` option is set to `true`, the `match` function returns 
 
 ```ts
 const {matches, total} = await users.match(
-    User,
     {
         name: "Josh"
     }, 
@@ -212,7 +201,6 @@ const distance = ComputedProperty.geographicDistance(
 )
 
 const nearbyJoshes = await users.match(
-    User, 
     {
         name: "Josh", // name = "Josh"
         distance: MatchCondition.lessThan(1000) // distance < 1000m
@@ -235,7 +223,7 @@ const TodoItem = struct({
 })
 type TodoItem = inferType<typeof TodoItem>
 
-const todoItems = new StorageSet<TodoItem>()
+const todoItems = StorageSet.of(TodoItem)
 
 // sum of completedTaskCount and openTaskCount for a given TodoItem
 const totalTaskCount = ComputedProperty.sum(
@@ -245,7 +233,6 @@ const totalTaskCount = ComputedProperty.sum(
 
 // match all todo items where the total task count is > 100
 const bigTodoItems = await todoItems.match(
-    User, 
     {
         totalTaskCount: MatchCondition.greaterThan(100) // totalTaskCount > 100
     }, 

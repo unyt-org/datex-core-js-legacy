@@ -1,13 +1,5 @@
 import type { Datex } from "../../mod.ts";
 
-export type dbOptions = {
-    hostname: string
-    username: string
-    password:string
-    port: number
-    db?: string
-}
-
 export type Class = (new (...args: any[]) => any); // type for a JS class
 
 export enum PropertyMappingType {

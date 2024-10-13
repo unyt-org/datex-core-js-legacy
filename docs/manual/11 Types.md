@@ -113,6 +113,10 @@ const transferableFn = JSTransferableFunction.create(() => {
 await datex `@example :: ${transferableFn}()`
 ```
 
+> [!NOTE]
+> When you are using transferable functions within a [UIX](https://docs.unyt.org/manual/uix) project, dependencies from the parent scope are automatically detected and transferred.
+> You don't need to explicitly declare them with `use()`.
+
 ### js:Object
 
 In contrast to `std:Object`, `js:Object` is used for JavaScript object with a prototype other than `Object.prototype` or `null` (e.g. a class instance). 

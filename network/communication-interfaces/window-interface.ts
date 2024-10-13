@@ -26,8 +26,8 @@ export class WindowInterfaceSocket extends CommunicationInterfaceSocket {
 
     send(dxb: ArrayBuffer) {
         try {
-            if (this.transmissionMode == "json") this.window.postMessage(arrayBufferToBase64(dxb), this.windowOrigin)
-            else this.window.postMessage(dxb, this.windowOrigin)
+            if (this.transmissionMode == "json") this.globalThis.postMessage(arrayBufferToBase64(dxb), this.windowOrigin)
+            else this.globalThis.postMessage(dxb, this.windowOrigin)
             return true;
         }
         catch {
@@ -72,13 +72,13 @@ export class WindowInterface extends CommunicationInterface {
             this.#isChild = false;
             // Modifying the sandbox attr does not make sense since here
             // since the src is already set and iframe is sandboxed on load
-            // window.setAttribute("sandbox", "allow-popups-to-escape-sandbox allow-modals allow-forms allow-popups allow-scripts allow-same-origin allow-top-navigation")
-            this.#windowOrigin = new URL(window.src).origin;
-            windowOriginURL = new URL(window.src);
+            // globalThis.setAttribute("sandbox", "allow-popups-to-escape-sandbox allow-modals allow-forms allow-popups allow-scripts allow-same-origin allow-top-navigation")
+            this.#windowOrigin = new URL(globalThis.src).origin;
+            windowOriginURL = new URL(globalThis.src);
             this.logger.debug("initializing as parent window, child iframe origin: " + this.#windowOrigin)
         }
         // is opened child window or inside iframe
-        else if (type !== "parent" && (type === "child" || window === self.window.opener || globalThis.self !== globalThis.top)) {
+        else if (type !== "parent" && (type === "child" || window === self.globalThis.opener || globalThis.self !== globalThis.top)) {
             this.#isChild = true;
 
             // explicitly set window origin
@@ -86,9 +86,9 @@ export class WindowInterface extends CommunicationInterface {
                 this.#windowOrigin = windowOriginURL.origin;
             }
             else {
-                // first try window.location.origin
+                // first try globalThis.location.origin
                 try {
-                    this.#windowOrigin = window.location.origin;
+                    this.#windowOrigin = globalThis.location.origin;
                 }
                 // try document.referrer
                 catch {
@@ -135,7 +135,7 @@ export class WindowInterface extends CommunicationInterface {
     
 
     private sendInit() {
-        this.window.postMessage({
+        this.globalThis.postMessage({
             type: "INIT",
             endpoint: Runtime.endpoint.toString()
         }, this.#windowOrigin);
@@ -144,7 +144,7 @@ export class WindowInterface extends CommunicationInterface {
     onClose?: ()=>void
 
     private handleClose() {
-        // check window.closed every second
+        // check globalThis.closed every second
         const interval = setInterval(() => {
             if (this.window?.closed) {
                 clearInterval(interval);
@@ -195,7 +195,7 @@ export class WindowInterface extends CommunicationInterface {
      * The WindowInterface is automatically removed when the window is closed.
      */
     static createWindow(url: string | URL, target?: string, features?: string, connectionTimeout?: number) {
-        const newWindow = window.open(url, target, features);
+        const newWindow = globalThis.open(url, target, features);
         if (!newWindow) return Promise.resolve({window: null, endpoint: null});
         const windowInterface = this.createChildWindowInterface(newWindow, url)
         

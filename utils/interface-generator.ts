@@ -1,7 +1,7 @@
 // generates typescript code for @namespace JS classes with static @expose methods
 // (matching code to call the methods on another endpoint)
 import { Pointer } from "../datex_all.ts";
-import { $$, Datex } from "../mod.ts";
+import { $, Datex } from "../mod.ts";
 import { DX_PTR, DX_SOURCE } from "../runtime/constants.ts";
 import { Storage } from "../storage/storage.ts";
 import { indent } from "./indent.ts";
@@ -138,7 +138,7 @@ async function getValueTSCode(module_name:string, name:string, value: any, no_po
 	const is_datex_module = module_name.endsWith(".dx") || module_name.endsWith(".dxb")
 
 	const type = Datex.Type.ofValue(value)
-	const is_pointer = (value instanceof Datex.Ref) || !!(Datex.Pointer.getByValue(value));
+	const is_pointer = (value instanceof Datex.ReactiveValue) || !!(Datex.Pointer.getByValue(value));
 	const original_value = value;
 
 	// if (no_pointer) {
@@ -147,14 +147,14 @@ async function getValueTSCode(module_name:string, name:string, value: any, no_po
 
 	// log warning for primitive non-pointer values (cannot be converted to pointer)
 	if (type.is_primitive && (!is_pointer || implicitly_converted_primitives.get(module_name)?.has(name))) {
-		if (!is_datex_module) code += name ? `logger.warn('The export "${name}" cannot be converted to a shared value. Consider explicitly converting it to a primitive pointer using $$().');\n` : `logger.warn('The default export cannot be converted to a shared value. Consider explicitly converting it to a primitive pointer using $$().');\n`
+		if (!is_datex_module) code += name ? `logger.warn('The export "${name}" cannot be converted to a shared value. Consider explicitly converting it to a primitive pointer using $().');\n` : `logger.warn('The default export cannot be converted to a shared value. Consider explicitly converting it to a primitive pointer using $().');\n`
 		implicitly_converted_primitives.getAuto(module_name).add(name);
 	}
 
 	// other value -> create pointers
 	else {
 		if (implicitly_converted.get(module_name)?.has(name)) {
-			if (!is_datex_module)  code += name ? `logger.warn('The export "${name}" was implicitly converted to a shared pointer value. This might have unintended side effects. Consider explicitly converting it to a ${type} pointer using $$().');\n` : `logger.warn('The default export was implicitly converted to a shared pointer value. This might have unintended side effects. Consider explicitly converting it to a ${type} pointer using $$().');\n`
+			if (!is_datex_module)  code += name ? `logger.warn('The export "${name}" was implicitly converted to a shared pointer value. This might have unintended side effects. Consider explicitly converting it to a ${type} pointer using $().');\n` : `logger.warn('The default export was implicitly converted to a shared pointer value. This might have unintended side effects. Consider explicitly converting it to a ${type} pointer using $().');\n`
 		}
 		
 		// special convertions for non-pointer values
@@ -166,7 +166,7 @@ async function getValueTSCode(module_name:string, name:string, value: any, no_po
 				value = {}
 				for (const prop of Object.getOwnPropertyNames(original_value)) {
 					if (prop != "length" && prop != "name" && prop != "prototype") {
-						value[prop] = typeof original_value[prop] == "function" ? $$(Datex.Function.createFromJSFunction(original_value[prop], original_value)) : $$(original_value[prop]);
+						value[prop] = typeof original_value[prop] == "function" ? $(Datex.Function.createFromJSFunction(original_value[prop], original_value)) : $(original_value[prop]);
 						value[prop][BACKEND_EXPORT] = true;
 						if (original_value[prop]!=undefined) original_value[prop][BACKEND_EXPORT] = true;
 					}
@@ -181,7 +181,7 @@ async function getValueTSCode(module_name:string, name:string, value: any, no_po
 
 			// log warning for non-pointer arrays and object (ignore defaults aka 'no_pointer')
 			else if ((type == Datex.Type.std.Array || type == Datex.Type.std.Object || type == Datex.Type.js.NativeObject) && !no_pointer) {
-				if (!is_datex_module) code += name ? `logger.warn('The export "${name}" was implicitly converted to a shared pointer value. This might have unintended side effects. Consider explicitly converting it to a ${type} pointer using $$().');\n` : `logger.warn('The default export was implicitly converted to a shared pointer value. This might have unintended side effects. Consider explicitly converting it to a ${type} pointer using $$().');\n`
+				if (!is_datex_module) code += name ? `logger.warn('The export "${name}" was implicitly converted to a shared pointer value. This might have unintended side effects. Consider explicitly converting it to a ${type} pointer using $().');\n` : `logger.warn('The default export was implicitly converted to a shared pointer value. This might have unintended side effects. Consider explicitly converting it to a ${type} pointer using $().');\n`
 				implicitly_converted.getAuto(module_name).add(name);
 			}
 		}
