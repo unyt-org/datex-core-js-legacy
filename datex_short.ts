@@ -323,8 +323,13 @@ export function pointer<T>(value:RefOrValue<T>, property?:unknown, callStackInde
 export function prop<T extends Map<unknown, unknown>>(parent:RefOrValue<T>, propertyKey: T extends Map<infer K, infer V> ? K : unknown): PointerProperty<T extends Map<infer K, infer V> ? V : unknown>|(T extends Map<infer K, infer V> ? V : unknown)
 export function prop<T extends Record<PropertyKey, unknown>>(parent:RefOrValue<T>, propertyKey: keyof T): PointerProperty<T[keyof T]>|T[keyof T]
 export function prop(parent:Map<unknown, unknown>|Record<PropertyKey, unknown>, propertyKey: unknown): any {
-    if (ReactiveValue.isRef(parent)) return PointerProperty.get(parent, propertyKey);
-    else if (parent instanceof Map) return parent.get(propertyKey);
+    // try to get pointer property
+    if (ReactiveValue.isRef(parent)) {
+        const prop = PointerProperty.getIfExists(parent, propertyKey);
+        if (prop !== NOT_EXISTING) return prop;
+    }
+    
+    if (parent instanceof Map) return parent.get(propertyKey);
     else return parent[propertyKey as keyof typeof parent];
 }
 
@@ -385,7 +390,7 @@ export const $ = new Proxy(function(){} as unknown as $type, {
     },
 
     apply(_target, _thisArg, args) {
-        return pointer(args[0], args[1], 1);
+        return pointer(args[0], args[1], 1 /* callStackIndex */);
     },
 })
 
