@@ -503,7 +503,7 @@ export abstract class ReactiveValue<T = any> extends EventTarget {
         if (this.#transformSource) throw new Error("Ref already has a transform source");
         this.#transformSource = transformSource;
         // initial value init
-        transformSource.update();
+        return transformSource.update();
     }
     
     protected deleteTransformSource() {
@@ -588,8 +588,9 @@ export type TransformSource = {
     disableLive: ()=>void
     /**
      * called to update the transformed value
+     * returns a Pointer if the current (initial) transform value already was a transformed pointer itself
      */
-    update: ()=>void
+    update: ()=>void|Pointer
 
     // dependency values
     deps: IterableWeakSet<ReactiveValue>
@@ -1216,7 +1217,6 @@ const observableArrayMethods = new Set<string>([
     "forEach"
 ])
 
-
 /** Wrapper class for all pointer values ($xxxxxxxx) */
 export class Pointer<T = any> extends ReactiveValue<T> {
 
@@ -1787,6 +1787,7 @@ export class Pointer<T = any> extends ReactiveValue<T> {
     static createTransform<const T, const V extends TransformFunctionInputs>(observe_values:V, transform:TransformFunction<V,T>, persistent_datex_transform?:string, force_transform = false) {
         const ptr = Pointer.create(undefined, NOT_EXISTING).handleTransform(observe_values, transform, persistent_datex_transform);
         ptr.force_local_transform = force_transform;
+        ptr.isTransform = true;
         return ptr;
     }
 
@@ -2926,6 +2927,10 @@ export class Pointer<T = any> extends ReactiveValue<T> {
     set force_local_transform(force_transform: boolean) {this.#force_transform = force_transform}
     get force_local_transform() {return this.#force_transform}
 
+    #isTransform = false;
+    set isTransform(isTransform: boolean) {this.#isTransform = isTransform}
+    get isTransform() {return this.#isTransform}
+
     /**
      * transform observed values to update pointer value (using a transform function or DATEX transform scope)
      * @param values values to be observed (should be same as internal_vars in scope)
@@ -3004,6 +3009,7 @@ export class Pointer<T = any> extends ReactiveValue<T> {
     protected smartTransform<R>(transform:SmartTransformFunction<T&R>, persistent_datex_transform?:string, forceLive = false, ignoreReturnValue = false, options?:SmartTransformOptions): Pointer<R> {
         if (persistent_datex_transform) this.setDatexTransform(persistent_datex_transform) // TODO: only workaround
         this.#smart_transform_method = transform;
+        this.isTransform = true;
 
         const state: TransformState = {
             isLive: false,
@@ -3072,7 +3078,15 @@ export class Pointer<T = any> extends ReactiveValue<T> {
                             ({capturedGetters, capturedGettersWithKeys} = ReactiveValue.getCapturedGetters());
                         }
                     }
-        
+                                    
+                    // check if val is already the result if a transform function
+                    // happens e.g. with jusix _$(() => map(x, ...))
+                    // early return the inner transformed pointer
+                    const ptr = Pointer.getByValue(val);
+                    if (ptr?.isTransform) {
+                        return ptr;
+                    }
+
                     // promise returned, wait for promise to resolve
                     if (val instanceof Promise) {
                         // force live required for async transforms (cannot synchronously calculate the value in a getter)
@@ -3184,7 +3198,7 @@ export class Pointer<T = any> extends ReactiveValue<T> {
 
 
         // set transform source with TransformSource interface
-        this.setTransformSource({
+        const innerTransformPointer = this.setTransformSource({
             enableLive: (doUpdate = true) => {
                 state.isLive = true;
                 // get current value and automatically reenable observers
@@ -3204,6 +3218,16 @@ export class Pointer<T = any> extends ReactiveValue<T> {
             keyedDeps: state.keyedDeps,
             update: state.update
         })
+
+        /**
+         * if an inner transform pointer is returned, the current pointer is no longer needed
+         * and the inner transform pointer is returned instead
+         */
+        if (innerTransformPointer) {
+            this.delete();
+            logger.debug("found inner transform pointer " + innerTransformPointer.idString())
+            return innerTransformPointer;
+        }
 
         if (forceLive) this.enableLiveTransforms(false);
 

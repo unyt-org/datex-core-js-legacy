@@ -307,6 +307,9 @@ export function map<T, U, O extends 'array'|'map' = 'array'>(iterable: Iterable<
         }
         
     }
+
+    const ptr = Pointer.getByValue(mapped);
+    if (ptr) ptr.isTransform = true;
     
     return mapped as any;
 }
