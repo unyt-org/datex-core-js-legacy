@@ -963,9 +963,7 @@ export abstract class SQLDBStorageLocation<Options extends {db: string}> extends
 			await this.#getTableForType(type)
 		}
 
-		SQLDBStorageLocation.debug(true);
 		const queryResult = await this.#query<{_ptr_id:string, map_key: string}>(query);
-		SQLDBStorageLocation.debug(false);
 
 		const ptrIds = options.returnKeys ? queryResult.map(({map_key}) => map_key.split(".")[1].slice(1)) : queryResult.map(({_ptr_id}) => _ptr_id)
 		const limitedPtrIds = options.returnPointerIds ? 
