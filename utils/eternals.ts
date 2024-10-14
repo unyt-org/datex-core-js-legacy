@@ -32,7 +32,7 @@ export function getEternal(info?:ReturnType<typeof getCallerInfo>, customIdentif
     if (!eternals.has(key)) {
         waitingEternals.set(unique_row, key); // assign next pointer to this eternal
         setTimeout(()=>{
-            if (waitingEternals.has(unique_row)) logger.error(`uncaptured eternal value at ${unique_row}: please surround the value with $$(), otherwise it cannot be restored correctly`)
+            if (waitingEternals.has(unique_row)) logger.error(`uncaptured eternal value at ${unique_row}: please surround the value with $(), otherwise it cannot be restored correctly`)
         }, 6000)
         if (return_not_existing) return NOT_EXISTING
     }
@@ -52,7 +52,7 @@ export async function getLazyEternal(info?:ReturnType<typeof getCallerInfo>, cus
     if (!await Storage.hasItem(key)) {
         waitingLazyEternals.set(unique_row, key); // assign next pointer to this eternal
         setTimeout(()=>{
-            if (waitingLazyEternals.has(unique_row)) logger.error(`uncaptured lazy_eternal value at ${unique_row}: please surround the value with $$(), otherwise it cannot be restored correctly`)
+            if (waitingLazyEternals.has(unique_row)) logger.error(`uncaptured lazy_eternal value at ${unique_row}: please surround the value with $(), otherwise it cannot be restored correctly`)
         }, 6000)
         if (return_not_existing) return NOT_EXISTING
     }
