@@ -26,8 +26,8 @@ export class WindowInterfaceSocket extends CommunicationInterfaceSocket {
 
     send(dxb: ArrayBuffer) {
         try {
-            if (this.transmissionMode == "json") this.globalThis.postMessage(arrayBufferToBase64(dxb), this.windowOrigin)
-            else this.globalThis.postMessage(dxb, this.windowOrigin)
+            if (this.transmissionMode == "json") this.window.postMessage(arrayBufferToBase64(dxb), this.windowOrigin)
+            else this.window.postMessage(dxb, this.windowOrigin)
             return true;
         }
         catch {
@@ -135,7 +135,7 @@ export class WindowInterface extends CommunicationInterface {
     
 
     private sendInit() {
-        this.globalThis.postMessage({
+        this.window.postMessage({
             type: "INIT",
             endpoint: Runtime.endpoint.toString()
         }, this.#windowOrigin);
