@@ -78,6 +78,7 @@ import { addPersistentListener, removePersistentListener } from "../utils/persis
 import { endpoint_config } from "./endpoint_config.ts";
 import type { DatexInData, DatexOutData } from "../network/communication-hub.ts";
 import { communicationHub } from "../network/communication-hub.ts";
+import { sub } from "../functions.ts";
 
 const mime = client_type === "deno" ? (await import("https://deno.land/x/mimetypes@v1.0.0/mod.ts")).mime : null;
 
@@ -4513,7 +4514,10 @@ export class Runtime {
                 let type:Type|undefined
                 while ((type = INNER_SCOPE.type_casts.pop())) {
                     // workaround to get pointer that the new cast value will be assigned to
-                    const waitingPtr = [...INNER_SCOPE.waiting_ptrs??[]][0];
+                    let subscopePtrs = SCOPE.sub_scopes.at(-1)?.waiting_ptrs; // INNER_SCOPE.waiting_ptrs
+                    // workaround: only for uix - also check one subscope up for assigning pointer if none found
+                    if (!subscopePtrs && type.name == "uix") subscopePtrs = SCOPE.sub_scopes.at(-2)?.waiting_ptrs; // go one scope up
+                    const waitingPtr = [...subscopePtrs??[]][0];
                     let ptrId: string|undefined;
                     if (waitingPtr && (typeof waitingPtr[1] == "object" || waitingPtr[1] == undefined)) ptrId = waitingPtr[0].id;
                     el = await Runtime.castValue(type, el, INNER_SCOPE.ctx_intern, SCOPE.context_location, SCOPE.origin, undefined, ptrId)
