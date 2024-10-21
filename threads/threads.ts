@@ -649,7 +649,6 @@ export async function run<ReturnType=unknown>(task:TemplateStringsArray, ...args
 export async function run<ReturnType>(task: (() => ReturnType)|JSTransferableFunction|TemplateStringsArray, options?: ThreadOptions, _meta?: {taskIndex?: number }, ..._rest:unknown[]): Promise<ReturnType> {
 	
 	const contextURL = new URL(getCallerFile());
-	console.log("moduleURL")
 
 	let datexSource: string;
 	let datexArgs: unknown[];
