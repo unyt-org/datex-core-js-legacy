@@ -7,7 +7,7 @@ import { Datex, f } from "../datex.ts";
 import { blobifyFile, blobifyScript } from "../utils/blobify.ts";
 import { RuntimeError } from "../types/errors.ts";
 import { Path } from "../utils/path.ts";
-import { getCallerDir } from "../utils/caller_metadata.ts";
+import { getCallerDir, getCallerFile } from "../utils/caller_metadata.ts";
 import { PromiseMapReturnType, PromiseMappingFn } from "./promise-fn-types.ts";
 import { JSTransferableFunction } from "../types/js-function.ts";
 import { INSERT_MARK } from "../compiler/compiler.ts";
@@ -648,6 +648,9 @@ export async function run<ReturnType=unknown>(task:TemplateStringsArray, ...args
 
 export async function run<ReturnType>(task: (() => ReturnType)|JSTransferableFunction|TemplateStringsArray, options?: ThreadOptions, _meta?: {taskIndex?: number }, ..._rest:unknown[]): Promise<ReturnType> {
 	
+	const contextURL = new URL(getCallerFile());
+	console.log("moduleURL")
+
 	let datexSource: string;
 	let datexArgs: unknown[];
 
@@ -661,8 +664,8 @@ export async function run<ReturnType>(task: (() => ReturnType)|JSTransferableFun
 	else if (task instanceof Function || task instanceof JSTransferableFunction) {
 		const transferableTaskFn = task instanceof JSTransferableFunction ? task : (
 			JSTransferableFunction.functionIsAsync(task) ? 
-				await JSTransferableFunction.createAsync(task) :
-				JSTransferableFunction.create(task)
+				await JSTransferableFunction.createAsync(task, {contextURL}) :
+				JSTransferableFunction.create(task, {contextURL})
 		)
 		datexSource = '?(?)';
 		datexArgs = [$$(transferableTaskFn), _meta?.taskIndex??0];

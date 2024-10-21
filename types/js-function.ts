@@ -4,12 +4,14 @@
 
 import { Pointer } from "../runtime/pointers.ts";
 import { Runtime } from "../runtime/runtime.ts";
-import { ExtensibleFunction, getDeclaredExternalVariables, getDeclaredExternalVariablesAsync, getSourceWithoutUsingDeclaration, Callable, createFunctionWithDependencyInjectionsResolveLazyPointers, hasUnresolvedLazyDependencies } from "./function-utils.ts";
+import { ExtensibleFunction, getDeclaredExternalVariables, getDeclaredExternalVariablesAsync, getSourceWithoutUsingDeclaration, Callable, createFunctionWithDependencyInjectionsResolveLazyPointers, hasUnresolvedLazyDependencies, getSourceWithResolvedPaths } from "./function-utils.ts";
 
 
 export type JSTransferableFunctionOptions = {
 	errorOnOriginContext?: Error,
-	isLocal?: boolean
+	isLocal?: boolean,
+	// when set, all relative import paths in the function body will be resolved relative to this URL
+	contextURL?: URL
 }
 
 export class JSTransferableFunction extends ExtensibleFunction {
@@ -88,7 +90,9 @@ export class JSTransferableFunction extends ExtensibleFunction {
 	static create<T extends (...args:unknown[])=>unknown>(fn: T, options:JSTransferableFunctionOptions = {}, useDeclaration?: {vars:{[k:string]:unknown}, flags?:string[]}): JSTransferableFunction & Callable<Parameters<T>, ReturnType<T>> {
         const {vars, flags} = useDeclaration ?? getDeclaredExternalVariables(fn);
 		options.isLocal ??= true;
-		return this.#createTransferableFunction(getSourceWithoutUsingDeclaration(fn), vars, flags, options) as any;
+		let source = getSourceWithoutUsingDeclaration(fn);
+		if (options.contextURL) source = getSourceWithResolvedPaths(source, options.contextURL);
+		return this.#createTransferableFunction(source, vars, flags, options) as any;
 	}
 
 	/**
@@ -99,7 +103,9 @@ export class JSTransferableFunction extends ExtensibleFunction {
 	static async createAsync<T extends (...args:unknown[])=>Promise<unknown>>(fn: T, options:JSTransferableFunctionOptions = {}): Promise<JSTransferableFunction & Callable<Parameters<T>, ReturnType<T>>> {
 		const {vars, flags} = await getDeclaredExternalVariablesAsync(fn)	
 		options.isLocal ??= true;
-		return this.#createTransferableFunction(getSourceWithoutUsingDeclaration(fn), vars, flags, options) as any;
+		let source = getSourceWithoutUsingDeclaration(fn);
+		if (options.contextURL) source = getSourceWithResolvedPaths(source, options.contextURL);
+		return this.#createTransferableFunction(source, vars, flags, options) as any;
 	}
 
 	/**

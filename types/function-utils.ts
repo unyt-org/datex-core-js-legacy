@@ -183,6 +183,16 @@ const isNativeFunction = (fnSrc:string) => {
 }
 
 
+export function getSourceWithResolvedPaths(source: string, contextURL: URL) {
+    // TODO: use SWC for source transformation
+    return source  
+        .replace(/import\(["']([.]{1,2}\/[^)]*)["']\)/, (_match, p1) => {
+            const url = new URL(p1, contextURL);
+            return `import('${url}')`
+        })
+}
+
+
 function resolveLazyDependencies(deps:Record<string,unknown>, resolve?: ()=>void) {
     let resolved = false;
     for (const [key, value] of Object.entries(deps)) {
