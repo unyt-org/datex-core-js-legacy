@@ -47,14 +47,9 @@ As explained in the chapter [Pointers](./03%20Pointers.md),
 you can now create a new pointer containing a number value.
 
 ```ts
-const x = $$(42)
+const x = $(42)
 x.val // -> 42
 ```
-
-This pointer is now accessible on any other endpoint in the supranet.
-
-> [!NOTE]
-> Per default, pointers have no read/write restrictions and can be accessed by any endpoint. This behaviour can be disabled by setting the [`PROTECT_POINTERS` runtime flag](#protecting-pointers)
 
 ### Pointer IDs
 
@@ -68,10 +63,36 @@ The pointer id can be accessed via the `id` property of a pointer instance:
 x.id // -> e.g. "D5A3CB02310Dx480B651422749F9x40C85600300"
 ```
 
+## Pointer Protection
+
+Per default, pointers have read/write restrictions and can only be accessed by the endpoint that created them or other
+instances of the same endpoint.
+
+You can explicitly grant access for a pointer to a specific endpoint:
+
+```ts
+const y = $(43);
+grantAccess(y, '@user1'); // @user1 can now read/write x
+revokeAccess(y, '@user1'); // @user1 can no longer read/write x
+```
+
+You can also make a pointer publicly accessible by all endpoints, which
+we will do for our example pointer `x`:
+```ts
+grantPublicAccess(x); // any endpoint can now read/write x
+```
+
+> [!NOTE]
+> To allow all remote endpoints to access pointers that are created on the local endpoint, you can disable the runtime option `PROTECT_POINTERS`:
+> ```ts
+> Datex.Runtime.OPTIONS.PROTECT_POINTERS = false
+> ```
+> We want to emphasize that this is a major security risk and should only be used in controlled environments and for testing purposes.
+
 ### Accessing remote pointers
 
-Now that we know the id of the pointer, we can access it from another
-endpoint.
+Now that we know the id of the pointer `x` and have made it publicly accessible,
+we can access it from another endpoint:
 
 Open a new browser tab or Deno CLI and follow the same steps
 to load the DATEX runtime and connect to the supranet:
@@ -98,8 +119,8 @@ x.val // -> 42
 
 The pointer that we stored in the variable `x` is not just a static value - its value is updated bidirectionally.
 
-That means that any changes on the original client are reflected
-on the second client, and vice-versa - try it out for yourself:
+That means that any changes on the original endpoint are reflected
+on the second endpoint, and vice-versa - try it out for yourself:
 
 **Update value on first client:**
 ```ts
@@ -113,32 +134,6 @@ x.val // -> 10
 
 Pointer synchronisation does not just work with primitive values,
 but also with objects, maps, sets, etc.
-
-## Protecting Pointers
-
-Per default, pointers have no read/write restrictions and can be accessed by any endpoint.
-This behaviour will probably change in the future.
-To disable default read/write access for all remote endpoints, you can set
-
-```ts
-Datex.Runtime.OPTIONS.PROTECT_POINTERS = true
-```
-
-Now, pointers are only accessible by remote endpoints if they are explicitly sent to the endpoint from the
-origin endpoint.
-
-You can also explicitly grant access for a pointer to a specific endpoint:
-
-```ts
-const x = $$("private content");
-grantAccess(x, '@user1'); // @user1 can now read/write x
-revokeAccess(x, '@user1'); // @user1 can no longer read/write x
-```
-
-You can also make a pointer publicly accessible by all endpoints:
-```ts
-grantPublicAccess(x); // any endpoint can now read/write x
-```
 
 
 ## Global Garbage Collection (GGC)
@@ -175,7 +170,7 @@ from a remote endpoint call, it is still identical to the local instance:
 
 type User = {name: string, age: number}
 
-const happyBirthday = $$(
+const happyBirthday = $(
    function (user: User) {
       user.age++;
       return user;
@@ -186,7 +181,7 @@ const happyBirthday = $$(
 ```ts
 // local endpoint
 
-const user = $$({
+const user = $({
    name: "Luke",
    age: 20
 })
