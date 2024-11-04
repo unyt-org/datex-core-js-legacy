@@ -130,8 +130,8 @@ class EndpointConfig implements EndpointConfigData {
 
 			}
 			catch (e) {
-				logger.error `Could not read config file ${path}: ${e.toString()}`;
-				throw "invalid config file"
+				logger.warn `Could not read config file ${path}: ${e.toString()}`;
+				// ignore if no .dx file found
 			}
 			
 		}
