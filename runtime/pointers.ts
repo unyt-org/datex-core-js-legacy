@@ -937,6 +937,14 @@ export type Ref<T, _C = CollapsedValue<T>> =
     )
 
 /**
+ * global type definitions
+ */
+type _Ref<T> = Ref<T>
+declare global {
+    type Ref<T> = _Ref<T>
+}
+
+/**
  * @deprecated use Ref
  */
 export type MinimalJSRef<T, _C = CollapsedValue<T>> = Ref<T, _C>
