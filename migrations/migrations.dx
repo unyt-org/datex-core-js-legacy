@@ -1,0 +1,18 @@
+// migrations/migrations.dx
+
+(
+  'struct:User': (
+        (
+           migration: ./user-with-names.ts,
+           from:      '123456',
+           to:        'abcedf'
+        ),
+        
+        (
+           migration: ./user-new-attrs.ts,
+           from:     'abcedf',
+           to:       'eeefffee'
+        )
+  ),
+  ...
+)

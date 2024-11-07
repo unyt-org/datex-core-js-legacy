@@ -1393,7 +1393,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		const result = (await this.#queryFirst<{value: string, value_text: string, value_integer: number, value_decimal: number, value_boolean: boolean, value_time: Date, ptrId: string}>(
 			new Query()
 				.table(this.#metaTables.items.name)
-				.select("value", "value_text", "value_integer", "value_decimal", "value_boolean", "value_time", "value_pointer", `${this.#pointerMysqlColumnName} as ptrId`)
+				.select("value", "value_text", "value_integer", "value_decimal", "value_boolean", "value_time", `${this.#pointerMysqlColumnName} as ptrId`)
 				.where(Where.eq("key", key))
 				.build(),
 			undefined
