@@ -119,6 +119,11 @@ export abstract class SQLDBStorageLocation<Options extends {db: string}> extends
 			columns: [
 				["key", "varchar(200)", "PRIMARY KEY"],
 				["value", "blob"],
+				["value_text", "text"],
+				["value_integer", "int"],
+				["value_decimal", "double"],
+				["value_boolean", "boolean"],
+				["value_time", "datetime"],
 				[this.#pointerMysqlColumnName, this.#pointerMysqlType],
 			]
 		}
@@ -1333,7 +1338,7 @@ export abstract class SQLDBStorageLocation<Options extends {db: string}> extends
 	}
 
 
-	async setItem(key: string,value: unknown) {
+	async setItem(key: string, value: unknown) {
 		const dependencies = new Set<Pointer>()
 
 		// value is pointer
@@ -1342,16 +1347,18 @@ export abstract class SQLDBStorageLocation<Options extends {db: string}> extends
 			dependencies.add(ptr);
 			await this.#setItemPointer(key, ptr)
 		}
+		// value is primitive
+		else if (typeof value == "string" || typeof value == "number" || typeof value == "bigint" || typeof value == "boolean" || value instanceof Date) {
+			await this.setItemValuePrimitive(key, value);
+		}
 		else {
 			const encoded = Compiler.encodeValue(value, dependencies);
 			await this.setItemValueDXB(key, encoded)
 		}
 		return dependencies;
 	}
-	async getItem(key: string, conditions: ExecConditions): Promise<unknown> {
-		const encoded = await this.getItemValueDXB(key);
-		if (encoded === null) return NOT_EXISTING;
-		return Runtime.decodeValue(encoded, false, conditions);
+	getItem(key: string, conditions: ExecConditions): Promise<unknown> {
+		return this.getItemValue(key, conditions);
 	}
 
 	async hasItem(key:string) {
@@ -1362,7 +1369,7 @@ export abstract class SQLDBStorageLocation<Options extends {db: string}> extends
 				.select("COUNT(*) as COUNT")
 				.where(Where.eq("key", key))
 				.build(),
-			undefined, ['COUNT']
+			undefined
 		));
 		const exists = !!count && count.COUNT > 0;
 		if (exists) {
@@ -1445,14 +1452,54 @@ export abstract class SQLDBStorageLocation<Options extends {db: string}> extends
 				.select("value", `${this.#pointerMysqlColumnName} as ptrId`)
 				.where(Where.eq("key", key))
 				.build(),
-			undefined, ['value', 'ptrId']
+			undefined
 		));
 		if (encoded?.ptrId) return Compiler.compile(`$${encoded.ptrId}`, undefined, {sign: false, encrypt: false, to: Datex.Runtime.endpoint, preemptive_pointer_init: false}, false) as Promise<ArrayBuffer>;
 		else if (encoded?.value) return this.#stringToBinary(encoded.value);
 		else return null;
 	}
+
+	async getItemValue(key: string, conditions?: ExecConditions): Promise<unknown> {
+		const result = (await this.#queryFirst<{value: string, value_text: string, value_integer: number, value_decimal: number, value_boolean: boolean, value_time: Date, ptrId: string}>(
+			new Query()
+				.table(this.#metaTables.items.name)
+				.select("value", "value_text", "value_integer", "value_decimal", "value_boolean", "value_time", "value_pointer", `${this.#pointerMysqlColumnName} as ptrId`)
+				.where(Where.eq("key", key))
+				.build(),
+			undefined
+		));
+		if (result?.ptrId || result?.value) {
+			const dxb = result.ptrId ?
+				await (Compiler.compile(`$${result.ptrId}`, undefined, {sign: false, encrypt: false, to: Datex.Runtime.endpoint, preemptive_pointer_init: false}, false) as Promise<ArrayBuffer>) :
+				this.#stringToBinary(result.value);
+			return Runtime.decodeValue(dxb, false, conditions);
+		} 
+		else if (result?.value_text) return result.value_text
+		else if (result?.value_integer) return BigInt(result.value_integer);
+		else if (result?.value_decimal) return result.value_decimal;
+		else if (result?.value_boolean) return Boolean(result.value_boolean);
+		else if (result?.value_time) return result.value_time;
+		else return NOT_EXISTING;
+	}
+
 	async setItemValueDXB(key: string, value: ArrayBuffer) {
 		if (this.supportsInsertOrReplace) {
+			await this.#query(`INSERT OR REPLACE INTO \`${this.#metaTables.items.name}\` (\`key\`, \`value\`) VALUES (?, ?);`, [key, value])
+		}
+		else {
+			await this.#query('INSERT INTO ?? ?? VALUES ? ON DUPLICATE KEY UPDATE value=?;', [this.#metaTables.items.name, ["key", "value"], [key, value], value])
+		}
+	}
+
+	async setItemValuePrimitive(key: string, value: string|number|bigint|boolean|Date) {
+		if (this.supportsInsertOrReplace) {
+			const columnName = "value_" + (
+				typeof value == "string" ? "text" :
+				typeof value == "number" ? "decimal" :
+				typeof value == "bigint" ? "integer" :
+				typeof value == "boolean" ? "boolean" :
+				value instanceof Date ? "time" : "text"
+			)
 			await this.#query(`INSERT OR REPLACE INTO \`${this.#metaTables.items.name}\` (\`key\`, \`value\`) VALUES (?, ?);`, [key, value])
 		}
 		else {
