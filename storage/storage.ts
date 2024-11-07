@@ -1401,7 +1401,7 @@ export class Storage {
      * Increase the reference count of a pointer in storage
      */
     private static async increaseReferenceCount(ptrId:string) {
-        await this.setItem(this.rc_prefix+ptrId, (this.getReferenceCount(ptrId) + 1).toString());
+        await this.setItem(this.rc_prefix+ptrId, (await this.getReferenceCount(ptrId) + 1).toString());
     }
     /**
      * Decrease the reference count of a pointer in storage
@@ -1449,6 +1449,8 @@ export class Storage {
     }
 
     private static async updateItemDependencies(key:string, newDeps:string[]) {
+        // ignore if rc:: or deps:: key
+        if (key.startsWith(this.rc_prefix) || key.startsWith(this.item_deps_prefix) || key.startsWith(this.pointer_deps_prefix)) return;
         const oldDeps = await this.getItemDependencies(key);
         const added = newDeps.filter(p=>!oldDeps.includes(p));
         const removed = oldDeps.filter(p=>!newDeps.includes(p));
@@ -1457,6 +1459,8 @@ export class Storage {
         this.setItemDependencies(key, newDeps).catch(e=>console.error(e));
     }
     private static async updatePointerDependencies(key:string, newDeps:string[]) {
+        // ignore if rc:: or deps:: key
+        if (key.startsWith(this.rc_prefix) || key.startsWith(this.item_deps_prefix) || key.startsWith(this.pointer_deps_prefix)) return;
         const oldDeps = await this.getPointerDependencies(key);
         const added = newDeps.filter(p=>!oldDeps.includes(p));
         const removed = oldDeps.filter(p=>!newDeps.includes(p));
