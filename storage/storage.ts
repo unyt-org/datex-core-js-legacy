@@ -1530,7 +1530,6 @@ export class Storage {
 
 
     public static async printSnapshot(options: StorageSnapshotOptions = {internalItems: false, expandStorageMapsAndSets: true, onlyHeaders: false}) {
-        const {items, pointers} = await this.getSnapshot(options);
 
         const COLOR_PTR = `\x1b[38;2;${[65,102,238].join(';')}m`
         const COLOR_NUMBER = `\x1b[38;2;${[253,139,25].join(';')}m`
@@ -1546,6 +1545,8 @@ export class Storage {
         string += `\n${ESCAPE_SEQUENCES.BOLD}Primary Location:${ESCAPE_SEQUENCES.RESET} ${this.#primary_location?.name ?? "none"}`
 
         console.log(string+"\n\n");
+
+        const {items, pointers} = await this.getSnapshot(options);
 
         // pointers
         string = ESCAPE_SEQUENCES.BOLD+"Pointers\n\n"+ESCAPE_SEQUENCES.RESET
