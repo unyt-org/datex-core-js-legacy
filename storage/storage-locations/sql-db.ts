@@ -1425,7 +1425,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			typeof value == "boolean" ? "boolean" :
 			value instanceof Date ? "time" : "text"
 		)
-		await this.#query(`INSERT OR REPLACE INTO \`${this.#metaTables.items.name}\` (\`key\`, \`${columnName}\`) VALUES (?, ?);`, [key, value])
+		await this.#query('INSERT INTO ?? ?? VALUES ? ON DUPLICATE KEY UPDATE '+columnName+'=?;', [this.#metaTables.items.name, ["key", columnName], [key, value], value])
 	}
 
 	async setPointer(pointer: Pointer<any>, partialUpdateKey: unknown|typeof NOT_EXISTING): Promise<Set<Pointer<any>>> {
