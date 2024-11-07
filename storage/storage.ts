@@ -1448,6 +1448,8 @@ export class Storage {
     }
 
     private static async updateItemDependencies(key:string, newDeps:string[]) {
+        // ignore if rc:: or deps:: key
+        if (key.startsWith(this.rc_prefix) || key.startsWith(this.item_deps_prefix) || key.startsWith(this.pointer_deps_prefix)) return;
         const oldDeps = await this.getItemDependencies(key);
         const added = newDeps.filter(p=>!oldDeps.includes(p));
         const removed = oldDeps.filter(p=>!newDeps.includes(p));
@@ -1456,6 +1458,8 @@ export class Storage {
         this.setItemDependencies(key, newDeps).catch(e=>console.error(e));
     }
     private static async updatePointerDependencies(key:string, newDeps:string[]) {
+        // ignore if rc:: or deps:: key
+        if (key.startsWith(this.rc_prefix) || key.startsWith(this.item_deps_prefix) || key.startsWith(this.pointer_deps_prefix)) return;
         const oldDeps = await this.getPointerDependencies(key);
         const added = newDeps.filter(p=>!oldDeps.includes(p));
         const removed = oldDeps.filter(p=>!newDeps.includes(p));
@@ -1479,14 +1483,7 @@ export class Storage {
 				await location.clear()
 			}
 		}
-
-        // remove internal localstorage entries
-        for (const key of Object.keys(localStorage)) {
-            if (key.startsWith(this.rc_prefix) || key.startsWith(this.item_deps_prefix) || key.startsWith(this.pointer_deps_prefix) || key.startsWith(this.meta_prefix)) {
-                localStorage.removeItem(key);
-            }
-        }
-
+        
     }
 
     /**
