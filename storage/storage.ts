@@ -675,7 +675,7 @@ export class Storage {
         // store value (might be pointer reference)
         const dependencies = await location.setItem(key, value);
         if (Pointer.is_local) this.checkUnresolvedLocalDependenciesForItem(key, value, dependencies);
-        this.updateItemDependencies(key, [...dependencies].map(p=>p.id));
+        await this.updateItemDependencies(key, [...dependencies].map(p=>p.id));
         await this.saveDependencyPointersAsync(dependencies, listen_for_pointer_changes, location);
         this.setDirty(location, false, metadata);
         return itemExisted;
@@ -685,7 +685,7 @@ export class Storage {
         const itemExisted = location.hasItem(key);
         const dependencies = location.setItem(key, value);
         if (Pointer.is_local) this.checkUnresolvedLocalDependenciesForItem(key, value, dependencies);
-        this.updateItemDependencies(key, [...dependencies].map(p=>p.id));
+        this.updateItemDependencies(key, [...dependencies].map(p=>p.id)).catch(e=>console.error(e));
         this.saveDependencyPointersSync(dependencies, listen_for_pointer_changes, location);
         return itemExisted;
 	}
@@ -751,7 +751,7 @@ export class Storage {
         const dependencies = this.updatePointerSync(location, pointer, partialUpdateKey);
         dependencies.delete(pointer);
         if (Pointer.is_local) this.checkUnresolvedLocalDependenciesForPointer(pointer, dependencies);
-        this.updatePointerDependencies(pointer.id, [...dependencies].map(p=>p.id));
+        this.updatePointerDependencies(pointer.id, [...dependencies].map(p=>p.id)).catch(e=>console.error(e));
         this.saveDependencyPointersSync(dependencies, listen_for_changes, location);
 
         // listen for changes
@@ -782,7 +782,7 @@ export class Storage {
         const dependencies = await this.updatePointerAsync(location, pointer, partialUpdateKey);
         dependencies.delete(pointer);
         if (Pointer.is_local) this.checkUnresolvedLocalDependenciesForPointer(pointer, dependencies);
-        this.updatePointerDependencies(pointer.id, [...dependencies].map(p=>p.id));
+        await this.updatePointerDependencies(pointer.id, [...dependencies].map(p=>p.id));
         await this.saveDependencyPointersAsync(dependencies, listen_for_changes, location);
 
         // listen for changes
@@ -1084,7 +1084,7 @@ export class Storage {
     }
 
     private static async removePointer(pointer_id:string, location?:StorageLocation, force_remove = false) {
-        if (!force_remove && this.getReferenceCount(pointer_id) > 0) {
+        if (!force_remove && (await this.getReferenceCount(pointer_id)) > 0) {
             logger.warn("Cannot remove pointer $" + pointer_id + ", still referenced");
             return;
         }
@@ -1116,7 +1116,7 @@ export class Storage {
             await Promise.all(promises);
 
             // clear dependencies
-            this.updatePointerDependencies(pointer_id, [])
+            await this.updatePointerDependencies(pointer_id, [])
 		}
     }
 
@@ -1390,7 +1390,7 @@ export class Storage {
 			}
 
             // clear dependencies
-            this.updateItemDependencies(key, [])
+            await this.updateItemDependencies(key, [])
 
             return itemExists;
 		}
@@ -1399,84 +1399,69 @@ export class Storage {
     /**
      * Increase the reference count of a pointer in storage
      */
-    private static increaseReferenceCount(ptrId:string) {
-        localStorage.setItem(this.rc_prefix+ptrId, (this.getReferenceCount(ptrId) + 1).toString());
+    private static async increaseReferenceCount(ptrId:string) {
+        await this.setItem(this.rc_prefix+ptrId, (await this.getReferenceCount(ptrId) + 1).toString())
     }
     /**
      * Decrease the reference count of a pointer in storage
      */
-    private static decreaseReferenceCount(ptrId:string) {
-        const newCount = this.getReferenceCount(ptrId) - 1;
+    private static async decreaseReferenceCount(ptrId:string) {
+        const newCount = await this.getReferenceCount(ptrId) - 1;
         // RC is 0, delete pointer from storage
         if (newCount <= 0) {
-            localStorage.removeItem(this.rc_prefix+ptrId);
+            this.removeItem(this.rc_prefix+ptrId)
+                .catch(e=>console.error(e));
             this.removePointer(ptrId, undefined, true)
                 .catch(e=>console.error(e))
         }
         // decrease RC
-        else localStorage.setItem(this.rc_prefix+ptrId, newCount.toString());
+        else await this.setItem(this.rc_prefix+ptrId, newCount.toString())
     }
     /**
      * Get the current reference count of a pointer (number of entries that have a reference to this pointer)
      * @returns 
      */
-    private static getReferenceCount(ptrId:string) {
-        const entry = localStorage.getItem(this.rc_prefix+ptrId);
+    private static async getReferenceCount(ptrId:string) {
+        const entry = await this.getItem(this.rc_prefix+ptrId);
         return entry ? Number(entry) : 0;
     }
 
-    private static addDependency(key:string, depPtrId:string, prefix:string) {
+    private static async setDependencies(key:string, depPtrIds:string[], prefix:string) {
         const uniqueKey = prefix+key;
-        if (localStorage.getItem(uniqueKey)?.includes(depPtrId)) return;
-        else localStorage.setItem(uniqueKey, (localStorage.getItem(uniqueKey) ?? "") + depPtrId);
-    }
-    private static removeDependency(key:string, depPtrId:string, prefix:string) {
-        const uniqueKey = prefix+key;
-        if (!localStorage.getItem(uniqueKey)?.includes(depPtrId)) return;
-        else {
-            const newDeps = localStorage.getItem(uniqueKey)!.replace(depPtrId, "");
-            // remove key if no more dependencies
-            if (newDeps.length == 0) localStorage.removeItem(uniqueKey);
-            // remove dependency
-            else localStorage.setItem(uniqueKey, newDeps);
-        }
-    }
-    private static setDependencies(key:string, depPtrIds:string[], prefix:string) {
-        const uniqueKey = prefix+key;
-        if (!depPtrIds.length) localStorage.removeItem(uniqueKey);
-        else localStorage.setItem(uniqueKey, depPtrIds.join(","));
+        if (!depPtrIds.length) await this.removeItem(uniqueKey);
+        else await this.setItem(uniqueKey, depPtrIds.join(","));
     }
 
     private static setItemDependencies(key:string, depPtrIds:string[]) {
-        this.setDependencies(key, depPtrIds, this.item_deps_prefix);
+        return this.setDependencies(key, depPtrIds, this.item_deps_prefix);
     }
     private static setPointerDependencies(key:string, depPtrIds:string[]) {
-        this.setDependencies(key, depPtrIds, this.pointer_deps_prefix);
+        return this.setDependencies(key, depPtrIds, this.pointer_deps_prefix);
     }
-    private static getItemDependencies(key:string) {
+    private static async getItemDependencies(key:string): Promise<string[]> {
         const uniqueKey = this.item_deps_prefix+key;
-        return localStorage.getItem(uniqueKey)?.split(",") ?? [];
+        return ((await this.getItem(uniqueKey))?.split(",")) ?? [];
     }
-    private static getPointerDependencies(key:string) {
+    private static async getPointerDependencies(key:string): Promise<string[]> {
         const uniqueKey = this.pointer_deps_prefix+key;
-        return localStorage.getItem(uniqueKey)?.split(",") ?? [];
+        return ((await this.getItem(uniqueKey))?.split(",")) ?? [];
     }
 
-    private static updateItemDependencies(key:string, newDeps:string[]) {
-        const oldDeps = this.getItemDependencies(key);
+    private static async updateItemDependencies(key:string, newDeps:string[]) {
+        const oldDeps = await this.getItemDependencies(key);
         const added = newDeps.filter(p=>!oldDeps.includes(p));
         const removed = oldDeps.filter(p=>!newDeps.includes(p));
-        for (const ptrId of added) this.increaseReferenceCount(ptrId);
-        for (const ptrId of removed) this.decreaseReferenceCount(ptrId);
-        this.setItemDependencies(key, newDeps);
+        for (const ptrId of added) this.increaseReferenceCount(ptrId).catch(e=>console.error(e));
+        for (const ptrId of removed) this.decreaseReferenceCount(ptrId).catch(e=>console.error(e));
+        this.setItemDependencies(key, newDeps).catch(e=>console.error(e));
     }
-    private static updatePointerDependencies(key:string, newDeps:string[]) {
-        const oldDeps = this.getPointerDependencies(key);
+    private static async updatePointerDependencies(key:string, newDeps:string[]) {
+        const oldDeps = await this.getPointerDependencies(key);
         const added = newDeps.filter(p=>!oldDeps.includes(p));
         const removed = oldDeps.filter(p=>!newDeps.includes(p));
-        for (const ptrId of added) this.increaseReferenceCount(ptrId);
-        for (const ptrId of removed) this.decreaseReferenceCount(ptrId);
-        this.setPointerDependencies(key, newDeps);
+        for (const ptrId of added) this.increaseReferenceCount(ptrId).catch(e=>console.error(e));
+        for (const ptrId of removed) this.decreaseReferenceCount(ptrId).catch(e=>console.error(e));
+        this.setPointerDependencies(key, newDeps).catch(e=>console.error(e));
     }
     
 
@@ -1587,6 +1572,10 @@ export class Storage {
 
         if (!options.onlyHeaders) {
             for (const [key, storageMap] of items.snapshot) {
+                
+                // skip rc:: and deps:: items
+                if (key.startsWith(this.rc_prefix) || key.startsWith(this.item_deps_prefix) || key.startsWith(this.pointer_deps_prefix)) continue;
+
                 // check if stored in all locations, otherwise print in which location it is stored (functional programming)
                 const locations = [...storageMap.keys()]
                 const storedInAll = [...this.#locations.keys()].every(l => locations.includes(l));
@@ -1605,40 +1594,40 @@ export class Storage {
             let item_deps_string = ""
             let pointer_deps_string = ""
             if (!options.onlyHeaders) {
-                for (let i = 0, len = localStorage.length; i < len; ++i ) {
-                    const key = localStorage.key(i)!;
-                    if (key.startsWith(this.rc_prefix)) {
-                        const ptrId = key.substring(this.rc_prefix.length);
-                        const count = this.getReferenceCount(ptrId);
-                        rc_string += `\x1b[0m  • ${key} = ${COLOR_NUMBER}${count}\n`
+                for (const key of await this.getItemKeysStartingWith(this.rc_prefix)) {
+                    const ptrId = key.substring(this.rc_prefix.length);
+                    const count = await this.getReferenceCount(ptrId);
+                    rc_string += `\x1b[0m  • ${key} = ${COLOR_NUMBER}${count}\n`
+                }
+
+                for (const key of await this.getItemKeysStartingWith(this.item_deps_prefix)) {
+                    const depsRaw = await this.getItem(key);
+                    // single entry
+                    if (!depsRaw?.includes(",")) {
+                        item_deps_string += `\x1b[0m  • ${key} = (${COLOR_PTR}${depsRaw}\x1b[0m)\n`
                     }
-                    else if (key.startsWith(this.item_deps_prefix)) {
-                        const depsRaw = localStorage.getItem(key);
-                        // single entry
-                        if (!depsRaw?.includes(",")) {
-                            item_deps_string += `\x1b[0m  • ${key} = (${COLOR_PTR}${depsRaw}\x1b[0m)\n`
-                        }
-                        // multiple entries
-                        else {
-                            let deps = localStorage.getItem(key)!.split(",").join(`\x1b[0m,\n      ${COLOR_PTR}$`)
-                            if (deps) deps = `      ${COLOR_PTR}$`+deps
-                            item_deps_string += `\x1b[0m  • ${key} = (\n${COLOR_PTR}${deps}\x1b[0m\n    )\n`
-                        }
-                    }
-                    else if (key.startsWith(this.pointer_deps_prefix)) {
-                        const depsRaw = localStorage.getItem(key);
-                        // single entry
-                        if (!depsRaw?.includes(",")) {
-                            pointer_deps_string += `\x1b[0m  • ${key} = (${COLOR_PTR}${depsRaw}\x1b[0m)\n`
-                        }
-                        // multiple entries
-                        else {
-                            let deps = localStorage.getItem(key)!.split(",").join(`\x1b[0m,\n      ${COLOR_PTR}$`)
-                            if (deps) deps = `      ${COLOR_PTR}$`+deps
-                            pointer_deps_string += `\x1b[0m  • ${key} = (\n${COLOR_PTR}${deps}\x1b[0m\n    )\n`
-                        }
+                    // multiple entries
+                    else {
+                        let deps = (await this.getItem(key))!.split(",").join(`\x1b[0m,\n      ${COLOR_PTR}$`)
+                        if (deps) deps = `      ${COLOR_PTR}$`+deps
+                        item_deps_string += `\x1b[0m  • ${key} = (\n${COLOR_PTR}${deps}\x1b[0m\n    )\n`
                     }
                 }
+
+                for (const key of await this.getItemKeysStartingWith(this.pointer_deps_prefix)) {
+                    const depsRaw = await this.getItem(key);
+                    // single entry
+                    if (!depsRaw?.includes(",")) {
+                        pointer_deps_string += `\x1b[0m  • ${key} = (${COLOR_PTR}${depsRaw}\x1b[0m)\n`
+                    }
+                    // multiple entries
+                    else {
+                        let deps = (await this.getItem(key))!.split(",").join(`\x1b[0m,\n      ${COLOR_PTR}$`)
+                        if (deps) deps = `      ${COLOR_PTR}$`+deps
+                        pointer_deps_string += `\x1b[0m  • ${key} = (\n${COLOR_PTR}${deps}\x1b[0m\n    )\n`
+                    }
+                }
+
             }
 
             string += rc_string + "\n" + item_deps_string + "\n" + pointer_deps_string;
@@ -1660,7 +1649,7 @@ export class Storage {
                 }
                 for (const [key, storageMap] of items.inconsistencies) {
                     for (const [location, value] of storageMap) {
-                        string += `  • ${key}${ESCAPE_SEQUENCES.GREY} (${(location.name+")").padEnd(15, " ")} = ${value}`
+                        string += `  • ${key}${ESCAPE_SEQUENCES.GREY} (${(location.name+")").padEnd(15, " ")} = ${value}\n`
                     }
                     string += `\n`
                 }
