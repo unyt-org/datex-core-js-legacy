@@ -1492,18 +1492,18 @@ export abstract class SQLDBStorageLocation<Options extends {db: string}> extends
 	}
 
 	async setItemValuePrimitive(key: string, value: string|number|bigint|boolean|Date) {
+		const columnName = "value_" + (
+			typeof value == "string" ? "text" :
+			typeof value == "number" ? "decimal" :
+			typeof value == "bigint" ? "integer" :
+			typeof value == "boolean" ? "boolean" :
+			value instanceof Date ? "time" : "text"
+		)
 		if (this.supportsInsertOrReplace) {
-			const columnName = "value_" + (
-				typeof value == "string" ? "text" :
-				typeof value == "number" ? "decimal" :
-				typeof value == "bigint" ? "integer" :
-				typeof value == "boolean" ? "boolean" :
-				value instanceof Date ? "time" : "text"
-			)
-			await this.#query(`INSERT OR REPLACE INTO \`${this.#metaTables.items.name}\` (\`key\`, \`value\`) VALUES (?, ?);`, [key, value])
+			await this.#query(`INSERT OR REPLACE INTO \`${this.#metaTables.items.name}\` (\`key\`, \`${columnName}\`) VALUES (?, ?);`, [key, value])
 		}
 		else {
-			await this.#query('INSERT INTO ?? ?? VALUES ? ON DUPLICATE KEY UPDATE value=?;', [this.#metaTables.items.name, ["key", "value"], [key, value], value])
+			await this.#query('INSERT INTO ?? ?? VALUES ? ON DUPLICATE KEY UPDATE '+columnName+'=?;', [this.#metaTables.items.name, ["key", columnName], [key, value], value])
 		}
 	}
 
