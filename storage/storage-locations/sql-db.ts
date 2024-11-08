@@ -937,7 +937,15 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 				if (!ptrId) logger.warn("Empty pointer id found in match query");
 				else return ptrId;
 			})
-			.map(ptrId => Pointer.load(ptrId))))
+			.map(async ptrId => {
+				try {
+					return await Pointer.load(ptrId)
+				}
+				catch (e) {
+					console.log("failed to load " + ptrId, valueType.toString(), e);
+					throw e;
+				}
+			})))
 			.filter(ptr => {
 				if (ptr instanceof LazyPointer) {
 					logger.warn("Cannot return lazy pointer from match query (" + ptr.id + ")");
