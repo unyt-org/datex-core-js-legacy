@@ -90,7 +90,8 @@ export abstract class SQLDBStorageLocation<Options extends {db: string}> extends
 			name: "__datex_pointer_mapping",
 			columns: [
 				[this.#pointerMysqlColumnName, this.#pointerMysqlType, "PRIMARY KEY"],
-				["table_name", "varchar(50)"]
+				["table_name", "varchar(50)"],
+				["rc", "int", "DEFAULT 0"]
 			]
 		},
 		rawPointers: {
@@ -1339,6 +1340,12 @@ export abstract class SQLDBStorageLocation<Options extends {db: string}> extends
 
 
 	async setItem(key: string, value: unknown) {
+
+		// special rc:: item, store in rc column of pointer mapping table
+		if (key.startsWith(Storage.rc_prefix)) {
+			return this.setRC(key.slice(Storage.rc_prefix.length), Number(value));
+		}
+
 		const dependencies = new Set<Pointer>()
 
 		// value is pointer
@@ -1358,7 +1365,32 @@ export abstract class SQLDBStorageLocation<Options extends {db: string}> extends
 		return dependencies;
 	}
 	getItem(key: string, conditions: ExecConditions): Promise<unknown> {
+		// special rc:: item, store in rc column of pointer mapping table
+		if (key.startsWith(Storage.rc_prefix)) {
+			return this.getRC(key.slice(Storage.rc_prefix.length));
+		}
+
 		return this.getItemValue(key, conditions);
+	}
+
+	async setRC(pointerId: string, value: number) {
+		if (this.supportsInsertOrReplace) {
+			await this.#query(`INSERT OR REPLACE INTO \`${this.#metaTables.pointerMapping.name}\` (\`${this.#pointerMysqlColumnName}\`, \`rc\`) VALUES (?, ?);`, [pointerId, value])
+		}
+		else {
+			await this.#query('INSERT INTO ?? ?? VALUES ? ON DUPLICATE KEY UPDATE rc=?;', [this.#metaTables.pointerMapping.name, [this.#pointerMysqlColumnName, "rc"], [pointerId, value], value])
+		}
+		return new Set<Pointer>();
+	}
+	async getRC(pointerId: string) {
+		const rc = (await this.#queryFirst<{rc: number}>(
+			new Query()
+				.table(this.#metaTables.pointerMapping.name)
+				.select("rc")
+				.where(Where.eq(this.#pointerMysqlColumnName, pointerId))
+				.build()
+		));
+		return rc?.rc ?? 0;
 	}
 
 	async hasItem(key:string) {
@@ -1655,12 +1687,36 @@ export abstract class SQLDBStorageLocation<Options extends {db: string}> extends
 		}
 	}
 
-	
+	// only for debugging purposes
+	static _onPointerRemoved?: (data: any) => void;
 
 	async removePointer(pointerId: string): Promise<void> {
 		this.#existingPointersCache.delete(pointerId)
 		// get table where pointer is stored
 		const table = await this.#getPointerTable(pointerId);
+
+		if (SQLDBStorageLocation._onPointerRemoved) {
+			if (table) {
+				// query data for pointer
+				const columns = await this.#queryFirst('SELECT * FROM ?? WHERE ??=?;', [table, this.#pointerMysqlColumnName, pointerId]);
+				// wait 8s and check if pointer was actually removed and not just moved
+				sleep(8000).then(async () => {
+					const stillExists = await this.#queryFirst('SELECT * FROM ?? WHERE ??=?;', [table, this.#pointerMysqlColumnName, pointerId]);
+					if (!stillExists) SQLDBStorageLocation._onPointerRemoved?.({
+						pointerId,
+						table,
+						columns
+					});
+				});
+			}
+			else {
+				SQLDBStorageLocation._onPointerRemoved({
+					pointerId,
+					table
+				});
+			}
+		}
+
 		if (table) {
 			//await this.#query('DELETE FROM ?? WHERE ??=?;', [table, this.#pointerMysqlColumnName, pointerId])
 			await this.#query(`DELETE FROM \`${table}\` WHERE \`${this.#pointerMysqlColumnName}\`=?;`, [pointerId])
