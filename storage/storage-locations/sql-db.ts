@@ -1620,7 +1620,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		if (SQLDBStorageLocation._onPointerRemoved) {
 			if (table) {
 				// query data for pointer
-				const columns = await this.#query('SELECT * FROM ?? WHERE ??=?;', [table, this.#pointerMysqlColumnName, pointerId]);
+				const columns = await this.#queryFirst('SELECT * FROM ?? WHERE ??=?;', [table, this.#pointerMysqlColumnName, pointerId]);
 				SQLDBStorageLocation._onPointerRemoved({
 					pointerId,
 					table,
