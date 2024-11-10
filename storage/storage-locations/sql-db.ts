@@ -1343,7 +1343,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			new Query()
 				.table(this.#metaTables.pointerMapping.name)
 				.select("rc")
-				.where(Where.eq("pointer_id", pointerId))
+				.where(Where.eq(this.#pointerMysqlColumnName, pointerId))
 				.build()
 		));
 		console.log("getting rc " + pointerId + ": " + rc?.rc)
