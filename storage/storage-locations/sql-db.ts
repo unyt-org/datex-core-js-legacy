@@ -1610,25 +1610,25 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 	}
 
 	// only for debugging purposes
-	_onPointerRemoved?: (data: any) => void;
+	static _onPointerRemoved?: (data: any) => void;
 
 	async removePointer(pointerId: string): Promise<void> {
 		this.#existingPointersCache.delete(pointerId)
 		// get table where pointer is stored
 		const table = await this.#getPointerTable(pointerId);
 
-		if (this._onPointerRemoved) {
+		if (SQLDBStorageLocation._onPointerRemoved) {
 			if (table) {
 				// query data for pointer
 				const columns = await this.#query('SELECT * FROM ?? WHERE ??=?;', [table, this.#pointerMysqlColumnName, pointerId]);
-				this._onPointerRemoved({
+				SQLDBStorageLocation._onPointerRemoved({
 					pointerId,
 					table,
 					columns
 				});
 			}
 			else {
-				this._onPointerRemoved({
+				SQLDBStorageLocation._onPointerRemoved({
 					pointerId,
 					table
 				});
