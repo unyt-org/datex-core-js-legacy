@@ -1085,7 +1085,12 @@ export class Storage {
     }
 
     private static async removePointer(pointer_id:string, location?:StorageLocation, force_remove = false) {
-        if (!force_remove && (await this.getReferenceCount(pointer_id)) > 0) {
+        const count = await this.getReferenceCount(pointer_id);
+        if (count == -1) {
+            console.error("Cannot remove pointer"  + pointer_id + ", reference count not available");
+            return;
+        }
+        if (!force_remove && count > 0) {
             logger.warn("Cannot remove pointer $" + pointer_id + ", still referenced");
             return;
         }
@@ -1401,13 +1406,23 @@ export class Storage {
      * Increase the reference count of a pointer in storage
      */
     private static async increaseReferenceCount(ptrId:string) {
-        await this.setItem(this.rc_prefix+ptrId, (await this.getReferenceCount(ptrId) + 1).toString());
+        const count = await this.getReferenceCount(ptrId);
+        if (count == -1) {
+            console.log("Cannot increment unknown rc for pointer " + ptrId);
+            return;
+        }
+        await this.setItem(this.rc_prefix+ptrId, (count + 1).toString());
     }
     /**
      * Decrease the reference count of a pointer in storage
      */
     private static async decreaseReferenceCount(ptrId:string) {
-        const newCount = await this.getReferenceCount(ptrId) - 1;
+        const count = await this.getReferenceCount(ptrId);
+        if (count == -1) {
+            console.log("Cannot decrement unknown rc for pointer " + ptrId);
+            return;
+        }
+        const newCount = count - 1;
         // RC is 0, delete pointer from storage
         if (newCount <= 0) {
             this.removeItem(this.rc_prefix+ptrId)

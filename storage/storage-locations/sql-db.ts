@@ -66,7 +66,8 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			name: "__datex_pointer_mapping",
 			columns: [
 				[this.#pointerMysqlColumnName, this.#pointerMysqlType, "PRIMARY KEY"],
-				["table_name", "varchar(50)"]
+				["table_name", "varchar(50)"],
+				["rc", "int", "DEFAULT 0"]
 			]
 		},
 		rawPointers: {
@@ -1283,6 +1284,12 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 
 
 	async setItem(key: string, value: unknown) {
+
+		// special rc:: item, store in rc column of pointer mapping table
+		if (key.startsWith(Storage.rc_prefix)) {
+			return this.setRC(key.slice(Storage.rc_prefix.length), Number(value));
+		}
+
 		const dependencies = new Set<Pointer>()
 
 		// value is pointer
@@ -1301,7 +1308,11 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		}
 		return dependencies;
 	}
-	async getItem(key: string, conditions: ExecConditions): Promise<unknown> {
+	getItem(key: string, conditions: ExecConditions): Promise<unknown> {
+		// special rc:: item, store in rc column of pointer mapping table
+		if (key.startsWith(Storage.rc_prefix)) {
+			return this.getRC(key.slice(Storage.rc_prefix.length));
+		}
 		return this.getItemValue(key, conditions);
 	}
 
@@ -1321,6 +1332,22 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			setTimeout(()=>this.#existingItemsCache.delete(key), 1000*60*2)
 		}
 		return exists;
+	}
+
+	async setRC(pointerId: string, value: number) {
+		console.log("setting rc " + pointerId + " to " + value)
+		await this.#query('INSERT INTO ?? ?? VALUES ? ON DUPLICATE KEY UPDATE rc=?;', [this.#metaTables.pointerMapping.name, ["pointer_id", "rc"], [pointerId, value], value])
+	}
+	async getRC(pointerId: string) {
+		const rc = (await this.#queryFirst<{rc: number}>(
+			new Query()
+				.table(this.#metaTables.pointerMapping.name)
+				.select("rc")
+				.where(Where.eq("pointer_id", pointerId))
+				.build()
+		));
+		console.log("getting rc " + pointerId + ": " + rc?.rc)
+		return rc?.rc ?? 0;
 	}
 
 	async getItemKeys(prefix: string) {
