@@ -503,11 +503,18 @@ export abstract class ReactiveValue<T = any> extends EventTarget {
         if (this.#transformSource) throw new Error("Ref already has a transform source");
         this.#transformSource = transformSource;
         // initial value init
-        return transformSource.update();
+        if (!transformSource.initLazy) return transformSource.update();
     }
     
     protected deleteTransformSource() {
         this.#transformSource = undefined;
+    }
+
+    protected handleLazyTransformInit() {
+        if (this.#transformSource?.initLazy) {
+            this.#transformSource.initLazy = false;
+            this.#transformSource.update();
+        }
     }
 
     /**
@@ -595,6 +602,8 @@ export type TransformSource = {
     // dependency values
     deps: IterableWeakSet<ReactiveValue>
     keyedDeps: IterableWeakMap<Pointer, Set<any>>
+
+    initLazy?: boolean // if true, don't immediately initialize the pointer - instead wait for the first access
 }
 
 
@@ -1174,10 +1183,11 @@ export type SmartTransformOptions<T=unknown> = {
     initial?: T,
 	cache?: boolean,
     allowStatic?: boolean,
+    initLazy?: boolean, // if true, don't immediately initialize the pointer - instead wait for the first access
     // allow async when using always instead of asyncAlways
     _allowAsync?: boolean,
     // collapse primitive pointer if value has no reactive dependencies and garbage-collect pointer
-    _collapseStatic: boolean,
+    _collapseStatic?: boolean,
     // always return the wrapper instead of the collapsed value, even for non-primitive pointers
     _returnWrapper?: boolean,
     // set the pointer type to allow any value
@@ -2560,6 +2570,7 @@ export class Pointer<T = any> extends ReactiveValue<T> {
     }    
 
     override get val():T {
+        this.handleLazyTransformInit();
         if (this.#garbage_collected) throw new PointerError("Pointer "+this.idString()+" was garbage collected");
         else if (!this.#loaded) {
             throw new PointerError("Cannot get value of uninitialized pointer ("+this.idString()+")")
@@ -3224,7 +3235,8 @@ export class Pointer<T = any> extends ReactiveValue<T> {
             },
             deps: state.deps,
             keyedDeps: state.keyedDeps,
-            update: state.update
+            update: state.update,
+            initLazy: options?.initLazy
         })
 
         /**
@@ -3776,7 +3788,7 @@ export class Pointer<T = any> extends ReactiveValue<T> {
         const value = this.shadow_object!;
 
         for (const name of this.visible_children ?? Object.keys(value)) {
-            const type = Type.ofValue(value[name])
+            const type = Type.ofValue(value[name]);
 
             // run assertions for property if defined in template
             const templatePropType = this.type?.template?.[name];
@@ -3788,19 +3800,19 @@ export class Pointer<T = any> extends ReactiveValue<T> {
 
             }
 
-            // non primitive value - proxify always
-            if (!type.is_primitive) {
+            // non primitive value - always proxify
+            
+            // already proxified child - set observers
+            if (value[name] instanceof ReactiveValue) {
+                this.initShadowObjectPropertyObserver(name, value[name]);
+            }
+            else if (!type.is_primitive) {
                 // custom timeout for remote proxy function
                 if (value[name] instanceof DatexFunction && this.type?.children_timeouts?.has(name)) {
                     value[name].datex_timeout = this.type.children_timeouts.get(name);
                 }
                 // save property to shadow_object
                 this.initShadowObjectProperty(name, this.proxifyChild(name, NOT_EXISTING))
-            }
-
-            // already proxified child - set observers
-            else if (value[name] instanceof ReactiveValue) {
-                this.initShadowObjectPropertyObserver(name, value[name]);
             }
             high_priority_keys.add(name);
         }
@@ -3811,7 +3823,7 @@ export class Pointer<T = any> extends ReactiveValue<T> {
         while ((prototype = Object.getPrototypeOf(prototype)) != Object.prototype) {
             for (const name of this.visible_children ?? Object.keys(prototype)) {
                 try {
-                    if (prototype[name] instanceof ReactiveValue && !high_priority_keys.has(name)) { // only observer Values, and ignore if already observed higher up in prototype chain
+                    if (prototype[name] instanceof ReactiveValue && !high_priority_keys.has(name)) { // only observe Values, and ignore if already observed higher up in prototype chain
                         this.initShadowObjectPropertyObserver(name, <ReactiveValue>prototype[name]);
                     }
                 } catch (e) {
@@ -3938,8 +3950,7 @@ export class Pointer<T = any> extends ReactiveValue<T> {
 
             for (const [name, property_descriptor] of childrenWithGetters) {
                 // copied from always in datex_short
-                const transformRef = Pointer.createSmartTransform(property_descriptor.get!.bind(obj));
-
+                const transformRef = Pointer.createSmartTransform(property_descriptor.get!.bind(obj), undefined, undefined, undefined, {initLazy: true, _allowAnyType: true});
                 Object.defineProperty(shadow_object, name, {value:transformRef})
             }
 
@@ -4564,6 +4575,24 @@ export class Pointer<T = any> extends ReactiveValue<T> {
 
     }
 
+    #scheduledWhenObserving = new Set<(...args:unknown[])=>unknown>();
+
+    /**
+     * schedule a task to only be called once a observer is added to this pointer
+     * can be used to setup observers for pointer properties that are only needed when observing
+     */
+    protected scheduleWhenObserving(callback: (...args:unknown[])=>unknown) {
+        this.#scheduledWhenObserving.add(callback);
+    }
+
+    protected callScheduledWhenObserving() {
+        for (const callback of this.#scheduledWhenObserving) {
+            callback();
+        }
+        this.#scheduledWhenObserving.clear();
+    }
+
+
     // set new reference
     protected initShadowObjectProperty(key:string, value:unknown){
         if (!this.shadow_object) throw new Error("pointer has no shadow object");
@@ -4582,27 +4611,27 @@ export class Pointer<T = any> extends ReactiveValue<T> {
 
     // set observer for internal changes in property value reference
     protected initShadowObjectPropertyObserver(key:string, value:RefLike){
-        // console.log("set reference observer" + this.idString(),key,value)
+        this.scheduleWhenObserving(()=>{
+            // remove previous observer for property
+            if (this.#active_property_observers.has(key)) {
+                const [value, handler] = this.#active_property_observers.get(key)!;
+                ReactiveValue.unobserve(value, handler, this.#unique); // xxxxxx
+            }
 
-        // remove previous observer for property
-        if (this.#active_property_observers.has(key)) {
-            const [value, handler] = this.#active_property_observers.get(key)!;
-            ReactiveValue.unobserve(value, handler, this.#unique); // xxxxxx
-        }
+            // new observer 
+            // TODO: is weak pointer reference correct here?
+            const ref = new WeakRef(this);
+            const handler = (_value: unknown, _key?: unknown, _type?: ReactiveValue.UPDATE_TYPE, _is_transform?: boolean, _is_child_update?: boolean, previous?: any) => {
+                const self = ref.deref();
+                if (!self) return;
+                // console.warn(_value,_key,_type,_is_transform)
+                // inform observers (TODO: more update event info?, currently just acting as if it was a SET)
+                self.callObservers(_value, key, ReactiveValue.UPDATE_TYPE.SET, _is_transform, true, previous)
+            };
 
-        // new observer 
-        // TODO: is weak pointer reference correct here?
-        const ref = new WeakRef(this);
-        const handler = (_value: unknown, _key?: unknown, _type?: ReactiveValue.UPDATE_TYPE, _is_transform?: boolean, _is_child_update?: boolean, previous?: any) => {
-            const self = ref.deref();
-            if (!self) return;
-            // console.warn(_value,_key,_type,_is_transform)
-            // inform observers (TODO: more update event info?, currently just acting as if it was a SET)
-            self.callObservers(_value, key, ReactiveValue.UPDATE_TYPE.SET, _is_transform, true, previous)
-        };
-
-        ReactiveValue.observeAndInit(value, handler, this.#unique);
-        this.#active_property_observers.set(key, [value, handler]);
+            ReactiveValue.observeAndInit(value, handler, this.#unique);
+            this.#active_property_observers.set(key, [value, handler]);
+        })
     }
 
 
@@ -4624,6 +4653,8 @@ export class Pointer<T = any> extends ReactiveValue<T> {
     // observe pointer value change (primitive) of change of a key
     public override observe<K=unknown>(handler:observe_handler<K, this>, bound_object?:object, key?:K, options?:observe_options):void {
         if (!handler) throw new ValueError("Missing observer handler")
+
+        this.callScheduledWhenObserving();
         
         // TODO handle bound_object in pointer observers/unobserve
         // observe all changes
