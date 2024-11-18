@@ -3950,7 +3950,8 @@ export class Pointer<T = any> extends ReactiveValue<T> {
 
             for (const [name, property_descriptor] of childrenWithGetters) {
                 // copied from always in datex_short
-                const transformRef = Pointer.createSmartTransform(property_descriptor.get!.bind(obj), undefined, undefined, undefined, {initLazy: true, _allowAnyType: true});
+                const transformRef = Pointer.createSmartTransform(property_descriptor.get!.bind(obj), undefined, undefined, undefined, {initLazy: true});
+                transformRef.allowAnyType(true);
                 Object.defineProperty(shadow_object, name, {value:transformRef})
             }
 
