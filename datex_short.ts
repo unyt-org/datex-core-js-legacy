@@ -1,7 +1,7 @@
 
 // shortcut functions
 // import { Datex } from "./datex.ts";
-import { baseURL, Runtime, PrecompiledDXB, Type, Pointer, ReactiveValue, PointerProperty, primitive, Target, IdEndpoint, Markdown, MinimalJSRef, RefOrValue, PartialRefOrValueObject, datex_meta, ObjectWithDatexValues, Compiler, endpoint_by_endpoint_name, endpoint_name, Storage, compiler_scope, datex_scope, DatexResponse, target_clause, ValueError, logger, Class, getDefaultLocalMeta, Endpoint, INSERT_MARK, CollapsedValueAdvanced, CollapsedValue, SmartTransformFunction, compiler_options, activePlugins, METADATA, handleDecoratorArgs, RefOrValueObject, PointerPropertyParent, InferredPointerProperty, RefLike, dc } from "./datex_all.ts";
+import { baseURL, Runtime, PrecompiledDXB, Type, Pointer, ReactiveValue, PointerProperty, primitive, Target, IdEndpoint, Markdown, MinimalJSRef, RefOrValue, datex_meta, ObjectWithDatexValues, Compiler, endpoint_by_endpoint_name, endpoint_name, Storage, compiler_scope, datex_scope, DatexResponse, target_clause, ValueError, Class, getDefaultLocalMeta, Endpoint, INSERT_MARK, SmartTransformFunction, activePlugins, PointerPropertyParent, RefLike } from "./datex_all.ts";
 
 /** make decorators global */
 import { assert as _assert, timeout as _timeout, entrypoint as _entrypoint, ref as _ref, entrypointProperty as _entrypointProperty, property as _property, struct as _struct, endpoint as _endpoint, sync as _sync, allow as _allow} from "./datex_all.ts";
