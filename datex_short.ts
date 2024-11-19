@@ -1,7 +1,7 @@
 
 // shortcut functions
 // import { Datex } from "./datex.ts";
-import { baseURL, Runtime, PrecompiledDXB, Type, Pointer, ReactiveValue, PointerProperty, primitive, Target, IdEndpoint, Markdown, MinimalJSRef, RefOrValue, PartialRefOrValueObject, datex_meta, ObjectWithDatexValues, Compiler, endpoint_by_endpoint_name, endpoint_name, Storage, compiler_scope, datex_scope, DatexResponse, target_clause, ValueError, logger, Class, getUnknownMeta, Endpoint, INSERT_MARK, CollapsedValueAdvanced, CollapsedValue, SmartTransformFunction, compiler_options, activePlugins, METADATA, handleDecoratorArgs, RefOrValueObject, PointerPropertyParent, InferredPointerProperty, RefLike, dc } from "./datex_all.ts";
+import { baseURL, Runtime, PrecompiledDXB, Type, Pointer, ReactiveValue, PointerProperty, primitive, Target, IdEndpoint, Markdown, MinimalJSRef, RefOrValue, PartialRefOrValueObject, datex_meta, ObjectWithDatexValues, Compiler, endpoint_by_endpoint_name, endpoint_name, Storage, compiler_scope, datex_scope, DatexResponse, target_clause, ValueError, logger, Class, getDefaultLocalMeta, Endpoint, INSERT_MARK, CollapsedValueAdvanced, CollapsedValue, SmartTransformFunction, compiler_options, activePlugins, METADATA, handleDecoratorArgs, RefOrValueObject, PointerPropertyParent, InferredPointerProperty, RefLike, dc } from "./datex_all.ts";
 
 /** make decorators global */
 import { assert as _assert, timeout as _timeout, entrypoint as _entrypoint, ref as _ref, entrypointProperty as _entrypointProperty, property as _property, struct as _struct, endpoint as _endpoint, sync as _sync, allow as _allow} from "./datex_all.ts";
@@ -13,7 +13,6 @@ import { getCallerFile, getCallerInfo, getMeta } from "./utils/caller_metadata.t
 import { eternals, getLazyEternal, waitingEternals, waitingLazyEternals } from "./utils/eternals.ts";
 
 import {instance} from "./js_adapter/js_class_adapter.ts";
-import { client_type } from "./utils/constants.ts";
 import { communicationHub } from "./network/communication-hub.ts";
 import { MessageLogger } from "./utils/message_logger.ts";
 export {instance} from "./js_adapter/js_class_adapter.ts";
@@ -167,7 +166,7 @@ function _datex(dx:string|TemplateStringsArray|PrecompiledDXB, data?:unknown[], 
 }
 
 // add datex.meta
-Object.defineProperty(_datex, 'meta', {get:()=>getMeta()??getUnknownMeta(), set:()=>{}, configurable:false})
+Object.defineProperty(_datex, 'meta', {get:()=>getMeta()??getDefaultLocalMeta(), set:()=>{}, configurable:false})
 // add datex.get
 Object.defineProperty(_datex, 'get', {value:(res:string, type?:Class|Type, location?:URL, plugins?:string[])=>get(res,type,location ?? getCallerFile(),plugins), configurable:false})
 
