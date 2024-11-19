@@ -336,6 +336,9 @@ export class Supranet {
         // enable network interface
 	    await import("../network/network-interface.ts");
 
+        // enable DATEX inspector request interface
+        await import("../network/debugging/request-datex-inspector.ts");
+
         return endpoint;
     }
 
