@@ -68,10 +68,7 @@ class EndpointConfig implements EndpointConfigData {
 	async load(path?:URL) {
 		let config:EndpointConfigData|null = null;
 
-		if (!Runtime.OPTIONS.USE_DX_CONFIG) {
-			console.log("Skipping endpoint config file");
-		}
-		else if (client_type=="deno") {
+		if (client_type=="deno") {
 			let config_file = new URL('./'+this.DX_FILE_NAME, cache_path);
 			// try to open .dx from cache
 			try {
@@ -103,35 +100,41 @@ class EndpointConfig implements EndpointConfigData {
 			if (serialized) {
 				config = <EndpointConfigData> await Runtime.executeDatexLocally(serialized, undefined, undefined, globalThis.location?.href ? new URL(globalThis.location.href) : undefined)
 			}
-			// try to get from .dx url
-			if (!path) path = new URL('/'+this.DX_FILE_NAME, globalThis.location.href)
-			try {
 
-				const dxResponse = await fetch(path);
-
-				// check headers for http-over-datex
-				if (dxResponse.headers.get("x-http-over-datex") == "yes") this.usingHTTPoverDATEX = true;
-
-				if (dxResponse.ok) {
-					const content = await dxResponse.text();
-					const configUpdate = await Runtime.executeDatexLocally(content, undefined, undefined, path) as EndpointConfigData;
-					if (!config) {
-						config = configUpdate;
-						logger.info("loaded endpoint config from " + path);
-					}
-					else {
-						for (const [key, value] of DatexObject.entries(configUpdate as Record<string|symbol,unknown>)) {
-							DatexObject.set(config as Record<string|symbol,unknown>, key as string, value);
-						}
-						logger.debug("updated endpoint config from " + path);
-					}
-				}
-				// ignore if no .dx file found
-
+			if (!Runtime.OPTIONS.USE_DX_CONFIG) {
+				console.log("Skipping endpoint config file");
 			}
-			catch (e) {
-				logger.warn `Could not read config file ${path}: ${e.toString()}`;
-				// ignore if no .dx file found
+			else {
+				// try to get from .dx url
+				if (!path) path = new URL('/'+this.DX_FILE_NAME, globalThis.location.href)
+					try {
+		
+						const dxResponse = await fetch(path);
+		
+						// check headers for http-over-datex
+						if (dxResponse.headers.get("x-http-over-datex") == "yes") this.usingHTTPoverDATEX = true;
+		
+						if (dxResponse.ok) {
+							const content = await dxResponse.text();
+							const configUpdate = await Runtime.executeDatexLocally(content, undefined, undefined, path) as EndpointConfigData;
+							if (!config) {
+								config = configUpdate;
+								logger.info("loaded endpoint config from " + path);
+							}
+							else {
+								for (const [key, value] of DatexObject.entries(configUpdate as Record<string|symbol,unknown>)) {
+									DatexObject.set(config as Record<string|symbol,unknown>, key as string, value);
+								}
+								logger.debug("updated endpoint config from " + path);
+							}
+						}
+						// ignore if no .dx file found
+		
+					}
+					catch (e) {
+						logger.warn `Could not read config file ${path}: ${e.toString()}`;
+						// ignore if no .dx file found
+					}
 			}
 			
 		}
