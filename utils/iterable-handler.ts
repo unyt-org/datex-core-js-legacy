@@ -1,8 +1,6 @@
 import { Datex } from "../mod.ts";
 import { ValueError } from "../datex_all.ts";
 import { weakAction } from "./weak-action.ts";
-import { retry } from "https://deno.land/std@0.208.0/async/retry.ts";
-import { or } from "../functions.ts";
 
 
 export class IterableHandler<T, U = T> {

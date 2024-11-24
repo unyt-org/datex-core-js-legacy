@@ -316,15 +316,23 @@ export function map<T, U, O extends 'array'|'map' = 'array'>(iterable: Iterable<
 
 
 // TODO: (remove empty entries inbetween)
-export function filter<T, U>(array: Array<T>, predicate: (value: T, index: number, array: T[]) => boolean): T[] {
+export function filter<T, U>(array: Array<T>, predicate: (value: T, index: number, array: T[]) => boolean, deps?: Datex.RefOrValue<any>[]): T[] {
     // live map
     if (Datex.ReactiveValue.isRef(array)) {
+        console.log("predicate", deps)
+      
+        // if (Datex.ReactiveValue.isRef(predicate)) {
+        //     console.warn("predicate")
+        //     observe(predicate, ()=> {
+        //         console.log("predicate changed")
+        //     })
+        // }
 
         const filtered: U[] = $([])
 
         const spliceArray = true;
 
-        new IterableHandler<T,U>(array, {
+        const handler = new IterableHandler<T,U>(array, {
             filter: (v,k):v is T&U => {               
                 // console.log("filter",v,k)
                 return predicate(v,k,array)
@@ -346,7 +354,18 @@ export function filter<T, U>(array: Array<T>, predicate: (value: T, index: numbe
                 // console.log("onEmpty")
                 filtered.length = 0
             }
-        })
+        });
+
+        if (deps) {
+            // TODO cleanup gargabe
+            const _deps = $(deps);
+            const ref = Datex.Pointer.getByValue(array);
+            if (ref)
+                observe(_deps, () => {
+                    ref.triggerValueInitEvent(false);
+                });
+        }
+
         return filtered as unknown as T[];
 
     }
