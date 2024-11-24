@@ -27,13 +27,13 @@ export class IterableHandler<T, U = T> {
 	constructor(private iterable: Datex.RefOrValue<Iterable<T>>, callbacks: {
 		map?: (value: T, index: number, array: Iterable<T>) => U,
 		// TODO:
-		// filter?: (value: T, index: number, array: Iterable<T>) => value is T&U,
+		filter?: (value: T, index: number, array: Iterable<T>) => value is T&U,
 		onNewEntry: (this: IterableHandler<T, U>, entry:U, key:number) => void
 		onEntryRemoved: (entry: U, key:number) => void,
 		onEmpty?: () => void
 	}) {
 		this.map = callbacks.map;
-		// this.filter = callbacks.filter;
+		this.filter = callbacks.filter;
 		this.onNewEntry = callbacks.onNewEntry;
 		this.onEntryRemoved = callbacks.onEntryRemoved;
 		this.onEmpty = callbacks.onEmpty;
@@ -188,16 +188,23 @@ export class IterableHandler<T, U = T> {
 		const entry = this.valueToEntry(value, key)
 
 		// TODO: remove entries inbetween
-		// if (this.filter && !this.filter(value, key, val(this.iterable))) {
-		// 	return;
-		// }
+		if (this.filter && !this.filter(value, key, val(this.iterable))) {
+			if (this.entries.has(key)) {
+				this.handleRemoveEntry(key);
+			}
+			console.log("Remove entry", key, value)
+			return;
+		}
 
 		if (key != undefined) {
 			// TODO: is this correct
-			if (!this.isPseudoIndex() && this.entries.has(key)) this.handleRemoveEntry(key) // entry is overridden
+			if (!this.isPseudoIndex() && this.entries.has(key))
+				this.handleRemoveEntry(key) // entry is overridden
 			this.entries.set(key, entry);
 		}
-		this.onNewEntry.call ? this.onNewEntry.call(this, entry, Number(key)) : this.onNewEntry(entry, Number(key)); // new entry handler
+		this.onNewEntry.call ? 
+			this.onNewEntry.call(this, entry, Number(key)) :
+			this.onNewEntry(entry, Number(key)); // new entry handler
 		this.checkEmpty();
 	}
 
@@ -205,13 +212,17 @@ export class IterableHandler<T, U = T> {
 		key = Number(key)
 		const entry = this.entries.get(key)!;
 		this.deleteEntry(key);
-		this.onEntryRemoved.call ? this.onEntryRemoved.call(this, entry, key) : this.onEntryRemoved(entry, key);
-
+		this.onEntryRemoved.call ? 
+			this.onEntryRemoved.call(this, entry, key) :
+			this.onEntryRemoved(entry, key);
 		this.checkEmpty();
 	}
 
 	private checkEmpty() {
-		if (this.onEmpty && this.#entries?.size == 0) this.onEmpty.call ? this.onEmpty.call(this) : this.onEmpty();
+		if (this.onEmpty && this.#entries?.size == 0) 
+			this.onEmpty.call ? 
+				this.onEmpty.call(this) :
+				this.onEmpty();
 	}
 
 }

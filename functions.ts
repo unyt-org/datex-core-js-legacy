@@ -316,38 +316,40 @@ export function map<T, U, O extends 'array'|'map' = 'array'>(iterable: Iterable<
 
 
 // TODO: (remove empty entries inbetween)
-// export function filter<T, U>(array: Array<T>, predicate: (value: T, index: number, array: T[]) => value is T&U) {
+export function filter<T, U>(array: Array<T>, predicate: (value: T, index: number, array: T[]) => value is T&U) {
+    // live map
+    if (Datex.ReactiveValue.isRef(array)) {
 
-// 	// live map
-// 	if (Datex.Ref.isRef(array)) {
+        const filtered:U[] = $([])
 
-// 		const filtered:U[] = $$([])
+        const spliceArray = true;
 
-// 		const spliceArray = true;
+        new IterableHandler<T,U>(array, {
+            filter: (v,k):v is T&U => {
+                console.log("filter")
+                return predicate(v,k,array)
+            },
+            onEntryRemoved: (v,k) => {
+                console.log("onEntryRemoved")
+                if (spliceArray) filtered.splice(k, 1);
+                else delete filtered[k];
+            },
+            onNewEntry: (v,k) => {
+                console.log("onNewEntry")
+                filtered[k] = v
+            },
+            onEmpty: () => {
+                console.log("onEmpty")
+                filtered.length = 0
+            }
+        })
+        return filtered;
 
-// 		new IterableHandler<T,U>(array, {
-// 			filter: (v,k):v is T&U => {
-// 				return predicate(v,k,array)
-// 			},
-// 			onEntryRemoved: (v,k) => {
-// 				if (spliceArray) filtered.splice(k, 1);
-// 				else delete filtered[k];
-// 			},
-// 			onNewEntry: (v,k) => {
-// 				filtered[k] = v
-// 			},
-// 			onEmpty: () => {
-// 				filtered.length = 0
-// 			}
-// 		})
+    }
 
-// 		return filtered;
-
-// 	}
-
-// 	// static map
-// 	else return array.filter(predicate)
-// }
+    // static map
+    else return array.filter(predicate)
+}
 
 
 /**

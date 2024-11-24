@@ -5,7 +5,7 @@ import { baseURL, Runtime, PrecompiledDXB, Type, Pointer, ReactiveValue, Pointer
 
 /** make decorators global */
 import { assert as _assert, timeout as _timeout, entrypoint as _entrypoint, ref as _ref, entrypointProperty as _entrypointProperty, property as _property, struct as _struct, endpoint as _endpoint, sync as _sync, allow as _allow} from "./datex_all.ts";
-import { effect as _effect, always as _always, reactiveFn as _reactiveFn, asyncAlways as _asyncAlways, toggle as _toggle, map as _map, equals as _equals, selectProperty as _selectProperty, not as _not } from "./functions.ts";
+import { effect as _effect, always as _always, reactiveFn as _reactiveFn, asyncAlways as _asyncAlways, toggle as _toggle, filter as _filter, map as _map, equals as _equals, selectProperty as _selectProperty, not as _not } from "./functions.ts";
 export * from "./functions.ts";
 import { NOT_EXISTING, DX_SLOTS, SLOT_GET, SLOT_SET } from "./runtime/constants.ts";
 import { AssertionError } from "./types/errors.ts";
@@ -36,6 +36,7 @@ declare global {
     const reactiveFn: typeof _reactiveFn;
     const toggle: typeof _toggle;
     const map: typeof _map;
+    const filter: typeof _filter;
     const equals: typeof _equals;
     const selectProperty: typeof _selectProperty;
     const not: typeof _not;
@@ -696,6 +697,7 @@ Object.defineProperty(globalThis, '_$method', {value: _$method, configurable:fal
 Object.defineProperty(globalThis, 'reactiveFn', {value:_reactiveFn, configurable:false})
 Object.defineProperty(globalThis, 'toggle', {value:_toggle, configurable:false})
 Object.defineProperty(globalThis, 'map', {value:_map, configurable:false})
+Object.defineProperty(globalThis, 'filter', {value:_filter, configurable:false})
 Object.defineProperty(globalThis, 'equals', {value:_equals, configurable:false})
 Object.defineProperty(globalThis, 'selectProperty', {value:_selectProperty, configurable:false})
 Object.defineProperty(globalThis, 'not', {value:_not, configurable:false})
