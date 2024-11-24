@@ -361,7 +361,8 @@ export function filter<T, U>(array: Array<T>, predicate: (value: T, index: numbe
                     // Trigger event for iterable handler
                     originalRef.triggerValueInitEvent(false);
                     // Trigger event on always value of filtered array
-                    filteredRef?.triggerValueEvent(ReactiveValue.UPDATE_TYPE.UPDATE, false);
+                    filteredRef?.triggerValueInitEvent(false);
+                    // filteredRef?.triggerValueEvent(ReactiveValue.UPDATE_TYPE.UPDATE, false);
                 });
         }
 
