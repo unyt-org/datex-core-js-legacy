@@ -325,21 +325,25 @@ export function filter<T, U>(array: Array<T>, predicate: (value: T, index: numbe
         const spliceArray = true;
 
         new IterableHandler<T,U>(array, {
-            filter: (v,k):v is T&U => {
-                console.log("filter")
+            filter: (v,k):v is T&U => {               
+                // console.log("filter",v,k)
                 return predicate(v,k,array)
             },
             onEntryRemoved: (v,k) => {
-                console.log("onEntryRemoved")
+                // console.log(`onEntryRemoved ${v}=${k}`, [...filtered])
                 if (spliceArray) filtered.splice(k, 1);
                 else delete filtered[k];
             },
             onNewEntry: (v,k) => {
-                console.log("onNewEntry")
+                // console.log(`onNewEntry ${v}=${k}`)
                 filtered[k] = v
             },
+            onSplice: (start, deleteCount, ...items) => {
+                // console.log(`onSplice ${start} ${deleteCount} ${items}`)
+                filtered.splice(start, deleteCount, ...items)
+            },
             onEmpty: () => {
-                console.log("onEmpty")
+                // console.log("onEmpty")
                 filtered.length = 0
             }
         })

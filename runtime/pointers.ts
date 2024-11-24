@@ -4032,11 +4032,12 @@ export class Pointer<T = any> extends ReactiveValue<T> {
                         }
                         // delete values
                         else if (val < obj.length) {
-                            for (let i=obj.length-1; i>=val;i--) {
-                                if (i in obj) this.handleDelete(BigInt(i));
-                            }
-                            // update array length if shorter than previous
-                            obj.length = val;
+                            // for (let i=obj.length-1; i>=val;i--) {
+                            //     if (i in obj) this.handleDelete(BigInt(i));
+                            // }
+                            // // update array length if shorter than previous
+                            // obj.length = val;
+                            this.handleSplice(val, obj.length - val, []);
                         }
                         
                         return true;

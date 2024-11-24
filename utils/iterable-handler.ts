@@ -1,27 +1,18 @@
 import { Datex } from "../mod.ts";
 import { ValueError } from "../datex_all.ts";
 import { weakAction } from "./weak-action.ts";
+import { retry } from "https://deno.land/std@0.208.0/async/retry.ts";
+import { or } from "../functions.ts";
 
-
-function workaroundGetHandler(iterableHandler: WeakRef<IterableHandler<any>>) {
-	return (v:any, k:any, t:any) => {
-		const deref = iterableHandler.deref();
-		if (!deref) {
-			console.warn("Undetected garbage collection (datex-w0001)");
-			return;
-		}
-		deref.onValueChanged(v, k, t)
-	}
-}
 
 export class IterableHandler<T, U = T> {
-
 	private map: ((value: T, index: number, array: Iterable<T>) => U) | undefined
 	private filter: ((value: T, index: number, array: Iterable<T>) => value is T&U) | undefined
 
 	private onNewEntry: (entry:U, key:number,) => void
 	private onEntryRemoved: (entry:U, key:number,) => void
 	private onEmpty?: () => void
+	private onSplice?: (start: number, deleteCount: number, ...items: U[]) => void
 
 	
 	constructor(private iterable: Datex.RefOrValue<Iterable<T>>, callbacks: {
@@ -30,25 +21,26 @@ export class IterableHandler<T, U = T> {
 		filter?: (value: T, index: number, array: Iterable<T>) => value is T&U,
 		onNewEntry: (this: IterableHandler<T, U>, entry:U, key:number) => void
 		onEntryRemoved: (entry: U, key:number) => void,
-		onEmpty?: () => void
+		onEmpty?: () => void,
+		onSplice?: (start: number, deleteCount: number, ...items: U[]) => void
 	}) {
 		this.map = callbacks.map;
 		this.filter = callbacks.filter;
 		this.onNewEntry = callbacks.onNewEntry;
 		this.onEntryRemoved = callbacks.onEntryRemoved;
 		this.onEmpty = callbacks.onEmpty;
+		this.onSplice = callbacks.onSplice;
 
 		this.checkEmpty();
 		this.observe()
+
+		globalThis.iterable = this;
 	}
 
 	observe() {
 		// deno-lint-ignore no-this-alias
 		const self = this;
 		const iterableRef = new WeakRef(this.iterable);
-
-		// const handler = this.workaroundGetHandler(self)
-		// Datex.Ref.observeAndInit(iterable, handler);
 
 		weakAction(
 			{self}, 
@@ -80,10 +72,64 @@ export class IterableHandler<T, U = T> {
 		// TODO: unobserve
 	}
 
+	/**
+	 * maps all keys of the iterable to the keys of the filtered iterable
+	 * (only relevant if a filter is set)
+	 */
+	#filterKeyMap = new Map<number, number>();
+	private setEntryWithMappedFilterKey(key: number, entry: U) {
+		const originalKey = key;
+		// append at the end if last item
+		if (key >= this.#filterKeyMap.size) {
+			key = this.#filterKeyMap.size;
+			this.#filterKeyMap.set(originalKey, key);
+		}
+		// get mapped key
+		else if (this.#filterKeyMap.has(key)) {
+			key = this.#filterKeyMap.get(key)!;
+		}
+		// insert key at position
+		else {
+			// shift entries to the right to make space for new entry at key
+			this.shiftEntriesForNewEntry(key, entry);
+			// shift all following keys to the right in filterKeyMap
+			for (const [k, v] of this.#filterKeyMap) {
+				if (v >= key) {
+					this.#filterKeyMap.set(k, v + 1);
+				}
+			}
+			this.#filterKeyMap.set(originalKey, key);
+			return -1;
+		}
+		return key;
+	}
+
+	/**
+	 * Removes a key from the filterKeyMap
+	 * and shifts all following keys to the left
+	 * @param key 
+	 */
+	private deleteFilterKey(key: number) {
+		// remove key from filterKeyMap
+		this.#filterKeyMap.delete(key);
+		// shift all following keys to the left in filterKeyMap
+		for (const [k, v] of this.#filterKeyMap) {
+			if (v > key) {
+				this.#filterKeyMap.set(k, v - 1);
+			}
+		}
+		// shift all following keys to the left in entries
+		for (let k = key; k < this.entries.size; k++) {
+			this.entries.set(k, this.entries.get(k + 1)!);
+		}
+		this.handleRemoveEntry(key);
+	}
+
 
 	#entries?: Map<number, U>;
 	public get entries() {
-		if (!this.#entries) this.#entries = new Map<number, U>();
+		if (!this.#entries)
+			this.#entries = new Map<number, U>();
 		return this.#entries;
 	}
 
@@ -101,6 +147,16 @@ export class IterableHandler<T, U = T> {
 			this.entries.set(k, this.entries.get(k+1)!)
 		}
 		this.entries.delete(max);
+	}
+
+	// shift entries to make space for new entry at key
+	private shiftEntriesForNewEntry(key:number, entry: U){
+		const max = [...this.entries.keys()].at(-1) || 0;
+		for (let k = max; k>=key; k--) {
+			this.entries.set(k+1, this.entries.get(k)!)
+		}
+		this.entries.set(key, entry);
+		this.onSplice?.(key, 0, entry);
 	}
 
 	private deleteEntry(key:number) {
@@ -151,13 +207,21 @@ export class IterableHandler<T, U = T> {
 		}
 
 		// single property update
-		if (type == Datex.ReactiveValue.UPDATE_TYPE.SET) this.handleNewEntry(<T>value, key)
-		else if (type == Datex.ReactiveValue.UPDATE_TYPE.ADD) this.handleNewEntry(<T>value, this.getPseudoIndex(key, <T>value));
+		if (type == Datex.ReactiveValue.UPDATE_TYPE.SET)
+			this.handleNewEntry(<T>value, key)
+		else if (type == Datex.ReactiveValue.UPDATE_TYPE.ADD)
+			this.handleNewEntry(<T>value, this.getPseudoIndex(key, <T>value));
 		// clear all
 		else if (type == Datex.ReactiveValue.UPDATE_TYPE.CLEAR) {
 			// handle onEmpty
 			if (this.onEmpty) {
-				this.onEmpty.call ? this.onEmpty.call(this) : this.onEmpty();
+				// clear filterKeyMap
+				this.#filterKeyMap.clear();
+				// clear entries
+				this.#entries?.clear();
+				this.onEmpty.call ?
+					this.onEmpty.call(this) :
+					this.onEmpty();
 			}
 			// alternative: delete all entries individually
 			else {
@@ -166,20 +230,43 @@ export class IterableHandler<T, U = T> {
 				}
 			}
 		}
-		else if (type == Datex.ReactiveValue.UPDATE_TYPE.BEFORE_DELETE) this.handleRemoveEntry(key);
-		else if (type == Datex.ReactiveValue.UPDATE_TYPE.BEFORE_REMOVE) this.handleRemoveEntry(this.getPseudoIndex(key, <T>value));
+		else if (type == Datex.ReactiveValue.UPDATE_TYPE.BEFORE_DELETE)
+			this.handleRemoveEntry(key);
+		else if (type == Datex.ReactiveValue.UPDATE_TYPE.BEFORE_REMOVE)
+			this.handleRemoveEntry(this.getPseudoIndex(key, <T>value));
 		// completely new value
 		else if (type == Datex.ReactiveValue.UPDATE_TYPE.INIT) {
-			for (const e of this.entries.keys()) this.handleRemoveEntry(e); // clear all entries
+			for (const e of this.entries.keys())
+				this.handleRemoveEntry(e); // clear all entries
+
+			const it = <Iterable<T>>this.iterator(value??[]);
+			const initValue: T[] = [];
+
+			if (this.filter) {
+				let key = 0;
+				for (const child of it) {
+					if (this.filter(child, key++, val(this.iterable))) {
+						initValue.push(child);
+					}
+				}
+			} else {
+				for (const child of it) {
+					initValue.push(child);
+				}
+			}
+
 			let key = 0;
-			for (const child of <Iterable<T>>this.iterator(value??[])) this.handleNewEntry(child, key++);
+			for (const child of initValue)
+				this.handleNewEntry(child, key++);
 		}
 	}
 
 	// can be overriden
 	protected valueToEntry(value:T, key?: number):U {
 		key = Number(key);
-		return this.map ? this.map(value, key??0, val(this.iterable)) : value as unknown as U;
+		return this.map ? 
+			this.map(value, key??0, val(this.iterable)) :
+			value as unknown as U;
 	}
 
 	// call valueToEntry and save entry in this.#entries
@@ -188,18 +275,32 @@ export class IterableHandler<T, U = T> {
 		const entry = this.valueToEntry(value, key)
 
 		// TODO: remove entries inbetween
-		if (this.filter && !this.filter(value, key, val(this.iterable))) {
-			if (this.entries.has(key)) {
-				this.handleRemoveEntry(key);
+		if (this.filter) {
+			const filteredOut = !this.filter(value, key, val(this.iterable));
+
+			// is filtered out
+			if (filteredOut) {
+				// at the end of the list, just ignore
+				if (key >= this.entries.size) {}
+				// remove entry
+				else {
+					this.deleteFilterKey(key);
+				}
+				return;
 			}
-			console.log("Remove entry", key, value)
-			return;
+
+			// get mapped filter key
+			else {
+				key = this.setEntryWithMappedFilterKey(key, value);
+				// update already handled, continue
+				if (key == -1) return;
+			}
 		}
 
 		if (key != undefined) {
-			// TODO: is this correct
-			if (!this.isPseudoIndex() && this.entries.has(key))
-				this.handleRemoveEntry(key) // entry is overridden
+			// // TODO: is this correct
+			// if (!this.isPseudoIndex() && this.entries.has(key))
+			// 	this.handleRemoveEntry(key) // entry is overridden
 			this.entries.set(key, entry);
 		}
 		this.onNewEntry.call ? 
@@ -219,10 +320,14 @@ export class IterableHandler<T, U = T> {
 	}
 
 	private checkEmpty() {
-		if (this.onEmpty && this.#entries?.size == 0) 
+		if (this.onEmpty && this.#entries?.size == 0) {
+			// clear filterKeyMap
+			this.#filterKeyMap.clear();
 			this.onEmpty.call ? 
 				this.onEmpty.call(this) :
 				this.onEmpty();
+		}
+			
 	}
 
 }
