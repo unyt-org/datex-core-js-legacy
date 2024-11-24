@@ -354,14 +354,14 @@ export function filter<T, U>(array: Array<T>, predicate: (value: T, index: numbe
         if (deps) {
             // TODO cleanup gargabe
             const _deps = $(deps);
-            const ref = Datex.Pointer.getByValue(array);
-            if (ref)
+            const originalRef = Datex.Pointer.getByValue(array);
+            const filteredRef = Datex.Pointer.getByValue(filtered);
+            if (originalRef)
                 observe(_deps, () => {
                     // Trigger event for iterable handler
-                    ref.triggerValueInitEvent(false);
+                    originalRef.triggerValueInitEvent(false);
                     // Trigger event on always value of filtered array
-                    Datex.Pointer.getByValue(filtered)?.
-                            triggerValueEvent(ReactiveValue.UPDATE_TYPE.UPDATE, false);
+                    filteredRef?.triggerValueEvent(ReactiveValue.UPDATE_TYPE.UPDATE, false);
                 });
         }
 
