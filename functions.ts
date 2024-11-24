@@ -316,11 +316,11 @@ export function map<T, U, O extends 'array'|'map' = 'array'>(iterable: Iterable<
 
 
 // TODO: (remove empty entries inbetween)
-export function filter<T, U>(array: Array<T>, predicate: (value: T, index: number, array: T[]) => value is T&U) {
+export function filter<T, U>(array: Array<T>, predicate: (value: T, index: number, array: T[]) => boolean): T[] {
     // live map
     if (Datex.ReactiveValue.isRef(array)) {
 
-        const filtered:U[] = $([])
+        const filtered: U[] = $([])
 
         const spliceArray = true;
 
@@ -347,7 +347,7 @@ export function filter<T, U>(array: Array<T>, predicate: (value: T, index: numbe
                 filtered.length = 0
             }
         })
-        return filtered;
+        return filtered as unknown as T[];
 
     }
 
