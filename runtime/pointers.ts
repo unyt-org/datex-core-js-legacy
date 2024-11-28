@@ -95,16 +95,19 @@ export abstract class ReactiveValue<T = any> extends EventTarget {
         this.#val = <T> ReactiveValue.collapseValue(value, true, true);
         if (trigger_observers && previous !== this.#val) return this.triggerValueInitEvent(is_transform, previous)
     }
-    
+
     protected triggerValueInitEvent(is_transform = false, previous?:any){
+        return this.triggerValueEvent(ReactiveValue.UPDATE_TYPE.INIT, is_transform, previous);
+    }
+    protected triggerValueEvent(event: ReactiveValue.UPDATE_TYPE, is_transform = false, previous?:any){
         const value = this.current_val;
         const promises = [];
         for (const [o, options] of this.#observers??[]) {
-            if ((!options?.types || options.types.includes(ReactiveValue.UPDATE_TYPE.INIT)) && !(is_transform && options?.ignore_transforms)) promises.push(o(value, VOID, ReactiveValue.UPDATE_TYPE.INIT, is_transform, undefined, previous));
+            if ((!options?.types || options.types.includes(event)) && !(is_transform && options?.ignore_transforms)) promises.push(o(value, VOID, event, is_transform, undefined, previous));
         }
         for (const [object, observers] of this.#observers_bound_objects??[]) {
             for (const [o, options] of observers??[]) {
-                if ((!options?.types || options.types.includes(ReactiveValue.UPDATE_TYPE.INIT)) && !(is_transform && options?.ignore_transforms)) promises.push(o.call(object, value, VOID, ReactiveValue.UPDATE_TYPE.INIT, is_transform, undefined, previous));
+                if ((!options?.types || options.types.includes(event)) && !(is_transform && options?.ignore_transforms)) promises.push(o.call(object, value, VOID, event, is_transform, undefined, previous));
             }
         }
         return Promise.allSettled(promises);
@@ -2629,26 +2632,29 @@ export class Pointer<T = any> extends ReactiveValue<T> {
 
     // also trigger event for all property specific observers
     override triggerValueInitEvent(is_transform = false, previous?: any) {
+        return this.triggerValueEvent(ReactiveValue.UPDATE_TYPE.INIT, is_transform, previous)
+    }
+    override triggerValueEvent(event: ReactiveValue.UPDATE_TYPE, is_transform = false, previous?: any) {
         const value = this.current_val;
 
         // TODO: await promises?
         for (const [key, entry] of this.change_observers) {
             for (const [o, options] of entry) {
-                if ((!options?.types || options.types.includes(ReactiveValue.UPDATE_TYPE.INIT))) o(value, key, ReactiveValue.UPDATE_TYPE.INIT); 
+                if ((!options?.types || options.types.includes(event))) o(value, key, event); 
             }
         }
         for (const [object, entries] of this.bound_change_observers) {
             for (const [key, handlers] of entries) {
                 for (const [handler, options] of handlers) {
-                    if ((!options?.types || options.types.includes(ReactiveValue.UPDATE_TYPE.INIT))) {
-                        const res = handler.call(object, value, key, ReactiveValue.UPDATE_TYPE.INIT);
+                    if ((!options?.types || options.types.includes(event))) {
+                        const res = handler.call(object, value, key, event);
                         if (res === false) this.unobserve(handler, object, key);
                     }
                 }
             }
         }
 
-        return super.triggerValueInitEvent(is_transform, previous)
+        return super.triggerValueEvent(event, is_transform, previous)
     }
 
 
@@ -4032,11 +4038,12 @@ export class Pointer<T = any> extends ReactiveValue<T> {
                         }
                         // delete values
                         else if (val < obj.length) {
-                            for (let i=obj.length-1; i>=val;i--) {
-                                if (i in obj) this.handleDelete(BigInt(i));
-                            }
-                            // update array length if shorter than previous
-                            obj.length = val;
+                            // for (let i=obj.length-1; i>=val;i--) {
+                            //     if (i in obj) this.handleDelete(BigInt(i));
+                            // }
+                            // // update array length if shorter than previous
+                            // obj.length = val;
+                            this.handleSplice(val, obj.length - val, []);
                         }
                         
                         return true;
@@ -4401,7 +4408,7 @@ export class Pointer<T = any> extends ReactiveValue<T> {
         const originalLength = obj.length;
         // array splice
         // trigger BEFORE_DELETE
-        for (let i = obj.length - netDeleteCount; i < obj.length; i++) {
+        for (let i = obj.length - 1; i >= obj.length - netDeleteCount; i--) {
             this.callObservers(obj[i], i, ReactiveValue.UPDATE_TYPE.BEFORE_DELETE)
         }
 
@@ -4444,9 +4451,8 @@ export class Pointer<T = any> extends ReactiveValue<T> {
         }
 
         const atomicId = Symbol("ATOMIC_SPLICE")
-
         // inform observers after splice finished - value already in right position
-        for (let i = originalLength-1; i>=start_index; i--) {
+        for (let i = Math.max(originalLength, obj.length)-1; i>=start_index; i--) {
             // element moved here?
             if (i < obj.length) {
                 this.callObservers(obj[i], i, ReactiveValue.UPDATE_TYPE.SET, undefined, undefined, previous[i], atomicId)

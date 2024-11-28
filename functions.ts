@@ -245,7 +245,7 @@ export function map<T, U, O extends 'array'|'map' = 'array'>(iterable: Iterable<
 
         // return map
         if (options?.outType == "map") {
-            mapped = $$(new Map())
+            mapped = $(new Map())
 
             const iterableHandler = new IterableHandler(iterable, {
                 map: (v,k)=>{
@@ -263,7 +263,7 @@ export function map<T, U, O extends 'array'|'map' = 'array'>(iterable: Iterable<
 
         // return array
         else {
-            mapped = $$([])
+            mapped = $([])
 
             // no gaps in a set -> array splice required
             const spliceArray = iterable instanceof Set; 
@@ -277,7 +277,7 @@ export function map<T, U, O extends 'array'|'map' = 'array'>(iterable: Iterable<
                     else delete (mapped as U[])[k];
                 },
                 onNewEntry: (v,k) => {
-                    (mapped as U[])[k] = v
+                    (mapped as U[])[k] = v;
                 },
                 onEmpty: () => {
                     (mapped as U[]).length = 0
@@ -316,38 +316,73 @@ export function map<T, U, O extends 'array'|'map' = 'array'>(iterable: Iterable<
 
 
 // TODO: (remove empty entries inbetween)
-// export function filter<T, U>(array: Array<T>, predicate: (value: T, index: number, array: T[]) => value is T&U) {
+export function filter<T, U>(array: Array<T>, predicate: (value: T, index: number, array: T[]) => boolean, deps?: Datex.RefOrValue<any>[]): T[] {
+    // live map
+    if (Datex.ReactiveValue.isRef(array)) {
 
-// 	// live map
-// 	if (Datex.Ref.isRef(array)) {
+        const filtered: U[] = $([])
+        const spliceArray = true;
 
-// 		const filtered:U[] = $$([])
+        const observers = new Map<number, [Ref<boolean>, ()=>void]>();
+        const removeObserver = (key: number) => {
+            const observer = observers.get(key);
+            if (observer) {
+                unobserve(observer[0], observer[1]);
+                // explicitly delete ref
+                observer[0].delete();
+            }
+        }
 
-// 		const spliceArray = true;
+        const handler = new IterableHandler<T,U>(array, {
+            filter: (v,k):v is T&U => {
+                // remove previous observer if it exists
+                removeObserver(k);
+                // make filter function reactive, re-evaluate when dependencies changes
+                const filtered = always(() => predicate(array[k],k,array));
+                const observer = () => {
+                    handler.handleNewEntry(array[k],k,filtered.val);
+                }
+                observers.set(k, [filtered, observer])
+                observe(filtered, observer);
+                return filtered.val;              
+            },
+            onEntryRemoved: (v,k) => {
+                if (spliceArray) filtered.splice(k, 1);
+                else delete filtered[k];
+            },
+            onNewEntry: (v,k) => {
+                filtered[k] = v
+            },
+            onSplice: (start, deleteCount, ...items) => {
+                filtered.splice(start, deleteCount, ...items)
+            },
+            onEmpty: () => {
+                filtered.length = 0
+            }
+        });
 
-// 		new IterableHandler<T,U>(array, {
-// 			filter: (v,k):v is T&U => {
-// 				return predicate(v,k,array)
-// 			},
-// 			onEntryRemoved: (v,k) => {
-// 				if (spliceArray) filtered.splice(k, 1);
-// 				else delete filtered[k];
-// 			},
-// 			onNewEntry: (v,k) => {
-// 				filtered[k] = v
-// 			},
-// 			onEmpty: () => {
-// 				filtered.length = 0
-// 			}
-// 		})
+        if (deps) {
+            // TODO cleanup gargabe
+            const _deps = $(deps);
+            const originalRef = Datex.Pointer.getByValue(array);
+            const filteredRef = Datex.Pointer.getByValue(filtered);
+            if (originalRef)
+                observe(_deps, () => {
+                    // Trigger event for iterable handler
+                    originalRef.triggerValueInitEvent(false);
+                    // Trigger event on always value of filtered array
+                    filteredRef?.triggerValueInitEvent(false);
+                    // filteredRef?.triggerValueEvent(ReactiveValue.UPDATE_TYPE.UPDATE, false);
+                });
+        }
 
-// 		return filtered;
+        return filtered as unknown as T[];
 
-// 	}
+    }
 
-// 	// static map
-// 	else return array.filter(predicate)
-// }
+    // static map
+    else return array.filter(predicate)
+}
 
 
 /**
