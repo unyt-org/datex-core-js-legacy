@@ -9,8 +9,7 @@ export class ReactiveArrayMethods<T=unknown> {
 		return map(this.pointer.val, thisArg ? callbackfn.bind(thisArg) : callbackfn as any)
 	}
 
-	// TODO
-	// filter<S extends T>(predicate: (value: T, index: number, array: T[]) => value is S, thisArg?: any): S[] {
-	// 	return filter(this.pointer.val, thisArg ? predicate.bind(thisArg) : predicate as any)
-	// }
+	filter<S extends T>(predicate: (value: T, index: number, array: T[]) => value is S, thisArg?: any): S[] {
+		return filter(this.pointer.val, thisArg ? predicate.bind(thisArg) : predicate as any)
+	}
 }

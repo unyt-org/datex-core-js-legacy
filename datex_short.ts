@@ -681,7 +681,7 @@ export function translocate<T extends Map<unknown,unknown>|Set<unknown>|Array<un
 // }
 
 export function _$method(value: any, method: string, ...args: unknown[]) {
-    if (ReactiveValue.isRef(value) && value['$'][method]) {
+    if (ReactiveValue.isRef(value) && typeof value['$'][method] == 'function') {
         return value['$'][method](...args);
     }
     else return value[method](...args);

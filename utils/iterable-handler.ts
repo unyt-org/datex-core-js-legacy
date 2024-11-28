@@ -90,7 +90,6 @@ export class IterableHandler<T, U = T> {
 		else {
 			// shift entries to the right to make space for new entry at key
 			const mappedKey = this.findFilterMapKey(key);
-			console.log("fin fiter maokey",mappedKey)
 			this.shiftEntriesForNewEntry(mappedKey, entry);
 			// shift all following keys to the right in filterKeyMap
 			for (const [k, v] of this.#filterKeyMap) {
