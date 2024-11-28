@@ -4408,7 +4408,7 @@ export class Pointer<T = any> extends ReactiveValue<T> {
         const originalLength = obj.length;
         // array splice
         // trigger BEFORE_DELETE
-        for (let i = obj.length - netDeleteCount; i < obj.length; i++) {
+        for (let i = obj.length - 1; i >= obj.length - netDeleteCount; i--) {
             this.callObservers(obj[i], i, ReactiveValue.UPDATE_TYPE.BEFORE_DELETE)
         }
 
@@ -4451,9 +4451,8 @@ export class Pointer<T = any> extends ReactiveValue<T> {
         }
 
         const atomicId = Symbol("ATOMIC_SPLICE")
-
         // inform observers after splice finished - value already in right position
-        for (let i = originalLength-1; i>=start_index; i--) {
+        for (let i = Math.max(originalLength, obj.length)-1; i>=start_index; i--) {
             // element moved here?
             if (i < obj.length) {
                 this.callObservers(obj[i], i, ReactiveValue.UPDATE_TYPE.SET, undefined, undefined, previous[i], atomicId)

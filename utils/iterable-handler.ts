@@ -31,8 +31,6 @@ export class IterableHandler<T, U = T> {
 
 		this.checkEmpty();
 		this.observe()
-
-		globalThis.iterable = this;
 	}
 
 	observe() {
@@ -77,29 +75,33 @@ export class IterableHandler<T, U = T> {
 	#filterKeyMap = new Map<number, number>();
 	private setEntryWithMappedFilterKey(key: number, entry: U) {
 		const originalKey = key;
+		let mappedKey = -1;
 		// append at the end if last item
-		if (key >= this.#filterKeyMap.size) {
-			key = this.#filterKeyMap.size;
-			this.#filterKeyMap.set(originalKey, key);
+		const maxFilterMapKey = this.#filterKeyMap.keys().reduce((a, b) => Math.max(a, b), 0);
+		if (key >= maxFilterMapKey) {
+			mappedKey = this.#filterKeyMap.size;
+			this.#filterKeyMap.set(originalKey, mappedKey);
 		}
 		// get mapped key
 		else if (this.#filterKeyMap.has(key)) {
-			key = this.#filterKeyMap.get(key)!;
+			mappedKey = this.#filterKeyMap.get(key)!;
 		}
 		// insert key at position
 		else {
 			// shift entries to the right to make space for new entry at key
-			this.shiftEntriesForNewEntry(key, entry);
+			const mappedKey = this.findFilterMapKey(key);
+			console.log("fin fiter maokey",mappedKey)
+			this.shiftEntriesForNewEntry(mappedKey, entry);
 			// shift all following keys to the right in filterKeyMap
 			for (const [k, v] of this.#filterKeyMap) {
-				if (v >= key) {
+				if (v >= mappedKey) {
 					this.#filterKeyMap.set(k, v + 1);
 				}
 			}
-			this.#filterKeyMap.set(originalKey, key);
+			this.#filterKeyMap.set(originalKey, mappedKey);
 			return -1;
 		}
-		return key;
+		return mappedKey;
 	}
 
 	/**
@@ -109,18 +111,25 @@ export class IterableHandler<T, U = T> {
 	 */
 	private deleteFilterKey(key: number) {
 		// remove key from filterKeyMap
+		const mappedKey = this.#filterKeyMap.get(key) ?? Infinity; 
+
 		this.#filterKeyMap.delete(key);
+
 		// shift all following keys to the left in filterKeyMap
 		for (const [k, v] of this.#filterKeyMap) {
-			if (v > key) {
+			if (v > mappedKey) {
 				this.#filterKeyMap.set(k, v - 1);
+				const entryKey = v-1;
+				const entry = this.entries.get(entryKey+1)!;
+				this.entries.set(entryKey, entry);
+				this.onNewEntry.call ? 
+					this.onNewEntry.call(this, entry, entryKey) :
+					this.onNewEntry(entry, entryKey); // new entry handler
 			}
 		}
-		// shift all following keys to the left in entries
-		for (let k = key; k < this.entries.size; k++) {
-			this.entries.set(k, this.entries.get(k + 1)!);
-		}
-		this.handleRemoveEntry(key);
+
+		// remove last key if not out of bounds
+		if (mappedKey < this.entries.size) this.handleRemoveEntry(this.entries.size-1);		
 	}
 
 
@@ -147,13 +156,28 @@ export class IterableHandler<T, U = T> {
 		this.entries.delete(max);
 	}
 
-	// shift entries to make space for new entry at key
+	// find the filter map key of an item that is not in #filterKeyMap
+	private findFilterMapKey(key: number) {
+		// check all nearby filter map keys
+		// TODO: make this more performant
+		let nextUpperKey = Infinity;
+		let nextUpperIndex = 0;
+		for (const [k, v] of this.#filterKeyMap) {
+			if (k > key && k < nextUpperKey) {
+				nextUpperKey = k;
+				nextUpperIndex = v;
+			}
+		}
+		return nextUpperIndex;
+	}
+
+	// shift entries to the right make space for new entry at key
 	private shiftEntriesForNewEntry(key:number, entry: U){
-		const max = [...this.entries.keys()].at(-1) || 0;
-		for (let k = max; k>=key; k--) {
+		for (let k = this.entries.size-1; k>=key; k--) {
 			this.entries.set(k+1, this.entries.get(k)!)
 		}
 		this.entries.set(key, entry);
+		if (!this.onSplice) throw new Error("onSplice is required when using filters with IterableHandler")
 		this.onSplice?.(key, 0, entry);
 	}
 
@@ -240,17 +264,8 @@ export class IterableHandler<T, U = T> {
 			const it = <Iterable<T>>this.iterator(value??[]);
 			const initValue: T[] = [];
 
-			if (this.filter) {
-				let key = 0;
-				for (const child of it) {
-					if (this.filter(child, key++, val(this.iterable))) {
-						initValue.push(child);
-					}
-				}
-			} else {
-				for (const child of it) {
-					initValue.push(child);
-				}
+			for (const child of it) {
+				initValue.push(child);
 			}
 
 			let key = 0;
@@ -268,22 +283,17 @@ export class IterableHandler<T, U = T> {
 	}
 
 	// call valueToEntry and save entry in this.#entries
-	private handleNewEntry(value:T, key:number) {
+	handleNewEntry(value:T, key:number, filterResult?:boolean) {
 		key = Number(key);
 		const entry = this.valueToEntry(value, key)
 
-		// TODO: remove entries inbetween
-		if (this.filter) {
-			const filteredOut = !this.filter(value, key, val(this.iterable));
-
+		if (this.filter || filterResult != undefined) {
+			const filteredOut = ! (
+				filterResult != undefined ? filterResult : this.filter!(value, key, val(this.iterable))
+			);
 			// is filtered out
 			if (filteredOut) {
-				// at the end of the list, just ignore
-				if (key >= this.entries.size) {}
-				// remove entry
-				else {
-					this.deleteFilterKey(key);
-				}
+				this.deleteFilterKey(key);
 				return;
 			}
 

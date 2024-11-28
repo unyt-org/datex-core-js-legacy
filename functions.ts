@@ -245,7 +245,7 @@ export function map<T, U, O extends 'array'|'map' = 'array'>(iterable: Iterable<
 
         // return map
         if (options?.outType == "map") {
-            mapped = $$(new Map())
+            mapped = $(new Map())
 
             const iterableHandler = new IterableHandler(iterable, {
                 map: (v,k)=>{
@@ -263,7 +263,7 @@ export function map<T, U, O extends 'array'|'map' = 'array'>(iterable: Iterable<
 
         // return array
         else {
-            mapped = $$([])
+            mapped = $([])
 
             // no gaps in a set -> array splice required
             const spliceArray = iterable instanceof Set; 
@@ -277,7 +277,7 @@ export function map<T, U, O extends 'array'|'map' = 'array'>(iterable: Iterable<
                     else delete (mapped as U[])[k];
                 },
                 onNewEntry: (v,k) => {
-                    (mapped as U[])[k] = v
+                    (mapped as U[])[k] = v;
                 },
                 onEmpty: () => {
                     (mapped as U[]).length = 0
@@ -319,22 +319,32 @@ export function map<T, U, O extends 'array'|'map' = 'array'>(iterable: Iterable<
 export function filter<T, U>(array: Array<T>, predicate: (value: T, index: number, array: T[]) => boolean, deps?: Datex.RefOrValue<any>[]): T[] {
     // live map
     if (Datex.ReactiveValue.isRef(array)) {
-        console.log("predicate", deps)
-      
-        // if (Datex.ReactiveValue.isRef(predicate)) {
-        //     console.warn("predicate")
-        //     observe(predicate, ()=> {
-        //         console.log("predicate changed")
-        //     })
-        // }
 
         const filtered: U[] = $([])
-
         const spliceArray = true;
 
-        new IterableHandler<T,U>(array, {
-            filter: (v,k):v is T&U => {               
-                return predicate(v,k,array)
+        const observers = new Map<number, [Ref<boolean>, ()=>void]>();
+        const removeObserver = (key: number) => {
+            const observer = observers.get(key);
+            if (observer) {
+                unobserve(observer[0], observer[1]);
+                // explicitly delete ref
+                observer[0].delete();
+            }
+        }
+
+        const handler = new IterableHandler<T,U>(array, {
+            filter: (v,k):v is T&U => {
+                // remove previous observer if it exists
+                removeObserver(k);
+                // make filter function reactive, re-evaluate when dependencies changes
+                const filtered = always(() => predicate(array[k],k,array));
+                const observer = () => {
+                    handler.handleNewEntry(array[k],k,filtered.val);
+                }
+                observers.set(k, [filtered, observer])
+                observe(filtered, observer);
+                return filtered.val;              
             },
             onEntryRemoved: (v,k) => {
                 if (spliceArray) filtered.splice(k, 1);
