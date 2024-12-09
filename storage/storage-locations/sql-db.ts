@@ -832,10 +832,10 @@ export abstract class SQLDBStorageLocation<Options extends {db: string}> extends
 
 	async #updatePointerMapping(pointerId: string, tableName: string) {
 		if (this.supportsInsertOrReplace) {
-			await this.#query(`INSERT OR REPLACE INTO \`${this.#metaTables.pointerMapping.name}\` (\`${this.#pointerMysqlColumnName}\`, \`table_name\`) VALUES (?, ?);`, [pointerId, tableName])
+			await this.#query(`INSERT INTO \`${this.#metaTables.pointerMapping.name}\` (\`${this.#pointerMysqlColumnName}\`, \`table_name\`) VALUES (?, ?) ON CONFLICT(\`${this.#pointerMysqlColumnName}\`) DO UPDATE SET \`table_name\`=?;`, [pointerId, tableName, tableName])
 		}
 		else {
-			await this.#query('INSERT INTO ?? ?? VALUES ? ON DUPLICATE KEY UPDATE table_name=?;', [this.#metaTables.pointerMapping.name, [this.#pointerMysqlColumnName, "table_name"], [pointerId, tableName], tableName])
+			await this.#query(`INSERT INTO \`${this.#metaTables.pointerMapping.name}\` (\`${this.#pointerMysqlColumnName}\`, \`table_name\`) VALUES (?, ?) ON DUPLICATE KEY UPDATE \`table_name\`=?;`, [pointerId, tableName, tableName])
 		}
 	}
 
@@ -1375,10 +1375,10 @@ export abstract class SQLDBStorageLocation<Options extends {db: string}> extends
 
 	async setRC(pointerId: string, value: number) {
 		if (this.supportsInsertOrReplace) {
-			await this.#query(`INSERT OR REPLACE INTO \`${this.#metaTables.pointerMapping.name}\` (\`${this.#pointerMysqlColumnName}\`, \`rc\`) VALUES (?, ?);`, [pointerId, value])
+			await this.#query(`INSERT INTO \`${this.#metaTables.pointerMapping.name}\` (\`${this.#pointerMysqlColumnName}\`, \`rc\`) VALUES (?, ?) ON CONFLICT(\`${this.#pointerMysqlColumnName}\`) DO UPDATE SET \`rc\`=?;`, [pointerId, value, value])
 		}
 		else {
-			await this.#query('INSERT INTO ?? ?? VALUES ? ON DUPLICATE KEY UPDATE rc=?;', [this.#metaTables.pointerMapping.name, [this.#pointerMysqlColumnName, "rc"], [pointerId, value], value])
+			await this.#query(`INSERT INTO \`${this.#metaTables.pointerMapping.name}\` (\`${this.#pointerMysqlColumnName}\`, \`rc\`) VALUES (?, ?) ON DUPLICATE KEY UPDATE \`rc\`=?;`, [pointerId, value, value]) 
 		}
 		return new Set<Pointer>();
 	}
@@ -1787,20 +1787,39 @@ export abstract class SQLDBStorageLocation<Options extends {db: string}> extends
 			logger.error("Setting raw dxb value for templated pointer is not yet supported in SQL storage (pointer: " + pointerId + ", table: " + table + ")");
 		}
 	}
+	
+	#runningSetPointerRawPromise: Promise<void>|undefined;
 
 	async #setPointerInRawTable(pointerId: string, encoded: ArrayBuffer) {
-		const table = this.#metaTables.rawPointers.name;
-		const {result} = 
-			this.supportsInsertOrReplace ?
-				await this.#query(`INSERT OR REPLACE INTO \`${table}\` (\`${this.#pointerMysqlColumnName}\`, \`value\`) VALUES (?, ?);`, [pointerId, encoded], true) :
-				await this.#query('INSERT INTO ?? ?? VALUES ? ON DUPLICATE KEY UPDATE value=?;', [table, [this.#pointerMysqlColumnName, "value"], [pointerId, encoded], encoded], true)
-		// is newly inserted, add to pointer mapping
-		if (!('affectedRows' in result) && this.affectedRowsQuery) {
-			// query affected rows
-			const {affectedRows} = await this.#queryFirst<{affectedRows:number}>(this.affectedRowsQuery, undefined, ['affectedRows']) ?? {};
-			result.affectedRows = affectedRows;
+
+		// make sure only one setPointerRaw is running at a time to make 
+		// sure the affectedRowsQuery is correctly returning the affected rows of the last query
+		// TODO: optimize this to allow multiple setPointerRaw calls at the same time
+		if (this.affectedRowsQuery) await this.#runningSetPointerRawPromise;
+		const {promise, resolve} = this.affectedRowsQuery ? Promise.withResolvers<void>() : {};
+		try {
+			this.#runningSetPointerRawPromise = promise;
+
+			const table = this.#metaTables.rawPointers.name;
+			const {result} = 
+				this.supportsInsertOrReplace ?
+					await this.#query(`INSERT OR REPLACE INTO \`${table}\` (\`${this.#pointerMysqlColumnName}\`, \`value\`) VALUES (?, ?);`, [pointerId, encoded], true) :
+					await this.#query('INSERT INTO ?? ?? VALUES ? ON DUPLICATE KEY UPDATE value=?;', [table, [this.#pointerMysqlColumnName, "value"], [pointerId, encoded], encoded], true)
+
+			// is newly inserted, add to pointer mapping
+			if (!('affectedRows' in result) && this.affectedRowsQuery) {
+				// query affected rows
+				const {affectedRows} = await this.#queryFirst<{affectedRows:number}>(this.affectedRowsQuery, undefined) ?? {};
+				result.affectedRows = affectedRows;
+			}
+			if (result.affectedRows == 1) await this.#updatePointerMapping(pointerId, table)
 		}
-		if (result.affectedRows == 1) await this.#updatePointerMapping(pointerId, table)
+		finally {
+			if (this.affectedRowsQuery) {
+				resolve!();
+				this.#runningSetPointerRawPromise = undefined;
+			}
+		}
 	}
 
 	async hasPointer(pointerId: string): Promise<boolean> {
