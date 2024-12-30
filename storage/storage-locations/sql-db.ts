@@ -902,7 +902,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			query = outerBuilder.build().replace('`__placeholder__`', `(${builder.build()}) as _inner_res`);
 
 			// add ORDER BY manually at the end of the query
-			if (!isSimplePropertySort) {
+			if (options.sortBy && !isSimplePropertySort) {
 				query += ` ORDER BY ${options.sortBy} ${options.sortDesc ? "DESC" : "ASC"}`
 			}
 		}
@@ -917,7 +917,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			query = builder.build();
 
 			// add ORDER BY manually at the end of the query
-			if (!isSimplePropertySort) {
+			if (options.sortBy && !isSimplePropertySort) {
 				query += ` ORDER BY ${options.sortBy} ${options.sortDesc ? "DESC" : "ASC"}`
 			}
 		}
