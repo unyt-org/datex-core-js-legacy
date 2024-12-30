@@ -880,6 +880,8 @@ export abstract class SQLDBStorageLocation<Options extends {db: string}> extends
 		const where = this.buildQueryConditions(builder, match, joins, collectedTableTypes, collectedIdentifiers, valueType, rootTableName, undefined, options.computedProperties, true)
 		let query = "error";
 
+		const isSimplePropertySort = options.sortBy && !options.sortBy.includes(",") && !options.s
+
 		// computed properties - nested select
 		if (options.computedProperties || options.returnRaw) {
 
@@ -952,6 +954,11 @@ export abstract class SQLDBStorageLocation<Options extends {db: string}> extends
 
 			// nested select
 			query = outerBuilder.build().replace('`__placeholder__`', `(${builder.build()}) as _inner_res`)
+		
+			// add ORDER BY manually at the end of the query
+			if (options.sortBy && !isSimplePropertySort) {
+				query += ` ORDER BY ${options.sortBy} ${options.sortDesc ? "DESC" : "ASC"}`
+			}
 		}
 
 		// no computed properties
@@ -962,6 +969,11 @@ export abstract class SQLDBStorageLocation<Options extends {db: string}> extends
 			this.appendBuilderConditions(builder, options, where)
 			joins.forEach(join => builder.join(join));
 			query = builder.build();
+
+			// add ORDER BY manually at the end of the query
+			if (options.sortBy && !isSimplePropertySort) {
+				query += ` ORDER BY ${options.sortBy} ${options.sortDesc ? "DESC" : "ASC"}`
+			}
 		}
 
 		// make sure all tables are created
@@ -1086,8 +1098,9 @@ export abstract class SQLDBStorageLocation<Options extends {db: string}> extends
 		if (options && (options.limit !== undefined && isFinite(options.limit) && !options.returnPointerIds)) {
 			builder.limit(options.offset ?? 0, options.limit)
 		}
+		const isSimplePropertySort = options.sortBy && !options.sortBy.includes(",") && !options.sortBy.includes(" ") && !options.sortBy.includes("(");
 		// sort
-		if (options.sortBy) {
+		if (options.sortBy && isSimplePropertySort) {
 			builder.order(Order.by(this.formatProperty(options.sortBy))[options.sortDesc ? "desc" : "asc"])
 		}
 		if (where) builder.where(where);
