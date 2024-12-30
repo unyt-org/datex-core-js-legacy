@@ -826,6 +826,8 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		const where = this.buildQueryConditions(builder, match, joins, collectedTableTypes, collectedIdentifiers, valueType, rootTableName, undefined, options.computedProperties, true)
 		let query = "error";
 
+		const isSimplePropertySort = options.sortBy && !options.sortBy.includes(",") && !options.sortBy.includes(" ") && !options.sortBy.includes("(");
+
 		// computed properties - nested select
 		if (options.computedProperties || options.returnRaw) {
 
@@ -897,7 +899,12 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			this.appendBuilderConditions(outerBuilder, options, where)
 
 			// nested select
-			query = outerBuilder.build().replace('`__placeholder__`', `(${builder.build()}) as _inner_res`)
+			query = outerBuilder.build().replace('`__placeholder__`', `(${builder.build()}) as _inner_res`);
+
+			// add ORDER BY manually at the end of the query
+			if (isSimplePropertySort) {
+				query += ` ORDER BY ${options.sortBy} ${options.sortDesc ? "DESC" : "ASC"}`
+			}
 		}
 
 		// no computed properties
@@ -908,6 +915,11 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			this.appendBuilderConditions(builder, options, where)
 			joins.forEach(join => builder.join(join));
 			query = builder.build();
+
+			// add ORDER BY manually at the end of the query
+			if (isSimplePropertySort) {
+				query += ` ORDER BY ${options.sortBy} ${options.sortDesc ? "DESC" : "ASC"}`
+			}
 		}
 
 		// make sure all tables are created
@@ -1030,8 +1042,9 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		if (options && (options.limit !== undefined && isFinite(options.limit) && !options.returnPointerIds)) {
 			builder.limit(options.offset ?? 0, options.limit)
 		}
+		const isSimplePropertySort = options.sortBy && !options.sortBy.includes(",") && !options.sortBy.includes(" ") && !options.sortBy.includes("(");
 		// sort
-		if (options.sortBy) {
+		if (options.sortBy && isSimplePropertySort) {
 			builder.order(Order.by(this.formatProperty(options.sortBy))[options.sortDesc ? "desc" : "asc"])
 		}
 		if (where) builder.where(where);
