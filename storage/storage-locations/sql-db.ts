@@ -901,9 +901,12 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			// nested select
 			query = outerBuilder.build().replace('`__placeholder__`', `(${builder.build()}) as _inner_res`);
 
-			// add ORDER BY manually at the end of the query
+			// add ORDER BY and LIMIT manually at the end of the query
 			if (options.sortBy && !isSimplePropertySort) {
 				query += ` ORDER BY ${options.sortBy} ${options.sortDesc ? "DESC" : "ASC"}`
+				if (options && (options.limit !== undefined && isFinite(options.limit) && !options.returnPointerIds)) {
+					query += ` LIMIT ${options.offset ?? 0}, ${options.limit ?? 100}`
+				}
 			}
 		}
 
@@ -916,9 +919,12 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			joins.forEach(join => builder.join(join));
 			query = builder.build();
 
-			// add ORDER BY manually at the end of the query
+			// add ORDER BY and LIMIT manually at the end of the query
 			if (options.sortBy && !isSimplePropertySort) {
 				query += ` ORDER BY ${options.sortBy} ${options.sortDesc ? "DESC" : "ASC"}`
+				if (options && (options.limit !== undefined && isFinite(options.limit) && !options.returnPointerIds)) {
+					query += ` LIMIT ${options.offset ?? 0}, ${options.limit ?? 100}`
+				}
 			}
 		}
 
@@ -1038,14 +1044,14 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 	}
 
 	private appendBuilderConditions(builder: Query, options: MatchOptions, where?: Where) {
-		// limit, do limit later if options.returnPointerIds
-		if (options && (options.limit !== undefined && isFinite(options.limit) && !options.returnPointerIds)) {
-			builder.limit(options.offset ?? 0, options.limit)
-		}
 		const isSimplePropertySort = options.sortBy && !options.sortBy.includes(",") && !options.sortBy.includes(" ") && !options.sortBy.includes("(");
 		// sort
-		if (options.sortBy && isSimplePropertySort) {
-			builder.order(Order.by(this.formatProperty(options.sortBy))[options.sortDesc ? "desc" : "asc"])
+		if (!options.sortBy || (options.sortBy && isSimplePropertySort)) {
+			// limit, do limit later if options.returnPointerIds
+			if (options && (options.limit !== undefined && isFinite(options.limit) && !options.returnPointerIds)) {
+				builder.limit(options.offset ?? 0, options.limit)
+			}
+			if (options.sortBy) builder.order(Order.by(this.formatProperty(options.sortBy))[options.sortDesc ? "desc" : "asc"])
 		}
 		if (where) builder.where(where);
 	}
