@@ -959,7 +959,7 @@ export abstract class SQLDBStorageLocation<Options extends {db: string}> extends
 			if (options.sortBy && !isSimplePropertySort) {
 				query += ` ORDER BY ${options.sortBy} ${options.sortDesc ? "DESC" : "ASC"}`
 				if (options && (options.limit !== undefined && isFinite(options.limit) && !options.returnPointerIds)) {
-					query += ` LIMIT ${options.offset ?? 0}, ${options.limit ?? 100}`
+					query += ` LIMIT ${options.offset!=undefined ? Number(options.offset) : 0}, ${Number(options.limit)}`
 				}
 			}
 		}
@@ -977,7 +977,7 @@ export abstract class SQLDBStorageLocation<Options extends {db: string}> extends
 			if (options.sortBy && !isSimplePropertySort) {
 				query += ` ORDER BY ${options.sortBy} ${options.sortDesc ? "DESC" : "ASC"}`
 				if (options && (options.limit !== undefined && isFinite(options.limit) && !options.returnPointerIds)) {
-					query += ` LIMIT ${options.offset ?? 0}, ${options.limit ?? 100}`
+					query += ` LIMIT ${options.offset!=undefined ? Number(options.offset) : 0}, ${Number(options.limit)}`
 				}
 			}
 		}
