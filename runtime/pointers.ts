@@ -3869,8 +3869,8 @@ export class Pointer<T = any> extends ReactiveValue<T> {
             return obj;
         }
 
-        // don't proxyify Text nodes
-        if (globalThis.Text && obj instanceof Text) {
+        // don't proxyify nodes
+        if (globalThis.Node && obj instanceof Node) {
             return obj;
         }
 
