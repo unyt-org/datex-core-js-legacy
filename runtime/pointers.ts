@@ -3869,8 +3869,8 @@ export class Pointer<T = any> extends ReactiveValue<T> {
             return obj;
         }
 
-        // don't proxyify nodes
-        if (globalThis.Node && obj instanceof Node) {
+        // don't proxyify nodes (except for UIX Components)
+        if (globalThis.Node && obj instanceof Node && (Object.getPrototypeOf(obj.constructor)?.name !== "Component")) {
             return obj;
         }
 
