@@ -53,7 +53,7 @@ export async function handleError(error: Error|string, logger = defaultLogger, e
 		});
 	}
 
-	if (exit) Deno.exit(exitCode);
+	if (exit && !(globalThis as any).PREVENT_EXIT_ON_UNCAUGHT_ERROR) Deno.exit(exitCode);
 }
 
 
