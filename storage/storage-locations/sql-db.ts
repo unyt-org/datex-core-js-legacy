@@ -1354,7 +1354,6 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 	}
 
 	async setRC(pointerId: string, value: number) {
-		console.log("setting rc " + pointerId + " to " + value)
 		await this.#query('INSERT INTO ?? ?? VALUES ? ON DUPLICATE KEY UPDATE rc=?;', [this.#metaTables.pointerMapping.name, [this.#pointerMysqlColumnName, "rc"], [pointerId, value], value])
 		return new Set<Pointer>();
 	}
@@ -1366,7 +1365,6 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 				.where(Where.eq(this.#pointerMysqlColumnName, pointerId))
 				.build()
 		));
-		console.log("getting rc " + pointerId + ": " + rc?.rc)
 		return rc?.rc ?? 0;
 	}
 
