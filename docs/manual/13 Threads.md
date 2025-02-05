@@ -168,11 +168,18 @@ the compute cluster.
 
 An endpoint can be added to the cluster by calling 
 ```ts
-ComputeCluster.join('@@77C60C750E0000000020EF113CD85E8F.myComputeCluster')
+ComputeCluster.join('@executingEndpoint.myComputeCluster')
 ```
 (using your own identifier from the log) on the endpoint itself.
 
 Tasks are now equally distributed among all available endpoints in the cluster.
+
+> [!NOTE]
+> Per default, endpoints cannot execute JS code on other endpoints.
+> Every endpoint in the compute cluster thus needs to explicitly allow the execution of code from the endpoint that is running the task:
+> ```ts
+> Datex.Runtime.addTrustedEndpoint(f('@executingEndpoint'), ['remote-js-execution'])
+> ```
 
 
 <!-- > [!NOTE]
