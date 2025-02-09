@@ -77,7 +77,7 @@ export class IterableHandler<T, U = T> {
 		const originalKey = key;
 		let mappedKey = -1;
 		// append at the end if last item
-		const maxFilterMapKey = this.#filterKeyMap.keys().reduce((a, b) => Math.max(a, b), 0);
+		const maxFilterMapKey = [...this.#filterKeyMap.keys()].reduce((a, b) => Math.max(a, b), 0);
 		if (key >= maxFilterMapKey) {
 			mappedKey = this.#filterKeyMap.size;
 			this.#filterKeyMap.set(originalKey, mappedKey);
