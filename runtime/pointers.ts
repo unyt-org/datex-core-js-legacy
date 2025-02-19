@@ -1226,6 +1226,8 @@ export class Pointer<T = any> extends Ref<T> {
     static #persistent_ids = new Set<string>();
 
     public static keepPersistentIds(ids: string[]) {
+        // only keep valid ids
+        ids = ids.filter(id => typeof id == "string" && id.length);
         for (const id of ids) {
             this.#persistent_ids.add(id);
             // check if pointer exists and update garbage collection
@@ -1235,6 +1237,8 @@ export class Pointer<T = any> extends Ref<T> {
     }
 
     public static removePersistentIds(ids: string[]) {
+        // only keep valid ids
+        ids = ids.filter(id => typeof id == "string" && id.length);
         for (const id of ids) {
             // remove from persistent ids
             this.#persistent_ids.delete(id);
