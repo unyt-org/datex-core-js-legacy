@@ -1824,8 +1824,8 @@ export class Pointer<T = any> extends Ref<T> {
 
     // clean up after garbage collection:
     private static handleGarbageCollected(mockPtr: MockPointer|Pointer){
-        logger.debug("$" + mockPtr.id + " was garbage collected");
-
+        //logger.debug("$" + mockPtr.id + " was garbage collected");
+        console.log("$" + mockPtr.id + " was garbage collected");
         // cleanup for complex pointer that still has an instance
         const pointer = Pointer.get(mockPtr.id);
         if (pointer) {
@@ -2476,7 +2476,7 @@ export class Pointer<T = any> extends Ref<T> {
     }    
 
     override get val():T {
-        if (this.#garbage_collected) throw new PointerError("Pointer "+this.idString()+" was garbage collected");
+        if (this.#garbage_collected) throw new PointerError("Pointer "+this.idString()+" was garbage collected (#1)");
         else if (!this.#loaded) {
             throw new PointerError("Cannot get value of uninitialized pointer")
         }
@@ -2504,7 +2504,7 @@ export class Pointer<T = any> extends Ref<T> {
 
     // same as get val, with current_val (calling super.current_val)
     override get current_val():T|undefined {
-        if (this.#garbage_collected) throw new PointerError("Pointer "+this.idString()+" was garbage collected");
+        if (this.#garbage_collected) throw new PointerError("Pointer "+this.idString()+" was garbage collected (#2)");
         else if (!this.#loaded) {
             throw new PointerError("Cannot get value of uninitialized pointer")
         }
