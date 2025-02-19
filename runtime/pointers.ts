@@ -1226,10 +1226,12 @@ export class Pointer<T = any> extends Ref<T> {
     static #persistent_ids = new Set<string>();
 
     public static keepPersistentIds(ids: string[]) {
+        console.log("keeping persistent ids", ids)
         for (const id of ids) this.#persistent_ids.add(id);
     }
 
     public static removePersistentIds(ids: string[]) {
+        console.log("removing persistent ids", ids)
         for (const id of ids) {
             // remove from persistent ids
             this.#persistent_ids.delete(id);
