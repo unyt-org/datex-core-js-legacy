@@ -2076,9 +2076,19 @@ export class Pointer<T = any> extends Ref<T> {
         if (Runtime.endpoint == LOCAL_ENDPOINT) Pointer.#undetermined_pointers.add(this);
     }
 
-    get is_persistent() { return this.#is_persistent || this.subscribers?.size != 0}
+    get is_persistent() { 
+        // TODO: remove
+        return true;
+        //
+        return this.#is_persistent || this.subscribers?.size != 0
+    }
     // change the persistant state of this pointer
     set is_persistent(persistant:boolean) {
+
+        // TODO: remove
+        persistant = true;
+        //
+
         if (persistant && !this.#is_persistent) {
             this.#is_persistent = true;
             this.updateGarbageCollection()
