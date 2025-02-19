@@ -1824,8 +1824,8 @@ export class Pointer<T = any> extends Ref<T> {
 
     // clean up after garbage collection:
     private static handleGarbageCollected(mockPtr: MockPointer|Pointer){
-        //logger.debug("$" + mockPtr.id + " was garbage collected");
-        console.log("$" + mockPtr.id + " was garbage collected");
+        logger.debug("$" + mockPtr.id + " was garbage collected");
+        //console.log("$" + mockPtr.id + " was garbage collected");
         // cleanup for complex pointer that still has an instance
         const pointer = Pointer.get(mockPtr.id);
         if (pointer) {
