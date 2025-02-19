@@ -1221,6 +1221,23 @@ export class Pointer<T = any> extends Ref<T> {
             if (!pointer.is_anonymous && !pointer.is_origin) pointer.unsubscribeFromPointerUpdates()
         }
     }
+ 
+
+    static #persistent_ids = new Set<string>();
+
+    public static keepPersistentIds(ids: string[]) {
+        for (const id of ids) this.#persistent_ids.add(id);
+    }
+
+    public static removePersistentIds(ids: string[]) {
+        for (const id of ids) {
+            // remove from persistent ids
+            this.#persistent_ids.delete(id);
+            // check if pointer exists and update garbage collection
+            const pointer = this.get(id);
+            if (pointer) pointer.updateGarbageCollection();
+        }
+    }
 
     /**
      *  Pointer Storage
@@ -1825,7 +1842,7 @@ export class Pointer<T = any> extends Ref<T> {
     // clean up after garbage collection:
     private static handleGarbageCollected(mockPtr: MockPointer|Pointer){
         logger.debug("$" + mockPtr.id + " was garbage collected");
-        //console.log("$" + mockPtr.id + " was garbage collected");
+        console.log("$" + mockPtr.id + " was garbage collected");
         // cleanup for complex pointer that still has an instance
         const pointer = Pointer.get(mockPtr.id);
         if (pointer) {
@@ -2077,18 +2094,10 @@ export class Pointer<T = any> extends Ref<T> {
     }
 
     get is_persistent() { 
-        // TODO: remove
-        return true;
-        //
-        return this.#is_persistent || this.subscribers?.size != 0
+        return Pointer.#persistent_ids.has(this.id) || this.#is_persistent || this.subscribers?.size != 0
     }
     // change the persistant state of this pointer
     set is_persistent(persistant:boolean) {
-
-        // TODO: remove
-        persistant = true;
-        //
-
         if (persistant && !this.#is_persistent) {
             this.#is_persistent = true;
             this.updateGarbageCollection()

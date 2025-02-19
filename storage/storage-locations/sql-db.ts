@@ -951,6 +951,8 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 
 		const loadStart = Date.now();
 
+		Pointer.keepPersistentIds(limitedPtrIds);
+
 		const result = options.returnRaw ? null : new Set((await Promise.all(limitedPtrIds
 			.filter(ptrId => {
 				if (!ptrId) logger.warn("Empty pointer id found in match query");
@@ -973,6 +975,8 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 				return true;
 			})
 			.map(ptr => (ptr as Pointer).val as T))
+
+		Pointer.removePersistentIds(limitedPtrIds);
 
 		logger.debug("load time", (Date.now() - loadStart) + "ms")
 		logger.debug("total query time", (Date.now() - start) + "ms")
