@@ -1825,6 +1825,7 @@ export class Pointer<T = any> extends Ref<T> {
             return (has_$ ? "$" : "") + this.normalizePointerId(buffer);
         }
         else {
+            console.error("Cannot normalize invalid pointer id", new Error().stack)
             throw Error("Cannot normalize invalid pointer id - must be string or Uint8Array")
         }
     }
