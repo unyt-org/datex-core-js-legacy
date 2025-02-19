@@ -2486,7 +2486,7 @@ export class Pointer<T = any> extends Ref<T> {
             // seems to be garbage collected
             if (val === undefined && this.#loaded && !this.#is_js_primitive) {
                 Pointer.handleGarbageCollected(this)
-                throw new PointerError("Pointer "+this.idString()+" was garbage collected");
+                throw new PointerError("Pointer "+this.idString()+" seems to be garbage collected (#1)");
             }
             // can be returned
             return val;
@@ -2514,7 +2514,7 @@ export class Pointer<T = any> extends Ref<T> {
             // seems to be garbage collected
             if (val === undefined && this.#loaded && !this.#is_js_primitive) {
                 Pointer.handleGarbageCollected(this)
-                throw new PointerError("Pointer "+this.idString()+" was garbage collected");
+                throw new PointerError("Pointer "+this.idString()+" seems to be garbage collected (#2)");
             }
             // can be returned
             return val;
