@@ -1226,6 +1226,29 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 						}
 						else throw new Error("MatchConditionType.CONTAINS is not supported for type " + propertyType.base_type);
 					}
+					// SIZE (only for sets)
+					else if (or.type == MatchConditionType.SIZE) {
+						insertedConditionForIdentifier = false;
+
+						const condition = or as MatchCondition<MatchConditionType.SIZE, number>
+
+						const propertyType = valueType.template[namespacedKey];
+						if (!propertyType) throw new Error("Property '" + namespacedKey + "' does not exist in type " + valueType);
+						if (propertyType.base_type != Type.std.Set) throw new Error("MatchConditionType.SIZE is only supported for sets");
+
+						const tableAName = rememberEntryIdentifier ? this.getTableProperty(namespacedKey) : namespacedKey
+						const tableBName = this.#typeToTableName(propertyType); // Address
+						const tableBIdentifier = underscoreIdentifier + '.' + this.#pointerMysqlColumnName
+						// Join Adddreess on address._ptr_id = User.address
+						joins.set(
+							underscoreIdentifier!, 
+							Join
+								.left(`${tableBName}`, underscoreIdentifier)
+								.on(tableBIdentifier, tableAName)
+						);
+						wheresOr.push(Where.eq(`COUNT(${tableBName}.${this.#pointerMysqlColumnName})`, condition.data));
+					}
+
 					else if (or.type == MatchConditionType.POINTER_ID) {
 						const condition = or as MatchCondition<MatchConditionType.POINTER_ID, string>
 						const column = isRoot && entryIdentifier == namespacedKey ? this.#pointerMysqlColumnName : entryIdentifier!;

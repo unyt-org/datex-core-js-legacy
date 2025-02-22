@@ -134,6 +134,7 @@ export enum MatchConditionType {
     NOT_EQUAL = "NOT_EQUAL",
     CONTAINS = "CONTAINS",
     POINTER_ID = "POINTER_ID",
+    SIZE = "SIZE"
 }
 export type MatchConditionData<T extends MatchConditionType, V> = 
     T extends MatchConditionType.BETWEEN ? 
@@ -144,6 +145,8 @@ export type MatchConditionData<T extends MatchConditionType, V> =
         V :
     T extends MatchConditionType.POINTER_ID ?
         string[] :
+    T extends MatchConditionType.SIZE ?
+        number :
     never
 
 export class MatchCondition<Type extends MatchConditionType, V> {
@@ -181,6 +184,9 @@ export class MatchCondition<Type extends MatchConditionType, V> {
         return new MatchCondition(MatchConditionType.CONTAINS, new Set(values))
     }
 
+    static size(size: number) {
+        return new MatchCondition(MatchConditionType.SIZE, size)
+    }
     static pointerId(id: string): MatchCondition<MatchConditionType.POINTER_ID, string>
     static pointerId(ids: string[]): MatchCondition<MatchConditionType.POINTER_ID, string>
     static pointerId(id: string|string[]) {
