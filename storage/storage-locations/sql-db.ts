@@ -812,6 +812,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		// measure total query time
 		const start = Date.now();
 
+		const appendStatements: string[] = [];
 		const joins = new Map<string, Join>()
 		const collectedTableTypes = new Set<Type>([valueType])
 		const collectedIdentifiers = new Set<string>()
@@ -823,7 +824,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			)
 		const rootTableName = this.#typeToTableName(valueType);
 
-		const where = this.buildQueryConditions(builder, match, joins, collectedTableTypes, collectedIdentifiers, valueType, rootTableName, undefined, options.computedProperties, true)
+		const where = this.buildQueryConditions(builder, match, joins, collectedTableTypes, collectedIdentifiers, appendStatements, valueType, rootTableName, undefined, options.computedProperties, true)
 		let query = "error";
 
 		const isSimplePropertySort = options.sortBy && !options.sortBy.includes(",") && !options.sortBy.includes(" ") && !options.sortBy.includes("(");
@@ -835,7 +836,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			if (options.returnRaw) {
 				this.addPropertyJoins(
 					options.returnRaw, 
-					builder, joins, valueType, collectedTableTypes
+					builder, joins, appendStatements, valueType, collectedTableTypes
 				)
 				for (const property of options.returnRaw) {
 					collectedIdentifiers.add(property.replaceAll(".", "__"))
@@ -856,7 +857,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 
 					this.addPropertyJoins(
 						[pointA.lat, pointA.lon, pointB.lat, pointB.lon].filter(v => typeof v == "string") as string[], 
-						builder, joins, valueType, collectedTableTypes
+						builder, joins, appendStatements, valueType, collectedTableTypes
 					)
 					
 					select.push(
@@ -875,7 +876,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 					const computedProperty = value as ComputedProperty<ComputedPropertyType.SUM>
 					this.addPropertyJoins(
 						computedProperty.data.filter(v => typeof v == "string") as string[], 
-						builder, joins, valueType, collectedTableTypes
+						builder, joins, appendStatements, valueType, collectedTableTypes
 					)
 					select.push(`SUM(${computedProperty.data.map(p => {
 						if (typeof p == "string") return this.formatProperty(p)
@@ -926,6 +927,10 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 					query += ` LIMIT ${options.offset!=undefined ? Number(options.offset) : 0}, ${Number(options.limit)}`
 				}
 			}
+		}
+
+		for (const statement of appendStatements) {
+			query += " " + statement;
 		}
 
 		// make sure all tables are created
@@ -1029,7 +1034,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		}
 	}
 
-	private addPropertyJoins(properties: string[], builder: Query, joins: Map<string, Join>, valueType: Type, collectedTableTypes: Set<Type>) {
+	private addPropertyJoins(properties: string[], builder: Query, joins: Map<string, Join>, appendStatements:string[], valueType: Type, collectedTableTypes: Set<Type>) {
 		const mockObject = {}
 		for (const property of properties) {
 			let object:Record<string,any> = mockObject;
@@ -1044,7 +1049,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			if (lastParent && lastProperty!=undefined) lastParent[lastProperty] = null;
 		}
 		// get correct joins
-		this.buildQueryConditions(builder, mockObject, joins, collectedTableTypes, new Set<string>(), valueType)
+		this.buildQueryConditions(builder, mockObject, joins, collectedTableTypes, new Set<string>(), appendStatements, valueType)
 	}
 
 	private appendBuilderConditions(builder: Query, options: MatchOptions, where?: Where) {
@@ -1075,7 +1080,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		return prop.replace(/__(?!.*__.*)/, '.')
 	}
 
-	private buildQueryConditions(builder: Query, match: unknown, joins: Map<string, Join>, collectedTableTypes:Set<Type>, collectedIdentifiers:Set<string>, valueType:Type, namespacedKey?: string, previousKey?: string, computedProperties?: Record<string, ComputedProperty<Datex.ComputedPropertyType>>, isRoot = false): Where|undefined {
+	private buildQueryConditions(builder: Query, match: unknown, joins: Map<string, Join>, collectedTableTypes:Set<Type>, collectedIdentifiers:Set<string>, appendStatements:string[], valueType:Type, namespacedKey?: string, previousKey?: string, computedProperties?: Record<string, ComputedProperty<Datex.ComputedPropertyType>>, isRoot = false): Where|undefined {
 
 		const matchOrs = match instanceof Array ? match : [match]
 		// entry identifier for nested props: address.street
@@ -1231,22 +1236,23 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 						insertedConditionForIdentifier = false;
 
 						const condition = or as MatchCondition<MatchConditionType.SIZE, number>
-
+						insertedConditionForIdentifier = false;
 						const propertyType = valueType.template[namespacedKey];
-						if (!propertyType) throw new Error("Property '" + namespacedKey + "' does not exist in type " + valueType);
 						if (propertyType.base_type != Type.std.Set) throw new Error("MatchConditionType.SIZE is only supported for sets");
 
-						const tableAName = rememberEntryIdentifier ? this.getTableProperty(namespacedKey) : namespacedKey
-						const tableBName = this.#typeToTableName(propertyType); // Address
-						const tableBIdentifier = underscoreIdentifier + '.' + this.#pointerMysqlColumnName
-						// Join Adddreess on address._ptr_id = User.address
+						const tableAName = this.#typeToTableName(valueType) + '.' + namespacedKey // User.address
+
 						joins.set(
-							underscoreIdentifier!, 
+							namespacedKey, 
 							Join
-								.left(`${tableBName}`, underscoreIdentifier)
-								.on(tableBIdentifier, tableAName)
+								.left(`${this.#metaTables.sets.name}`, namespacedKey)
+								.on(`${namespacedKey}.${this.#pointerMysqlColumnName}`, tableAName)
 						);
-						wheresOr.push(Where.eq(`COUNT(${tableBName}.${this.#pointerMysqlColumnName})`, condition.data));
+
+						appendStatements.push(
+							// size + 1 (empty placeholder entry)
+							replaceParams(`GROUP BY ${this.#typeToTableName(valueType)}.${this.#pointerMysqlColumnName} HAVING COUNT(*) = ?`, [condition.data + 1])
+						)
 					}
 
 					else if (or.type == MatchConditionType.POINTER_ID) {
@@ -1304,7 +1310,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 							// make sure the key exists in the type
 							if (!valueType.template[key] && !(computedProperties && key in computedProperties)) throw new Error("Property '" + key + "' does not exist in type " + valueType);
 
-							const condition = this.buildQueryConditions(builder, value, joins, collectedTableTypes, collectedIdentifiers, valueType, key, underscoreIdentifier, computedProperties);
+							const condition = this.buildQueryConditions(builder, value, joins, collectedTableTypes, collectedIdentifiers, appendStatements, valueType, key, underscoreIdentifier, computedProperties);
 							if (condition) whereAnds.push(condition)
 						}
 						if (whereAnds.length > 1) wheresOr.push(Where.and(...whereAnds))

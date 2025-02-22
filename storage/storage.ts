@@ -185,7 +185,7 @@ export class MatchCondition<Type extends MatchConditionType, V> {
     }
 
     static size(size: number) {
-        return new MatchCondition(MatchConditionType.SIZE, size)
+        return new MatchCondition<MatchConditionType.SIZE, Set<any>>(MatchConditionType.SIZE, size)
     }
     static pointerId(id: string): MatchCondition<MatchConditionType.POINTER_ID, string>
     static pointerId(ids: string[]): MatchCondition<MatchConditionType.POINTER_ID, string>
