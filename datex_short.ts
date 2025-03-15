@@ -321,7 +321,7 @@ export function pointer<T>(value:RefOrValue<T>, property?:unknown, callStackInde
  * @param propertyKey 
  */
 export function prop<T extends Map<unknown, unknown>>(parent:RefOrValue<T>, propertyKey: T extends Map<infer K, infer V> ? K : unknown): PointerProperty<T extends Map<infer K, infer V> ? V : unknown>|(T extends Map<infer K, infer V> ? V : unknown)
-export function prop<T extends Record<PropertyKey, unknown>>(parent:RefOrValue<T>, propertyKey: keyof T): PointerProperty<T[keyof T]>|T[keyof T]
+export function prop<T extends Record<PropertyKey, unknown>, K extends keyof T>(parent:RefOrValue<T>, propertyKey: K): PointerProperty<T[K]>|T[K]
 export function prop(parent:Map<unknown, unknown>|Record<PropertyKey, unknown>, propertyKey: unknown): any {
     // try to get pointer property
     if (ReactiveValue.isRef(parent)) {
@@ -692,7 +692,7 @@ Object.defineProperty(globalThis, 'once', {value:once, configurable:false})
 Object.defineProperty(globalThis, 'always', {value:_always, configurable:false})
 Object.defineProperty(globalThis, 'asyncAlways', {value:_asyncAlways, configurable:false})
 // used internally for reactive $ syntax
-Object.defineProperty(globalThis, '_$', {value: (cb:SmartTransformFunction<unknown>) => _always(cb, {allowStatic: true, _allowAsync: true, _collapseStatic: true, _returnWrapper: true, _allowAnyType: true}), configurable:false})
+Object.defineProperty(globalThis, '_$', {value: (cb:SmartTransformFunction<unknown>) => _always(cb, {allowStatic: true, _allowAsync: true, _collapseStatic: true, _rebindStaticToPointers: true, _returnWrapper: true, _allowAnyType: true}), configurable:false})
 Object.defineProperty(globalThis, '_$method', {value: _$method, configurable:false})
 Object.defineProperty(globalThis, 'reactiveFn', {value:_reactiveFn, configurable:false})
 Object.defineProperty(globalThis, 'toggle', {value:_toggle, configurable:false})

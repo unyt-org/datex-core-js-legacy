@@ -51,6 +51,9 @@ export type RefLikeOut<T = any> = PointerWithPrimitive<T>|PointerProperty<T>
 // root class for pointers and pointer properties, value changes can be observed
 export abstract class ReactiveValue<T = any> extends EventTarget {
 
+    // required for reactive indexing logic (JUSIX)
+    #__ref__!: never
+
     static [DX_NOT_TRANSFERABLE] = true
 
     #observerCount = 0;
@@ -862,18 +865,18 @@ type _Proxy$<T>         = _Proxy$Function<T> &
     T extends Array<infer V> ? 
     // array
     {
-        [key: number]: RefLike<V>, 
+        [key: number]: V extends primitive ? Ref<V> : RefLike<V>, 
         map<U>(callbackfn: (value: MaybeObjectRef<V>, index: number, array: V[]) => U, thisArg?: any): Pointer<U[]>
     }
     : 
     (
         T extends Map<infer K, infer V> ? 
         {
-            get(key: K): RefLike<V>
+            get(key: K): V extends primitive ? Ref<V> :  RefLike<V>
         }
 
          // normal object
-        : {[K in keyof T]: RefLike<T[K]>} // always map properties to pointer property references
+        : {[K in keyof T]: T[K] extends primitive ? Ref<T[K]> : RefLike<T[K]>} // always map properties to pointer property references
     )
    
 type _PropertyProxy$<T> = _Proxy$Function<T> & 
@@ -1191,6 +1194,8 @@ export type SmartTransformOptions<T=unknown> = {
     _allowAsync?: boolean,
     // collapse primitive pointer if value has no reactive dependencies and garbage-collect pointer
     _collapseStatic?: boolean,
+    // when _collapseStatic is enabled, values are first collapsed and then re-assigned to a pointer wrapper
+    _rebindStaticToPointers?: boolean,
     // always return the wrapper instead of the collapsed value, even for non-primitive pointers
     _returnWrapper?: boolean,
     // set the pointer type to allow any value
