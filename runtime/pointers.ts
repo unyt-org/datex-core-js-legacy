@@ -53,6 +53,7 @@ export abstract class ReactiveValue<T = any> extends EventTarget {
 
     // required for reactive indexing logic (JUSIX)
     #__ref__!: never
+    __ref__!: symbol
 
     static [DX_NOT_TRANSFERABLE] = true
 
