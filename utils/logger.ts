@@ -402,12 +402,13 @@ export class Logger {
         if (this.origin) Logger.loggers_by_origin.get(this.origin)?.delete(this);
     }
 
-    private log(color: COLOR, text: string, data:any[], log_level:LOG_LEVEL = LOG_LEVEL.DEFAULT, only_log_own_stream = !this.log_to_streams, add_tag = true, raw = false) {
+    private log(color: COLOR, text: string, data:any[], log_level:LOG_LEVEL = LOG_LEVEL.DEFAULT, only_log_own_stream = !this.log_to_streams, add_tag = true, raw = false, onlyReturn = false) {
 
         if (this.production && (log_level < Logger.production_log_level)) return; // don't log for production
         if (!this.production && (log_level < Logger.development_log_level)) return; // don't log for development
         const log_string = raw ? text : this.generateLogString(color, text, data, add_tag);
-        this.logRaw(log_string, log_level, only_log_own_stream);
+        if (onlyReturn) return log_string;
+        else this.logRaw(log_string, log_level, only_log_own_stream);
     }
 
     // log_level: decides which console log method is used (log, error, warn, debug)
@@ -710,6 +711,17 @@ export class Logger {
     public info(text:string|TemplateStringsArray|any,...data:any[]) {
         if (!this.isTemplateStringArrayOrString(text)) {data = [text];text = '?';} // text is a single non-string value
         this.log(console_theme == 'dark' ?  COLOR.WHITE : COLOR.BLACK, this.normalizeLogText(text), data, LOG_LEVEL.DEFAULT)
+    }
+
+    /**
+     * Returns the formatted info message without logging it
+     */
+    public getInfoMessage(text:TemplateStringsArray, ...data:any[]):string
+    public getInfoMessage(text:string, ...data:any[]):string
+    public getInfoMessage(value:any):string
+    public getInfoMessage(text:string|TemplateStringsArray|any,...data:any[]) {
+        if (!this.isTemplateStringArrayOrString(text)) {data = [text];text = '?';} // text is a single non-string value
+        return this.log(console_theme == 'dark' ?  COLOR.WHITE : COLOR.BLACK, this.normalizeLogText(text), data, LOG_LEVEL.DEFAULT, undefined, undefined, undefined, true)
     }
 
     public warn(text:TemplateStringsArray, ...data:any[]):void
