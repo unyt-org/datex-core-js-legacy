@@ -866,18 +866,18 @@ type _Proxy$<T>         = _Proxy$Function<T> &
     T extends Array<infer V> ? 
     // array
     {
-        [key: number]: V extends primitive ? Ref<V> : RefLike<V>, 
+        [key: number]: V extends primitive ? CollapsedRef<V> : RefLike<V>, 
         map<U>(callbackfn: (value: MaybeObjectRef<V>, index: number, array: V[]) => U, thisArg?: any): Pointer<U[]>
     }
     : 
     (
         T extends Map<infer K, infer V> ? 
         {
-            get(key: K): V extends primitive ? Ref<V> :  RefLike<V>
+            get(key: K): V extends primitive ? CollapsedRef<V> :  RefLike<V>
         }
 
          // normal object
-        : {[K in keyof T]: T[K] extends primitive ? Ref<T[K]> : RefLike<T[K]>} // always map properties to pointer property references
+        : {[K in keyof T]: T[K] extends primitive ? CollapsedRef<T[K]> : RefLike<T[K]>} // always map properties to pointer property references
     )
    
 type _PropertyProxy$<T> = _Proxy$Function<T> & 
@@ -945,11 +945,16 @@ export type MinimalJSRefWithIndirectRef<T, _C = CollapsedValue<T>> =
                 ObjectRef<_C> // collapsed object
     )
 
-export type Ref<T, _C = CollapsedValue<T>> =
+export type CollapsedRef<T, _C = CollapsedValue<T>> =
     _C&{} extends symbol ? symbol : (
         _C&{} extends WrappedPointerValue ?
             PointerWithPrimitive<_C>: // keep pointer reference
             ObjectRef<_C> // collapsed object
+    )
+
+export type Ref<T, _C = CollapsedValue<T>> =
+    _C&{} extends symbol ? symbol : (
+        PointerWithPrimitive<_C>
     )
 
 /**
@@ -963,7 +968,7 @@ declare global {
 /**
  * @deprecated use Ref
  */
-export type MinimalJSRef<T, _C = CollapsedValue<T>> = Ref<T, _C>
+export type MinimalJSRef<T, _C = CollapsedValue<T>> = CollapsedRef<T, _C>
 
 // same as MinimalJSRef, but objects don't have $ and $$ properties
 export type MinimalJSRefNoObjRef<T, _C = CollapsedValue<T>> =
