@@ -3326,8 +3326,13 @@ export class Pointer<T = any> extends ReactiveValue<T> {
                 // unobserve no longer relevant dependencies
                 for (const dep of state.deps) {
                     if (!capturedGetters?.has(dep)) {
-                        dep.unobserve(state.update, this.#unique);
-                        state.deps.delete(dep)
+                        // TODO: (NOTE) this was disabled because in some scenarios, dependencies were unobserved
+                        // although they were still needed for reactive updates.
+                        // This is not the most efficient solution, but it should work for now.
+                        // Potential source for memory leaks.
+
+                        // dep.unobserve(state.update, this.#unique);
+                        // state.deps.delete(dep)
                     }
                 }
                 // observe newly discovered dependencies
@@ -3517,7 +3522,6 @@ export class Pointer<T = any> extends ReactiveValue<T> {
         otherPointer.observe(value=>{
             if (changing2) return;
             changing1 = true;
-            console.warn("other pointer cahnged", key, value)
             this.handleSet(key, value, false)
             changing1 = false;
         }, undefined, key);
@@ -3527,7 +3531,6 @@ export class Pointer<T = any> extends ReactiveValue<T> {
             this.observe(value=>{
                 if (changing1) return;
                 changing2 = true;
-                console.warn("own pointer cahnged", key, value)
                 otherPointer.handleSet(key, value)
                 changing2 = false;
             }, undefined, key);
@@ -4683,7 +4686,10 @@ export class Pointer<T = any> extends ReactiveValue<T> {
         if (!handler) throw new ValueError("Missing observer handler")
 
         this.callScheduledWhenObserving();
-        
+
+        // make sure the ptr is not garbage collected
+        this.is_persistent = true;
+
         // TODO handle bound_object in pointer observers/unobserve
         // observe all changes
         if (key == undefined) {
