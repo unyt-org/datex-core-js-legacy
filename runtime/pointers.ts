@@ -750,6 +750,18 @@ export class PointerProperty<T=any> extends ReactiveValue<T> {
     #observer_internal_handlers = new WeakMap<observe_handler, observe_handler>()
     #observer_internal_bound_handlers = new WeakMap<object, WeakMap<observe_handler, observe_handler>>()
 
+    /**
+     * returns true if the property cannot directly observed,
+     * e.g. because it is an internal JS property like Array.length which only
+     * gets updated when the array is modified
+     */
+    private isIndirectReactiveProperty() {
+        if (this.pointer?.val instanceof Array && this.key == "length") return true;
+        else if (this.pointer?.val instanceof Map && this.key == "size") return true;
+        else if (this.pointer?.val instanceof Set && this.key == "size") return true;
+        else return false;
+    }
+
     // callback on property value change and when the property value changes internally
     public override observe(handler: observe_handler, bound_object?:Record<string, unknown>, options?:observe_options) {
         if (this.lazy_pointer) {
@@ -766,7 +778,10 @@ export class PointerProperty<T=any> extends ReactiveValue<T> {
             // if arrow function
             else handler(v,undefined,ReactiveValue.UPDATE_TYPE.INIT)
         };
-        this.pointer!.observe(internal_handler, bound_object, this.key, options)
+       
+        const key = this.isIndirectReactiveProperty() ? undefined : this.key;
+        // if indirect property, observe the whole parent for any changes
+        this.pointer!.observe(internal_handler, bound_object, key, options)
 
         if (bound_object) {
             if (!this.#observer_internal_bound_handlers.has(bound_object)) this.#observer_internal_bound_handlers.set(bound_object, new WeakMap);
