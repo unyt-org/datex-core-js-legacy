@@ -396,8 +396,8 @@ export abstract class ReactiveValue<T = any> extends EventTarget {
 
 
 
-    protected static capturedGetters? = new Set<ReactiveValue>()
-    protected static capturedGettersWithKeys? = new Map<Pointer, Set<any>>().setAutoDefault(Set)
+    protected static capturedGetters:Set<ReactiveValue>[] = [];
+    protected static capturedGettersWithKeys:AutoMap<Pointer<any>, Set<any>>[] = [];
 
     /**
      * true if currently capturing pointer getters in always function
@@ -413,16 +413,16 @@ export abstract class ReactiveValue<T = any> extends EventTarget {
     protected static captureGetters() {
         this.isCapturing = true;
         this.freezeCapturing = false;
-        this.capturedGetters = new Set()
-        this.capturedGettersWithKeys = new Map().setAutoDefault(Set)
+        this.capturedGetters.push(new Set());
+        this.capturedGettersWithKeys.push(new Map().setAutoDefault(Set));
     }
 
+    /**
+     * pops the last captured getters and returns them
+     */
     protected static getCapturedGetters() {
-        const captured = {capturedGetters: this.capturedGetters, capturedGettersWithKeys:this.capturedGettersWithKeys};
-        this.capturedGetters = undefined;
-        this.capturedGettersWithKeys = undefined;
         this.isCapturing = false;
-        return captured;
+        return {capturedGetters: this.capturedGetters.pop(), capturedGettersWithKeys: this.capturedGettersWithKeys.pop()};
     }
 
     /**
@@ -448,23 +448,18 @@ export abstract class ReactiveValue<T = any> extends EventTarget {
         if (ReactiveValue.freezeCapturing) return;
 
         // remember previous capture state
-        const previousGetters = ReactiveValue.capturedGetters;
-        const previousGettersWithKeys = ReactiveValue.capturedGettersWithKeys;
         const previousCapturing = ReactiveValue.isCapturing;
 
         // trigger transform update if not live
         if (this.#transformSource && !this.#liveTransform && !this.#forceLiveTransform) {
-            ReactiveValue.capturedGetters = new Set();
-            ReactiveValue.capturedGettersWithKeys = new Map().setAutoDefault(Set);
+            ReactiveValue.captureGetters();
             this.#transformSource.update();
         }
-        if (previousCapturing) {
-            ReactiveValue.isCapturing = true;
-            ReactiveValue.capturedGetters = previousGetters ?? new Set();
-            ReactiveValue.capturedGettersWithKeys = previousGettersWithKeys ?? new Map().setAutoDefault(Set);
 
-            if (key === NOT_EXISTING) ReactiveValue.capturedGetters.add(this);
-            else if (this instanceof Pointer) ReactiveValue.capturedGettersWithKeys.getAuto(this).add(key)
+        // add self to current capturedGetters
+        if (previousCapturing) {
+            if (key === NOT_EXISTING) ReactiveValue.capturedGetters[ReactiveValue.capturedGetters.length-1].add(this);
+            else if (this instanceof Pointer) ReactiveValue.capturedGettersWithKeys[ReactiveValue.capturedGettersWithKeys.length-1].getAuto(this).add(key)
             else {
                 logger.warn("invalid capture, must be a pointer or property")
             }
@@ -2724,7 +2719,7 @@ export class Pointer<T = any> extends ReactiveValue<T> {
                 if (val && typeof val == "object" && DX_PTR in val) {
                     alreadyProxy = true;
                     // TODO: handle this correctly
-                    console.warn("The value assigned to pointer "+this.idString()+" is already bound to " + (val[DX_PTR] as unknown as Pointer).idString() + ":", val);
+                    //console.warn("The value assigned to pointer "+this.idString()+" is already bound to " + (val[DX_PTR] as unknown as Pointer).idString() + ":", val);
                 }
 
                 // TODO: is this required somewhere?
@@ -3115,7 +3110,7 @@ export class Pointer<T = any> extends ReactiveValue<T> {
                         }
                     }
                                     
-                    // check if val is already the result if a transform function
+                    // check if val is already the result of a transform function
                     // happens e.g. with jusix _$(() => map(x, ...))
                     // early return the inner transformed pointer
                     const ptr = Pointer.getByValue(val);
