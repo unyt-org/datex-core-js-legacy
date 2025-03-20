@@ -46,13 +46,13 @@ export function always(scriptOrJSTransform:TemplateStringsArray|SmartTransformFu
         }
         const ptr = Pointer.createSmartTransform(scriptOrJSTransform, undefined, undefined, undefined, options);
         if (options?._allowAsync && !ptr.value_initialized && ptr.waiting_for_always_promise) {
-            return ptr.waiting_for_always_promise.then(()=>collapseTransformPointer(ptr, options?._collapseStatic, options?._returnWrapper, options?._allowAnyType));
+            return ptr.waiting_for_always_promise.then(()=>collapseTransformPointer(ptr, options?._collapseStatic, options?._returnWrapper, options?._allowAnyType, options?._rebindStaticToPointers));
         }
         if (!ptr.value_initialized && ptr.waiting_for_always_promise) {
             throw new PointerError(`Promises cannot be returned from always transforms - use 'asyncAlways' instead`);
         }
         else {
-            return collapseTransformPointer(ptr, options?._collapseStatic, options?._returnWrapper, options?._allowAnyType);
+            return collapseTransformPointer(ptr, options?._collapseStatic, options?._returnWrapper, options?._allowAnyType, options?._rebindStaticToPointers);
         }
     }
     // datex script
@@ -68,7 +68,7 @@ export function always(scriptOrJSTransform:TemplateStringsArray|SmartTransformFu
 }
 
 
-function collapseTransformPointer(ptr: Pointer, collapseStatic = false, alwaysReturnWrapper = false, _allowAnyType = false) {
+function collapseTransformPointer(ptr: Pointer, collapseStatic = false, alwaysReturnWrapper = false, _allowAnyType = false, _rebindStaticToPointers = false) {
     // collapse if transform function is static
     const collapse = collapseStatic && ptr.isStaticTransform;
 
@@ -84,7 +84,17 @@ function collapseTransformPointer(ptr: Pointer, collapseStatic = false, alwaysRe
 
     if (collapse) ptr.delete();
     // TODO: deproxify static non-primitive objects to garbage-collect pointer and associated data
-    return val;
+    if (_rebindStaticToPointers) {
+        if (!(val instanceof ReactiveValue)) {
+            return Pointer.createOrGet(val);
+        }
+        else {
+            return val;
+        }
+    }
+    else {
+        return val;
+    }
 }
 
 /**

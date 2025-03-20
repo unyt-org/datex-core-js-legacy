@@ -51,6 +51,10 @@ export type RefLikeOut<T = any> = PointerWithPrimitive<T>|PointerProperty<T>
 // root class for pointers and pointer properties, value changes can be observed
 export abstract class ReactiveValue<T = any> extends EventTarget {
 
+    // required for reactive indexing logic (JUSIX)
+    #__ref__!: never
+    __ref__!: symbol
+
     static [DX_NOT_TRANSFERABLE] = true
 
     #observerCount = 0;
@@ -392,8 +396,8 @@ export abstract class ReactiveValue<T = any> extends EventTarget {
 
 
 
-    protected static capturedGetters? = new Set<ReactiveValue>()
-    protected static capturedGettersWithKeys? = new Map<Pointer, Set<any>>().setAutoDefault(Set)
+    protected static capturedGetters:Set<ReactiveValue>[] = [];
+    protected static capturedGettersWithKeys:AutoMap<Pointer<any>, Set<any>>[] = [];
 
     /**
      * true if currently capturing pointer getters in always function
@@ -409,16 +413,16 @@ export abstract class ReactiveValue<T = any> extends EventTarget {
     protected static captureGetters() {
         this.isCapturing = true;
         this.freezeCapturing = false;
-        this.capturedGetters = new Set()
-        this.capturedGettersWithKeys = new Map().setAutoDefault(Set)
+        this.capturedGetters.push(new Set());
+        this.capturedGettersWithKeys.push(new Map().setAutoDefault(Set));
     }
 
+    /**
+     * pops the last captured getters and returns them
+     */
     protected static getCapturedGetters() {
-        const captured = {capturedGetters: this.capturedGetters, capturedGettersWithKeys:this.capturedGettersWithKeys};
-        this.capturedGetters = undefined;
-        this.capturedGettersWithKeys = undefined;
         this.isCapturing = false;
-        return captured;
+        return {capturedGetters: this.capturedGetters.pop(), capturedGettersWithKeys: this.capturedGettersWithKeys.pop()};
     }
 
     /**
@@ -444,23 +448,18 @@ export abstract class ReactiveValue<T = any> extends EventTarget {
         if (ReactiveValue.freezeCapturing) return;
 
         // remember previous capture state
-        const previousGetters = ReactiveValue.capturedGetters;
-        const previousGettersWithKeys = ReactiveValue.capturedGettersWithKeys;
         const previousCapturing = ReactiveValue.isCapturing;
 
         // trigger transform update if not live
         if (this.#transformSource && !this.#liveTransform && !this.#forceLiveTransform) {
-            ReactiveValue.capturedGetters = new Set();
-            ReactiveValue.capturedGettersWithKeys = new Map().setAutoDefault(Set);
+            ReactiveValue.captureGetters();
             this.#transformSource.update();
         }
-        if (previousCapturing) {
-            ReactiveValue.isCapturing = true;
-            ReactiveValue.capturedGetters = previousGetters ?? new Set();
-            ReactiveValue.capturedGettersWithKeys = previousGettersWithKeys ?? new Map().setAutoDefault(Set);
 
-            if (key === NOT_EXISTING) ReactiveValue.capturedGetters.add(this);
-            else if (this instanceof Pointer) ReactiveValue.capturedGettersWithKeys.getAuto(this).add(key)
+        // add self to current capturedGetters
+        if (previousCapturing) {
+            if (key === NOT_EXISTING) ReactiveValue.capturedGetters[ReactiveValue.capturedGetters.length-1].add(this);
+            else if (this instanceof Pointer) ReactiveValue.capturedGettersWithKeys[ReactiveValue.capturedGettersWithKeys.length-1].getAuto(this).add(key)
             else {
                 logger.warn("invalid capture, must be a pointer or property")
             }
@@ -751,6 +750,18 @@ export class PointerProperty<T=any> extends ReactiveValue<T> {
     #observer_internal_handlers = new WeakMap<observe_handler, observe_handler>()
     #observer_internal_bound_handlers = new WeakMap<object, WeakMap<observe_handler, observe_handler>>()
 
+    /**
+     * returns true if the property cannot directly observed,
+     * e.g. because it is an internal JS property like Array.length which only
+     * gets updated when the array is modified
+     */
+    private isIndirectReactiveProperty() {
+        if (this.pointer?.val instanceof Array && this.key == "length") return true;
+        else if (this.pointer?.val instanceof Map && this.key == "size") return true;
+        else if (this.pointer?.val instanceof Set && this.key == "size") return true;
+        else return false;
+    }
+
     // callback on property value change and when the property value changes internally
     public override observe(handler: observe_handler, bound_object?:Record<string, unknown>, options?:observe_options) {
         if (this.lazy_pointer) {
@@ -767,7 +778,10 @@ export class PointerProperty<T=any> extends ReactiveValue<T> {
             // if arrow function
             else handler(v,undefined,ReactiveValue.UPDATE_TYPE.INIT)
         };
-        this.pointer!.observe(internal_handler, bound_object, this.key, options)
+       
+        const key = this.isIndirectReactiveProperty() ? undefined : this.key;
+        // if indirect property, observe the whole parent for any changes
+        this.pointer!.observe(internal_handler, bound_object, key, options)
 
         if (bound_object) {
             if (!this.#observer_internal_bound_handlers.has(bound_object)) this.#observer_internal_bound_handlers.set(bound_object, new WeakMap);
@@ -862,18 +876,18 @@ type _Proxy$<T>         = _Proxy$Function<T> &
     T extends Array<infer V> ? 
     // array
     {
-        [key: number]: RefLike<V>, 
+        [key: number]: V extends primitive ? CollapsedRef<V> : RefLike<V>, 
         map<U>(callbackfn: (value: MaybeObjectRef<V>, index: number, array: V[]) => U, thisArg?: any): Pointer<U[]>
     }
     : 
     (
         T extends Map<infer K, infer V> ? 
         {
-            get(key: K): RefLike<V>
+            get(key: K): V extends primitive ? CollapsedRef<V> :  RefLike<V>
         }
 
          // normal object
-        : {[K in keyof T]: RefLike<T[K]>} // always map properties to pointer property references
+        : {[K in keyof T]: T[K] extends primitive ? CollapsedRef<T[K]> : RefLike<T[K]>} // always map properties to pointer property references
     )
    
 type _PropertyProxy$<T> = _Proxy$Function<T> & 
@@ -941,11 +955,16 @@ export type MinimalJSRefWithIndirectRef<T, _C = CollapsedValue<T>> =
                 ObjectRef<_C> // collapsed object
     )
 
-export type Ref<T, _C = CollapsedValue<T>> =
+export type CollapsedRef<T, _C = CollapsedValue<T>> =
     _C&{} extends symbol ? symbol : (
         _C&{} extends WrappedPointerValue ?
             PointerWithPrimitive<_C>: // keep pointer reference
             ObjectRef<_C> // collapsed object
+    )
+
+export type Ref<T, _C = CollapsedValue<T>> =
+    _C&{} extends symbol ? symbol : (
+        PointerWithPrimitive<_C>
     )
 
 /**
@@ -959,7 +978,7 @@ declare global {
 /**
  * @deprecated use Ref
  */
-export type MinimalJSRef<T, _C = CollapsedValue<T>> = Ref<T, _C>
+export type MinimalJSRef<T, _C = CollapsedValue<T>> = CollapsedRef<T, _C>
 
 // same as MinimalJSRef, but objects don't have $ and $$ properties
 export type MinimalJSRefNoObjRef<T, _C = CollapsedValue<T>> =
@@ -1191,6 +1210,8 @@ export type SmartTransformOptions<T=unknown> = {
     _allowAsync?: boolean,
     // collapse primitive pointer if value has no reactive dependencies and garbage-collect pointer
     _collapseStatic?: boolean,
+    // when _collapseStatic is enabled, values are first collapsed and then re-assigned to a pointer wrapper
+    _rebindStaticToPointers?: boolean,
     // always return the wrapper instead of the collapsed value, even for non-primitive pointers
     _returnWrapper?: boolean,
     // set the pointer type to allow any value
@@ -2713,7 +2734,7 @@ export class Pointer<T = any> extends ReactiveValue<T> {
                 if (val && typeof val == "object" && DX_PTR in val) {
                     alreadyProxy = true;
                     // TODO: handle this correctly
-                    console.warn("The value assigned to pointer "+this.idString()+" is already bound to " + (val[DX_PTR] as unknown as Pointer).idString() + ":", val);
+                    //console.warn("The value assigned to pointer "+this.idString()+" is already bound to " + (val[DX_PTR] as unknown as Pointer).idString() + ":", val);
                 }
 
                 // TODO: is this required somewhere?
@@ -3104,7 +3125,7 @@ export class Pointer<T = any> extends ReactiveValue<T> {
                         }
                     }
                                     
-                    // check if val is already the result if a transform function
+                    // check if val is already the result of a transform function
                     // happens e.g. with jusix _$(() => map(x, ...))
                     // early return the inner transformed pointer
                     const ptr = Pointer.getByValue(val);
@@ -3305,8 +3326,13 @@ export class Pointer<T = any> extends ReactiveValue<T> {
                 // unobserve no longer relevant dependencies
                 for (const dep of state.deps) {
                     if (!capturedGetters?.has(dep)) {
-                        dep.unobserve(state.update, this.#unique);
-                        state.deps.delete(dep)
+                        // TODO: (NOTE) this was disabled because in some scenarios, dependencies were unobserved
+                        // although they were still needed for reactive updates.
+                        // This is not the most efficient solution, but it should work for now.
+                        // Potential source for memory leaks.
+
+                        // dep.unobserve(state.update, this.#unique);
+                        // state.deps.delete(dep)
                     }
                 }
                 // observe newly discovered dependencies
@@ -3496,7 +3522,6 @@ export class Pointer<T = any> extends ReactiveValue<T> {
         otherPointer.observe(value=>{
             if (changing2) return;
             changing1 = true;
-            console.warn("other pointer cahnged", key, value)
             this.handleSet(key, value, false)
             changing1 = false;
         }, undefined, key);
@@ -3506,7 +3531,6 @@ export class Pointer<T = any> extends ReactiveValue<T> {
             this.observe(value=>{
                 if (changing1) return;
                 changing2 = true;
-                console.warn("own pointer cahnged", key, value)
                 otherPointer.handleSet(key, value)
                 changing2 = false;
             }, undefined, key);
@@ -4662,7 +4686,10 @@ export class Pointer<T = any> extends ReactiveValue<T> {
         if (!handler) throw new ValueError("Missing observer handler")
 
         this.callScheduledWhenObserving();
-        
+
+        // make sure the ptr is not garbage collected
+        this.is_persistent = true;
+
         // TODO handle bound_object in pointer observers/unobserve
         // observe all changes
         if (key == undefined) {

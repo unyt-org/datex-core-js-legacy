@@ -2,7 +2,7 @@
 import { client_type } from "./constants.ts";
 import { getCallerFile } from "./caller_metadata.ts";
 
-const relative = client_type === "deno" ? (await import("https://deno.land/std@0.172.0/path/mod.ts")).relative : null;
+const relative = client_type === "deno" ? (await import("https://deno.land/std@0.224.0/path/mod.ts")).relative : null;
 
 export class Path<P extends Path.protocol = Path.protocol, IsDir extends boolean = boolean> extends URL {
 

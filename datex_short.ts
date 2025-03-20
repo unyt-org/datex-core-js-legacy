@@ -1,7 +1,7 @@
 
 // shortcut functions
 // import { Datex } from "./datex.ts";
-import { baseURL, Runtime, PrecompiledDXB, Type, Pointer, ReactiveValue, PointerProperty, primitive, Target, IdEndpoint, Markdown, MinimalJSRef, RefOrValue, datex_meta, ObjectWithDatexValues, Compiler, endpoint_by_endpoint_name, endpoint_name, Storage, compiler_scope, datex_scope, DatexResponse, target_clause, ValueError, Class, getDefaultLocalMeta, Endpoint, INSERT_MARK, SmartTransformFunction, activePlugins, PointerPropertyParent, RefLike } from "./datex_all.ts";
+import { baseURL, Runtime, PrecompiledDXB, Type, Pointer, ReactiveValue, PointerProperty, primitive, Target, IdEndpoint, Markdown, MinimalJSRef, RefOrValue, datex_meta, ObjectWithDatexValues, Compiler, endpoint_by_endpoint_name, endpoint_name, Storage, compiler_scope, datex_scope, DatexResponse, target_clause, ValueError, Class, getDefaultLocalMeta, Endpoint, INSERT_MARK, SmartTransformFunction, activePlugins, PointerPropertyParent, RefLike, CollapsedValue } from "./datex_all.ts";
 
 /** make decorators global */
 import { assert as _assert, timeout as _timeout, entrypoint as _entrypoint, ref as _ref, entrypointProperty as _entrypointProperty, property as _property, struct as _struct, endpoint as _endpoint, sync as _sync, allow as _allow} from "./datex_all.ts";
@@ -321,16 +321,16 @@ export function pointer<T>(value:RefOrValue<T>, property?:unknown, callStackInde
  * @param propertyKey 
  */
 export function prop<T extends Map<unknown, unknown>>(parent:RefOrValue<T>, propertyKey: T extends Map<infer K, infer V> ? K : unknown): PointerProperty<T extends Map<infer K, infer V> ? V : unknown>|(T extends Map<infer K, infer V> ? V : unknown)
-export function prop<T extends Record<PropertyKey, unknown>>(parent:RefOrValue<T>, propertyKey: keyof T): PointerProperty<T[keyof T]>|T[keyof T]
+export function prop<T extends Record<PropertyKey, unknown>, K extends keyof T>(parent:RefOrValue<T>, propertyKey: K): PointerProperty<T[K]>|T[K]
 export function prop(parent:Map<unknown, unknown>|Record<PropertyKey, unknown>, propertyKey: unknown): any {
     // try to get pointer property
     if (ReactiveValue.isRef(parent)) {
-        const prop = PointerProperty.getIfExists(parent, propertyKey);
+        const prop = PointerProperty.getIfExists(parent, propertyKey, true);
         if (prop !== NOT_EXISTING) return prop;
     }
     
-    if (parent instanceof Map) return parent.get(propertyKey);
-    else return parent[propertyKey as keyof typeof parent];
+    if (parent instanceof Map) return pointer(parent.get(propertyKey));
+    else return pointer(parent[propertyKey as keyof typeof parent]);
 }
 
 
@@ -400,7 +400,7 @@ export const $ = new Proxy(function(){} as unknown as $type, {
  * @param val 
  * @returns 
  */
-export function val<T>(val: RefOrValue<T>):T  { // TODO: return inferred type instead of T (ts resolution error, too deep)
+export function val<T>(val: T): CollapsedValue<T>  { // TODO: return inferred type instead of T (ts resolution error, too deep)
     return ReactiveValue.collapseValue(val, true, true)
 }
 
@@ -692,7 +692,7 @@ Object.defineProperty(globalThis, 'once', {value:once, configurable:false})
 Object.defineProperty(globalThis, 'always', {value:_always, configurable:false})
 Object.defineProperty(globalThis, 'asyncAlways', {value:_asyncAlways, configurable:false})
 // used internally for reactive $ syntax
-Object.defineProperty(globalThis, '_$', {value: (cb:SmartTransformFunction<unknown>) => _always(cb, {allowStatic: true, _allowAsync: true, _collapseStatic: true, _returnWrapper: true, _allowAnyType: true}), configurable:false})
+Object.defineProperty(globalThis, '_$', {value: (cb:SmartTransformFunction<unknown>) => _always(cb, {allowStatic: true, _allowAsync: true, _collapseStatic: true, _rebindStaticToPointers: true, _returnWrapper: true, _allowAnyType: true}), configurable:false})
 Object.defineProperty(globalThis, '_$method', {value: _$method, configurable:false})
 Object.defineProperty(globalThis, 'reactiveFn', {value:_reactiveFn, configurable:false})
 Object.defineProperty(globalThis, 'toggle', {value:_toggle, configurable:false})
