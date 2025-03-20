@@ -386,6 +386,6 @@ const double = map(array, v => v*2) // equivalent to always(() => array.map(v =>
 
 
 
-## Appendix: The definition of 'pure' functions in DATEX
+<!-- ## Appendix: The definition of 'pure' functions in DATEX
 
-TODO
+TODO -->
