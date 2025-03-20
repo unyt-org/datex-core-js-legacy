@@ -80,7 +80,7 @@ product.observe((v) => console.log(v))
 c.val = 20;
 ```
 
->  [!NOTE]  
+>  [!NOTE]
 >  The `always` transform function must always be synchronous and must not return a Promise
 
 
