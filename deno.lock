@@ -94,7 +94,6 @@
     "https://cdn.unyt.org/datex-core-js-legacy@0.0.x/lib/localforage/utils/isLocalStorageValid.js": "64e1fa95986ff2dc2aa66b6f064ac72bc06cc56fa28d3c3dd0ea18cc5aa0df7c",
     "https://cdn.unyt.org/datex-core-js-legacy@0.0.x/lib/localforage/utils/isWebSQLValid.js": "a2cb2bc344ad4fc3d9bd66e59b03765d15e5695896be5ef43ddf7c00c8005090",
     "https://cdn.unyt.org/datex-core-js-legacy@0.0.x/lib/localforage/utils/normalizeKey.js": "57ed80a6f574511682e1575ebcb8cfe57652bddb36252642372168312d054082",
-    "https://cdn.unyt.org/datex-core-js-legacy@0.0.x/lib/localforage/utils/promise.js": "553a6e73bfe59e43390c7f88514574d4284eef5e34ce7cdbf93c3d9c6347c559",
     "https://cdn.unyt.org/datex-core-js-legacy@0.0.x/lib/localforage/utils/serializer.js": "5960c40deb26d81ca4841c9fe829a5305ea09bfd3d9deb6c1d74875934923b03",
     "https://cdn.unyt.org/datex-core-js-legacy@0.0.x/lib/marked.js": "0a1fa6c8bbe5f691c8d5bed2041fdfb9e22494bd3caca2cbc076cb142c19b014",
     "https://cdn.unyt.org/datex-core-js-legacy@0.0.x/mod.ts": "446c7e5f0ab17fb04b93f125d0b619be9de1796e236dd5380c3089655a844d88",
