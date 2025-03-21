@@ -3139,15 +3139,17 @@ export class Pointer<T = any> extends ReactiveValue<T> {
                         this.enableLiveTransforms(false)
 
                         // remember latest transform promise
+                        const alreadyWaiting = !!this.#waiting_for_always_promise;
+                        // update promise result to most recent val
                         this.#waiting_for_always_promise = val; 
+
+                        // return if already waiting for a promise
+                        if (alreadyWaiting) return;
 
                         // wait until val promise resolves
                         val
-                            .then((resolvedVal)=>{
-                                // got a more recent promise result in the meantime, ignore this one
-                                if (val !== this.#waiting_for_always_promise) {
-                                    return;
-                                }
+                            .then(async ()=>{
+                                const resolvedVal = await this.#waiting_for_always_promise;
                                 this.#waiting_for_always_promise = undefined;
                                 this.handleTransformValue(
                                     resolvedVal,
@@ -3204,7 +3206,7 @@ export class Pointer<T = any> extends ReactiveValue<T> {
             
 
             /**
-             * if the transform triggeed by update() method returns a promise, block further updates until the promise resolves
+             * if the transform triggered by update() method returns a promise, block further updates until the promise resolves
              */
             const blockLoop = () => {
                 if (this.#waiting_for_always_promise) {
