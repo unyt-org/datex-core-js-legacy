@@ -1,8 +1,8 @@
 # Introduction to DATEX JS
 
->  [!WARNING]
->  The current implementation of the DATEX JavaScript Library is still a beta version.
->  We are actively working on a new stable [Rust implementation](https://github.com/unyt-org/datex-core) that will be much more performant.
+> [!WARNING]
+> The current implementation of the DATEX JavaScript Library is still a beta version.
+> We are actively working on a new stable [Rust implementation](https://github.com/unyt-org/datex-core) that will be much more performant.
 
 The DATEX JavaScript Library (*DATEX JS*) enables fine-grained reactivity with cross-device processing including data synchronisation.
 
@@ -17,9 +17,9 @@ The [UIX framework](https://uix.unyt.org/) provides a developer-friendly abstrac
 DATEX JS implements a JavaScript interface on top of a DATEX Runtime environment.
 If you want to learn more about the DATEX, check out the  [Specification](https://github.com/unyt-org/datex-specification)
 
->  [!NOTE]  
->  We will use the term "*JavaScript*" throughout in this manual. This should be regarded as 
->  interchangable with "*TypeScript*", since this library is designed as a TypeScript library.
+> [!NOTE]  
+> We will use the term "*JavaScript*" throughout in this manual. This should be regarded as 
+> interchangable with "*TypeScript*", since this library is designed as a TypeScript library.
 
 
 ## Using DATEX JS

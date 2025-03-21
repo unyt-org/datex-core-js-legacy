@@ -80,8 +80,8 @@ product.observe((v) => console.log(v))
 c.val = 20;
 ```
 
->  [!NOTE]  
->  The `always` transform function must always be synchronous and must not return a Promise
+> [!NOTE]
+> The `always` transform function must always be synchronous and must not return a Promise
 
 
 #### Caching `always` output values
@@ -162,7 +162,7 @@ async function doAsyncStuff(input: number) {
     return res + input
 }
 
-const output = await asyncAlways(() =>  doAsyncStuff(input.val)) // ✅ Correct usage
+const output = await asyncAlways(() => doAsyncStuff(input.val)) // ✅ Correct usage
 ```
 
 When you don't return a promise, the `asyncAlways` function will display a runtime warning:
@@ -179,8 +179,8 @@ let c = $$(5);
 const product: Datex.Ref<number> = await always `${c} * 10`
 ```
 
->  [!NOTE]  
->  When using a DATEX script template, the `always` function returns a Promise that has to be awaited.
+> [!NOTE]  
+> When using a DATEX script template, the `always` function returns a Promise that has to be awaited.
 
 
 In this form, the transform function can also be serialized and restored later, in contrast to normal JavaScript callback functions which cannot be serialized to DATEX.
@@ -386,6 +386,6 @@ const double = map(array, v => v*2) // equivalent to always(() => array.map(v =>
 
 
 
-## Appendix: The definition of 'pure' functions in DATEX
+<!-- ## Appendix: The definition of 'pure' functions in DATEX
 
-TODO
+TODO -->

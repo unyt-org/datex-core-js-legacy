@@ -265,9 +265,11 @@ async function searchUser(name: string, age: number) {
 effect(() => searchUser(searchName.val, searchAge.val))
 ```
 
-All dependency values of the effect must be accessed synchronously.
-This means that the variables inside the async function don't trigger the effect, only the ones passed
-into the `searchUser` call.
+> [!WARNING]
+> All dependency values of the effect must be accessed synchronously.
+> This means that in the example above, the variables inside the async function don't trigger the effect, only the ones passed
+> into the `searchUser` call.
+> If you access values after the first `await` in the async function, the effect will not be triggered by changes of these values.
 
 
 #### Sequential async effect execution
