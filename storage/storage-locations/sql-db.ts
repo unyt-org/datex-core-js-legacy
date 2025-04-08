@@ -435,10 +435,12 @@ export abstract class SQLDBStorageLocation<Options extends {db: string}> extends
 						}
 						else {
 							if (
-								propType !== Datex.Type.std.StorageSet &&
-								propType !== Datex.Type.std.StorageMap &&
-								propType !== Datex.Type.std.StorageWeakSet &&
-								propType !== Datex.Type.std.StorageWeakMap
+								// propType !== Datex.Type.std.StorageSet &&
+								// propType !== Datex.Type.std.StorageMap &&
+								// propType !== Datex.Type.std.StorageWeakSet &&
+								// propType !== Datex.Type.std.StorageWeakMap &&
+								propType.namespace != "std" &&
+								propType.namespace != "js"
 							) {
 								logger.warn("Cannot map type " + propType + " to a SQL table, falling back to raw pointer storage")
 							}
@@ -1606,7 +1608,6 @@ export abstract class SQLDBStorageLocation<Options extends {db: string}> extends
 		// get table where pointer is stored
 		const table = await this.#getPointerTable(pointerId);
 		if (!table) {
-			console.warn("No table found for pointer " + pointerId);
 			return NOT_EXISTING;
 		}
 
