@@ -109,7 +109,7 @@ export function struct(defOrTypeName: StructuralTypeDefIn|Class|string, def?: St
 		template[key] = convertDefinitionToType(val, key);
 	}
 
-	const hash = typeName ?? sha256(Runtime.valueToDatexStringExperimental(template))
+	const hash = typeName ?? sha256(Runtime.valueToDatexString(template, false, false, false))
 	const type = new Type("struct", hash).setTemplate(template);
 
     // custom instanceof handling for structs
