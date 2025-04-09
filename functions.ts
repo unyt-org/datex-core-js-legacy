@@ -45,10 +45,10 @@ export function always(scriptOrJSTransform:TemplateStringsArray|SmartTransformFu
             throw new Error("Async functions are not allowed as always transforms")
         }
         const ptr = Pointer.createSmartTransform(scriptOrJSTransform, undefined, undefined, undefined, options);
-        if (options?._allowAsync && !ptr.value_initialized && ptr.waiting_for_always_promise) {
-            return ptr.waiting_for_always_promise.then(()=>collapseTransformPointer(ptr, options?._collapseStatic, options?._returnWrapper, options?._allowAnyType, options?._rebindStaticToPointers));
+        if (options?._allowAsync && !ptr.value_initialized && ptr.waiting_for_initial_async_transform) {
+            return ptr.waiting_for_initial_async_transform.then(()=>collapseTransformPointer(ptr, options?._collapseStatic, options?._returnWrapper, options?._allowAnyType, options?._rebindStaticToPointers));
         }
-        if (!ptr.value_initialized && ptr.waiting_for_always_promise) {
+        if (!ptr.value_initialized && ptr.waiting_for_initial_async_transform) {
             throw new PointerError(`Promises cannot be returned from always transforms - use 'asyncAlways' instead`);
         }
         else {
@@ -113,8 +113,8 @@ function collapseTransformPointer(ptr: Pointer, collapseStatic = false, alwaysRe
  */
 export async function asyncAlways<T>(transform:AsyncSmartTransformFunction<T>, options?: SmartTransformOptions): Promise<MinimalJSRefWithIndirectRef<T>> { // return signature from Value.collapseValue(Pointer.smartTransform())
     const ptr = Pointer.createSmartTransform(transform, undefined, undefined, undefined, options);
-    if (!ptr.value_initialized && ptr.waiting_for_always_promise) {
-        await ptr.waiting_for_always_promise;
+    if (!ptr.value_initialized && ptr.waiting_for_initial_async_transform) {
+        await ptr.waiting_for_initial_async_transform;
     }
     else {
         logger.warn("asyncAlways: transform function did not return a Promise, you should use 'always' instead")

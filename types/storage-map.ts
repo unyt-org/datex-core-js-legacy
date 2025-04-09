@@ -1,8 +1,8 @@
 // deno-lint-ignore-file no-this-alias
 
 import { Compiler } from "../compiler/compiler.ts";
-import { DX_PTR } from "../runtime/constants.ts";
-import { Pointer } from "../runtime/pointers.ts";
+import { VOID } from "../runtime/constants.ts";
+import { Pointer, ReactiveValue } from "../runtime/pointers.ts";
 import { MatchOptions, Storage } from "../storage/storage.ts";
 import { Class } from "../utils/global_types.ts";
 import { MatchInput, MatchResult, match } from "../utils/match.ts";
@@ -84,6 +84,7 @@ export class StorageWeakMap<K,V> {
 	}
 
 	protected _get(storage_key:string) {
+		this.handleBeforeNonReferencableGet();
 		this.activateCacheTimeout(storage_key);
 		return Storage.getItem(storage_key);
 	}
@@ -93,28 +94,32 @@ export class StorageWeakMap<K,V> {
 		return this._has(storage_key);
 	}
 	protected _has(storage_key:string) {
+		this.handleBeforeNonReferencableGet();
 		return Storage.hasItem(storage_key)
 	}
 
 	async delete(key: K) {
 		const storage_key = await this.getStorageKey(key);
-		return this._delete(storage_key);
+		return this._delete(storage_key, key);
 	}
-	protected _delete(storage_key:string) {
-		return Storage.removeItem(storage_key)
+	protected async _delete(storage_key:string, key: K) {
+		const res = await Storage.removeItem(storage_key)
+		this.#pointer.callObservers(VOID, key, ReactiveValue.UPDATE_TYPE.DELETE);
+		return res;
 	}
 
 	async set(key: K, value:V) {
 		const storage_key = await this.getStorageKey(key);
-		return this._set(storage_key, value);
+		return this._set(storage_key, key, value);
 	}
-	protected async _set(storage_key:string, value:V) {
+	protected async _set(storage_key:string, key:K, value:V) {
 		// proxify value
 		if (!this.allowNonPointerObjectValues) {
 			value = this.#pointer.proxifyChild("", value);
 		}
 		this.activateCacheTimeout(storage_key);
-		await Storage.setItem(storage_key, value)
+		await Storage.setItem(storage_key, value);
+		this.#pointer.callObservers(value, key, ReactiveValue.UPDATE_TYPE.SET, false, false)
 		return this;
 	}
 
@@ -136,8 +141,16 @@ export class StorageWeakMap<K,V> {
 			promises.push(Storage.removeItem(key));
 		}
 		await Promise.all(promises);
+		this.handleClear();
 	}
 
+	protected handleBeforeNonReferencableGet() {
+		this.#pointer.handleBeforeNonReferencableGet();
+	}
+
+	protected handleClear() {
+		this.#pointer.callObservers(VOID, VOID, ReactiveValue.UPDATE_TYPE.CLEAR);
+	}
 }
 
 /**
@@ -152,7 +165,7 @@ export class StorageMap<K,V> extends StorageWeakMap<K,V> {
 	 * @param valueType Class or DATEX Type of the values
 	 * @returns 
 	 */
-	static of<K, V>(keyType:Class<K>|Type<K>, valueType: Class<V>|Type<V>): StorageMap<K, V> {
+	static override of<K, V>(keyType:Class<K>|Type<K>, valueType: Class<V>|Type<V>): StorageMap<K, V> {
 		return super.of(keyType, valueType) as StorageMap<K, V>;
 	}
 
@@ -167,11 +180,13 @@ export class StorageMap<K,V> extends StorageWeakMap<K,V> {
 	#size?: number;
 
 	get size() {
+		this.handleBeforeNonReferencableGet();
 		if (this.#size == undefined) throw new Error("size not yet available. use getSize() instead");
 		return this.#size;
 	}
 
 	async getSize() {
+		this.handleBeforeNonReferencableGet();
 		if (this.#size != undefined) return this.#size;
 		else {
 			await this.#determineSizeFromStorage(); 
@@ -180,6 +195,7 @@ export class StorageMap<K,V> extends StorageWeakMap<K,V> {
 	}
 
 	async getKeyForValue(value: V): Promise<K|undefined> {
+		this.handleBeforeNonReferencableGet();
 		const keyId = await Storage.getItemKey(value);
 		const key = await Storage.getItem(this.#key_prefix + keyId);
 		return key;
@@ -209,7 +225,7 @@ export class StorageMap<K,V> extends StorageWeakMap<K,V> {
 		const storage_key = await this.getStorageKey(key);
 		const storage_item_key = this.#key_prefix + storage_key;
 		// store value
-		await this._set(storage_key, value);
+		await this._set(storage_key, key, value);
 		// store key
 		this.activateCacheTimeout(storage_item_key);
 		const alreadyExisted = await Storage.setItem(storage_item_key, key);
@@ -221,7 +237,7 @@ export class StorageMap<K,V> extends StorageWeakMap<K,V> {
 		const storage_key = await this.getStorageKey(key);
 		const storage_item_key = this.#key_prefix + storage_key;
 		// delete value
-		await this._delete(storage_key);
+		await this._delete(storage_key, key);
 		// delete key
 		const existed = await Storage.removeItem(storage_item_key)
 		if (existed) await this.#decrementSize();
@@ -232,6 +248,7 @@ export class StorageMap<K,V> extends StorageWeakMap<K,V> {
 	 * Async iterator that returns all keys.
 	 */
 	keys() {
+		this.handleBeforeNonReferencableGet();
 		const self = this;
 		const key_prefix = this.#key_prefix;
 		return (async function*(){
@@ -258,6 +275,7 @@ export class StorageMap<K,V> extends StorageWeakMap<K,V> {
 	 * Async iterator that returns all values.
 	 */
 	values() {
+		this.handleBeforeNonReferencableGet();
 		const self = this;
 		return (async function*(){
 			const keyGenerator = await Storage.getItemKeysStartingWith(self._prefix);
@@ -297,6 +315,7 @@ export class StorageMap<K,V> extends StorageWeakMap<K,V> {
 	}
 
 	async *[Symbol.asyncIterator]() {
+		this.handleBeforeNonReferencableGet();
 		const keyGenerator = await Storage.getItemKeysStartingWith(this._prefix);
 		
 		for (const key of keyGenerator) {
@@ -313,10 +332,12 @@ export class StorageMap<K,V> extends StorageWeakMap<K,V> {
 			promises.push(await Storage.removeItem(this.#key_prefix+key));
 		}
 		await Promise.all(promises);
+		this.handleClear();
 	}
 
-	match<Options extends MatchOptions, T extends V & object>(matchInput: MatchInput<T>, options?: Options, valueType?: Class<T>|Type<T>): Promise<MatchResult<Options['returnKeys'] extends true ? K : T, Options>> {
-		valueType ??= this.type;
+	match<Options extends MatchOptions, T extends V & object>(matchInput: MatchInput<T>, options?: Options, valueType?: Type<T>): Promise<MatchResult<Options['returnKeys'] extends true ? K : T, Options>> {
+		this.handleBeforeNonReferencableGet();
+		valueType ??= this.type as any;
 		if (!valueType) throw new Error("Cannot determine value type. Please provide a valueType parameter to match()");
 		return match(this as unknown as StorageMap<unknown, T>, valueType, matchInput, options) as any;
 	}

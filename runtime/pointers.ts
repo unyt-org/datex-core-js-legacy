@@ -2209,7 +2209,9 @@ export class Pointer<T = any> extends ReactiveValue<T> {
     get pointer_type(){return this.#pointer_type}
 
     #waiting_for_always_promise?: Promise<unknown>;
-    get waiting_for_always_promise() {return this.#waiting_for_always_promise}
+
+    #waiting_for_initial_async_transform?: Promise<unknown>;
+    get waiting_for_initial_async_transform() {return this.#waiting_for_initial_async_transform}
 
     #updateIsJSPrimitive(val:any = this.val) {
         const type = this.#type ?? Type.ofValue(val);
@@ -3135,6 +3137,16 @@ export class Pointer<T = any> extends ReactiveValue<T> {
 
                     // promise returned, wait for promise to resolve
                     if (val instanceof Promise) {
+
+                        let resolveInitialAsyncTransform: (() => void) | undefined;
+
+                        // handle waiting_for_initial_async_transform if not yet initialized
+                        if (!this.#loaded) {
+                            const {promise, resolve} = Promise.withResolvers<void>();
+                            resolveInitialAsyncTransform = resolve;
+                            this.#waiting_for_initial_async_transform = promise;
+                        }
+
                         // force live required for async transforms (cannot synchronously calculate the value in a getter)
                         this.enableLiveTransforms(false)
 
@@ -3167,6 +3179,9 @@ export class Pointer<T = any> extends ReactiveValue<T> {
                                 // TODO: handle case where promise is rejected in initial transform call
                                 // and captured refs are not observed?
                             })
+                            .finally(() => {
+                                resolveInitialAsyncTransform?.();
+                            });
                     }
                     // normal sync transform
                     else {
@@ -4752,7 +4767,7 @@ export class Pointer<T = any> extends ReactiveValue<T> {
     }
 
 
-    private callObservers(value:any, key:any, type:ReactiveValue.UPDATE_TYPE, is_transform = false, is_child_update = false, previous?: any, atomic_id?: symbol) {
+    callObservers(value:any, key:any, type:ReactiveValue.UPDATE_TYPE, is_transform = false, is_child_update = false, previous?: any, atomic_id?: symbol) {
         // disable unintentional capturing of dependencies for smart transforms that are triggered by getters inside observer callbacks
         
         // @ReactiveValue.disableCapturing

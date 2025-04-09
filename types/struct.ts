@@ -85,8 +85,8 @@ export type inferType<DXTypeOrClass extends Type|Class> =
 
 export function struct<T extends Record<string, any> & Class>(classDefinition: T): dc<T>
 export function struct<T extends Record<string, any> & Class>(type: string, classDefinition: T): dc<T>
-export function struct<Def extends StructuralTypeDefIn>(typeName: string, def: Def): Type<collapseTypeDef<Def>> & ((val: collapseTypeDef<Def>)=>ObjectRef<collapseTypeDef<Def>>)
-export function struct<Def extends StructuralTypeDefIn>(def: Def): Type<collapseTypeDef<Def>> & ((val: collapseTypeDef<Def>)=>ObjectRef<collapseTypeDef<Def>>)
+export function struct<Def extends StructuralTypeDefIn>(typeName: string, def: Def): Type<ObjectRef<collapseTypeDef<Def>>> & ((val: collapseTypeDef<Def>)=>ObjectRef<collapseTypeDef<Def>>)
+export function struct<Def extends StructuralTypeDefIn>(def: Def): Type<ObjectRef<collapseTypeDef<Def>>> & ((val: collapseTypeDef<Def>)=>ObjectRef<collapseTypeDef<Def>>)
 export function struct(defOrTypeName: StructuralTypeDefIn|Class|string, def?: StructuralTypeDefIn|Class): any {
 	// create unique type name from template hash
 

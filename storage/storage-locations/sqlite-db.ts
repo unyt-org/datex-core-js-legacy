@@ -8,7 +8,6 @@ import { ptr_cache_path } from "../../runtime/cache_path.ts";
 import { Path } from "../../utils/path.ts";
 
 function regexp(pattern: string, value: string): boolean {
-    console.log("REGEXP", pattern, value)
     const regex = new RegExp(pattern, "i");
     return regex.test(value);
 }

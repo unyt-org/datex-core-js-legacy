@@ -1,14 +1,14 @@
 // deno-lint-ignore-file no-this-alias
 
 import { Compiler } from "../compiler/compiler.ts";
-import { DX_PTR } from "../runtime/constants.ts";
+import { VOID } from "../runtime/constants.ts";
 import { Pointer } from "../runtime/pointers.ts";
 import { MatchResult, Storage } from "../storage/storage.ts";
-import { Logger } from "../utils/logger.ts";
 import { MatchInput, match } from "../utils/match.ts";
 import type { Class } from "../utils/global_types.ts";
 import { MatchOptions } from "../utils/match.ts";
 import { Type } from "./type.ts";
+import { ReactiveValue } from "../runtime/pointers.ts";
 
 /**
  * WeakSet that outsources values to storage.
@@ -84,13 +84,15 @@ export class StorageWeakSet<V> {
 		await this._add(storage_key, null);
 		return this;
 	}
-	protected _add(storage_key:string, value:V|null) {
+	protected async _add(storage_key:string, value:V|null) {
 		// proxify value
 		if (!this.allowNonPointerObjectValues) {
 			value = this.#pointer.proxifyChild("", value);
 		}
 		this.activateCacheTimeout(storage_key);
-		return Storage.setItem(storage_key, value);
+		const res = await Storage.setItem(storage_key, value);
+		this.#pointer.callObservers(value, VOID, ReactiveValue.UPDATE_TYPE.ADD)
+		return res;
 	}
 
 	async has(value: V): Promise<boolean> {
@@ -98,15 +100,18 @@ export class StorageWeakSet<V> {
 		return this._has(storage_key);
 	}
 	protected _has(storage_key:string) {
+		this.handleBeforeNonReferencableGet();
 		return Storage.hasItem(storage_key)
 	}
 
 	async delete(value: V) {
 		const storage_key = await this.getStorageKey(value);
-		return this._delete(storage_key);
+		return this._delete(storage_key, value);
 	}
-	protected _delete(storage_key:string) {
-		return Storage.removeItem(storage_key)
+	protected async _delete(storage_key:string, value: V) {
+		const res = await Storage.removeItem(storage_key)
+		this.#pointer.callObservers(VOID, value, ReactiveValue.UPDATE_TYPE.DELETE);
+		return res;
 	}
 
 	protected activateCacheTimeout(storage_key:string){
@@ -127,8 +132,12 @@ export class StorageWeakSet<V> {
 			promises.push(await Storage.removeItem(key));
 		}
 		await Promise.all(promises);
+		this.#pointer.callObservers(VOID, VOID, ReactiveValue.UPDATE_TYPE.CLEAR)
 	}
 
+	protected handleBeforeNonReferencableGet() {
+		this.#pointer.handleBeforeNonReferencableGet();
+	}
 
 }
 
@@ -142,18 +151,20 @@ export class StorageSet<V> extends StorageWeakSet<V> {
 	 * Create a new StorageSet instance with the given value type.
 	 * @param type Class or DATEX Type of the values
 	 */
-	static of<V>(type: Class<V>|Type<V>): StorageSet<V> {
+	static override of<V>(type: Class<V>|Type<V>): StorageSet<V> {
 		return super.of(type) as StorageSet<V>;
 	}
 
 	#size?: number;
 
 	get size() {
+		this.handleBeforeNonReferencableGet();
 		if (this.#size == undefined) throw new Error("size not yet available. use getSize() instead");
 		return this.#size;
 	}
 
 	async getSize() {
+		this.handleBeforeNonReferencableGet();
 		if (this.#size != undefined) return this.#size;
 		else {
 			await this.#determineSizeFromStorage(); 
@@ -185,7 +196,7 @@ export class StorageSet<V> extends StorageWeakSet<V> {
 	/**
 	 * Appends a new value to the StorageWeakSet.
 	 */
-	async add(value: V) {
+	override async add(value: V) {
 		const storage_key = await this.getStorageKey(value);
 		if (await this._has(storage_key)) return this; // already exists
 		await this._add(storage_key, value);
@@ -193,15 +204,15 @@ export class StorageSet<V> extends StorageWeakSet<V> {
 		return this;
 	}
 
-	async delete(value: V) {
+	override async delete(value: V) {
 		const wasDeleted = await super.delete(value);
 		if (wasDeleted) await this.#decrementSize();
 		return wasDeleted;
 	}
 
-	async clear(): Promise<void> {
+	override async clear(): Promise<void> {
 		await super.clear();
-		await this.#updateSize(0);
+		this.#updateSize(0);
 	}
 
 	/**
@@ -242,6 +253,7 @@ export class StorageSet<V> extends StorageWeakSet<V> {
 	 * Async iterator that returns all entries.
 	 */
 	entries() {
+		this.handleBeforeNonReferencableGet();
 		const self = this;
 		return (async function*(){
 			const keyGenerator = await Storage.getItemKeysStartingWith(self._prefix);
@@ -264,6 +276,7 @@ export class StorageSet<V> extends StorageWeakSet<V> {
 	}
 
 	async *[Symbol.asyncIterator]() {
+		this.handleBeforeNonReferencableGet();
 		const keyGenerator = await Storage.getItemKeysStartingWith(this._prefix);
 		
 		for (const key of keyGenerator) {
@@ -273,7 +286,8 @@ export class StorageSet<V> extends StorageWeakSet<V> {
 	}
 
 	match<Options extends MatchOptions, T extends V & object>(matchInput: MatchInput<T>, options?: Options, valueType?:Class<T>|Type<T>): Promise<MatchResult<T, Options>> {
-		valueType ??= this.type;
+		this.handleBeforeNonReferencableGet();
+		valueType ??= this.type as any;
 		if (!valueType) throw new Error("Cannot determine value type. Please provide a valueType parameter to match()");
 		return match(this as unknown as StorageSet<T>, valueType, matchInput, options)
 	}
