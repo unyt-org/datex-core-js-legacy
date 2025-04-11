@@ -38,7 +38,7 @@ for await (const [key, value] of myMap) { // Iterate over entries
     console.log(key, value);
 }
 
-await mySet.getSize(); // Returns the size of the StorageMap (1)
+await myMap.getSize(); // Returns the size of the StorageMap (1)
 await myMap.clear(); // Clear StorageMap
 ```
 
