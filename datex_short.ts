@@ -329,8 +329,11 @@ export function prop(parent:Map<unknown, unknown>|Record<PropertyKey, unknown>, 
         if (prop !== NOT_EXISTING) return prop;
     }
     
-    if (parent instanceof Map) return pointer(parent.get(propertyKey));
-    else return pointer(parent[propertyKey as keyof typeof parent]);
+    const value = parent instanceof Map ? 
+        parent.get(propertyKey) : 
+        parent[propertyKey as keyof typeof parent];
+    if (value instanceof ReactiveValue) return value;
+    else return pointer(value);
 }
 
 
