@@ -5,7 +5,7 @@ The DATEX JavaScript Library supports functional programming concepts in combina
 All transform functions are pure functions.
 They return a live reference value that gets recalculated when one of the dependency values changes.
 
-All standard transform functions can be imported from `"unyt_core/functions.ts"`.
+All standard transform functions can be imported from `"datex-core-legacy/functions.ts"`.
 
 ## Generic transform functions
 
