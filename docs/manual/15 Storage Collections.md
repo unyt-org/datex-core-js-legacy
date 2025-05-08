@@ -57,7 +57,7 @@ The easiest way to match entries in a storage set is to provide one or multiple 
 
 ```ts
 import { StorageSet } from "datex-core-legacy/types/storage-set.ts";
-import { Time } from "unyt_core/datex_all.ts";
+import { Time } from "datex-core-legacy/types/time.ts";
 
 const User = struct({
     name: string,
