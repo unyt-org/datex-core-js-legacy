@@ -15,7 +15,7 @@ from the parent thread.
 export function exportedFunction(x: number, y: number) {
   return x + y
 }
-export const exportedValue = $$([1,2,3]);
+export const exportedValue = $([1,2,3]);
 ```
 
 ```ts

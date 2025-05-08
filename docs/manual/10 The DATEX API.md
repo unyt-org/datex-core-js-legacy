@@ -15,7 +15,7 @@ When executing a DATEX Script, values can be passed from the JS context.
 Values passed into the script template string are always escaped to prevent injection attacks.
 
 ```ts
-const val = $$(10);
+const val = $(10);
 const result = await datex `${val} + ${10}` // returns 20
 ```
 

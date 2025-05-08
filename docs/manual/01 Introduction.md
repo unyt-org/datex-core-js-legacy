@@ -27,11 +27,11 @@ If you want to learn more about the DATEX, check out the  [Specification](https:
 ### Creating pointers
 
 
-To create a pointer for any JS value, just use the `$$` helper function:
+To create a pointer for any JS value, just use the `$` helper function:
 
 ```tsx
-const refA = $$(5);
-const refB = $$(0);
+const refA = $(5);
+const refB = $(0);
 const refSum = always(() => refA + refB);
 
 refB.val = 5;
@@ -68,7 +68,7 @@ const MyObject = struct(
 const obj = new MyObject();
 ```
 
-Instances of a class wrapped with `struct` are also automatically bound to a pointer when created (The value does not have to be explicitly wrapped in `$$()`).
+Instances of a class wrapped with `struct` are also automatically bound to a pointer when created (The value does not have to be explicitly wrapped in `$()`).
 
 Read more about `struct` classes [here](./12%20Classes.md).
 

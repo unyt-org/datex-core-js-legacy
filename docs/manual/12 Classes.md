@@ -28,7 +28,7 @@ obj.$.a // Datex.Ref<10>
 
 ## Automatic Pointer Binding
 
-Instances of a struct class are also automatically bound to a pointer when created (The value does not have to be explicitly wrapped in `$$()`).
+Instances of a struct class are also automatically bound to a pointer when created (The value does not have to be explicitly wrapped in `$()`).
 
 All non-primitive properties of an instance (that are decorated with `@property`) are automatically bound to a new pointer if they don't have a pointer yet.
 

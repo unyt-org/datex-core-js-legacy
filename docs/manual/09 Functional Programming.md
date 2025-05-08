@@ -14,7 +14,7 @@ All standard transform functions can be imported from `"unyt_core/functions.ts"`
 The `always` function can be used to define a custom transform:
 
 ```ts
-const number = $$(2);
+const number = $(2);
 const square = always(() => number**2)
 square.val // -> 4
 number.val = 3;
@@ -22,9 +22,9 @@ square.val // -> 9
 ```
 
 ```ts
-const colorA = $$("red");
-const colorB = $$("green");
-const c = $$(1);
+const colorA = $("red");
+const colorB = $("green");
+const c = $(1);
 
 const result: Datex.Ref<string> = always(()=>{
     if (c > 0) return `The color is ${colorA}`;
@@ -72,7 +72,7 @@ c = 20;
 
 The correct implementation for this example would be:
 ```ts
-const c = $$(5);
+const c = $(5);
 const product: Datex.Ref<number> = always(() => c * 10);
 
 // ✅ observer gets triggered when c is updated
@@ -96,7 +96,7 @@ This can be particularly useful when
 To enable output caching, set `cache` to `true` in the `always` options that are passed in as a second parameter:
 
 ```ts
-const n = $$(0);
+const n = $(0);
 
 const fibN = always(() => {
   console.log("calculating fibonacci nr " + n)
@@ -134,7 +134,7 @@ The `asyncAlways` function awaits the result of the promise returned by the tran
 
 This means that the following code will *not* work as expected:
 ```tsx
-const input = $$(10);
+const input = $(10);
 
 const output = await asyncAlways(async () => {
     const res = await asyncOperation();
@@ -144,7 +144,7 @@ const output = await asyncAlways(async () => {
 
 To fix this, you can capture the value of `input` before the `await` statement:
 ```tsx
-const input = $$(10);
+const input = $(10);
 
 const output = await asyncAlways(async () => {
     const val = input.val;
@@ -155,7 +155,7 @@ const output = await asyncAlways(async () => {
 
 To make sure that all dependencies are captured, we recommend creating a separate async function and passing the dependencies as arguments:
 ```tsx
-const input = $$(10);
+const input = $(10);
 
 async function doAsyncStuff(input: number) {
     const res = await asyncOperation();
@@ -175,7 +175,7 @@ const output = await asyncAlways(() => input.val * 10) // 🔶 Runtime warning: 
 
 Instead of providing a JavaScript callback function, you can also provide a DATEX Script as a template string to an `always` function:
 ```ts
-let c = $$(5);
+let c = $(5);
 const product: Datex.Ref<number> = await always `${c} * 10`
 ```
 
@@ -191,8 +191,8 @@ The `transform` function works similar to `always`, with the difference that all
 value need to be explicitly specified:
 
 ```ts
-const x = $$(40);
-const y = $$(2);
+const x = $(40);
+const y = $(2);
 const sum = transform([x,y], (x,y) => x + y);
 ```
 
@@ -211,7 +211,7 @@ If `async` calculations are required, the `transformAsync` function can be used 
 Example with an async `fetch` request:
 
 ```ts
-const url = $$("https://example.com/x");
+const url = $("https://example.com/x");
 const urlContent = transformAsync([url], async url => (await fetch(url)).json());
 ```
 
@@ -264,7 +264,7 @@ const getGreetingMessageReactive = reactiveFn((country: string) => {
     }
 })
 
-const country: Ref<string> = $$("de");
+const country: Ref<string> = $("de");
 const greetingMessage: Ref<string> = getGreetingMessageReactive(country);
 
 console.log(greetingMessage.val) // "Hallo"
@@ -280,9 +280,9 @@ The DATEX JavaSccript Library provides some standard transform functions for com
 ### add
 Calculates the sum of multiple numbers.
 ```ts
-const a = $$(1);
-const b = $$(2);
-const c = $$(3);
+const a = $(1);
+const b = $(2);
+const c = $(3);
 
 const sum = add(a,b,c); // equivalent to always(() => a + b + c)
 ```
@@ -290,8 +290,8 @@ const sum = add(a,b,c); // equivalent to always(() => a + b + c)
 ### sub
 Calculates the difference of multiple numbers.
 ```ts
-const a = $$(44);
-const b = $$(2);
+const a = $(44);
+const b = $(2);
 
 const difference = sub(a,b); // equivalent to always(() => a - b)
 ```
@@ -299,8 +299,8 @@ const difference = sub(a,b); // equivalent to always(() => a - b)
 ### mul
 Calculates the product of multiple numbers.
 ```ts
-const a = $$(7);
-const b = $$(6);
+const a = $(7);
+const b = $(6);
 
 const product = mul(a,b); // equivalent to always(() => a * b)
 ```
@@ -308,8 +308,8 @@ const product = mul(a,b); // equivalent to always(() => a * b)
 ### div
 Calculates the quotient of multiple numbers.
 ```ts
-const a = $$(84);
-const b = $$(2);
+const a = $(84);
+const b = $(2);
 
 const quotient = div(a,b); // equivalent to always(() => a / b)
 ```
@@ -317,8 +317,8 @@ const quotient = div(a,b); // equivalent to always(() => a / b)
 ### pow
 Calculates the result of a number raised to another number.
 ```ts
-const a = $$(10);
-const b = $$(2);
+const a = $(10);
+const b = $(2);
 
 const raised = pow(a,b); // equivalent to always(() => a ** b)
 ```
@@ -327,8 +327,8 @@ const raised = pow(a,b); // equivalent to always(() => a ** b)
 ### and
 Calculates the logical conjunction of multiple boolean values.
 ```ts
-const a = $$(true);
-const b = $$(false);
+const a = $(true);
+const b = $(false);
 
 const conjunction = and(a,b); // equivalent to always(() => a.val && b.val)
 ```
@@ -336,8 +336,8 @@ const conjunction = and(a,b); // equivalent to always(() => a.val && b.val)
 ### or
 Calculates the logical disjunction of multiple boolean values.
 ```ts
-const a = $$(true);
-const b = $$(false);
+const a = $(true);
+const b = $(false);
 
 const disjunction = or(a,b); // equivalent to always(() => a.val || b.val)
 ```
@@ -345,7 +345,7 @@ const disjunction = or(a,b); // equivalent to always(() => a.val || b.val)
 ### not
 Calculates the negation of a boolean value.
 ```ts
-const a = $$(true);
+const a = $(true);
 
 const notA = not(a); // equivalent to always(() => !a.val)
 ```
@@ -355,7 +355,7 @@ const notA = not(a); // equivalent to always(() => !a.val)
 Switches between two values depending on the truthiness of another value.
 
 ```ts
-const lightSwitchOn = $$(false);
+const lightSwitchOn = $(false);
 
 const sum = select(lightSwitchOn, "Yei light", "It's dark in here"); // equivalent to always(() => lightSwitchOn.val ? "Yei light" : "It's dark in here")
 ```
@@ -372,7 +372,7 @@ const potato = {
     schwä: 'Gromber'
 };
 
-const lang = $$("de");
+const lang = $("de");
 
 const translatedPotato = selectProperty(lang, potato); // equivalent to always(() => potato[lang])
 ```
@@ -380,7 +380,7 @@ const translatedPotato = selectProperty(lang, potato); // equivalent to always((
 ### map
 Maps an iterable to an array using a callback function (same API as Array.map).
 ```ts
-const array = $$([1,2,3]);
+const array = $([1,2,3]);
 const double = map(array, v => v*2) // equivalent to always(() => array.map(v => v*2))
 ```
 

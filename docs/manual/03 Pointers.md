@@ -7,8 +7,8 @@ The `always` helper function lets you define a reactive pointer that depends on 
 pointers.
 
 ```ts
-const refA = $$(5);
-const refB = $$(0);
+const refA = $(5);
+const refB = $(0);
 const refSum = always(() => refA + refB);
 
 refB.val = 5;
@@ -24,11 +24,11 @@ This creates the [pointers](#pointers-for-primitive-values) `refA`, `refB` and a
 Pointer can also be created for non-primitive values (JSON Objects, Maps, Sets, ...).
 
 ```ts
-const refObj = $$({
+const refObj = $({
     x: 100,
     y: 200
 });
-const refArray1: string[] = $$(['some', 'example', 'values']);
+const refArray1: string[] = $(['some', 'example', 'values']);
 ```
 
 The created reference object can be used like a normal object. You can access all properties and methods.
@@ -52,13 +52,13 @@ const propX = refObj.$$.x; // Datex.PointerProperty<number>
 refObj.x = 10; // update the value of refObj.x
 propX.val // 10, same as with normal reference
 
-refObj.$.x = $$(4); // assign a new reference to refObj.x
+refObj.$.x = $(4); // assign a new reference to refObj.x
 propX.val // 4, points to the newly assigned reference
 ```
 
 Alternatively, the `$$` function can be used:
 ```ts
-$$(refObj, "x") // Datex.PointerProperty<number>
+$(refObj, "x") // Datex.PointerProperty<number>
 ```
 
 ### Recursive pointer initialization
@@ -76,7 +76,7 @@ const map = new Map([
 Datex.Ref.isRef(map) // false, not bound to a pointer
 Datex.Ref.isRef(map.get('y')) // false, not bound to a pointer
 
-const nestedObject = $$({
+const nestedObject = $({
     map: map
 })
 
@@ -89,7 +89,7 @@ There are some exceptions to this behaviour:
 1. Primitive property values are not converted to pointers per default
 2. Normal [class instances](./10%20Types.md#jsobject) (`js:Object`) are not converted to pointers per default.
    Instances of [`struct`](12%20Classes.md) classes are still converted to pointers
-3. When a [class instances](./10%20Types.md#jsobject) is directly bound to a pointer with `$$()`, its
+3. When a [class instances](./10%20Types.md#jsobject) is directly bound to a pointer with `$()`, its
    properties are not converted to pointers per default (like 2., this does not affect `struct` class instances 
 
 
@@ -102,7 +102,7 @@ Since JavaScript does not support references for primitive values (e.g. numbers,
 primitive references are always wrapped in a `Datex.Pointer` object to keep the reference intact:
 
 ```ts
-const refA: Datex.Pointer<number> = $$(5);
+const refA: Datex.Pointer<number> = $(5);
 ```
 The advantage of having the `Datex.Pointer` interface always exposed as a primitive value wrapper is that utility methods like [`observe`](#observing-pointer-changes) can be easily accessed:
 
@@ -111,8 +111,8 @@ refA.observe(a => console.log(`refA was updated: ${a}`)); // called every time t
 ```
 Primitive pointers are still automatically converted to their primitive representation in some contexts, but keep in mind that the references are lost at this point:
 ```ts
-const refX = $$(2);
-const refY = $$(3);
+const refX = $(2);
+const refY = $(3);
 const result = (refX * refY) + 6; // = 12 (a normal JS primitive value)
 ```
 
@@ -123,8 +123,8 @@ const result = (refX * refY) + 6; // = 12 (a normal JS primitive value)
 > because type coercion of the weak equality operator can lead to unexpected results.
 > To compare pointer values, always compare their `.val` properties with a strict equality operator:
 > ```ts
-> const refString1 = $$("hello");
-> const refString2 = $$("hello");
+> const refString1 = $("hello");
+> const refString2 = $("hello");
 >
 > console.log(refString1.val === refString2.val); // true
 > console.log(refString1 === refString2); // false, not the same reference
@@ -132,7 +132,7 @@ const result = (refX * refY) + 6; // = 12 (a normal JS primitive value)
 > ```
 > A similar problem occurs when using boolean operators like `!` on a non-collapsed boolean pointer:
 > ```ts
-> const refBool = $$(false);
+> const refBool = $(false);
 > if (!refBool) console.log("bool is false") // expected branch to be executed
 > else console.log("bool is true") // actually executed
 > ```
@@ -166,7 +166,7 @@ but in contrast to the `always()` function, it does not create a new pointer.
 An `effect()` handler can also have side-*effects* (hence the name).
 
 ```ts
-const id = $$(42);
+const id = $(42);
 
 // define a new effect (is immediately invoked)
 effect(() => {
@@ -193,7 +193,7 @@ The `effect()` function returns an object with a `dispose()` method that can be 
 
 ```ts
 function task() {
-    const x = $$(0);
+    const x = $(0);
     // effect is run every time x changes
     const {dispose} = effect(() => console.log("x = " + x));
 
@@ -209,7 +209,7 @@ function task() {
 Alternatively, effects can be restricted to the lifetime of a scope with the `using` keyword.
 ```ts
 function task() {
-    const x = $$(0);
+    const x = $(0);
     // effect is run every time x changes
     using e1 = effect(() => console.log("x = " + x));
 
@@ -227,7 +227,7 @@ Effects can also be automatically disposed by using weak value bindings.
 The effect is only active as long as none of the weakly bound values is garbage collected:
 
 ```ts
-const x = $$(42)
+const x = $(42)
 
 // bind x to the effect as a weak value
 effect(
@@ -252,8 +252,8 @@ If you need to handle async operations, you can instead call an async function f
 effect callback:
 
 ```ts
-const searchName = $$("");
-const searchAge = $$(18);
+const searchName = $("");
+const searchAge = $(18);
 
 // async function that searches for a user and shows the result somewhere
 async function searchUser(name: string, age: number) {
@@ -302,7 +302,7 @@ In contrast to `effect()`, the `observe()` function does not automatically deter
 they are explicitly specified. 
 
 ```ts
-const ptr = $$(10);
+const ptr = $(10);
 
 // log on value change
 observe(ptr, value => console.log(`ptr value is now ${value}`));
@@ -349,7 +349,7 @@ Calling `unobserve()` with the same callback function that was passed to `observ
 removes the observer.
 
 ```ts
-const ptr = $$(10);
+const ptr = $(10);
 
 const observer = value => console.log(`ptr value is now ${value}`);
 
@@ -372,7 +372,7 @@ For this purpose, the `val()` helper
 function can be used:
 
 ```ts
-const refX: Datex.Ref<number> = $$(42);
+const refX: Datex.Ref<number> = $(42);
 const valX: number = val(refX);
 ```
 

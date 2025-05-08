@@ -99,7 +99,7 @@ A transferable functions can be created from a normal JS function. Dependencies 
 ```ts
 import { JSTransferableFunction } from "datex-core-legacy/types/js-function.ts";
 
-const data = $$([1,2,3]);
+const data = $([1,2,3]);
 
 // create a js:Function
 const transferableFn = JSTransferableFunction.create(() => {

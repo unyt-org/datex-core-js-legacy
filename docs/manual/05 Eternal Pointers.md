@@ -22,7 +22,7 @@ This means that per default, pointers only exist in the local memory of an endpo
 To let a pointer exist beyond the lifetime of an endpoint, the `eternal` label can be used:
 
 ```ts
-const users = eternal ?? $$(new Set<string>());
+const users = eternal ?? $(new Set<string>());
 
 export function addUser(name: string) {
     users.add(name)
@@ -40,12 +40,12 @@ For this reason, it is currently recommended to use the `eternalVar` function in
 You can pass a unique identifier to `eternalVar` to guarantee that the eternal pointer is always correctly mapped:
 
 ```ts
-const users = eternalVar('users') ?? $$(new Set<string>());
+const users = eternalVar('users') ?? $(new Set<string>());
 ```
 
 
 > [!NOTE]
-> The expression followed by the `eternal` value must be always enclosed with `$$()`.
+> The expression followed by the `eternal` value must be always enclosed with `$()`.
 > This ensures that a new pointer is created and is also necessary to bind the eternal pointer to the correct value within the JavaScript module.
 
 > [!WARNING]
@@ -78,7 +78,7 @@ The `lazyEternal`/`lazyEternalVar` label can be used the same was as the `eterna
 ```ts
 import { User } from "user.ts";
 
-const users = await lazyEternalVar('users') ?? $$(new Set<User>());
+const users = await lazyEternalVar('users') ?? $(new Set<User>());
 ```
 
 ## Resetting eternal state
