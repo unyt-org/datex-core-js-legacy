@@ -82,7 +82,8 @@ Besides exact matches, you can also match properties with certain constraints us
 
 Match between to numbers/dates:
 ```ts
-import { MatchCondition } from "unyt_core/storage/storage.ts";
+import { MatchCondition } from "datex-core-legacy/storage/storage.ts";
+import { Time } from "datex-core-legacy/types/time.ts";
 
 // all users where the "created" timestamp is between now and 7 days ago:
 const newUsersLastWeek = users.match({
