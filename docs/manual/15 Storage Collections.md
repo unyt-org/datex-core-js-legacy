@@ -57,11 +57,12 @@ The easiest way to match entries in a storage set is to provide one or multiple 
 
 ```ts
 import { StorageSet } from "datex-core-legacy/types/storage-set.ts";
+import { inferType } from "datex-core-legacy/types/struct.ts";
 import { Time } from "datex-core-legacy/types/time.ts";
 
 const User = struct({
     name: string,
-    age: nubmer,
+    age: number,
     created: Time
 })
 type User = inferType<typeof User>
