@@ -57,11 +57,12 @@ The easiest way to match entries in a storage set is to provide one or multiple 
 
 ```ts
 import { StorageSet } from "datex-core-legacy/types/storage-set.ts";
-import { Time } from "unyt_core/datex_all.ts";
+import { inferType } from "datex-core-legacy/types/struct.ts";
+import { Time } from "datex-core-legacy/types/time.ts";
 
 const User = struct({
     name: string,
-    age: nubmer,
+    age: number,
     created: Time
 })
 type User = inferType<typeof User>
@@ -81,7 +82,8 @@ Besides exact matches, you can also match properties with certain constraints us
 
 Match between to numbers/dates:
 ```ts
-import { MatchCondition } from "unyt_core/storage/storage.ts";
+import { MatchCondition } from "datex-core-legacy/storage/storage.ts";
+import { Time } from "datex-core-legacy/types/time.ts";
 
 // all users where the "created" timestamp is between now and 7 days ago:
 const newUsersLastWeek = users.match({
