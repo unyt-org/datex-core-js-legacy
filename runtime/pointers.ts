@@ -4175,13 +4175,13 @@ export class Pointer<T = any> extends ReactiveValue<T> {
         let property_value = JSInterface.handleGetProperty(this.shadow_object, key, this.type)
         if (property_value == INVALID || property_value == NOT_EXISTING) {
             // all JS properties
-            if (leak_js_properties && this.current_val && key in this.current_val) {
+            if (leak_js_properties && this.current_val && (typeof this.current_val == "object" || typeof this.current_val == "function") && key in this.current_val) {
                 property_value = this.current_val?.[key]; 
                 // also bind non-datex function to parent
                 return (typeof property_value == "function") ? (...args:unknown[])=>(<Function>property_value).apply(this.current_val, args) : property_value;
             }
             // restricted to DATEX properties
-            else if (this.shadow_object && key in this.shadow_object) property_value = ReactiveValue.collapseValue(this.shadow_object[key], true, true)
+            else if (this.shadow_object && (typeof this.shadow_object == "object" || typeof this.shadow_object == "function") && key in this.shadow_object) property_value = ReactiveValue.collapseValue(this.shadow_object[key], true, true)
         }
         return property_value;
     }

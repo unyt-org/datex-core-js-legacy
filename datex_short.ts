@@ -325,6 +325,10 @@ export function prop<T extends Record<PropertyKey, unknown>, K extends keyof T>(
 export function prop(parent:Map<unknown, unknown>|Record<PropertyKey, unknown>, propertyKey: unknown): any {
     // try to get pointer property
     if (ReactiveValue.isRef(parent)) {
+        // if parent is ReactiveValue and propertyKey is "val", just directly return pointer to keep reactivity
+        if (parent instanceof ReactiveValue && propertyKey == "val") {
+            return parent;
+        }
         const prop = PointerProperty.getIfExists(parent, propertyKey, true);
         if (prop !== NOT_EXISTING) return prop;
     }
