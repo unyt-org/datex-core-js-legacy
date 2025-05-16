@@ -325,9 +325,24 @@ export function prop<T extends Record<PropertyKey, unknown>, K extends keyof T>(
 export function prop(parent:Map<unknown, unknown>|Record<PropertyKey, unknown>, propertyKey: unknown): any {
     // try to get pointer property
     if (ReactiveValue.isRef(parent)) {
-        // if parent is ReactiveValue and propertyKey is "val", just directly return pointer to keep reactivity
-        if (parent instanceof ReactiveValue && propertyKey == "val") {
-            return parent;
+        if (parent instanceof ReactiveValue) {
+            // If parent is ReactiveValue and propertyKey is "val", just directly return pointer to keep reactivity
+            if (propertyKey == "val") return parent;
+            // If any other property key, assume we want to get a reactive property of the underlying value
+            // This is useful in JUSIX expressions when having nested properties after a .val access, e.g.
+            // <div>{myString.val.length}</div>
+            // Which gets transformed by JUSIX to
+            // prop(prop(myString, "val"), "length")
+            // prop(myString, "val") is transformed to the Pointer myString,
+            // so prop(myString, "length") should return a reactive reference to the actual
+            // length property of the underlying pointer value
+            // We can guarantee this with an always, which is less performant than a pointer property,
+            // but supports more cases (e.g. internal properties like "length")
+            // With this workaround, it is no longer possible for a user to directly access any other
+            // internal Pointer/ReactiveProperty properties besides ".val", but this is not a common/recommended use case
+            else {
+                return _always(()=>parent.val[propertyKey])
+            }
         }
         const prop = PointerProperty.getIfExists(parent, propertyKey, true);
         if (prop !== NOT_EXISTING) return prop;
