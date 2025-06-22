@@ -200,7 +200,8 @@ export class Crypto {
         endpoint = endpoint.main;
         if (!this.#activeEndpoints.has(endpoint)) {
             this.#activeEndpoints.add(endpoint)
-            return this.storeKeys(endpoint);
+            return true;
+            // return this.storeKeys(endpoint);
         }
         return Promise.resolve(true)
     }
