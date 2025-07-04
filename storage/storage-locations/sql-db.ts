@@ -201,7 +201,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			console.log(query_string, query_params)
 			if (this.log) this.log("SQL error:", e)
            	else console.error("SQL error:", e);
-			this.handleError?.((e as any).toString?.(), query_string, query_params);
+			SQLDBStorageLocation.handleError?.((e as any).toString?.(), query_string, query_params);
 
 			// errors to ignore for now (TODO: this is only a temporary solution, input should be validated beforehand)
 			// incorrect datetime value (out of range, etc.)
@@ -216,7 +216,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
         }
     }
 
-	handleError?: (error: string, query_string: string, query_params?:any[]) => void;
+	static handleError?: (error: string, query_string: string, query_params?:any[]) => void;
 
 	#stringToBinary(value: string){
 		return Uint8Array.from(value, x => x.charCodeAt(0)).buffer
