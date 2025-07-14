@@ -3424,7 +3424,17 @@ export class Pointer<T = any> extends ReactiveValue<T> {
         }
         else {
             // make sure complex pointer value is not persisted (add WeakRef if not yet added)
-            if (!this.is_js_primitive && !(super.val instanceof WeakRef)) super.setVal(<any>new WeakRef(<any>super.val), false);
+            if (!this.is_js_primitive && !(super.val instanceof WeakRef)) {
+                let weakRef;
+                try {
+                    weakRef = new WeakRef(<any>super.val);
+                }
+                catch {
+                    logger.debug("Cannot assign a primitive value (" + super.val + ") to a pointer that was previously an object");
+                    return;
+                }
+                super.setVal(<any>weakRef, false);
+            }
             // make sure primitive pointer is not persisted
             if (this.#is_js_primitive) Pointer.#persistentPrimitivePointers.delete(this);  
         }
@@ -3468,7 +3478,7 @@ export class Pointer<T = any> extends ReactiveValue<T> {
                         Pointer.garbage_registry.register(<object><unknown>(this.is_js_primitive ? this : this.current_val), mockPointer, this)
                     }
                     catch {
-                        logger.error("couldn't register for garbage collection: ", this.idString())
+                        console.warn("couldn't register for garbage collection: ", this.idString())
                     }
                 }
             }, Runtime.OPTIONS.GARBAGE_COLLECTION_TIMEOUT);
@@ -3523,7 +3533,6 @@ export class Pointer<T = any> extends ReactiveValue<T> {
 
     // extend pointer (updates in both directions or in one direction)
     public extendProperty(otherPointer:Pointer, key:any, update_back = true) {
-        console.log("extend poperty",key);
         if (!(otherPointer instanceof Pointer)) throw "not a pointer";
 
         this.extended_pointers.add(otherPointer);
