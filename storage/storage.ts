@@ -133,6 +133,8 @@ export enum MatchConditionType {
     GREATER_OR_EQUAL = "GREATER_OR_EQUAL",
     NOT_EQUAL = "NOT_EQUAL",
     CONTAINS = "CONTAINS",
+    CONTAINS_NONE = "CONTAINS_NONE",
+    CONTAINS_ALL = "CONTAINS_ALL",
     POINTER_ID = "POINTER_ID",
     SIZE = "SIZE"
 }
@@ -141,7 +143,7 @@ export type MatchConditionData<T extends MatchConditionType, V> =
         [V, V] :
     T extends MatchConditionType.LESS_THAN|MatchConditionType.GREATER_THAN|MatchConditionType.LESS_OR_EQUAL|MatchConditionType.GREATER_OR_EQUAL|MatchConditionType.NOT_EQUAL ?
         V :
-    T extends MatchConditionType.CONTAINS ?
+    T extends MatchConditionType.CONTAINS|MatchConditionType.CONTAINS_NONE|MatchConditionType.CONTAINS_ALL ?
         V :
     T extends MatchConditionType.POINTER_ID ?
         string[] :
@@ -182,6 +184,14 @@ export class MatchCondition<Type extends MatchConditionType, V> {
 
     static contains<V>(...values: V[]) {
         return new MatchCondition(MatchConditionType.CONTAINS, new Set(values))
+    }
+
+    static containsAll<V>(...values: V[]) {
+        return new MatchCondition(MatchConditionType.CONTAINS_ALL, new Set(values))
+    }
+
+    static containsNone<V>(...values: V[]) {
+        return new MatchCondition(MatchConditionType.CONTAINS_NONE, new Set(values))
     }
 
     static size(size: number) {
