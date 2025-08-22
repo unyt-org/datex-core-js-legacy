@@ -1156,9 +1156,9 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 						const condition = or as MatchCondition<MatchConditionType.NOT_EQUAL, unknown>
 						wheresOr.push(Where.ne(entryIdentifier!, condition.data))
 					}
-					else if (or.type == MatchConditionType.CONTAINS) {
+					else if (or.type == MatchConditionType.CONTAINS || or.type == MatchConditionType.CONTAINS_ALL) {
 						insertedConditionForIdentifier = false;
-						const condition = or as MatchCondition<MatchConditionType.CONTAINS, unknown[]>
+						const condition = or as MatchCondition<MatchConditionType.CONTAINS|MatchConditionType.CONTAINS_ALL, unknown[]>
 						const propertyType = valueType.template[namespacedKey];
 						const tableAName = this.#typeToTableName(valueType) + '.' + namespacedKey // User.address
 						
@@ -1212,6 +1212,13 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 									throw new Error("Unsupported type for MatchConditionType.CONTAINS: " + type);
 								}
 							}
+
+							// make sure all values exist in the set
+							if (or.type == MatchConditionType.CONTAINS_ALL) {
+								appendStatements.push(
+									replaceParams(`GROUP BY ${this.#typeToTableName(valueType)}.${this.#pointerMysqlColumnName} HAVING COUNT(*) = ?`, [condition.data.length])
+								)
+							}
 							
 						}
 
@@ -1234,126 +1241,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 						}
 						else throw new Error("MatchConditionType.CONTAINS is not supported for type " + propertyType.base_type);
 					}
-					// CONTAINS_ALL
-					else if (or.type == MatchConditionType.CONTAINS_ALL) {
-						insertedConditionForIdentifier = false;
-						const condition = or as MatchCondition<MatchConditionType.CONTAINS_ALL, unknown[]>
-						const propertyType = valueType.template[namespacedKey];
-						if (propertyType.base_type != Type.std.Set) throw new Error("MatchConditionType.CONTAINS_ALL is only supported for sets");
-
-						const tableAName = this.#typeToTableName(valueType) + '.' + namespacedKey // User.address
-
-						joins.set(
-							namespacedKey, 
-							Join
-								.left(`${this.#metaTables.sets.name}`, namespacedKey)
-								.on(`${namespacedKey}.${this.#pointerMysqlColumnName}`, tableAName)
-						);
-
-						const values = [...condition.data]
-						// group values by type
-						const valuesByType = Map.groupBy(values, v =>
-								v instanceof Date ? 
-									"time" : 
-								Pointer.getByValue(v) ? "value_pointer" :
-									typeof v
-							);
-						const whereAnds: Where[] = [];
-						for (const [type, vals] of valuesByType) {
-
-							for (let i=0;i<vals.length;i++) {
-								if (Pointer.getByValue(vals[i])) vals[i] = Pointer.getByValue(vals[i])!.id
-							}
-
-							const columnName = {
-								string: "value_text",
-								number: "value_decimal",
-								bigint: "value_integer",
-								boolean: "value_boolean",
-								function: "value_dxb",
-								time: "value_time",
-								object: "value_dxb",
-								symbol: "value_dxb",
-								value_pointer: "value_pointer",
-								undefined: "value_dxb",
-							}[type];
-
-							if (columnName) {
-								const identifier = rememberEntryIdentifier ? `${namespacedKey}__${columnName}` : `${namespacedKey}.${columnName}`
-								if (rememberEntryIdentifier) collectedIdentifiers.add(identifier)
-
-								// no match
-								if (vals.length == 0) whereAnds.push(Where.expr("false"))
-								// equals
-								else if (vals.length == 1) whereAnds.push(Where.eq(identifier, vals[0]))
-								// in
-								else whereAnds.push(Where.in(identifier, vals))
-							}
-							else {
-								throw new Error("Unsupported type for MatchConditionType.CONTAINS_ALL: " + type);
-							}
-						}
-						if (whereAnds.length > 1) wheresOr.push(Where.and(...whereAnds))
-						else if (whereAnds.length) wheresOr.push(whereAnds[0])
-					}
-					// CONTAINS_NONE
-					else if (or.type == MatchConditionType.CONTAINS_NONE) {
-						insertedConditionForIdentifier = false;
-						const condition = or as MatchCondition<MatchConditionType.CONTAINS_NONE, unknown[]>;
-						const propertyType = valueType.template[namespacedKey];
-						if (propertyType.base_type != Type.std.Set) throw new Error("MatchConditionType.CONTAINS_NONE is only supported for sets");
-						const tableAName = this.#typeToTableName(valueType) + '.' + namespacedKey // User.address
-						joins.set(
-							namespacedKey, 
-							Join
-								.left(`${this.#metaTables.sets.name}`, namespacedKey)
-								.on(`${namespacedKey}.${this.#pointerMysqlColumnName}`, tableAName)
-						);
-						const values = [...condition.data]
-						// group values by type
-						const valuesByType = Map.groupBy(values, v =>
-								v instanceof Date ? 
-									"time" : 
-								Pointer.getByValue(v) ? "value_pointer" :
-									typeof v
-							);
-						const whereAnds: Where[] = [];
-						for (const [type, vals] of valuesByType) {
-							for (let i=0;i<vals.length;i++) {
-								if (Pointer.getByValue(vals[i])) vals[i] = Pointer.getByValue(vals[i])!.id
-							}
-
-							const columnName = {
-								string: "value_text",
-								number: "value_decimal",
-								bigint: "value_integer",
-								boolean: "value_boolean",
-								function: "value_dxb",
-								time: "value_time",
-								object: "value_dxb",
-								symbol: "value_dxb",
-								value_pointer: "value_pointer",
-								undefined: "value_dxb",
-							}[type];
-
-							if (columnName) {
-								const identifier = rememberEntryIdentifier ? `${namespacedKey}__${columnName}` : `${namespacedKey}.${columnName}`
-								if (rememberEntryIdentifier) collectedIdentifiers.add(identifier)
-
-								// no match
-								if (vals.length == 0) whereAnds.push(Where.expr("true"))
-								// equals
-								else if (vals.length == 1) whereAnds.push(Where.ne(identifier, vals[0]))
-								// in
-								else whereAnds.push(Where.notIn(identifier, vals))
-							}
-							else {
-								throw new Error("Unsupported type for MatchConditionType.CONTAINS_NONE: " + type);
-							}
-						}
-						if (whereAnds.length > 1) wheresOr.push(Where.and(...whereAnds))
-						else if (whereAnds.length) wheresOr.push(whereAnds[0])
-					}
+					
 
 					// SIZE (only for sets)
 					else if (or.type == MatchConditionType.SIZE) {
