@@ -1188,7 +1188,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 								const groupBy = `GROUP BY ${this.#typeToTableName(valueType)}.${this.#pointerMysqlColumnName} HAVING`;
 								const alreadyHasGroupBy = appendStatements.some(s => s.startsWith("GROUP BY"));
 								appendStatements.push(
-									replaceParams(`${alreadyHasGroupBy ? 'AND' : groupBy} SUM(CASE WHEN ${namespacedKey}.value_text IN (?) THEN 1 ELSE 0 END) = 0`, [
+									replaceParams(`${alreadyHasGroupBy ? 'AND' : groupBy} SUM(CASE WHEN ${namespacedKey}.value_text IN ? THEN 1 ELSE 0 END) = 0`, [
 										values.map(v => v instanceof Date ? v.toISOString() : v)
 									])
 								)
