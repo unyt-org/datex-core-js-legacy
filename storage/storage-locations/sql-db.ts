@@ -1185,11 +1185,10 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 
 							// NOTE: currently only works for value_text!
 							if (or.type == MatchConditionType.CONTAINS_NONE) {
-								const groupBy = `GROUP BY ${this.#typeToTableName(valueType)}.${this.#pointerMysqlColumnName}`;						
-								const alreadyHasGroupBy = appendStatements.includes(groupBy);
-								if (!alreadyHasGroupBy) appendStatements.push(groupBy);
+								const groupBy = `GROUP BY ${this.#typeToTableName(valueType)}.${this.#pointerMysqlColumnName} HAVING`;
+								const alreadyHasGroupBy = appendStatements.some(s => s.startsWith("GROUP BY"));
 								appendStatements.push(
-									replaceParams(`${alreadyHasGroupBy ? 'AND' : 'HAVING'} SUM(CASE WHEN ${namespacedKey}.value_text IN (?) THEN 1 ELSE 0 END) = 0`, [
+									replaceParams(`${alreadyHasGroupBy ? 'AND' : groupBy} SUM(CASE WHEN ${namespacedKey}.value_text IN (?) THEN 1 ELSE 0 END) = 0`, [
 										values.map(v => v instanceof Date ? v.toISOString() : v)
 									])
 								)
@@ -1240,12 +1239,10 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 
 								// make sure all values exist in the set
 								if (or.type == MatchConditionType.CONTAINS_ALL) {
-									const groupBy = `GROUP BY ${this.#typeToTableName(valueType)}.${this.#pointerMysqlColumnName}`;
-									const alreadyHasGroupBy = appendStatements.includes(groupBy);
-									if (!alreadyHasGroupBy) appendStatements.push(groupBy);
-
+									const groupBy = `GROUP BY ${this.#typeToTableName(valueType)}.${this.#pointerMysqlColumnName} HAVING`;
+									const alreadyHasGroupBy = appendStatements.some(s => s.startsWith("GROUP BY"));
 									appendStatements.push(
-										replaceParams(`${alreadyHasGroupBy ? 'AND' : 'HAVING'} COUNT(*) = ?`, [
+										replaceParams(`${alreadyHasGroupBy ? 'AND' : groupBy} COUNT(*) = ?`, [
 											values.length
 										])
 									);
