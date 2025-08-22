@@ -905,6 +905,12 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			// nested select
 			query = outerBuilder.build().replace('`__placeholder__`', `(${builder.build()}) as _inner_res`);
 
+			// extract pre-append statements that must come before order by (group by)
+			const preAppendStatements = appendStatements.filter(statement => statement.startsWith("GROUP BY"));
+			for (const statement of preAppendStatements) {
+				query += " " + statement;
+			}
+
 			// add ORDER BY and LIMIT manually at the end of the query
 			if (options.sortBy && !isSimplePropertySort) {
 				query += ` ORDER BY ${options.sortBy} ${options.sortDesc ? "DESC" : "ASC"}`
@@ -923,6 +929,12 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			joins.forEach(join => builder.join(join));
 			query = builder.build();
 
+			// extract pre-append statements that must come before order by (group by)
+			const preAppendStatements = appendStatements.filter(statement => statement.startsWith("GROUP BY"));
+			for (const statement of preAppendStatements) {
+				query += " " + statement;
+			}
+
 			// add ORDER BY and LIMIT manually at the end of the query
 			if (options.sortBy && !isSimplePropertySort) {
 				query += ` ORDER BY ${options.sortBy} ${options.sortDesc ? "DESC" : "ASC"}`
@@ -933,6 +945,9 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		}
 
 		for (const statement of appendStatements) {
+			// ignore pre-append statements
+			if (statement.startsWith("GROUP BY")) continue;
+			// append other statements
 			query += " " + statement;
 		}
 
@@ -1216,7 +1231,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 							// make sure all values exist in the set
 							if (or.type == MatchConditionType.CONTAINS_ALL) {
 								appendStatements.push(
-									replaceParams(`GROUP BY ${this.#typeToTableName(valueType)}.${this.#pointerMysqlColumnName} HAVING COUNT(*) = ?`, [condition.data.length])
+									replaceParams(`GROUP BY ${this.#typeToTableName(valueType)}.${this.#pointerMysqlColumnName} HAVING COUNT(*) = ?`, [values.length])
 								)
 							}
 							
