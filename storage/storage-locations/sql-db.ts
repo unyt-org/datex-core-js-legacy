@@ -1343,11 +1343,13 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 
 						const whereAnds:Where[] = []
 						for (const [key, value] of Object.entries(or)) {
+							// normalize key by removing everything coming after the #
+							const [normalizedKey, _hash] = key.split("#");
 							
 							// make sure the key exists in the type
-							if (!valueType.template[key] && !(computedProperties && key in computedProperties)) throw new Error("Property '" + key + "' does not exist in type " + valueType);
+							if (!valueType.template[normalizedKey] && !(computedProperties && normalizedKey in computedProperties)) throw new Error("Property '" + normalizedKey + "' does not exist in type " + valueType);
 
-							const condition = this.buildQueryConditions(builder, value, joins, collectedTableTypes, collectedIdentifiers, appendStatements, valueType, key, underscoreIdentifier, computedProperties);
+							const condition = this.buildQueryConditions(builder, value, joins, collectedTableTypes, collectedIdentifiers, appendStatements, valueType, normalizedKey, underscoreIdentifier, computedProperties);
 							if (condition) whereAnds.push(condition)
 						}
 						if (whereAnds.length > 1) wheresOr.push(Where.and(...whereAnds))
