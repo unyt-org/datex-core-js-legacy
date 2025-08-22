@@ -1182,58 +1182,69 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 									.on(`${namespacedKey}.${this.#pointerMysqlColumnName}`, tableAName)
 							);
 							const values = [...condition.data]
-							// group values by type
-							const valuesByType = Map.groupBy(values, v => 
-									v instanceof Date ? 
-										"time" : 
-									Pointer.getByValue(v) ? "value_pointer" :
-										typeof v
-								);
-							
-							for (const [type, vals] of valuesByType) {
 
-								for (let i=0;i<vals.length;i++) {
-									if (Pointer.getByValue(vals[i])) vals[i] = Pointer.getByValue(vals[i])!.id
-								}
-
-								const columnName = {
-									string: "value_text",
-									number: "value_decimal",
-									bigint: "value_integer",
-									boolean: "value_boolean",
-									function: "value_dxb",
-									time: "value_time",
-									object: "value_dxb",
-									symbol: "value_dxb",
-									value_pointer: "value_pointer",
-									undefined: "value_dxb",
-								}[type];
-
-								if (columnName) {
-									const identifier = rememberEntryIdentifier ? `${namespacedKey}__${columnName}` : `${namespacedKey}.${columnName}`
-									if (rememberEntryIdentifier) collectedIdentifiers.add(identifier)
-
-									// no match
-									if (vals.length == 0) wheresOr.push(Where.expr("false"))
-									// equals
-									else if (vals.length == 1) wheresOr.push(Where.eq(identifier, vals[0]))
-									// in
-									else wheresOr.push(Where.in(identifier, vals))
-								}
-								else {
-									throw new Error("Unsupported type for MatchConditionType.CONTAINS: " + type);
-								}
-							}
-
-							// make sure all values exist in the set
-							if (or.type == MatchConditionType.CONTAINS_ALL || or.type == MatchConditionType.CONTAINS_NONE) {
+							// NOTE: currently only works for value_text!
+							if (or.type == MatchConditionType.CONTAINS_NONE) {								
 								appendStatements.push(
-									replaceParams(`GROUP BY ${this.#typeToTableName(valueType)}.${this.#pointerMysqlColumnName} HAVING COUNT(*) = ?`, [
-										or.type == MatchConditionType.CONTAINS_ALL ? values.length : 0
+									replaceParams(`GROUP BY ${this.#typeToTableName(valueType)}.${this.#pointerMysqlColumnName}
+										 HAVING SUM(CASE WHEN ${namespacedKey}.value_text IN (?) THEN 1 ELSE 0 END) = 0`, [
+										values.map(v => v instanceof Date ? v.toISOString() : v)
 									])
 								)
 							}
-							
+							else {
+								// group values by type
+								const valuesByType = Map.groupBy(values, v => 
+										v instanceof Date ? 
+											"time" : 
+										Pointer.getByValue(v) ? "value_pointer" :
+											typeof v
+									);
+								
+								for (const [type, vals] of valuesByType) {
+
+									for (let i=0;i<vals.length;i++) {
+										if (Pointer.getByValue(vals[i])) vals[i] = Pointer.getByValue(vals[i])!.id
+									}
+
+									const columnName = {
+										string: "value_text",
+										number: "value_decimal",
+										bigint: "value_integer",
+										boolean: "value_boolean",
+										function: "value_dxb",
+										time: "value_time",
+										object: "value_dxb",
+										symbol: "value_dxb",
+										value_pointer: "value_pointer",
+										undefined: "value_dxb",
+									}[type];
+
+									if (columnName) {
+										const identifier = rememberEntryIdentifier ? `${namespacedKey}__${columnName}` : `${namespacedKey}.${columnName}`
+										if (rememberEntryIdentifier) collectedIdentifiers.add(identifier)
+
+										// no match
+										if (vals.length == 0) wheresOr.push(Where.expr("false"))
+										// equals
+										else if (vals.length == 1) wheresOr.push(Where.eq(identifier, vals[0]))
+										// in
+										else wheresOr.push(Where.in(identifier, vals))
+									}
+									else {
+										throw new Error("Unsupported type for MatchConditionType.CONTAINS: " + type);
+									}
+								}
+
+								// make sure all values exist in the set
+								if (or.type == MatchConditionType.CONTAINS_ALL) {
+									appendStatements.push(
+										replaceParams(`GROUP BY ${this.#typeToTableName(valueType)}.${this.#pointerMysqlColumnName} HAVING COUNT(*) = ?`, [
+											values.length
+										])
+									)
+								}	
+							}
 						}
 
 						else if (propertyType.base_type == Type.std.StorageSet) {
