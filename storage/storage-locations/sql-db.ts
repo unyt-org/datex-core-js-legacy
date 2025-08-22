@@ -1168,9 +1168,9 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 						const condition = or as MatchCondition<MatchConditionType.NOT_EQUAL, unknown>
 						wheresOr.push(Where.ne(entryIdentifier!, condition.data))
 					}
-					else if (or.type == MatchConditionType.CONTAINS || or.type == MatchConditionType.CONTAINS_ALL) {
+					else if (or.type == MatchConditionType.CONTAINS || or.type == MatchConditionType.CONTAINS_ALL || or.type == MatchConditionType.CONTAINS_NONE) {
 						insertedConditionForIdentifier = false;
-						const condition = or as MatchCondition<MatchConditionType.CONTAINS|MatchConditionType.CONTAINS_ALL, unknown[]>
+						const condition = or as MatchCondition<MatchConditionType.CONTAINS|MatchConditionType.CONTAINS_ALL|MatchConditionType.CONTAINS_NONE, unknown[]>
 						const propertyType = valueType.template[namespacedKey];
 						const tableAName = this.#typeToTableName(valueType) + '.' + namespacedKey // User.address
 						
@@ -1226,9 +1226,11 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 							}
 
 							// make sure all values exist in the set
-							if (or.type == MatchConditionType.CONTAINS_ALL) {
+							if (or.type == MatchConditionType.CONTAINS_ALL || or.type == MatchConditionType.CONTAINS_NONE) {
 								appendStatements.push(
-									replaceParams(`GROUP BY ${this.#typeToTableName(valueType)}.${this.#pointerMysqlColumnName} HAVING COUNT(*) = ?`, [values.length])
+									replaceParams(`GROUP BY ${this.#typeToTableName(valueType)}.${this.#pointerMysqlColumnName} HAVING COUNT(*) = ?`, [
+										or.type == MatchConditionType.CONTAINS_ALL ? values.length : 0
+									])
 								)
 							}
 							
