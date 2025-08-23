@@ -934,7 +934,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 
 		for (const statement of appendStatements) {
 			// insert GROUP BY statements before ORDER BY
-			if (statement.startsWith("GROUP BY")) {
+			if (statement.startsWith("GROUP BY") || statement.startsWith("AND")) {
 				const [beforeOrderBy, afterOrderBy] = query.split(/ORDER BY/i);
 				if (afterOrderBy) {
 					query = beforeOrderBy + " " + statement + " ORDER BY " + afterOrderBy;
