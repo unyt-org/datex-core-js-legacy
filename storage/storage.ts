@@ -743,7 +743,7 @@ export class Storage {
     }
 
 
-    public static setPointer(pointer:Pointer, listen_for_changes = true, location:StorageLocation|undefined = this.#primary_location, partialUpdateKey: unknown = NOT_EXISTING): Promise<boolean>|boolean {
+    public static setPointer(pointer:Pointer, listen_for_changes = true, location:StorageLocation|undefined = this.#primary_location, partialUpdateKey: unknown = NOT_EXISTING, force_listen_for_deps = false): Promise<boolean>|boolean {
         if (!pointer.value_initialized) {
             // logger.warn("pointer value " + pointer.idString() + " not available, cannot save in storage");
             this.#storage_active_pointers.delete(pointer);
@@ -752,13 +752,13 @@ export class Storage {
         }
         
 		if (location)  {
-			if (location.isAsync) return this.initPointerAsync(location as AsyncStorageLocation, pointer, listen_for_changes, partialUpdateKey);
-			else return this.initPointerSync(location as SyncStorageLocation, pointer, listen_for_changes, partialUpdateKey);
+			if (location.isAsync) return this.initPointerAsync(location as AsyncStorageLocation, pointer, listen_for_changes, partialUpdateKey, force_listen_for_deps);
+			else return this.initPointerSync(location as SyncStorageLocation, pointer, listen_for_changes, partialUpdateKey, force_listen_for_deps);
 		}
 		else return false;
     }
 
-    private static initPointerSync(location: SyncStorageLocation, pointer:Pointer, listen_for_changes = true, partialUpdateKey: unknown = NOT_EXISTING):boolean {
+    private static initPointerSync(location: SyncStorageLocation, pointer:Pointer, listen_for_changes = true, partialUpdateKey: unknown = NOT_EXISTING, force_listen_for_deps = false):boolean {
         // if (pointer.transform_scope && this.hasPointer(pointer)) return true; // ignore transform pointer, initial transform scope already stored, does not change
         // was garbage collected in the meantime
         if (pointer.garbage_collected) {
@@ -769,7 +769,7 @@ export class Storage {
         dependencies.delete(pointer);
         if (Pointer.is_local) this.checkUnresolvedLocalDependenciesForPointer(pointer, dependencies);
         this.updatePointerDependencies(pointer.id, [...dependencies].map(p=>p.id)).catch(e=>console.error(e));
-        this.saveDependencyPointersSync(dependencies, listen_for_changes, location);
+        this.saveDependencyPointersSync(dependencies, force_listen_for_deps || listen_for_changes, location);
 
         // listen for changes
         if (listen_for_changes) this.syncPointer(pointer, location);
@@ -789,7 +789,7 @@ export class Storage {
 		return location.setPointer(pointer, partialUpdateKey);
     }
 
-    private static async initPointerAsync(location: AsyncStorageLocation, pointer:Pointer, listen_for_changes = true, partialUpdateKey: unknown = NOT_EXISTING):Promise<boolean>{
+    private static async initPointerAsync(location: AsyncStorageLocation, pointer:Pointer, listen_for_changes = true, partialUpdateKey: unknown = NOT_EXISTING, force_listen_for_deps = false):Promise<boolean>{
         // if (pointer.transform_scope && await this.hasPointer(pointer)) return true; // ignore transform pointer, initial transform scope already stored, does not change
         // was garbage collected in the meantime
         if (pointer.garbage_collected) {
@@ -800,7 +800,7 @@ export class Storage {
         dependencies.delete(pointer);
         if (Pointer.is_local) this.checkUnresolvedLocalDependenciesForPointer(pointer, dependencies);
         await this.updatePointerDependencies(pointer.id, [...dependencies].map(p=>p.id));
-        await this.saveDependencyPointersAsync(dependencies, listen_for_changes, location);
+        await this.saveDependencyPointersAsync(dependencies, force_listen_for_deps || listen_for_changes, location);
 
         // listen for changes
         if (listen_for_changes) this.syncPointer(pointer, location);
@@ -889,7 +889,7 @@ export class Storage {
             this.scheduleStorageUpdate(()=>{
                 // set pointer (async)
                 saving = false;
-                const res = this.setPointer(pointer, false, location, key); // update value and add new dependencies recursively
+                const res = this.setPointer(pointer, false, location, key, true); // update value and add new dependencies recursively
                 if (res instanceof Promise) {
                     return res.then((couldSave)=>{
                         if (couldSave) {
