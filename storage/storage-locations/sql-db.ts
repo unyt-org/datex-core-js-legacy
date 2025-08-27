@@ -567,7 +567,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 	/**
 	 * Update a pointer in the database, pointer type must be templated
 	 */
-	async #updatePointer(pointer: Datex.Pointer, keys:string[], dependencies?: Set<Pointer>) {
+	async #updatePointer(pointer: Datex.Pointer, keys:string[], allKeys: string[], dependencies?: Set<Pointer>) {
 		const table = await this.#getTableForType(pointer.type);
 		if (!table) throw new Error("Cannot store pointer of type " + pointer.type + " in a custom table")
 		const columns = await this.#getTableColumns(table);
@@ -578,7 +578,9 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		}
 		const ptrVal = pointer.val;
 
-		for (const key of keys) {
+		// always iterate over all keys - this is done so that all existing dependencies
+		// can be correctly tracked in Compiler.encodeValue, even if there were no changes
+		for (const key of new Set([...keys, ...allKeys])) {
 			const column = columns.get(key);
 			const val = 
 				column?.foreignPtr ?
@@ -591,6 +593,11 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 							// normal value
 							ptrVal[key]
 					)
+			// only update in DB if key is in keys
+			if (!keys.includes(key)) {
+				continue;
+			};
+	
 			await this.#query('UPDATE ?? SET ?? = ? WHERE ?? = ?;', [table, key, val, this.#pointerMysqlColumnName, pointer.id])
 		}
 	}
@@ -1573,6 +1580,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 				// add all pointer properties to dependencies
 				// dependencies must be added to database before the update to prevent foreign key constraint errors
 				const promises = []
+				const allKeys: string[] = [];
 				for (const [name, {foreignPtr}] of this.#iterateTableColumns(pointer.type)) {
 					if (foreignPtr) {
 						const ptr = Pointer.pointerifyValue(pointer.getProperty(name));
@@ -1581,9 +1589,12 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 							promises.push(Storage.setPointer(ptr))
 						}
 					}
+					else {
+						allKeys.push(name);
+					}
 				}
 				await Promise.all(promises)
-				await this.#updatePointer(pointer, [partialUpdateKey], dependencies)
+				await this.#updatePointer(pointer, [partialUpdateKey], allKeys, dependencies)
 				return dependencies;
 			}
 		}
