@@ -110,6 +110,8 @@ Type.std.Map.setJSInterface({
         const keys = value.keys.bind(value);
         const values = value.values.bind(value);
         const entries = value.entries.bind(value);
+        const get = value.get.bind(value);
+        const has = value.has.bind(value);
 
         Object.defineProperty(value, "size", {get() {
             pointer.handleBeforeNonReferencableGet();
@@ -129,6 +131,16 @@ Type.std.Map.setJSInterface({
         Object.defineProperty(value, "entries", {value: () => {
             pointer.handleBeforeNonReferencableGet();
             return entries()
+        }, writable:false, enumerable:false});
+
+        Object.defineProperty(value, "get", {value: (key: unknown) => {
+            pointer.handleBeforeNonReferencableGet(key);
+            return get(key)
+        }, writable:false, enumerable:false});
+
+        Object.defineProperty(value, "has", {value: (key: unknown) => {
+            pointer.handleBeforeNonReferencableGet(key);
+            return has(key)
         }, writable:false, enumerable:false});
 
         Object.defineProperty(value, Symbol.iterator, {value: value.entries, writable:true, enumerable:false});
@@ -200,6 +212,7 @@ Type.std.Set.setJSInterface({
         const getSize = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(value), "size")!.get!.bind(value);
         const values = value.values.bind(value);
         const entries = value.entries.bind(value);
+        const has = value.has.bind(value);
 
         Object.defineProperty(value, "size", {get() {
             pointer.handleBeforeNonReferencableGet();
@@ -219,6 +232,11 @@ Type.std.Set.setJSInterface({
         Object.defineProperty(value, "entries", {value: () => {
             pointer.handleBeforeNonReferencableGet();
             return entries()
+        }, writable:false, enumerable:false});
+
+        Object.defineProperty(value, "has", {value: (key: unknown) => {
+            pointer.handleBeforeNonReferencableGet();
+            return has(key)
         }, writable:false, enumerable:false});
 
         Object.defineProperty(value, Symbol.iterator, {value: value.values, writable:true, enumerable:false});
