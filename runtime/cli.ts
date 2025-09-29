@@ -3,7 +3,7 @@ import { Logger } from "../utils/logger.ts";
 
 export async function enableCLI() {
 	try {
-		const InputLoop = (await import("https://deno.land/x/input@2.0.3/index.ts")).default;
+		const InputLoop = (await import("https://deno.land/x/input@2.0.4/index.ts")).default;
 		const logger = new Logger("CLI");
 		const input = new InputLoop();
 		
