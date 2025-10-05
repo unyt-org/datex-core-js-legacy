@@ -4168,6 +4168,7 @@ export class Pointer<T = any> extends ReactiveValue<T> {
     private handleBeforeNonReferenceableGetArray(key: string|symbol) {
         // assumes map, filter, etc. gets called after property is accessed
         if (typeof key=="string" && observableArrayMethods.has(key)) this.handleBeforeNonReferencableGet()
+        else if (key === Symbol.iterator) this.handleBeforeNonReferencableGet();
         else this.handleBeforeNonReferencableGetObject(key);
     }
 
