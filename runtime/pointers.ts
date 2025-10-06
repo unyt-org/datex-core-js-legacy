@@ -431,9 +431,13 @@ export abstract class ReactiveValue<T = any> extends EventTarget {
      */
     public static disableCapturing<T>(callback:()=>T): T {
         this.freezeCapturing = true;
-        const res = callback();
-        this.freezeCapturing = false;
-        return res;
+        try {
+            const res = callback();
+            return res;
+        }
+        finally {
+            this.freezeCapturing = false;
+        }
     }
 
     /**
@@ -4782,9 +4786,13 @@ export class Pointer<T = any> extends ReactiveValue<T> {
         
         // @ReactiveValue.disableCapturing
         ReactiveValue.freezeCapturing = true;
-        const res = this._callObservers(value, key, type, is_transform, is_child_update, previous, atomic_id);
-        ReactiveValue.freezeCapturing = false;
-        return res;
+        try {
+            const res = this._callObservers(value, key, type, is_transform, is_child_update, previous, atomic_id);
+            return res;
+        }
+        finally {
+            ReactiveValue.freezeCapturing = false;
+        }
     }
 
     private _callObservers(value:any, key:any, type:ReactiveValue.UPDATE_TYPE, is_transform = false, is_child_update = false, previous?: any, atomic_id?: symbol) {
