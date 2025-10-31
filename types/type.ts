@@ -384,12 +384,12 @@ export class Type<T = any> extends ExtensibleFunction {
         if (is_constructor && this.#constructor_fn) {
             const res = this.#constructor_fn.apply(instance, args)
             // catch promise rejections (not awaited)
-            if (res instanceof Promise) res.catch(e=>{console.error(e)})
+            if (res instanceof Promise) res.catch(e=>{console.warn(e)})
         }
         else if (!is_constructor && this.#replicator_fn) {
             const res = this.#replicator_fn.apply(instance, args);
             // catch promise rejections (not awaited)
-            if (res instanceof Promise) res.catch(e=>{console.error(e)})
+            if (res instanceof Promise) res.catch(e=>{console.warn(e)})
         }
         
         return instance;
