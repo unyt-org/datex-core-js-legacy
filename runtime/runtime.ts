@@ -3769,6 +3769,10 @@ export class Runtime {
             if (!(o_parent instanceof Pointer)) o_parent = null;
             else o_parent.assertEndpointCanRead(SCOPE?.sender)
 
+            if (o_parent?.externalUpdatesBlocked) {
+                throw new Error("Cannot update readonly pointer");
+            }
+
             key = ReactiveValue.collapseValue(key,true,true);
             
             // check read/write permission (throws an error)
@@ -3934,7 +3938,11 @@ export class Runtime {
 
             let o_parent:Pointer = Pointer.pointerifyValue(current_val);
             if (!(o_parent instanceof Pointer)) o_parent = null;
-            else o_parent.assertEndpointCanRead(SCOPE?.sender)
+            else o_parent.assertEndpointCanRead(SCOPE?.sender);
+
+            if (o_parent?.externalUpdatesBlocked) {
+                throw new Error("Cannot update readonly pointer");
+            }
 
             key = ReactiveValue.collapseValue(key,true,true);
 

@@ -1865,7 +1865,9 @@ export class Pointer<T = any> extends ReactiveValue<T> {
      * @returns 
      */
     static createSmartTransform<const T>(transform:SmartTransformFunction<T>, persistent_datex_transform?:string, forceLive = false, ignoreReturnValue = false, options?:SmartTransformOptions):Pointer<T> {
-        return Pointer.create(undefined, options?.initial??NOT_EXISTING).smartTransform(transform, persistent_datex_transform, forceLive, ignoreReturnValue, options);
+        const ptr = Pointer.create(undefined, options?.initial??NOT_EXISTING).smartTransform(transform, persistent_datex_transform, forceLive, ignoreReturnValue, options);
+        ptr.blockExternalUpdates();
+        return ptr;
     }
 
     static createTransformAsync<const T,V extends TransformFunctionInputs>(observe_values:V, transform:AsyncTransformFunction<V,T>, persistent_datex_transform?:string):Promise<Pointer<T>>
@@ -3520,6 +3522,7 @@ export class Pointer<T = any> extends ReactiveValue<T> {
     }
 
     #any_type = false;
+    #blockExternalUpdates = false;
 
     /**
      * gets the current type of the pointer, or any if pointer is explicitly set to any
@@ -3536,6 +3539,14 @@ export class Pointer<T = any> extends ReactiveValue<T> {
 
     allowAnyType(any_type = true) {
         this.#any_type = any_type;
+    }
+
+    blockExternalUpdates() {
+        this.#blockExternalUpdates = true;
+    }
+
+    get externalUpdatesBlocked() {
+        return this.#blockExternalUpdates;
     }
 
 
