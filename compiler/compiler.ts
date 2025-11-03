@@ -2922,8 +2922,8 @@ export class Compiler {
 
 
                 value = value.val; // don't proxify anonymous pointers or serialize ptr
-                // add $$ operator, not if no_create_pointers enabled or skip_first_collapse
-                if (option_collapse && !SCOPE.options.no_create_pointers && !skip_first_collapse) SCOPE.uint8[SCOPE.b_index++] = BinaryCode.CREATE_POINTER;
+                // add $$ operator, not if no_create_pointers enabled or skip_first_collapse or forceCollapse
+                if (option_collapse && !forceCollapse && !SCOPE.options.no_create_pointers && !skip_first_collapse) SCOPE.uint8[SCOPE.b_index++] = BinaryCode.CREATE_POINTER;
             }
 
             // temporary to find errors: throw if a cloned html element without a unique ptr id
