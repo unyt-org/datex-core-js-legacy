@@ -225,13 +225,17 @@ export class Type<T = any> extends ExtensibleFunction {
 
             try {
 
-                // no type check available
-                if (!required_type) {
-                    assign_to_object[key] = value[key];
-                }
-                // check value type
-                else if (key in value && Type.matches(value[key], required_type)) {
-                    assign_to_object[key] = value[key];
+                // no type check available / check value type
+                if (!required_type || key in value && Type.matches(value[key], required_type)) {
+                    Object.defineProperty(
+                        assign_to_object,
+                        key,
+                        {
+                            value: value[key],
+                            configurable: true,
+                            writable: true
+                        }
+                    )
                 }
                 // JS number->bigint conversion
                 else if (key in value && required_type.root_type == Type.std.integer && typeof value[key] == "number" && Number.isInteger(value[key])) {

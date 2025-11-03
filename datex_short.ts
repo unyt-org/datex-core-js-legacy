@@ -344,8 +344,15 @@ export function prop(parent:Map<unknown, unknown>|Record<PropertyKey, unknown>, 
                 return _always(()=>parent.val[propertyKey])
             }
         }
-        const prop = PointerProperty.getIfExists(parent, propertyKey, true);
-        if (prop !== NOT_EXISTING) return prop;
+        // if strongBoundPointerProperty, return pointer instead of pointer property
+        const parentPtr = Pointer.getByValue(parent)!;
+        if (parentPtr.strongBoundPointerProperties.has(propertyKey)) {
+            return parentPtr.$[propertyKey]
+        }
+        else {
+            const prop = PointerProperty.getIfExists(parent, propertyKey, true);
+            if (prop !== NOT_EXISTING) return prop;
+        }
     }
     
     const value = parent instanceof Map ? 

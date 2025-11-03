@@ -27,7 +27,7 @@ import { BinaryCode } from "./binary_codes.ts";
 import { Scope } from "../types/scope.ts";
 import { ProtocolDataType } from "./protocol_types.ts";
 import { Quantity } from "../types/quantity.ts";
-import { EXTENDED_OBJECTS, INHERITED_PROPERTIES, VOID, SLOT_WRITE, SLOT_READ, SLOT_EXEC, NOT_EXISTING, SLOT_GET, SLOT_SET, DX_IGNORE, DX_BOUND_LOCAL_SLOT, DX_REPLACE, DX_PTR } from "../runtime/constants.ts";
+import { EXTENDED_OBJECTS, INHERITED_PROPERTIES, VOID, SLOT_WRITE, SLOT_READ, SLOT_EXEC, NOT_EXISTING, SLOT_GET, SLOT_SET, DX_IGNORE, DX_BOUND_LOCAL_SLOT, DX_RETURN_POINTER_VALUE, DX_REPLACE, DX_PTR } from "../runtime/constants.ts";
 import { arrayBufferToBase64, base64ToArrayBuffer, buffer2hex, hex2buffer } from "../utils/utils.ts";
 import { RuntimePerformance } from "../runtime/performance_measure.ts";
 import { Conjunction, Disjunction, Logical, Negation } from "../types/logic.ts";
@@ -2470,7 +2470,7 @@ export class Compiler {
         },
 
         // add object or tuple
-        addObject: (o:Object, SCOPE:compiler_scope, is_root=true, parents:Set<any>=new Set(), unassigned_children:[number, any, number][]=[], start_index:[number]=[0]) => {
+        addObject: (o:Object, SCOPE:compiler_scope, is_root=true, parents:Set<any>=new Set(), unassigned_children:[number, any, number][]=[], start_index:[number]=[0], pointer?: Pointer) => {
 
             const entries = Object.entries(Pointer.getByValue(o)?.shadow_object ?? o);
             Compiler.builder.handleRequiredBufferSize(SCOPE.b_index, SCOPE);
@@ -2495,7 +2495,14 @@ export class Compiler {
                 }
                 else {
                     Compiler.builder.addKey(key, SCOPE);
-                    Compiler.builder.insert(val, SCOPE, false, new Set(parents), unassigned_children); // shallow clone parents set
+                    // check if is getter property -> insert pointer
+                    if (pointer?.autoGetterProperties.has(key)) {
+                        val.handleLazyTransformInit();
+                        Compiler.builder.addPointer(val, SCOPE);
+                    }
+                    else {
+                        Compiler.builder.insert(val, SCOPE, false, new Set(parents), unassigned_children); // shallow clone parents set
+                    }
                 }
                
             }
@@ -2758,7 +2765,13 @@ export class Compiler {
 
         insert: (value:any, SCOPE:compiler_scope, is_root=true, parents?:Set<any>, unassigned_children?:[number, any, number][], replace_optimization = true, register_insert_index = true) => {
 
+            let forceCollapse = false;
+
             if (value?.[DX_REPLACE]) value = value[DX_REPLACE];
+            if (value?.[DX_RETURN_POINTER_VALUE]) {
+                forceCollapse = true;
+                value = value[DX_RETURN_POINTER_VALUE];
+            }
 
             const indirectReferencePtr = (value instanceof Pointer && value.indirectReference) ? true : false;
 
@@ -2863,7 +2876,7 @@ export class Compiler {
 
             const skip_first_collapse = !SCOPE.options._first_insert_done&&SCOPE.options.collapse_first_inserted;
 
-            const option_collapse = SCOPE.options.collapse_pointers && !(SCOPE.options.keep_external_pointers && value instanceof Pointer && !value.is_origin);
+            const option_collapse = forceCollapse || SCOPE.options.collapse_pointers && !(SCOPE.options.keep_external_pointers && value instanceof Pointer && !value.is_origin);
             const no_proxify = value instanceof ReactiveValue && (((value instanceof Pointer && value.is_anonymous) || option_collapse) || skip_first_collapse);
 
             // proxify pointer exceptions:
@@ -2920,8 +2933,6 @@ export class Compiler {
             // first value was collapsed (if no_proxify == false, it was still collapsed because it's not a pointer reference)
             // if (SCOPE.options.collapse_first_inserted)  SCOPE.options.collapse_first_inserted = false; // reset
             SCOPE.options._first_insert_done = true;
-
-            // console.log("INS",value)
                 
             // serialize if not pointer
             if (!(value instanceof Pointer)) {
@@ -3085,8 +3096,8 @@ export class Compiler {
             else if (typeof value == "object")  {
                 // add current value to parents list
                 if (!parents) parents = new Set();
-                parents.add(original_value);         
-                Compiler.builder.addObject(value, SCOPE, is_root, parents, unassigned_children, start_index);
+                parents.add(original_value);       
+                Compiler.builder.addObject(value, SCOPE, is_root, parents, unassigned_children, start_index, Pointer.getByValue(original_value));
             }
 
             // convert symbols to Datex.VOID (not supported) TODO create pointers for symbols (custom class)?

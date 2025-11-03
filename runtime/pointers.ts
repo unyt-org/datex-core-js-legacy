@@ -179,8 +179,9 @@ export abstract class ReactiveValue<T = any> extends EventTarget {
             const reactiveMethods = pointer.val?.[DX_REACTIVE_METHODS];
             if (reactiveMethods && key in reactiveMethods) return reactiveMethods[key];
 
-            if (force_pointer_properties) return PointerProperty.get(pointer, <keyof typeof pointer>key, true);
-            else {
+            if (force_pointer_properties && !(this as unknown as Pointer).strongBoundPointerProperties?.has(key)) {
+                return PointerProperty.get(pointer, <keyof typeof pointer>key, true);
+            } else {
                 if (!(pointer.val instanceof Array) && ![...pointer.getKeys()].includes(key)) {
                     throw new ValueError("Property "+key.toString()+" does not exist in value");
                 }
@@ -1446,6 +1447,25 @@ export class Pointer<T = any> extends ReactiveValue<T> {
     }
     public set createdInContext(fetched: boolean) {
         this.#createdInContext = fetched;
+    }
+
+    #autoGetterProperties: Set<string> = new Set();
+
+    /**
+     * A list of all object properties of the pointer that are created from @property get xy() {} and are automatically wrapped in an always transform
+     */
+    get autoGetterProperties() {
+        return this.#autoGetterProperties
+    }
+
+    #strongBoundPointerProperties: Set<string> = new Set();
+
+    /**
+     * A list of all object properties that are strongly bound to a specific pointer, meaning that .$$ and .$ both return
+     * the pointer and never a PointerProperty
+     */
+    get strongBoundPointerProperties() {
+        return this.#strongBoundPointerProperties
     }
 
     /** 21 bytes address: 1 byte address type () 18/16 byte origin id - 2/4 byte origin instance - 4 bytes timestamp - 1 byte counter*/
@@ -3992,20 +4012,37 @@ export class Pointer<T = any> extends ReactiveValue<T> {
                 // no original getter/setter
                 else shadow_object[name] = obj[name];
 
+                // custom get/set if value is already a pointer
+                if (obj[name] instanceof ReactiveValue) {
+                    const ptr = obj[name];
+                    Object.defineProperty(obj, name, {
+                        configurable: true, // TODO: cant be false because of uix @content bindings, fix
+                        enumerable: true,
+                        set: val => { 
+                            ptr.val = val
+                        },
+                        get: () => { 
+                            this.handleBeforeNonReferencableGet(name);
+                            return ptr.val;
+                        }
+                    });
+                    this.#strongBoundPointerProperties.add(name)
+                }
                 // new getter + setter
-                Object.defineProperty(obj, name, {
-                    configurable:  true, // TODO: cant be false because of uix @content bindings, fix
-                    enumerable: true,
-                    set: val => { 
-                        this.handleSet(name, val);
-                    },
-                    get: () => { 
-                        this.handleBeforeNonReferencableGet(name);
-                        // important: reference shadow_object, not this.shadow_object here, otherwise it might get garbage collected
-                        return ReactiveValue.collapseValue(shadow_object[name], true, true);
-                    }
-                });
-            
+                else {
+                     Object.defineProperty(obj, name, {
+                        configurable:  true, // TODO: cant be false because of uix @content bindings, fix
+                        enumerable: true,
+                        set: val => { 
+                            this.handleSet(name, val);
+                        },
+                        get: () => { 
+                            this.handleBeforeNonReferencableGet(name);
+                            // important: reference shadow_object, not this.shadow_object here, otherwise it might get garbage collected
+                            return ReactiveValue.collapseValue(shadow_object[name], true, true);
+                        }
+                    });
+                }
             }
 
             for (const [name, property_descriptor] of childrenWithGetters) {
@@ -4014,6 +4051,8 @@ export class Pointer<T = any> extends ReactiveValue<T> {
                 transformRef.allowAnyType(true);
                 Object.defineProperty(shadow_object, name, {value:transformRef})
             }
+
+            this.#autoGetterProperties = new Set(childrenWithGetters.keys());
 
             return obj;
         }

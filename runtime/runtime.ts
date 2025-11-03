@@ -44,7 +44,7 @@ import { Crypto } from "../runtime/crypto.ts";
 import { ProtocolDataType } from "../compiler/protocol_types.ts";
 import { arrayBufferToBase64, base64ToArrayBuffer, buffer2hex, getFileContent } from "../utils/utils.ts";
 import { IOHandler } from "./io_handler.ts";
-import { DX_PERMISSIONS, DX_SLOTS, DX_TYPE, DX_SERIALIZED, DX_VALUE, INVALID, MAX_UINT_16, NOT_EXISTING, UNKNOWN_TYPE, VOID, WILDCARD, SLOT_WRITE, SLOT_READ, DX_GET_PROPERTY, SLOT_GET, SLOT_SET } from "./constants.ts";
+import { DX_PERMISSIONS, DX_SLOTS, DX_RETURN_POINTER_VALUE, DX_TYPE, DX_SERIALIZED, DX_VALUE, INVALID, MAX_UINT_16, NOT_EXISTING, UNKNOWN_TYPE, VOID, WILDCARD, SLOT_WRITE, SLOT_READ, SLOT_GET, SLOT_SET } from "./constants.ts";
 import { baseURL, DEFAULT_HIDDEN_OBJECT_PROPERTIES, logger, TypedArray } from "../utils/global_values.ts";
 import { client_type } from "../utils/constants.ts";
 import { MessageLogger } from "../utils/message_logger.ts";
@@ -4773,7 +4773,9 @@ export class Runtime {
                     }
 
                     pointer.addSubscriber(SCOPE.sender);
-                    if (!silent) INNER_SCOPE.active_value = await Runtime.cloneValue(pointer.val);
+                    // workaround to make sure the compiler compiles the full pointer value, not the collapsed id
+                    // alternative would be a full clone, which is inefficient and can lead to loss of information
+                    if (!silent) INNER_SCOPE.active_value = {[DX_RETURN_POINTER_VALUE]: pointer};
 
                     // }
                     // // redirect to actual parent
