@@ -34,34 +34,10 @@ export class IterableHandler<T, U = T> {
 	}
 
 	observe() {
-		// deno-lint-ignore no-this-alias
-		const self = this;
-		const iterableRef = new WeakRef(this.iterable);
-
-		weakAction(
-			{self}, 
-			({self}) => {
-				use ("allow-globals", iterableRef, Datex);
-
-				const iterable = iterableRef.deref()! // only here to fix closure scope bug, should always exist at this point
-				const callback = (v:any, k:any, t:any) => {
-					const deref = self.deref();
-					if (!deref) {
-						console.warn("Undetected garbage collection (datex-w0001)");
-						return;
-					}
-					deref.onValueChanged(v, k, t)
-				}
-				Datex.ReactiveValue.observeAndInit(iterable, callback);
-				return callback;
-			},
-			(callback) => {
-				use ("allow-globals", iterableRef, Datex);
-
-				const deref = iterableRef.deref()
-				if (deref) Datex.ReactiveValue.unobserve(deref, callback);
-			}
-		);
+		const callback = (v:any, k:any, t:any) => {
+			this.onValueChanged(v, k, t)
+		}
+		Datex.ReactiveValue.observeAndInit(this.iterable, callback);
 	}
 
 	[Symbol.dispose]() {
