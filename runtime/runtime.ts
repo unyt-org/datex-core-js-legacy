@@ -1090,11 +1090,11 @@ export class Runtime {
                     receivers: BROADCAST,
                     socket: socket
                 })
-                    .then(finish)
                     .catch(e => {
                         if (wait_for_result) reject(e);
                         else logger.debug("Error sending datex block (flood)");
-                    });
+                    })
+                    .finally(() => finish());
             }
             // send to receivers
             else if (to) {
@@ -1110,12 +1110,11 @@ export class Runtime {
                     receivers: to,
                     socket
                 })
-                    .then(finish)
                     .catch(e => {
                         if (wait_for_result) reject(e);
                         else logger.debug("Error sending datex block to " + [...to].map(t=>t.toString()).join(", ") + ": " + e.message);
-                    });
-
+                    })
+                    .finally(() => finish());
             }
 
             // callback for detailed results?

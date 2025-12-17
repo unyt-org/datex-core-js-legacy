@@ -457,7 +457,6 @@ export abstract class ReactiveValue<T = any> extends EventTarget {
 
         // trigger transform update if not live
         if (this.#transformSource && !this.#liveTransform && !this.#forceLiveTransform) {
-            ReactiveValue.captureGetters();
             this.#transformSource.update();
         }
 
