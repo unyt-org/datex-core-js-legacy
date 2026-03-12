@@ -170,6 +170,13 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		await Promise.all(Object.values(this.#metaTables).map(table => this.#query(`TRUNCATE TABLE ${table.name};`)))
 	}
 
+	async query<row=object>(query_string:string, query_params:any[]|undefined, returnRawResult: true): Promise<{rows:row[], result:ExecuteResult}>
+	async query<row=object>(query_string:string, query_params?:any[]): Promise<row[]>
+	async query<row=object>(query_string:string, query_params?:any[], returnRawResult?: boolean): Promise<row[]|{rows:row[], result:ExecuteResult}> {
+		 return await this.#query(query_string, query_params, returnRawResult as unknown as true)
+	}
+
+	
 	async #query<row=object>(query_string:string, query_params:any[]|undefined, returnRawResult: true): Promise<{rows:row[], result:ExecuteResult}>
 	async #query<row=object>(query_string:string, query_params?:any[]): Promise<row[]>
 	async #query<row=object>(query_string:string, query_params?:any[], returnRawResult?: boolean): Promise<row[]|{rows:row[], result:ExecuteResult}> {
