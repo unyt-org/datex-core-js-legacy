@@ -188,7 +188,9 @@ async function getValueTSCode(module_name:string, name:string, value: any, no_po
 
 		// TODO: cleanup unused pointer ids
 		const pointerId = await Storage.loadOrCreate("ptrid::" + module_name + "::" + name, ()=>Pointer.normalizePointerId(Pointer.getUniquePointerID()));
-		value = Pointer.createOrGet(value, undefined, undefined, undefined, undefined, pointerId.val).val;
+		const resolvedPointer = Pointer.createOrGet(value, undefined, undefined, undefined, undefined, pointerId.val)
+		// only collapses non-primitive pointer values
+		value = Pointer.collapseValue(resolvedPointer);
 
 		try {
 			value[BACKEND_EXPORT] = true;
