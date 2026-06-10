@@ -24,7 +24,7 @@ import { Path } from "../../utils/path.ts";
         if (!this.endpointHasAccess(datex.meta.caller.main)) {
             throw new PermissionError("Unauthorized");
         }
-        await import("https://cdn.unyt.org/datex-inspector/inspector.ts")
+        // await import("https://cdn.unyt.org/datex-inspector/inspector.ts")
         return true;
     }
 }
