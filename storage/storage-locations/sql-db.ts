@@ -1,4 +1,4 @@
-import { Client, ExecuteResult } from "https://deno.land/x/mysql@v2.12.1/mod.ts";
+import { createPool, Pool, ResultSetHeader } from "mysql2/promise";
 import { Query } from "https://deno.land/x/sql_builder@v1.9.2/mod.ts";
 import { Where } from "https://deno.land/x/sql_builder@v1.9.2/where.ts";
 import { Pointer } from "../../runtime/pointers.ts";
@@ -22,10 +22,13 @@ import { MatchOptions, MatchCondition, MatchConditionType, ComputedProperty, Com
 import { MatchResult } from "../storage.ts";
 import { Time } from "../../types/time.ts";
 import { Order } from "https://deno.land/x/sql_builder@v1.9.2/order.ts";
-import { configLogger } from "https://deno.land/x/mysql@v2.12.1/src/logger.ts";
 import { replaceParams } from "https://deno.land/x/sql_builder@v1.9.2/util.ts";
 
-configLogger({level: "WARNING"})
+type ExecuteResult = {
+	affectedRows: number;
+	lastInsertId: number;
+	rows: unknown[];
+}
 
 const logger = new Logger("SQL Storage");
 
@@ -49,7 +52,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 	#initializing = false
 	#initialized = false
 	#options: dbOptions
-    #sqlClient: Client|undefined
+    #sqlClient: Pool|undefined
 
 	readonly #pointerMysqlType = "varchar(50)"
 	readonly #pointerMysqlColumnName = "_ptr_id"
@@ -125,11 +128,18 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		super()
         this.#options = options
     }
-	async #connect(){
+	#connect(){
 		if (this.#connected) return;
-        this.#sqlClient = await new Client().connect({poolSize: 20, ...this.#options});
+		this.#sqlClient = createPool({
+			connectionLimit: 20,
+			host: this.#options.hostname,
+			port: this.#options.port,
+			user: this.#options.username,
+			password: this.#options.password,
+			database: this.#options.db,
+		});
 		logger.info("Using SQL database " + this.#options.db + " on " + this.#options.hostname + ":" + this.#options.port + " as storage location")
-        this.#connected = true;
+		this.#connected = true;
     }
 
 	async #init() {
@@ -186,13 +196,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		// handle arraybuffers
 		if (query_params) {
 			for (let i = 0; i < query_params.length; i++) {
-				const param = query_params[i];
-				if (param instanceof ArrayBuffer) {
-					query_params[i] = this.#binaryToString(param)
-				}
-				if (param instanceof Array) {
-					query_params[i] = param.map(p => p instanceof ArrayBuffer ? this.#binaryToString(p) : p)
-				}
+				query_params[i] = this.#normalizeQueryParam(query_params[i]);
 			}
 		}
 		
@@ -201,9 +205,34 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		if (typeof query_string != "string") {console.error("invalid query:", query_string); throw new Error("invalid query")}
         if (!query_string) throw new Error("empty query");
         try {
-            const result = await this.#sqlClient!.execute(query_string, query_params);
-			if (returnRawResult) return {rows: result.rows ?? [], result};
-			else return result.rows ?? [];
+			const mysqlClient = this.#sqlClient as unknown as {
+				query?: (sql: string, values?: unknown[]) => Promise<[unknown, unknown]>;
+				execute: (sql: string, values?: unknown[]) => Promise<[unknown, unknown]>;
+			};
+			const runQuery = mysqlClient.query ?? mysqlClient.execute;
+			const [result] = query_params ? await runQuery(query_string, query_params) : await runQuery(query_string);
+
+			if (Array.isArray(result)) {
+				const rows = result as row[];
+				if (returnRawResult) return {
+					rows,
+					result: {
+						affectedRows: 0,
+						lastInsertId: 0,
+						rows: result as unknown[]
+					}
+				};
+				return rows;
+			}
+
+			const execResult = result as ResultSetHeader;
+			const normalizedResult: ExecuteResult = {
+				affectedRows: execResult.affectedRows ?? 0,
+				lastInsertId: execResult.insertId ?? 0,
+				rows: []
+			};
+			if (returnRawResult) return {rows: [], result: normalizedResult};
+			return [];
         } catch (e) {
 			console.log(query_string, query_params)
 			if (this.log) this.log("SQL error:", e)
@@ -213,7 +242,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			// errors to ignore for now (TODO: this is only a temporary solution, input should be validated beforehand)
 			// incorrect datetime value (out of range, etc.)
 			if (e?.toString?.().startsWith("Error: Incorrect datetime value")) {
-				console.error("SQL: Ignoring incorrect datetime value error", e.message);
+				console.error("SQL: Ignoring incorrect datetime value error", (e as {message?:string})?.message);
 				if (returnRawResult) return {rows: [], result: {affectedRows: 0, lastInsertId: 0, rows: []}};
 				else return [];
 			}
@@ -230,6 +259,23 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 	}
 	#binaryToString(value: ArrayBuffer){
 		return String.fromCharCode.apply(null, new Uint8Array(value) as unknown as number[])
+	}
+	#toArrayBuffer(value: string | ArrayBuffer | ArrayBufferView) {
+		if (typeof value == "string") return this.#stringToBinary(value);
+		if (value instanceof ArrayBuffer) return value;
+		if (ArrayBuffer.isView(value)) {
+			return value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength) as ArrayBuffer;
+		}
+		throw new Error("Unsupported binary value type");
+	}
+	#normalizeQueryParam(param: unknown): unknown {
+		if (param instanceof ArrayBuffer) return this.#binaryToString(param);
+		if (ArrayBuffer.isView(param)) {
+			const view = param as ArrayBufferView;
+			return this.#binaryToString(view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength) as ArrayBuffer);
+		}
+		if (param instanceof Array) return param.map(p => this.#normalizeQueryParam(p));
+		return param;
 	}
 
     async #queryFirst<row=object>(query_string:string, query_params?:any[]): Promise<row|undefined> {
@@ -633,8 +679,8 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		for (const [colName, {foreignPtr, type}] of columns.entries()) {
 
 			// convert blob strings to ArrayBuffer
-			if (type == "blob" && typeof object[colName] == "string") {
-				object[colName] = this.#stringToBinary(object[colName] as string)
+			if (type == "blob" && object[colName] != null) {
+				object[colName] = this.#toArrayBuffer(object[colName] as string | ArrayBuffer | ArrayBufferView)
 			}
 			// convert Date to Time
 			else if (object[colName] instanceof Date) {
@@ -1055,8 +1101,8 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		}
 		else {
 			// buffer
-			if (tableDefinition?.get(key)?.type == "blob" && typeof value == "string") {
-				value = await Runtime.decodeValue(this.#stringToBinary(value))
+			if (tableDefinition?.get(key)?.type == "blob" && value != null) {
+				value = await Runtime.decodeValue(this.#toArrayBuffer(value as string | ArrayBuffer | ArrayBufferView))
 			}
 
 			return {[key]: value}
@@ -1519,7 +1565,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		await this.#query('DELETE FROM ?? WHERE ??=?;', [this.#metaTables.items.name, "key", key])
 	}
 	async getItemValueDXB(key: string): Promise<ArrayBuffer|null> {
-		const encoded = (await this.#queryFirst<{value: string, ptrId: string}>(
+		const encoded = (await this.#queryFirst<{value: string | ArrayBuffer | ArrayBufferView, ptrId: string}>(
 			new Query()
 				.table(this.#metaTables.items.name)
 				.select("value", `${this.#pointerMysqlColumnName} as ptrId`)
@@ -1527,12 +1573,12 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 				.build()
 		));
 		if (encoded?.ptrId) return Compiler.compile(`$${encoded.ptrId}`, undefined, {sign: false, encrypt: false, to: Datex.Runtime.endpoint, preemptive_pointer_init: false}, false) as Promise<ArrayBuffer>;
-		else if (encoded?.value) return this.#stringToBinary(encoded.value);
+		else if (encoded?.value) return this.#toArrayBuffer(encoded.value);
 		else return null;
 	}
 
 	async getItemValue(key: string, conditions?: ExecConditions): Promise<unknown> {
-		const result = (await this.#queryFirst<{value: string, value_text: string, value_integer: number, value_decimal: number, value_boolean: boolean, value_time: Date, ptrId: string}>(
+		const result = (await this.#queryFirst<{value: string | ArrayBuffer | ArrayBufferView, value_text: string, value_integer: number, value_decimal: number, value_boolean: boolean, value_time: Date, ptrId: string}>(
 			new Query()
 				.table(this.#metaTables.items.name)
 				.select("value", "value_text", "value_integer", "value_decimal", "value_boolean", "value_time", `${this.#pointerMysqlColumnName} as ptrId`)
@@ -1543,7 +1589,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		if (result?.ptrId || result?.value) {
 			const dxb = result.ptrId ?
 				await (Compiler.compile(`$${result.ptrId}`, undefined, {sign: false, encrypt: false, to: Datex.Runtime.endpoint, preemptive_pointer_init: false}, false) as Promise<ArrayBuffer>) :
-				this.#stringToBinary(result.value);
+				this.#toArrayBuffer(result.value);
 			return Runtime.decodeValue(dxb, false, conditions);
 		} 
 		else if (result?.value_text) return result.value_text
@@ -1628,7 +1674,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 
 		// is raw pointer
 		if (table == this.#metaTables.rawPointers.name) {
-			const value = (await this.#queryFirst<{value: string}>(
+			const value = (await this.#queryFirst<{value: string | ArrayBuffer | ArrayBufferView}>(
 				new Query()
 					.table(this.#metaTables.rawPointers.name)
 					.select("value")
@@ -1636,12 +1682,12 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 					.build()
 			))?.value;
 			if (value) this.#existingPointersCache.add(pointerId);
-			return value ? Runtime.decodeValue(this.#stringToBinary(value), outer_serialized) : NOT_EXISTING;
+			return value ? Runtime.decodeValue(this.#toArrayBuffer(value), outer_serialized) : NOT_EXISTING;
 		}
 
 		// is set pointer
 		else if (table == this.#metaTables.sets.name) {
-			const values = await this.#query<{value_text:string, value_integer:number, value_decimal:number, value_boolean:boolean, value_time:Date, value_pointer:string, value_dxb:string}>(
+			const values = await this.#query<{value_text:string, value_integer:number, value_decimal:number, value_boolean:boolean, value_time:Date, value_pointer:string, value_dxb:string | ArrayBuffer | ArrayBufferView}>(
 				new Query()
 					.table(this.#metaTables.sets.name)
 					.select("value_text", "value_integer", "value_decimal", "value_boolean", "value_time", "value_pointer", "value_dxb")
@@ -1658,7 +1704,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 				else if (value_boolean != undefined) result.add(Boolean(value_boolean))
 				else if (value_time != undefined) result.add(value_time)
 				else if (value_pointer != undefined) result.add(await Pointer.load(value_pointer))
-				else if (value_dxb != undefined) result.add(await Runtime.decodeValue(this.#stringToBinary(value_dxb)))
+				else if (value_dxb != undefined) result.add(await Runtime.decodeValue(this.#toArrayBuffer(value_dxb)))
 			}
 			this.#existingPointersCache.add(pointerId);
 			return result;
@@ -1691,8 +1737,8 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 	private async assignPointerProperty(object:Record<string,unknown>, colName:string, type:string, foreignPtr:boolean, foreignTable?:string) {
 		// custom conversions:
 		// convert blob strings to ArrayBuffer
-		if (type == "blob" && typeof object[colName] == "string") {
-			object[colName] = this.#stringToBinary(object[colName] as string)
+		if (type == "blob" && object[colName] != null) {
+			object[colName] = this.#toArrayBuffer(object[colName] as string | ArrayBuffer | ArrayBufferView)
 		}
 		// convert Date ot Time
 		else if (object[colName] instanceof Date) {
@@ -1762,19 +1808,19 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 
 		// is raw pointer
 		if (table == this.#metaTables.rawPointers.name) {
-			const value = (await this.#queryFirst<{value: string}>(
+			const value = (await this.#queryFirst<{value: string | ArrayBuffer | ArrayBufferView}>(
 				new Query()
 					.table(this.#metaTables.rawPointers.name)
 					.select("value")
 					.where(Where.eq(this.#pointerMysqlColumnName, pointerId))
 					.build()
 			))?.value;
-			return value ? this.#stringToBinary(value) : null;
+			return value ? this.#toArrayBuffer(value) : null;
 		}
 
 		// is set pointer
 		else if (table == this.#metaTables.sets.name) {
-			const values = await this.#query<{value_text:string, value_integer:number, value_decimal:number, value_boolean:boolean, value_time:Date, value_pointer:string, value_dxb:string}>(
+			const values = await this.#query<{value_text:string, value_integer:number, value_decimal:number, value_boolean:boolean, value_time:Date, value_pointer:string, value_dxb:string | ArrayBuffer | ArrayBufferView}>(
 				new Query()
 					.table(this.#metaTables.sets.name)
 					.select("value_text", "value_integer", "value_decimal", "value_boolean", "value_time", "value_pointer", "value_dxb")
@@ -1792,7 +1838,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 				else if (value_boolean != undefined) setEntries.push(Runtime.valueToDatexStringExperimental(value_boolean))
 				else if (value_time != undefined) setEntries.push(Runtime.valueToDatexStringExperimental(value_time))
 				else if (value_pointer != undefined) setEntries.push(Runtime.valueToDatexStringExperimental(await Pointer.load(value_pointer)))
-				else if (value_dxb != undefined) setEntries.push(MessageLogger.decompile(this.#stringToBinary(value_dxb), false, false, false))
+				else if (value_dxb != undefined) setEntries.push(MessageLogger.decompile(this.#toArrayBuffer(value_dxb), false, false, false))
 			}
 			setString += setEntries.join(",") + "]"
 			return Compiler.compile(setString, [], {sign: false, encrypt: false, to: Datex.Runtime.endpoint, preemptive_pointer_init: false}, false) as ArrayBuffer;
