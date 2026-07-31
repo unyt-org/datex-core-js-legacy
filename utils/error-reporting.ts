@@ -32,6 +32,6 @@ export async function sendReport(identifier: string, reportData:Record<string,an
 let enabled = false;
 
 export function enableErrorReporting(enable = true) {
-	logger.debug("error reporting to unyt.org " + (enable ? "enabled" : "disabled"));
-	enabled = enable;
+	// logger.debug("error reporting to unyt.org " + (enable ? "enabled" : "disabled"));
+	// enabled = enable;
 }
