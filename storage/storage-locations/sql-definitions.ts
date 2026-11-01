@@ -6,6 +6,8 @@ export type dbOptions = {
     password:string
     port: number
     db?: string
+    /** connection charset (SET NAMES), defaults to utf8mb4 */
+    charset?: string
 }
 
 export type Class = (new (...args: any[]) => any); // type for a JS class

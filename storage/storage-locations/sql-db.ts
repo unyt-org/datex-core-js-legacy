@@ -127,7 +127,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
     }
 	async #connect(){
 		if (this.#connected) return;
-        this.#sqlClient = await new Client().connect({poolSize: 20, ...this.#options});
+        this.#sqlClient = await new Client().connect({poolSize: 20, charset: "utf8mb4", ...this.#options});
 		logger.info("Using SQL database " + this.#options.db + " on " + this.#options.hostname + ":" + this.#options.port + " as storage location")
         this.#connected = true;
     }
@@ -201,7 +201,14 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		if (typeof query_string != "string") {console.error("invalid query:", query_string); throw new Error("invalid query")}
         if (!query_string) throw new Error("empty query");
         try {
+            // diagnostics for unicode replacement characters: shows whether they are written to or read from the db
+            if (query_params && SQLDBStorageLocation.#containsReplacementChar(query_params)) {
+				console.error("SQL WRITE contains U+FFFD (corrupted before reaching the db):", query_string, query_params, new Error().stack);
+			}
             const result = await this.#sqlClient!.execute(query_string, query_params);
+			if (result.rows && SQLDBStorageLocation.#containsReplacementChar(result.rows)) {
+				console.error("SQL READ returned U+FFFD:", query_string, query_params);
+			}
 			if (returnRawResult) return {rows: result.rows ?? [], result};
 			else return result.rows ?? [];
         } catch (e) {
@@ -222,6 +229,13 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			
         }
     }
+
+	static #containsReplacementChar(value: unknown, depth = 0): boolean {
+		if (typeof value == "string") return value.includes("\uFFFD");
+		if (depth > 2 || value == null || typeof value != "object") return false;
+		for (const v of Object.values(value)) if (this.#containsReplacementChar(v, depth + 1)) return true;
+		return false;
+	}
 
 	static handleError?: (error: string, query_string: string, query_params?:any[]) => void;
 
@@ -1433,6 +1447,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 				.where(Where.eq("key", key))
 				.build()
 		));
+		// rc bookkeeping can create mapping rows without table_name before the pointer is stored
 		const exists = !!count && count.COUNT > 0;
 		if (exists) {
 			this.#existingItemsCache.add(key);
@@ -1829,7 +1844,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			new Query()
 				.table(this.#metaTables.pointerMapping.name)
 				.select("COUNT(*) as COUNT")
-				.where(Where.eq(this.#pointerMysqlColumnName, pointerId))
+				.where(Where.and(Where.eq(this.#pointerMysqlColumnName, pointerId), Where.isNotNull("table_name")))
 				.build()
 		));
 		const exists = !!count && count.COUNT > 0;
