@@ -766,6 +766,7 @@ export class Storage {
         }
 
         const dependencies = this.updatePointerSync(location, pointer, partialUpdateKey);
+        if (pointer.garbage_collected) return false;
         dependencies.delete(pointer);
         if (Pointer.is_local) this.checkUnresolvedLocalDependenciesForPointer(pointer, dependencies);
         this.updatePointerDependencies(pointer.id, [...dependencies].map(p=>p.id)).catch(e=>console.error(e));
@@ -797,6 +798,8 @@ export class Storage {
         }
 
         const dependencies = await this.updatePointerAsync(location, pointer, partialUpdateKey);
+        // garbage collected during the update: dependencies are incomplete, don't touch the reference counts
+        if (pointer.garbage_collected) return false;
         dependencies.delete(pointer);
         if (Pointer.is_local) this.checkUnresolvedLocalDependenciesForPointer(pointer, dependencies);
         await this.updatePointerDependencies(pointer.id, [...dependencies].map(p=>p.id));
@@ -1419,6 +1422,18 @@ export class Storage {
     }
 
     /**
+     * All reference count / dependencies is serialized through this queue.
+     * Without it, concurrent updates read stale dependency lists and rc values,
+     * which makes counts drift to 0 and deletes pointers that are still referenced.
+     */
+    static #rcQueue: Promise<unknown> = Promise.resolve();
+    private static runExclusiveRC<T>(fn: () => Promise<T>): Promise<T> {
+        const result = this.#rcQueue.then(fn, fn);
+        this.#rcQueue = result.catch(() => {});
+        return result;
+    }
+
+    /**
      * Increase the reference count of a pointer in storage
      */
     private static async increaseReferenceCount(ptrId:string) {
@@ -1433,16 +1448,19 @@ export class Storage {
      * Decrease the reference count of a pointer in storage
      */
     private static async decreaseReferenceCount(ptrId:string) {
-        const count = await this.getReferenceCount(ptrId);
-        if (count == -1) {
-            console.log("Cannot decrement unknown rc for pointer " + ptrId);
+        const entry = await this.getItem(this.rc_prefix+ptrId);
+        // no rc entry (e.g. pointer stored before reference counting) - the real number of references is unknown,
+        // never delete in this case
+        if (entry == undefined || entry === "" || isNaN(Number(entry))) {
+            logger.warn("Cannot decrement unknown rc for pointer $" + ptrId + ", keeping pointer");
             return;
         }
-        const newCount = count - 1;
+        const newCount = Number(entry) - 1;
         // RC is 0, delete pointer from storage
         if (newCount <= 0) {
-            this.removeItem(this.rc_prefix+ptrId)
+            await this.removeItem(this.rc_prefix+ptrId)
                 .catch(e=>console.error(e));
+            // must not be awaited: removePointer updates the pointer dependencies, which waits for this queue
             this.removePointer(ptrId, undefined, true)
                 .catch(e=>console.error(e))
         }
@@ -1482,22 +1500,28 @@ export class Storage {
     private static async updateItemDependencies(key:string, newDeps:string[]) {
         // ignore if rc:: or deps:: key
         if (key.startsWith(this.rc_prefix) || key.startsWith(this.item_deps_prefix) || key.startsWith(this.pointer_deps_prefix)) return;
-        const oldDeps = await this.getItemDependencies(key);
-        const added = newDeps.filter(p=>!oldDeps.includes(p));
-        const removed = oldDeps.filter(p=>!newDeps.includes(p));
-        for (const ptrId of added) this.increaseReferenceCount(ptrId).catch(e=>console.error(e));
-        for (const ptrId of removed) this.decreaseReferenceCount(ptrId).catch(e=>console.error(e));
-        this.setItemDependencies(key, newDeps).catch(e=>console.error(e));
+        await this.runExclusiveRC(async () => {
+            const oldDeps = await this.getItemDependencies(key);
+            const added = newDeps.filter(p=>!oldDeps.includes(p));
+            const removed = oldDeps.filter(p=>!newDeps.includes(p));
+            // increase before decrease so that moving a reference never drops the count to 0 in between
+            for (const ptrId of added) await this.increaseReferenceCount(ptrId).catch(e=>console.error(e));
+            await this.setItemDependencies(key, newDeps).catch(e=>console.error(e));
+            for (const ptrId of removed) await this.decreaseReferenceCount(ptrId).catch(e=>console.error(e));
+        });
     }
     private static async updatePointerDependencies(key:string, newDeps:string[]) {
         // ignore if rc:: or deps:: key
         if (key.startsWith(this.rc_prefix) || key.startsWith(this.item_deps_prefix) || key.startsWith(this.pointer_deps_prefix)) return;
-        const oldDeps = await this.getPointerDependencies(key);
-        const added = newDeps.filter(p=>!oldDeps.includes(p));
-        const removed = oldDeps.filter(p=>!newDeps.includes(p));
-        for (const ptrId of added) this.increaseReferenceCount(ptrId).catch(e=>console.error(e));
-        for (const ptrId of removed) this.decreaseReferenceCount(ptrId).catch(e=>console.error(e));
-        this.setPointerDependencies(key, newDeps).catch(e=>console.error(e));
+        await this.runExclusiveRC(async () => {
+            const oldDeps = await this.getPointerDependencies(key);
+            const added = newDeps.filter(p=>!oldDeps.includes(p));
+            const removed = oldDeps.filter(p=>!newDeps.includes(p));
+            // increase before decrease so that moving a reference never drops the count to 0 in between
+            for (const ptrId of added) await this.increaseReferenceCount(ptrId).catch(e=>console.error(e));
+            await this.setPointerDependencies(key, newDeps).catch(e=>console.error(e));
+            for (const ptrId of removed) await this.decreaseReferenceCount(ptrId).catch(e=>console.error(e));
+        });
     }
     
 

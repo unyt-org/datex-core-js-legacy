@@ -748,7 +748,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 
 		// was garbage collected in the meantime
 		if (pointer.garbage_collected) {
-			return;
+			return dependencies;
 		}
 		if (!(pointer.val instanceof Set)) throw new Error("Pointer value must be a Set");
 
