@@ -797,6 +797,17 @@ export class Storage {
             return false
         }
 
+        // keep the value (and with it all nested dependency values) alive until the dependencies are saved
+        const release = this.holdValue(pointer.val);
+        try {
+            return await this.initPointerAsyncHeld(location, pointer, listen_for_changes, partialUpdateKey, force_listen_for_deps);
+        }
+        finally {
+            release();
+        }
+    }
+
+    private static async initPointerAsyncHeld(location: AsyncStorageLocation, pointer:Pointer, listen_for_changes = true, partialUpdateKey: unknown = NOT_EXISTING, force_listen_for_deps = false):Promise<boolean>{
         const dependencies = await this.updatePointerAsync(location, pointer, partialUpdateKey);
         // garbage collected during the update: dependencies are incomplete, don't touch the reference counts
         if (pointer.garbage_collected) return false;
@@ -862,6 +873,25 @@ export class Storage {
 
     private static synced_pointers = new WeakSet<Pointer>();
 
+    /**
+     * Pointer values are only weakly referenced by their pointer. A value that changed (or a newly added
+     * nested value) can be garbage collected before the delayed storage update ran. The parent entry that
+     * references it would be written without the nested pointer ever being stored ("No table found for pointer").
+     * Values are therefore held strongly until the update including all dependencies is saved.
+     */
+    static #heldValues = new Map<unknown, number>();
+    private static holdValue(value: unknown): () => void {
+        this.#heldValues.set(value, (this.#heldValues.get(value) ?? 0) + 1);
+        let released = false;
+        return () => {
+            if (released) return;
+            released = true;
+            const count = (this.#heldValues.get(value) ?? 1) - 1;
+            if (count <= 0) this.#heldValues.delete(value);
+            else this.#heldValues.set(value, count);
+        };
+    }
+
     static syncPointer(pointer: Pointer, location: StorageLocation|undefined = this.#primary_location) {
         if (!this.#auto_sync_enabled) return;
 
@@ -887,6 +917,7 @@ export class Storage {
 
             // don't block saving if only partial update
             if (!(location.supportsPartialUpdates && key !== NOT_EXISTING)) saving = true;
+            const release = this.holdValue(pointer.val);
             const metadata = this.isDebugMode ? `${pointer.id}: ${Runtime.valueToDatexString(pointer.val)}` : undefined;
 
             this.scheduleStorageUpdate(()=>{
@@ -894,7 +925,7 @@ export class Storage {
                 saving = false;
                 const res = this.setPointer(pointer, false, location, key, true); // update value and add new dependencies recursively
                 if (res instanceof Promise) {
-                    return res.then((couldSave)=>{
+                    return res.finally(release).then((couldSave)=>{
                         if (couldSave) {
                             logger.debug("updated " + pointer.idString() + " in storage");
                         }
@@ -904,6 +935,7 @@ export class Storage {
                     });
                 }
                 else {
+                    release();
                     const couldSave = res; 
                     if (couldSave) {
                         logger.debug("updated " + pointer.idString() + " in storage");
