@@ -1103,13 +1103,16 @@ export class Storage {
         }
     }
 
-    private static async removePointer(pointer_id:string, location?:StorageLocation, force_remove = false) {
-        const count = await this.getReferenceCount(pointer_id);
-        if (count == -1) {
-            console.error("Cannot remove pointer"  + pointer_id + ", reference count not available");
+    private static async removePointer(pointer_id:string, location?:StorageLocation) {
+        // read inside the rc queue: increments that were queued after the decrement that triggered the removal
+        // must be taken into account, otherwise a pointer that was referenced again in the meantime is deleted
+        const count = await this.runExclusiveRC(() => this.getReferenceCount(pointer_id));
+        // negative rc (-1) marks a pinned pointer, never remove
+        if (count < 0) {
+            logger.warn("Cannot remove pointer $" + pointer_id + ", pinned (rc < 0)");
             return;
         }
-        if (!force_remove && count > 0) {
+        if (count > 0) {
             logger.warn("Cannot remove pointer $" + pointer_id + ", still referenced");
             return;
         }
@@ -1438,10 +1441,8 @@ export class Storage {
      */
     private static async increaseReferenceCount(ptrId:string) {
         const count = await this.getReferenceCount(ptrId);
-        if (count == -1) {
-            console.log("Cannot increment unknown rc for pointer " + ptrId);
-            return;
-        }
+        // negative rc (-1) marks a pinned pointer, the count is not tracked
+        if (count < 0) return;
         await this.setItem(this.rc_prefix+ptrId, (count + 1).toString());
     }
     /**
@@ -1455,13 +1456,15 @@ export class Storage {
             logger.warn("Cannot decrement unknown rc for pointer $" + ptrId + ", keeping pointer");
             return;
         }
+        // negative rc (-1) marks a pointer that must never be removed or counted
+        if (Number(entry) < 0) return;
         const newCount = Number(entry) - 1;
         // RC is 0, delete pointer from storage
         if (newCount <= 0) {
             await this.removeItem(this.rc_prefix+ptrId)
                 .catch(e=>console.error(e));
             // must not be awaited: removePointer updates the pointer dependencies, which waits for this queue
-            this.removePointer(ptrId, undefined, true)
+            this.removePointer(ptrId)
                 .catch(e=>console.error(e))
         }
         // decrease RC
@@ -1497,31 +1500,41 @@ export class Storage {
         return ((await this.getItem(uniqueKey))?.split(",")) ?? [];
     }
 
-    private static async updateItemDependencies(key:string, newDeps:string[]) {
+    // latest requested dependency list per entry; applied inside the rc queue so that
+    // an older request that is queued first can not overwrite the result of a newer one
+    static #pendingDeps = new Map<string, string[]>();
+
+    private static updateDependencies(
+        key: string,
+        newDeps: string[],
+        prefix: string,
+        get: (key: string) => Promise<string[]>,
+        set: (key: string, deps: string[]) => Promise<void>,
+    ) {
         // ignore if rc:: or deps:: key
-        if (key.startsWith(this.rc_prefix) || key.startsWith(this.item_deps_prefix) || key.startsWith(this.pointer_deps_prefix)) return;
-        await this.runExclusiveRC(async () => {
-            const oldDeps = await this.getItemDependencies(key);
-            const added = newDeps.filter(p=>!oldDeps.includes(p));
-            const removed = oldDeps.filter(p=>!newDeps.includes(p));
+        if (key.startsWith(this.rc_prefix) || key.startsWith(this.item_deps_prefix) || key.startsWith(this.pointer_deps_prefix)) return Promise.resolve();
+        const uniqueKey = prefix + key;
+        this.#pendingDeps.set(uniqueKey, newDeps);
+        return this.runExclusiveRC(async () => {
+            const latestDeps = this.#pendingDeps.get(uniqueKey);
+            // already applied by an earlier queued request
+            if (!latestDeps) return;
+            this.#pendingDeps.delete(uniqueKey);
+            const oldDeps = await get(key);
+            const added = latestDeps.filter(p=>!oldDeps.includes(p));
+            const removed = oldDeps.filter(p=>!latestDeps.includes(p));
             // increase before decrease so that moving a reference never drops the count to 0 in between
             for (const ptrId of added) await this.increaseReferenceCount(ptrId).catch(e=>console.error(e));
-            await this.setItemDependencies(key, newDeps).catch(e=>console.error(e));
+            await set(key, latestDeps).catch(e=>console.error(e));
             for (const ptrId of removed) await this.decreaseReferenceCount(ptrId).catch(e=>console.error(e));
         });
     }
-    private static async updatePointerDependencies(key:string, newDeps:string[]) {
-        // ignore if rc:: or deps:: key
-        if (key.startsWith(this.rc_prefix) || key.startsWith(this.item_deps_prefix) || key.startsWith(this.pointer_deps_prefix)) return;
-        await this.runExclusiveRC(async () => {
-            const oldDeps = await this.getPointerDependencies(key);
-            const added = newDeps.filter(p=>!oldDeps.includes(p));
-            const removed = oldDeps.filter(p=>!newDeps.includes(p));
-            // increase before decrease so that moving a reference never drops the count to 0 in between
-            for (const ptrId of added) await this.increaseReferenceCount(ptrId).catch(e=>console.error(e));
-            await this.setPointerDependencies(key, newDeps).catch(e=>console.error(e));
-            for (const ptrId of removed) await this.decreaseReferenceCount(ptrId).catch(e=>console.error(e));
-        });
+
+    private static updateItemDependencies(key:string, newDeps:string[]) {
+        return this.updateDependencies(key, newDeps, this.item_deps_prefix, k=>this.getItemDependencies(k), (k,d)=>this.setItemDependencies(k,d));
+    }
+    private static updatePointerDependencies(key:string, newDeps:string[]) {
+        return this.updateDependencies(key, newDeps, this.pointer_deps_prefix, k=>this.getPointerDependencies(k), (k,d)=>this.setPointerDependencies(k,d));
     }
     
 
