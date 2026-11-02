@@ -1493,7 +1493,9 @@ export class Storage {
         const newCount = Number(entry) - 1;
         // RC is 0, delete pointer from storage
         if (newCount <= 0) {
-            await this.removeItem(this.rc_prefix+ptrId)
+            // removeItem does not reset the rc column of the SQL pointer mapping, set it to 0 explicitly,
+            // otherwise the rc re-check in removePointer would still see the old count
+            await this.setItem(this.rc_prefix+ptrId, "0")
                 .catch(e=>console.error(e));
             // must not be awaited: removePointer updates the pointer dependencies, which waits for this queue
             this.removePointer(ptrId)
