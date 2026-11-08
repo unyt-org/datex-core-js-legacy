@@ -874,6 +874,14 @@ export class Storage {
     private static synced_pointers = new WeakSet<Pointer>();
 
     /**
+     * Whether changes of the pointer are written to storage automatically (syncPointer was called).
+     * A stored pointer can also be unsynced, e.g. when it was created via providePointer.
+     */
+    static isSyncedPointer(pointer: Pointer) {
+        return this.synced_pointers.has(pointer);
+    }
+
+    /**
      * Pointer values are only weakly referenced by their pointer. A value that changed (or a newly added
      * nested value) can be garbage collected before the delayed storage update ran. The parent entry that
      * references it would be written without the nested pointer ever being stored ("No table found for pointer").

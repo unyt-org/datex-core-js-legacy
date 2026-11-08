@@ -530,6 +530,15 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 	}
 
 	/**
+	 * Whether a referenced pointer is already in the database and synced (changes are written by its own listeners),
+	 * so it does not need to be stored again when a pointer referencing it is inserted/updated.
+	 * Removed pointers are reset to isStored = false, unsynced pointers are still written as before.
+	 */
+	async #isStoredDependency(pointer: Pointer) {
+		return pointer.isStored && Storage.isSyncedPointer(pointer) && await this.hasPointer(pointer.id);
+	}
+
+	/**
 	 * Insert a pointer into the database, pointer type must be templated
 	 */
 	async #insertTemplatedPointer(pointer: Datex.Pointer) {
@@ -564,7 +573,8 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 				else {
 					insertData[name] = propPointer.id
 					// must immediately add entry for foreign constraint to work
-					await Storage.setPointer(propPointer, true)
+					// pointers that are already stored (and synced) don't need to be written again
+					if (!await this.#isStoredDependency(propPointer)) await Storage.setPointer(propPointer, true)
 					dependencies.add(propPointer)
 				}
 			}
@@ -1608,7 +1618,9 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 						const ptr = Pointer.pointerifyValue(pointer.getProperty(name));
 						if (ptr instanceof Pointer) {
 							dependencies.add(ptr)
-							promises.push(Storage.setPointer(ptr))
+							promises.push(
+								this.#isStoredDependency(ptr).then(stored => stored ? undefined : Storage.setPointer(ptr))
+							)
 						}
 					}
 					else {
