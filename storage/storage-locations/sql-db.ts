@@ -40,6 +40,9 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		this.#debugMode = debugMode;
 	}
 
+	/** Number of executed queries and their total duration (ms), for profiling */
+	static queryStats = { count: 0, totalMs: 0 };
+
 	name = "SQL_DB"
 	supportsPrefixSelection = true;
 	supportsMatchSelection = true;
@@ -205,7 +208,10 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
             if (query_params && SQLDBStorageLocation.#containsReplacementChar(query_params)) {
 				console.error("SQL WRITE contains U+FFFD (corrupted before reaching the db):", query_string, query_params, new Error().stack);
 			}
+            const queryStart = performance.now();
             const result = await this.#sqlClient!.execute(query_string, query_params);
+            SQLDBStorageLocation.queryStats.count++;
+            SQLDBStorageLocation.queryStats.totalMs += performance.now() - queryStart;
 			if (result.rows && SQLDBStorageLocation.#containsReplacementChar(result.rows)) {
 				console.error("SQL READ returned U+FFFD:", query_string, query_params);
 			}
