@@ -10,7 +10,7 @@ import { Stream } from "./stream.ts";
 import { Scope } from "./scope.ts";
 import { Quantity } from "./quantity.ts";
 import { Function as DatexFunction } from "./function.ts";
-import { logger, TypedArray } from "../utils/global_values.ts";
+import { DEFAULT_HIDDEN_OBJECT_PROPERTIES, logger, TypedArray } from "../utils/global_values.ts";
 import { BinaryCode } from "../compiler/binary_codes.ts"
 import { RefOrValue, Pointer, ReactiveValue, PointerProperty } from "../runtime/pointers.ts";
 import { clause, Conjunction, Disjunction, Logical, Negation } from "./logic.ts";
@@ -366,9 +366,14 @@ export class Type<T = any> extends ExtensibleFunction {
         // just copy all properties if no template found
         else {
             for (const [key, val] of Object.entries(value)) {
+                // SECURITY: never overwrite prototype-related properties with remote values
+                if (DEFAULT_HIDDEN_OBJECT_PROPERTIES.has(key)) continue;
                 if (val instanceof JSTransferableFunction) {
                     // workaround create new transferable function with correct "this" context
-                    instance[key] = $$(JSTransferableFunction.recreate(val.source, {...val.deps, 'this':instance}));
+                    // SECURITY: keep the origin of the original function - otherwise the new local pointer
+                    // makes remote js source executable without "remote-js-execution" permission
+                    const sourceOrigin = val.sourceOrigin ?? Pointer.getByValue(val)?.origin ?? Runtime.endpoint;
+                    instance[key] = $$(JSTransferableFunction.recreate(val.source, {...val.deps, 'this':instance}, {sourceOrigin, sourceVerified: val.sourceVerified}));
                 }
                 else if (typeof val == "function" && typeof val.bind == "function") instance[key] = val.bind(instance);
                 else instance[key] = val;
@@ -419,7 +424,20 @@ export class Type<T = any> extends ExtensibleFunction {
 
 
     // never call the constructor directly!! should be private
+    // SECURITY: type names are used to generate DATEX source code (toString) and SQL identifiers,
+    // so they must never contain syntax characters (e.g. '>', quotes, backticks)
+    static readonly #INVALID_TYPE_NAME_CHARS = /[\s<>`'"(){}\[\];,\\:\/\x00-\x1f\x7f]/;
+    static #assertValidTypeNamePart(part: string|undefined, kind: string) {
+        if (part === undefined) return;
+        if (typeof part !== "string" || part.length > 255 || Type.#INVALID_TYPE_NAME_CHARS.test(part)) {
+            throw new globalThis.TypeError("Invalid type " + kind + ": " + JSON.stringify(part));
+        }
+    }
+
     constructor(namespace?:string, name?:string, variation?:string, parameters?:any[]) {
+        Type.#assertValidTypeNamePart(namespace, "namespace");
+        Type.#assertValidTypeNamePart(name, "name");
+        Type.#assertValidTypeNamePart(variation, "variation");
         super(namespace && namespace != "std" ? (val:any) => this.cast(val, undefined, undefined, true) : undefined)
         if (name) this.name = name;
         if (namespace) this.namespace = namespace;

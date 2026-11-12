@@ -4,6 +4,7 @@
 
 import { Pointer } from "../runtime/pointers.ts";
 import { Runtime } from "../runtime/runtime.ts";
+import type { Endpoint } from "./addressing.ts";
 import { ExtensibleFunction, getDeclaredExternalVariables, getDeclaredExternalVariablesAsync, getSourceWithoutUsingDeclaration, Callable, createFunctionWithDependencyInjectionsResolveLazyPointers, hasUnresolvedLazyDependencies, getSourceWithResolvedPaths } from "./function-utils.ts";
 
 
@@ -11,7 +12,17 @@ export type JSTransferableFunctionOptions = {
 	errorOnOriginContext?: Error,
 	isLocal?: boolean,
 	// when set, all relative import paths in the function body will be resolved relative to this URL
-	contextURL?: URL
+	contextURL?: URL,
+	/**
+	 * Endpoint that originally created the function source.
+	 * If set, permission checks also require this endpoint to be allowed to execute JS
+	 * (needed when a remote function is recreated locally, e.g. to rebind 'this')
+	 */
+	sourceOrigin?: Endpoint,
+	/**
+	 * Set to false if the source was received from an unverified (unsigned) sender
+	 */
+	sourceVerified?: boolean
 }
 
 export class JSTransferableFunction extends ExtensibleFunction {
@@ -20,6 +31,23 @@ export class JSTransferableFunction extends ExtensibleFunction {
 
 	// promise that resolves when all lazy dependencies are resolved
 	public lazyResolved: Promise<void>
+
+	// endpoint that created the JS source (if known)
+	public readonly sourceOrigin?: Endpoint
+	// false if the source was received in a message with an unverified (unsigned) sender
+	#sourceVerified = true
+
+	public get sourceVerified() {
+		return this.#sourceVerified;
+	}
+
+	/**
+	 * Marks the source of this function as unverified (received from an unsigned remote sender).
+	 * Unverified functions can never be executed unless they are local functions.
+	 */
+	public markSourceUnverified() {
+		this.#sourceVerified = false;
+	}
 
 	// deno-lint-ignore constructor-super
 	private constructor(intermediateFn: (...args:unknown[])=>unknown, lazyResolved: Promise<void>, public deps: Record<string,unknown>, public source: string, public flags?: string[], options?: JSTransferableFunctionOptions) {
@@ -34,8 +62,16 @@ export class JSTransferableFunction extends ExtensibleFunction {
 				if (!options?.isLocal) {
 					if (!ptr) ptr = Pointer.getByValue(this);
 					if (!ptr) throw new Error("Cannot execute js:Function, must be bound to a pointer");
-					const origin = ptr.origin.main;
-					if (origin !== Runtime.endpoint.main && !(Runtime.trustedEndpoints.get(origin)?.includes("remote-js-execution")) && !Runtime.trustedEndpoints.get(ptr.origin)?.includes("remote-js-execution")) {
+					// SECURITY: source must come from a verified (signed or local) sender
+					if (!this.#sourceVerified) {
+						throw new Error("Cannot execute js:Function, source was received from an unverified sender");
+					}
+					// SECURITY: the creator of the source must be allowed to execute JS on this endpoint
+					// (the pointer origin alone is derived from the pointer id, which can be chosen by the sender)
+					if (this.sourceOrigin && !Runtime.canExecuteRemoteJS(this.sourceOrigin)) {
+						throw new Error("Cannot execute js:Function, origin "+this.sourceOrigin+" has no permission to execute js source code on this endpoint");
+					}
+					if (!Runtime.canExecuteRemoteJS(ptr.origin)) {
 						throw new Error("Cannot execute js:Function, origin "+ptr.origin+" has no permission to execute js source code on this endpoint");
 					}
 				}
@@ -46,6 +82,8 @@ export class JSTransferableFunction extends ExtensibleFunction {
 		}
 
 		this.lazyResolved = lazyResolved;
+		this.sourceOrigin = options?.sourceOrigin;
+		if (options?.sourceVerified === false) this.#sourceVerified = false;
 
 		this.source = source;
 	}
@@ -113,8 +151,8 @@ export class JSTransferableFunction extends ExtensibleFunction {
 	 * @param source 
 	 * @param dependencies 
 	 */
-	static recreate(source: string, dependencies: Record<string, unknown>){
-		return this.#createTransferableFunction(source, dependencies)
+	static recreate(source: string, dependencies: Record<string, unknown>, options?: JSTransferableFunctionOptions){
+		return this.#createTransferableFunction(source, dependencies, undefined, options)
 	}
 
 	static #createTransferableFunction(source: string, dependencies: Record<string, unknown>, flags?: string[], options?:JSTransferableFunctionOptions) {
