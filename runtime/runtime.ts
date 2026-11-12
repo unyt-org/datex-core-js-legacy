@@ -947,6 +947,14 @@ export class Runtime {
             throw new DatexError("Cannot execute dxb locally, the receiver defined in the header is external")
         }
            
+        // SECURITY: an overridden sender is an external identity (e.g. derived from a HTTP request in datex-over-http)
+        // and must never be the local endpoint - otherwise the caller would get full local permissions
+        const overriddenSender = overrideMeta?.sender;
+        const hasOverriddenSender = overriddenSender != undefined;
+        if (overriddenSender && Runtime.endpoint && (Runtime.endpoint.equals(overriddenSender) || Runtime.endpoint.main?.equals(overriddenSender.main))) {
+            throw new PermissionError("Cannot execute DATEX with the local endpoint as overridden sender");
+        }
+
         // override meta
         if (overrideMeta) {
             Object.assign(header, overrideMeta)
@@ -954,8 +962,11 @@ export class Runtime {
 
         // create scope
         const scope = Runtime.createNewInitialScope(header, undefined, undefined, undefined, context_location);
-        // SECURITY: mark as local execution, except for forced execution of external blocks (e.g. relayed TRACE messages)
-        scope.local_execution = !forceLocalExecution;
+        // SECURITY: mark as local execution only if the block is executed on behalf of the local endpoint:
+        // - not for forced execution of external blocks (e.g. relayed TRACE messages)
+        // - not if an external sender was provided (overrideMeta.sender or compiled with options.from = external endpoint)
+        const senderIsLocal = !header.sender || header.sender === LOCAL_ENDPOINT || !!Runtime.endpoint?.equals(header.sender);
+        scope.local_execution = !forceLocalExecution && !hasOverriddenSender && senderIsLocal;
     
         // set dxb as scope buffer
         Runtime.updateScope(scope, dxb_body, header)
