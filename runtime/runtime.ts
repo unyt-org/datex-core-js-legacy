@@ -140,6 +140,10 @@ export class StaticScope {
         return this[name];
     }
     setVariable(name: string, value: any) {
+        // values in a static scope (e.g. @endpoint class methods) are publicly exposed
+        // and must be accessible for all endpoints when pointer protection is enabled (same as main branch)
+        const ptr = Pointer.pointerifyValue(value);
+        if (ptr instanceof Pointer) ptr.grantPublicAccess(true);
         return this[name] = value;
     }
     hasVariable(name: string) {
