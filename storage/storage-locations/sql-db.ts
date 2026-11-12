@@ -29,6 +29,14 @@ configLogger({level: "WARNING"})
 
 const logger = new Logger("SQL Storage");
 
+// SECURITY: allowed characters for table and column names that are derived from DATEX types and template keys
+// (these can originate from remote endpoints and are interpolated into SQL statements)
+const VALID_SQL_IDENTIFIER = /^[\p{L}\p{N}_$]{1,64}$/u;
+function assertValidSQLIdentifier(name: string, kind: string) {
+	if (typeof name !== "string" || !VALID_SQL_IDENTIFIER.test(name)) throw new Error("Invalid SQL " + kind + " name: " + JSON.stringify(name));
+	return name;
+}
+
 export class SQLDBStorageLocation extends AsyncStorageLocation {
 
 	static #debugMode = false;
@@ -359,7 +367,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 		const snakeCasePlural = snakeCaseName + (snakeCaseName.endsWith("s") ? "es" : "s");
 		const name = type.namespace=="ext"||type.namespace=="struct" ? snakeCasePlural : `${type.namespace}_${snakeCasePlural}`;
 		if (name.length > 64) throw new Error("Type name too long: " + type);
-		else return name;
+		else return assertValidSQLIdentifier(name, "table");
 	}
 
 	#typeToString(type: Datex.Type) {
@@ -394,6 +402,7 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 
 			// invalid prop name for now: starting/ending with _
 			if (propName.startsWith("_") || propName.endsWith("_")) throw new Error("Invalid property name: " + propName + " (Property names cannot start or end with an underscore)");
+			assertValidSQLIdentifier(propName, "column");
 
 			let mysqlType: mysql_data_type|undefined
 			
@@ -634,6 +643,11 @@ export class SQLDBStorageLocation extends AsyncStorageLocation {
 			if (!keys.includes(key)) {
 				continue;
 			};
+			// SECURITY: only update existing columns
+			if (!columns.has(key)) {
+				logger.warn("Ignoring update for unknown column " + JSON.stringify(key) + " in table " + table);
+				continue;
+			}
 	
 			await this.#query('UPDATE ?? SET ?? = ? WHERE ?? = ?;', [table, key, val, this.#pointerMysqlColumnName, pointer.id])
 		}
