@@ -310,6 +310,16 @@ export class Runtime {
         return !!header.signed || !!Runtime.endpoint?.equals(header.sender);
     }
 
+    /**
+     * Returns true if a remote scope is allowed to resolve URL content (get url),
+     * which can import JS modules: only signed scopes from endpoints with "remote-js-execution" permission
+     */
+    public static canScopeGetURLContent(SCOPE: datex_scope) {
+        const sender = SCOPE.header?.sender;
+        if (!sender || !SCOPE.header.signed) return false;
+        return Runtime.canExecuteRemoteJS(sender);
+    }
+
     public static canExecuteRemoteJS(origin?: Endpoint|null) {
         if (!origin) return false;
         if (origin === Runtime.endpoint || origin.main === Runtime.endpoint?.main) return true;
@@ -5530,8 +5540,10 @@ export class Runtime {
                 else if (el instanceof URL) {
                     // SECURITY: resolving URLs can import() JS modules (http(s)/file), read local files
                     // and execute fetched DATEX as the local endpoint. Only allow this for scopes
-                    // that run with the permissions of the local endpoint.
-                    if (!SCOPE.impersonation_permission && !SCOPE.local_execution) {
+                    // that run with the permissions of the local endpoint, or for verified (signed)
+                    // scopes from trusted endpoints with "remote-js-execution" permission
+                    // (e.g. a UIX backend sending module references to its frontend)
+                    if (!SCOPE.impersonation_permission && !SCOPE.local_execution && !Runtime.canScopeGetURLContent(SCOPE)) {
                         throw new PermissionError("No permission to get URL content", SCOPE)
                     }
                     INNER_SCOPE.active_value = await Runtime.getURLContent(el, false, true);
