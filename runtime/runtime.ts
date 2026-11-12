@@ -277,6 +277,16 @@ export class Runtime {
         this.trustedEndpoints.set(endpoint, permissions);
     }
 
+    /**
+     * Returns true if JS source code originating from the given endpoint may be executed on this endpoint
+     * (local endpoint or trusted endpoint with "remote-js-execution" permission)
+     */
+    public static canExecuteRemoteJS(origin?: Endpoint|null) {
+        if (!origin) return false;
+        if (origin === Runtime.endpoint || origin.main === Runtime.endpoint?.main) return true;
+        return !!(this.trustedEndpoints.get(origin.main)?.includes("remote-js-execution") || this.trustedEndpoints.get(origin)?.includes("remote-js-execution"));
+    }
+
     public static getLocalString(local_map:{[lang:string]:string}):Pointer<string> {
         const ptr = Pointer.createTransform([PointerProperty.get(Runtime.ENV, 'LANG')],
             (lang:string) => {
@@ -1906,7 +1916,18 @@ export class Runtime {
             }
             throw e;
         }
-        
+
+        // SECURITY: reject unsigned messages from an external interface that claim to be sent by this endpoint.
+        // Without this check, any peer could spoof the local endpoint as sender and obtain
+        // impersonation_permission (which is granted when header.sender equals Runtime.endpoint).
+        {
+            const incomingHeader = res instanceof Array ? res[0] : res;
+            const isLocalSocket = socket?.interfaceProperties?.type === "local";
+            if (!isLocalSocket && !incomingHeader.signed && incomingHeader.sender && Runtime.endpoint?.equals(incomingHeader.sender)) {
+                logger.error("Rejected unsigned DATEX message from external interface claiming to be sent by the local endpoint (" + incomingHeader.sender + ")");
+                return incomingHeader;
+            }
+        }
 
         // normal request
         if (res instanceof Array) {
@@ -2632,6 +2653,10 @@ export class Runtime {
                         if (old_value instanceof Tuple) {
                             // from js source
                             if (old_value.has('js_source')) {
+                                // SECURITY: js_source is evaluated with new Function() - only allow for local or trusted origins
+                                if (!Runtime.canExecuteRemoteJS(origin)) {
+                                    throw new PermissionError("Cannot create <Function> from JS source, origin " + origin + " has no permission to execute js source code on this endpoint");
+                                }
                                 const source = old_value.get('js_source');
                                 const dependencies = old_value.get('js_deps') ?? {}
                                 const intermediateFn = createFunctionWithDependencyInjections(source, dependencies)
@@ -5398,6 +5423,12 @@ export class Runtime {
                     }
                 }
                 else if (el instanceof URL) {
+                    // SECURITY: resolving URLs can import() JS modules (http(s)/file), read local files
+                    // and execute fetched DATEX as the local endpoint. Only allow this for scopes
+                    // that run with the permissions of the local endpoint.
+                    if (!SCOPE.impersonation_permission) {
+                        throw new PermissionError("No permission to get URL content", SCOPE)
+                    }
                     INNER_SCOPE.active_value = await Runtime.getURLContent(el, false, true);
                 }
                 // else ignore, continue with current value

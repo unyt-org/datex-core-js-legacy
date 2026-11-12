@@ -4,12 +4,19 @@
 
 import { Pointer } from "../runtime/pointers.ts";
 import { Runtime } from "../runtime/runtime.ts";
+import type { Endpoint } from "./addressing.ts";
 import { ExtensibleFunction, getDeclaredExternalVariables, getDeclaredExternalVariablesAsync, getSourceWithoutUsingDeclaration, Callable, createFunctionWithDependencyInjectionsResolveLazyPointers, hasUnresolvedLazyDependencies } from "./function-utils.ts";
 
 
 export type JSTransferableFunctionOptions = {
 	errorOnOriginContext?: Error,
-	isLocal?: boolean
+	isLocal?: boolean,
+	/**
+	 * Endpoint that originally created the function source.
+	 * If set, permission checks also require this endpoint to be allowed to execute JS
+	 * (needed when a remote function is recreated locally, e.g. to rebind 'this')
+	 */
+	sourceOrigin?: Endpoint
 }
 
 export class JSTransferableFunction extends ExtensibleFunction {
@@ -32,8 +39,11 @@ export class JSTransferableFunction extends ExtensibleFunction {
 				if (!options?.isLocal) {
 					if (!ptr) ptr = Pointer.getByValue(this);
 					if (!ptr) throw new Error("Cannot execute js:Function, must be bound to a pointer");
-					const origin = ptr.origin.main;
-					if (origin !== Runtime.endpoint.main && !(Runtime.trustedEndpoints.get(origin)?.includes("remote-js-execution")) && !Runtime.trustedEndpoints.get(ptr.origin)?.includes("remote-js-execution")) {
+					// SECURITY: a function recreated from remote source keeps the permissions of its original creator
+					if (options?.sourceOrigin && !Runtime.canExecuteRemoteJS(options.sourceOrigin)) {
+						throw new Error("Cannot execute js:Function, origin "+options.sourceOrigin+" has no permission to execute js source code on this endpoint");
+					}
+					if (!Runtime.canExecuteRemoteJS(ptr.origin)) {
 						throw new Error("Cannot execute js:Function, origin "+ptr.origin+" has no permission to execute js source code on this endpoint");
 					}
 				}
@@ -107,8 +117,8 @@ export class JSTransferableFunction extends ExtensibleFunction {
 	 * @param source 
 	 * @param dependencies 
 	 */
-	static recreate(source: string, dependencies: Record<string, unknown>){
-		return this.#createTransferableFunction(source, dependencies)
+	static recreate(source: string, dependencies: Record<string, unknown>, options?: JSTransferableFunctionOptions){
+		return this.#createTransferableFunction(source, dependencies, undefined, options)
 	}
 
 	static #createTransferableFunction(source: string, dependencies: Record<string, unknown>, flags?: string[], options?:JSTransferableFunctionOptions) {

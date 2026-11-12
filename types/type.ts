@@ -364,7 +364,10 @@ export class Type<T = any> extends ExtensibleFunction {
             for (const [key, val] of Object.entries(value)) {
                 if (val instanceof JSTransferableFunction) {
                     // workaround create new transferable function with correct "this" context
-                    instance[key] = $$(JSTransferableFunction.recreate(val.source, {...val.deps, 'this':instance}));
+                    // SECURITY: keep the origin of the original function - otherwise the new local pointer
+                    // makes remote js source executable without "remote-js-execution" permission
+                    const sourceOrigin = Pointer.getByValue(val)?.origin ?? Runtime.endpoint;
+                    instance[key] = $$(JSTransferableFunction.recreate(val.source, {...val.deps, 'this':instance}, {sourceOrigin}));
                 }
                 else if (typeof val == "function" && typeof val.bind == "function") instance[key] = val.bind(instance);
                 else instance[key] = val;
