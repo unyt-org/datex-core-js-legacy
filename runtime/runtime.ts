@@ -279,6 +279,52 @@ export class Runtime {
         this.trustedEndpoints.set(endpoint, permissions);
     }
 
+    /**
+     * Returns true if JS source code originating from the given endpoint may be executed on this endpoint
+     * (local endpoint or trusted endpoint with "remote-js-execution" permission)
+     */
+    /**
+     * Returns a shallow copy of an object without an own __proto__ property (if present)
+     */
+    static #withoutProtoKey(obj: Record<string, unknown>) {
+        if (!obj || !Object.hasOwn(obj, "__proto__")) return obj;
+        const copy: Record<string, unknown> = {};
+        for (const key of Object.keys(obj)) {
+            if (key !== "__proto__") copy[key] = obj[key];
+        }
+        return copy;
+    }
+
+    /**
+     * Returns true if the sender of the scope is verified (signed message or local endpoint)
+     */
+    public static isScopeOriginVerified(SCOPE: datex_scope) {
+        if (SCOPE.local_execution) return true;
+        const header = SCOPE.header;
+        // internal scope without header
+        if (!header) return true;
+        if (!header.sender) return false;
+        // signed messages or messages from the local endpoint (unsigned external messages claiming to be
+        // from the local endpoint are rejected in handleDatexIn)
+        return !!header.signed || !!Runtime.endpoint?.equals(header.sender);
+    }
+
+    /**
+     * Returns true if a remote scope is allowed to resolve URL content (get url),
+     * which can import JS modules: only signed scopes from endpoints with "remote-js-execution" permission
+     */
+    public static canScopeGetURLContent(SCOPE: datex_scope) {
+        const sender = SCOPE.header?.sender;
+        if (!sender || !SCOPE.header.signed) return false;
+        return Runtime.canExecuteRemoteJS(sender);
+    }
+
+    public static canExecuteRemoteJS(origin?: Endpoint|null) {
+        if (!origin) return false;
+        if (origin === Runtime.endpoint || origin.main === Runtime.endpoint?.main) return true;
+        return !!(this.trustedEndpoints.get(origin.main)?.includes("remote-js-execution") || this.trustedEndpoints.get(origin)?.includes("remote-js-execution"));
+    }
+
     public static getLocalString(local_map:{[lang:string]:string}):Pointer<string> {
         const ptr = Pointer.createTransform([PointerProperty.get(Runtime.ENV, 'LANG')],
             (lang:string) => {
@@ -501,6 +547,21 @@ export class Runtime {
     // DATEX OUT + REDIRECT
 
     private static callbacks_by_sid = new Map<string, [resolve:globalThis.Function, reject:globalThis.Function, timeoutId?: number]>();
+    // SECURITY: expected senders (and signature requirement) for pending requests, used to reject forged responses
+    static #expected_response_senders = new Map<string, {receivers: Endpoint[], signed: boolean}>();
+
+    /**
+     * Returns false if a response for the given unique_sid was received from an endpoint that was not
+     * a receiver of the original request, or if the request was signed but the response is not
+     */
+    static #isValidResponseSender(unique_sid: string, header: dxb_header) {
+        const expected = this.#expected_response_senders.get(unique_sid);
+        if (!expected) return true;
+        const sender = header.sender;
+        if (!sender) return false;
+        if (expected.signed && !header.signed && !Runtime.endpoint?.equals(sender)) return false;
+        return expected.receivers.some(receiver => receiver === sender || receiver.equals(sender) || receiver.main === sender.main || receiver.equals(sender.main));
+    }
     private static detailed_result_callbacks_by_sid = new Map<string, (scope:datex_scope, header:dxb_header, error?:Error)=>void>(); // call only once
     private static detailed_result_callbacks_by_sid_multi = new Map<string, (scope:datex_scope, header:dxb_header, error?:Error)=>void>(); // call multiple times
 
@@ -895,6 +956,14 @@ export class Runtime {
             throw new DatexError("Cannot execute dxb locally, the receiver defined in the header is external")
         }
            
+        // SECURITY: an overridden sender is an external identity (e.g. derived from a HTTP request in datex-over-http)
+        // and must never be the local endpoint - otherwise the caller would get full local permissions
+        const overriddenSender = overrideMeta?.sender;
+        const hasOverriddenSender = overriddenSender != undefined;
+        if (overriddenSender && Runtime.endpoint && (Runtime.endpoint.equals(overriddenSender) || Runtime.endpoint.main?.equals(overriddenSender.main))) {
+            throw new PermissionError("Cannot execute DATEX with the local endpoint as overridden sender");
+        }
+
         // override meta
         if (overrideMeta) {
             Object.assign(header, overrideMeta)
@@ -902,6 +971,11 @@ export class Runtime {
 
         // create scope
         const scope = Runtime.createNewInitialScope(header, undefined, undefined, undefined, context_location);
+        // SECURITY: mark as local execution only if the block is executed on behalf of the local endpoint:
+        // - not for forced execution of external blocks (e.g. relayed TRACE messages)
+        // - not if an external sender was provided (overrideMeta.sender or compiled with options.from = external endpoint)
+        const senderIsLocal = !header.sender || header.sender === LOCAL_ENDPOINT || !!Runtime.endpoint?.equals(header.sender);
+        scope.local_execution = !forceLocalExecution && !hasOverriddenSender && senderIsLocal;
     
         // set dxb as scope buffer
         Runtime.updateScope(scope, dxb_body, header)
@@ -1117,6 +1191,14 @@ export class Runtime {
 
             }
 
+            // remember expected response senders for single requests to endpoints
+            if (!flood && to && (wait_for_result || detailed_result_callback)) {
+                const receivers = [...to];
+                if (receivers.length && receivers.every(r => r instanceof Endpoint)) {
+                    this.#expected_response_senders.set(unique_sid, {receivers: receivers as Endpoint[], signed: !!(data instanceof Array && data[2]?.sign)});
+                }
+            }
+
             // callback for detailed results?
             if (detailed_result_callback) {
                 // only one expected response
@@ -1136,6 +1218,7 @@ export class Runtime {
                 if (timeout > 0 && Number.isFinite(timeout)) {
                     timeoutId = setTimeout(()=>{
                         // reject if response wasn't already received (might still be processed, and resolve not yet called)
+                        this.#expected_response_senders.delete(unique_sid);
                         reject(new NetworkError("DATEX request timeout after "+timeout+"ms: " + unique_sid +  " to " + Runtime.valueToDatexString(to)));
                     }, timeout);
                 }
@@ -1908,7 +1991,18 @@ export class Runtime {
             }
             throw e;
         }
-        
+
+        // SECURITY: reject unsigned messages from an external interface that claim to be sent by this endpoint.
+        // Without this check, any peer could spoof the local endpoint as sender and obtain
+        // impersonation_permission (which is granted when header.sender equals Runtime.endpoint).
+        {
+            const incomingHeader = res instanceof Array ? res[0] : res;
+            const isLocalSocket = socket?.interfaceProperties?.type === "local";
+            if (!isLocalSocket && !incomingHeader.signed && incomingHeader.sender && Runtime.endpoint?.equals(incomingHeader.sender)) {
+                logger.error("Rejected unsigned DATEX message from external interface claiming to be sent by the local endpoint (" + incomingHeader.sender + ")");
+                return incomingHeader;
+            }
+        }
 
         // normal request
         if (res instanceof Array) {
@@ -2154,6 +2248,13 @@ export class Runtime {
         {
             const unique_sid = header.sid+"-"+header.return_index;
 
+            // SECURITY: ignore responses from unexpected senders
+            if (!this.#isValidResponseSender(unique_sid, header)) {
+                logger.error("Ignoring error response for " + unique_sid + " from unexpected or unverified sender " + header.sender);
+                return;
+            }
+            if (!this.detailed_result_callbacks_by_sid_multi.has(unique_sid)) this.#expected_response_senders.delete(unique_sid);
+
             // handle result
             if (this.callbacks_by_sid.has(unique_sid)) {
                 this.callbacks_by_sid.get(unique_sid)![1](e, true);
@@ -2200,6 +2301,13 @@ export class Runtime {
                 const traceStack = return_value as trace[]
                 traceStack.push({endpoint:Runtime.endpoint, socket: {type: scope.socket?.interfaceProperties?.type??"unknown", name: scope.socket?.interfaceProperties?.name}, timestamp: new Date()});
             }
+
+            // SECURITY: ignore responses from unexpected senders
+            if (!this.#isValidResponseSender(unique_sid, header)) {
+                logger.error("Ignoring response for " + unique_sid + " from unexpected or unverified sender " + header.sender);
+                return;
+            }
+            if (!this.detailed_result_callbacks_by_sid_multi.has(unique_sid)) this.#expected_response_senders.delete(unique_sid);
 
             // handle result
             if (this.callbacks_by_sid.has(unique_sid)) {
@@ -2295,7 +2403,7 @@ export class Runtime {
      * Cast a value to a specific type
      * Result must be awaited and collapsed with Runtime.collapseValueCast
      */
-    public static async castValue(type:Type, value:any, context?:any, context_location?:URL, origin:Endpoint = Runtime.endpoint, no_fetch?:boolean, assigningPtrId?: string): Promise<any> {
+    public static async castValue(type:Type, value:any, context?:any, context_location?:URL, origin:Endpoint = Runtime.endpoint, no_fetch?:boolean, assigningPtrId?: string, originVerified = true): Promise<any> {
         
         let old_type = Type.ofValue(value);
         let old_value = value instanceof UnresolvedValue ? value[DX_VALUE] : value;
@@ -2634,6 +2742,10 @@ export class Runtime {
                         if (old_value instanceof Tuple) {
                             // from js source
                             if (old_value.has('js_source')) {
+                                // SECURITY: js_source is evaluated with new Function() - only allow for local or trusted origins
+                                if (!originVerified || !Runtime.canExecuteRemoteJS(origin)) {
+                                    throw new PermissionError("Cannot create <Function> from JS source, origin " + origin + " has no permission to execute js source code on this endpoint");
+                                }
                                 const source = old_value.get('js_source');
                                 const dependencies = old_value.get('js_deps') ?? {}
                                 const intermediateFn = createFunctionWithDependencyInjections(source, dependencies)
@@ -2727,7 +2839,7 @@ export class Runtime {
             if (!no_fetch) {
                 try {
                     await JSInterface.loadTypeConfiguration(type);
-                    return Runtime.castValue(type, value, context, undefined, origin, true, assigningPtrId); // no_fetch = true
+                    return Runtime.castValue(type, value, context, undefined, origin, true, assigningPtrId, originVerified); // no_fetch = true
                 } catch (e) {
                     logger.error(e)
                 }
@@ -2739,6 +2851,11 @@ export class Runtime {
                 new_value = type.cast(old_value, context, origin, false, false, assigningPtrId);
             }
 
+        }
+
+        // SECURITY: JS source received from an unverified sender can never be executed
+        if (!originVerified && new_value instanceof JSTransferableFunction) {
+            new_value.markSourceUnverified();
         }
 
         // could not cast 
@@ -3331,7 +3448,7 @@ export class Runtime {
                 let el = INNER_SCOPE.type_casts.pop();
                 let type:Type | undefined;
                 // iterate over now remaining type casts
-                while ((type = INNER_SCOPE.type_casts.pop())) el = await Runtime.castValue(type, el, INNER_SCOPE.ctx_intern, SCOPE.context_location, SCOPE.origin)
+                while ((type = INNER_SCOPE.type_casts.pop())) el = await Runtime.castValue(type, el, INNER_SCOPE.ctx_intern, SCOPE.context_location, SCOPE.origin, undefined, undefined, Runtime.isScopeOriginVerified(SCOPE))
                 INNER_SCOPE.active_value = el;
             }
 
@@ -4290,6 +4407,7 @@ export class Runtime {
                 internal_vars: {...SCOPE.internal_vars},
                 execution_permission: SCOPE.execution_permission,
                 impersonation_permission: SCOPE.impersonation_permission,
+                local_execution: SCOPE.local_execution,
                 sub_scopes: [],
                 meta: {...SCOPE.meta},
                 remote: {...SCOPE.remote},
@@ -4390,6 +4508,10 @@ export class Runtime {
                     else throw new RuntimeError("Invalid template definition");
                 }
                 else if (INNER_SCOPE.template instanceof Type) {
+                    // SECURITY: remote endpoints must not redefine existing (e.g. locally defined) type templates
+                    if (!SCOPE.impersonation_permission && !SCOPE.local_execution && INNER_SCOPE.template.template) {
+                        throw new PermissionError("No permission to redefine the template of " + INNER_SCOPE.template, SCOPE);
+                    }
                     if (typeof el == "object") {
                         INNER_SCOPE.template.setTemplate(el);
                         delete INNER_SCOPE.template;
@@ -4516,7 +4638,7 @@ export class Runtime {
                     const waitingPtr = [...INNER_SCOPE.waiting_ptrs??[]][0];
                     let ptrId: string|undefined;
                     if (waitingPtr && (typeof waitingPtr[1] == "object" || waitingPtr[1] == undefined)) ptrId = waitingPtr[0].id;
-                    el = await Runtime.castValue(type, el, INNER_SCOPE.ctx_intern, SCOPE.context_location, SCOPE.origin, undefined, ptrId)
+                    el = await Runtime.castValue(type, el, INNER_SCOPE.ctx_intern, SCOPE.context_location, SCOPE.origin, undefined, ptrId, Runtime.isScopeOriginVerified(SCOPE))
                 }
             }
 
@@ -4673,14 +4795,17 @@ export class Runtime {
                 if (INNER_SCOPE.waiting_collapse) {
                     INNER_SCOPE.waiting_collapse = false;
 
-                    if (el instanceof Tuple) Object.assign(INNER_SCOPE.active_object, el.toObject());
-                    else if (Type.ofValue(el) == Type.std.Object || Type.ofValue(el) == Type.js.NativeObject) Object.assign(INNER_SCOPE.active_object, el)
+                    // SECURITY: Object.assign would invoke the __proto__ setter for own __proto__ keys
+                    if (el instanceof Tuple) Object.assign(INNER_SCOPE.active_object, Runtime.#withoutProtoKey(el.toObject()));
+                    else if (Type.ofValue(el) == Type.std.Object || Type.ofValue(el) == Type.js.NativeObject) Object.assign(INNER_SCOPE.active_object, Runtime.#withoutProtoKey(el))
                     else throw new ValueError("Cannot collapse value")
                 }
 
                 // key insert
                 else if ('waiting_key' in INNER_SCOPE) {
-                    if (typeof INNER_SCOPE.waiting_key == "string") INNER_SCOPE.active_object[INNER_SCOPE.waiting_key] = el;
+                    // SECURITY: setting __proto__ would replace the prototype of the object
+                    if (INNER_SCOPE.waiting_key === "__proto__") throw new ValueError("Invalid <Object> key: __proto__");
+                    else if (typeof INNER_SCOPE.waiting_key == "string") INNER_SCOPE.active_object[INNER_SCOPE.waiting_key] = el;
                     else throw new ValueError("<Object> key must be <text>");
 
                     // add key permission
@@ -5400,6 +5525,14 @@ export class Runtime {
                     }
                 }
                 else if (el instanceof URL) {
+                    // SECURITY: resolving URLs can import() JS modules (http(s)/file), read local files
+                    // and execute fetched DATEX as the local endpoint. Only allow this for scopes
+                    // that run with the permissions of the local endpoint, or for verified (signed)
+                    // scopes from trusted endpoints with "remote-js-execution" permission
+                    // (e.g. a UIX backend sending module references to its frontend)
+                    if (!SCOPE.impersonation_permission && !SCOPE.local_execution && !Runtime.canScopeGetURLContent(SCOPE)) {
+                        throw new PermissionError("No permission to get URL content", SCOPE)
+                    }
                     INNER_SCOPE.active_value = await Runtime.getURLContent(el, false, true);
                 }
                 // else ignore, continue with current value
@@ -6716,7 +6849,7 @@ export class Runtime {
                         // clear object
                         Object.keys(new_object).forEach(key => delete new_object[key])
                         // assign scope result
-                        Object.assign(new_object, scope_result.toObject());
+                        Object.assign(new_object, Runtime.#withoutProtoKey(scope_result.toObject()));
                     }
                     else if (scope_result != VOID && !(new_object instanceof Array)) {
                         throw new ValueError("Cannot cast non-tuple value to object")
@@ -7518,7 +7651,8 @@ Type.get<JSTransferableFunction>("js:Function").setJSInterface({
         "deps"
     ]),
     cast(value,type,context,origin) {
-        return JSTransferableFunction.recreate(value.source, value.deps)
+        // SECURITY: remember the creator of the source for permission checks
+        return JSTransferableFunction.recreate(value.source, value.deps, {sourceOrigin: origin})
     },
 
     apply_value(parent, args = []) {

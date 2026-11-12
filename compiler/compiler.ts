@@ -349,8 +349,9 @@ export class Compiler {
         let sid:number;
         // get unique SID
         do {
-            sid = Math.round(Math.random() * this.MAX_SID);
-        } while (this.sid_return_indices.has(sid));
+            // SECURITY: use a cryptographically secure random SID (SIDs are used to match responses to requests)
+            sid = crypto.getRandomValues(new Uint32Array(1))[0];
+        } while (sid === 0 || this.sid_return_indices.has(sid));
 
         this.sid_return_indices.set(sid,0);
         this.sid_incs.set(sid,0);

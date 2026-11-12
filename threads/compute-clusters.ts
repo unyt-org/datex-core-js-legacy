@@ -32,7 +32,10 @@ export class ComputeCluster {
 	 * Cluster users now expect that they can request computations from this endpoint.
 	 */
 	@property private join() {
-		const endpoint = datex.meta.sender;
+		// SECURITY: the caller identity is only trustworthy if the message was signed
+		if (!datex.meta.signed) throw new Error("ComputeCluster.join() must be called with a signed message");
+		const endpoint = datex.meta.caller;
+		if (!endpoint) throw new Error("ComputeCluster.join(): unknown caller");
 		logger.success(`endpoint ${endpoint} joined cluster "${this.name}"`)
 		this.endpoints.set(endpoint, 0);
 	}
@@ -73,7 +76,11 @@ export class ComputeCluster {
 		const ptr = Datex.Pointer.getByValue(cluster);
 		if (!ptr) throw new Error(`ComputeCluster "${cluster.name}" is not a bound to a pointer`)
 
-		for (const user of cluster.users) {
+		// SECURITY: all cluster users are granted remote JS execution on this endpoint
+		// (only the users at join time, later changes to cluster.users are not trusted)
+		const users = [...cluster.users].filter(user => user instanceof Endpoint);
+		logger.warn(`joining cluster "${cluster.name}" grants remote JS execution on this endpoint to: ${users.map(u=>u.toString()).join(", ")}`);
+		for (const user of users) {
 			Datex.Runtime.addTrustedEndpoint(user, [
 				"remote-js-execution"
 			]);

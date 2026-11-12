@@ -209,6 +209,7 @@ export type datex_scope = {
 
     execution_permission: boolean, // can execute functions
     impersonation_permission: boolean, // can do everything the current endpoint can do: make requests to other endpoints
+    local_execution?: boolean, // scope was started locally via Runtime.executeDXBLocally (not received from a remote endpoint)
 
     sync?:boolean, // anywhere waiting for subscribe?
     unsubscribe?:boolean, // anywhere waiting for unsubscribe?
