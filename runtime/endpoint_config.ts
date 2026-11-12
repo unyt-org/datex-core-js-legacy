@@ -248,18 +248,20 @@ class EndpointConfig implements EndpointConfigData {
 	}
 
 	/**
-	 * get public node keys + connection points from unyt.cc/nodes.dx
+	 * get public node keys + connection points from the nodes.dx file bundled with this library
+	 * (fallback: unyt.cc/nodes.dx)
 	 */
 	private async loadPublicNodes() {
 		// get public nodes
 		if (!this.publicNodes) {
-			// try to get from unyt.cc
+			// use the bundled nodes.dx first (served together with the library, e.g. from the CDN),
+			// unyt.cc/nodes.dx is currently not available and caused failing requests on every startup
 			try {
-				this.publicNodes = await datex.get('https://unyt.cc/nodes.dx');
-			}
-			// otherwise try to get local file (only backend)
-			catch {
 				this.publicNodes = await datex.get(new URL('../dx_data/nodes.dx', import.meta.url));
+			}
+			// otherwise try to get from unyt.cc
+			catch {
+				this.publicNodes = await datex.get('https://unyt.cc/nodes.dx');
 			}
 		}
 	}
