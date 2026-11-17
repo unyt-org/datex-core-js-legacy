@@ -1837,7 +1837,11 @@ export class Pointer<T = any> extends ReactiveValue<T> {
         }
         // create new pointer
         else {
-            return <Pointer<T>>Pointer.create(id, value, sealed, undefined, persistant, anonymous, false, allowed_access); 
+            const pointer = <Pointer<T>>Pointer.create(id, value, sealed, undefined, persistant, anonymous, false, allowed_access);
+            // create() treats an undefined argument as an omitted initial value.
+            // Here it is an explicit value (DATEX void), so initialize it too.
+            if (value === undefined) pointer.val = value;
+            return pointer;
         }
     }
 
