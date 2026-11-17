@@ -16,6 +16,7 @@ import { Supranet } from "./supranet.ts";
 import { Endpoint } from "../types/addressing.ts";
 import { CommunicationInterfaceSocket } from "./communication-interface.ts";
 import { communicationHub } from "./communication-hub.ts";
+import { client_type } from "../utils/constants.ts";
 import { endpoint_config } from "../runtime/endpoint_config.ts";
 
 const logger = new Logger("unyt");
@@ -27,7 +28,10 @@ Supranet.onConnect = ()=>{
     Unyt.endpoint_info.datex_version = Runtime.VERSION;
     Unyt.using_http_over_datex = endpoint_config.usingHTTPoverDATEX
 
-    Unyt.logEndpointInfo(); 
+    // The banner resolves endpoint aliases over the network. In browsers this would compete with the
+    // requests of the starting app, so it is printed once the page has settled (same content).
+    if (client_type == "browser") setTimeout(() => Unyt.logEndpointInfo(), 3000);
+    else Unyt.logEndpointInfo();
 }
 
 export interface AppInfo {

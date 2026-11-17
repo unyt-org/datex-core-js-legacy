@@ -148,7 +148,7 @@ export class Endpoint extends Target {
 	#alias?: string
 	#certifier?: Endpoint
 
-	#properties = new Map<unknown,unknown>()
+	#properties?: Map<unknown,unknown> // allocated on first use (interned lookups construct a temporary Endpoint)
 	#entrypoint?: unknown
 
 	#n: string
@@ -166,7 +166,7 @@ export class Endpoint extends Target {
 	get certifier() {return this.#certifier}
 
 	get properties() {
-		return this.#properties;
+		return this.#properties ??= new Map();
 	}
 	get entrypoint() {
 		return this.#entrypoint;
@@ -256,7 +256,7 @@ export class Endpoint extends Target {
 		try {
 			const res = await datex("#public.(?)", [key], this);
 			if (res!==undefined) {
-				this.#properties.set(key, res)
+				this.properties.set(key, res)
 				return res;
 			}
 		} 
@@ -266,7 +266,7 @@ export class Endpoint extends Target {
 		}
 		// fallback: Blockchain
 		const res = Runtime.Blockchain.getEndpointProperty(this, key);
-		this.#properties.set(key, res)
+		this.properties.set(key, res)
 		return res;
 	}
 

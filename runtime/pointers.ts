@@ -1486,13 +1486,12 @@ export class Pointer<T = any> extends ReactiveValue<T> {
     /** total pointer id size: 26 bytes */
     static getUniquePointerID(forPointer?:Pointer): Uint8Array {
         const id = new Uint8Array(this.MAX_POINTER_ID_SIZE);
-        const id_view = new DataView(id.buffer)
         // add custom origin id
         if (forPointer && !forPointer.is_origin) id.set(forPointer.origin.getPointerPrefix());
         // add current endpoint origin id
         else id.set(this.pointer_prefix)
 
-        const timestamp = Math.round((new Date().getTime() - Compiler.BIG_BANG_TIME)/1000);
+        const timestamp = Math.round((Date.now() - Compiler.BIG_BANG_TIME)/1000);
 
         // reset on new timestamp
         if (timestamp !== this.last_t) {
@@ -1508,11 +1507,12 @@ export class Pointer<T = any> extends ReactiveValue<T> {
             this.time_shift ++;
         }
 
-        // add timestamp (in seconds)
-        id_view.setUint32(21,timestamp+this.time_shift, true); // timestamp + time_shift
+        // add timestamp (in seconds), little endian uint32 (same bytes as DataView.setUint32(21, t, true))
+        const t = (timestamp+this.time_shift) >>> 0;
+        id[21] = t & 0xff; id[22] = (t >>> 8) & 0xff; id[23] = (t >>> 16) & 0xff; id[24] = t >>> 24;
 
-        // add unique counter
-        id_view.setUint8(25, this.last_c++)
+        // add unique counter (setUint8 semantics: modulo 256)
+        id[25] = this.last_c++ & 0xff
 
         this.last_t = timestamp; // save actual last time a pointer was created
 
@@ -2075,9 +2075,22 @@ export class Pointer<T = any> extends ReactiveValue<T> {
             try {id_buffer = hex2buffer(id_buffer, Pointer.MAX_POINTER_ID_SIZE, true);}
             catch {throw new SyntaxError('Invalid pointer id: $' + id_buffer.slice(0, 48));}
         }
+        // Most pointer IDs share the origin prefix of the previous lookup (all locally created
+        // pointers). Reuse that canonical endpoint instead of reconstructing it; the strong
+        // reference keeps the interned instance alive, so identity is unchanged.
+        const last = Pointer.#lastOrigin;
+        if (last && id_buffer.length >= 21) {
+            const prefix = last.prefix;
+            let same = true;
+            for (let i = 0; i < 21; i++) if (prefix[i] !== id_buffer[i]) {same = false; break;}
+            if (same) return last.endpoint;
+        }
         const pointer_type = id_buffer[0];
-        return <Endpoint>Target.get(id_buffer.slice(1,19), id_buffer.slice(19,21), pointer_type);
+        const endpoint = <Endpoint>Target.get(id_buffer.slice(1,19), id_buffer.slice(19,21), pointer_type);
+        if (endpoint instanceof Endpoint && id_buffer.length >= 21) Pointer.#lastOrigin = {prefix: id_buffer.slice(0, 21), endpoint};
+        return endpoint;
     }
+    static #lastOrigin?: {prefix: Uint8Array, endpoint: Endpoint};
     
     // delete pointer again (reset everything) if not needed
     public delete() {

@@ -315,8 +315,18 @@ export class JSInterface {
 
 
 
+const nativeMapEntries = Map.prototype.entries;
+const nativeMapForEach = Map.prototype.forEach;
 const iterateMapReverse = function (this:Map<any,any>) {
-    const values = Array.from(this.entries());
+    const entries = this.entries;
+    let values:any[];
+    if (entries === nativeMapEntries) {
+        values = [];
+        // Keep a fresh entry snapshot without allocating a native iterator result
+        // for every registration. Exposed entry pairs still belong to this iterator.
+        nativeMapForEach.call(this, (value, key) => values.push([key, value]));
+    }
+    else values = Array.from(Reflect.apply(entries, this, []));
     // start at the end of the array
     let index = values.length;
     return <IterableIterator<any>>{
