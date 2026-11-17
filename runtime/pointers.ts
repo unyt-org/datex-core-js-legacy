@@ -422,8 +422,32 @@ export abstract class ReactiveValue<T = any> extends EventTarget {
      * pops the last captured getters and returns them
      */
     protected static getCapturedGetters() {
-        this.isCapturing = false;
-        return {capturedGetters: this.capturedGetters.pop(), capturedGettersWithKeys: this.capturedGettersWithKeys.pop()};
+        const captured = {capturedGetters: this.capturedGetters.pop(), capturedGettersWithKeys: this.capturedGettersWithKeys.pop()};
+        // an enclosing transform evaluation is still capturing (nested transform finished):
+        // keep capturing for it. Previously capturing was switched off entirely, so every
+        // dependency read after a nested transform inside a transform was silently lost.
+        this.isCapturing = this.capturedGetters.length > 0;
+        return captured;
+    }
+
+    /**
+     * Runs `callback` without letting the enclosing transform evaluation capture the values it
+     * reads (nesting-safe: reads go into a discarded capture frame; transforms created inside
+     * still capture their own dependencies). Used e.g. by UIX for element/component
+     * construction: an element sets up its own fine-grained bindings, so an enclosing
+     * transform must not depend on values read while building it.
+     */
+    public static untracked<T>(callback:()=>T): T {
+        if (!this.isCapturing) return callback();
+        const freeze = this.freezeCapturing;
+        this.captureGetters();
+        try {
+            return callback();
+        }
+        finally {
+            this.getCapturedGetters();
+            this.freezeCapturing = freeze;
+        }
     }
 
     /**
