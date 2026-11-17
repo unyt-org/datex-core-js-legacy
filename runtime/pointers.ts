@@ -1988,15 +1988,28 @@ export class Pointer<T = any> extends ReactiveValue<T> {
 
 
     // custom datex pointer array splice function
-    private arraySplice(start?: number, deleteCount?: number, ...items: unknown[]): unknown[] {
+    private arraySplice(...args: unknown[]): unknown[] {
+        // Normalize start/deleteCount exactly like Array.prototype.splice (ECMA-262 23.1.3.31):
+        // negative start counts from the end, values are clamped to the array bounds, a missing
+        // deleteCount removes everything from start, and no arguments remove nothing.
+        // (handleSplice, its observer events and the propagated DATEX update require normalized
+        // indices; e.g. splice(-1, 1) previously notified observers for index -1.)
+        const length = (<Array<unknown>><unknown>this.shadow_object).length;
+        const toInteger = (v: unknown) => {const n = Math.trunc(Number(v)); return Number.isNaN(n) ? 0 : n;};
+        const relativeStart = toInteger(args[0]);
+        const start = relativeStart < 0 ? Math.max(length + relativeStart, 0) : Math.min(relativeStart, length);
+        const deleteCount = args.length == 0 ? 0 :
+            args.length == 1 ? length - start :
+            Math.min(Math.max(toInteger(args[1]), 0), length - start);
+        const items = args.slice(2);
         // is clear?
-        if (start == 0 && deleteCount == (<Array<unknown>><unknown>this.shadow_object).length && items.length == 0) {
+        if (start == 0 && deleteCount == length && items.length == 0) {
+            if (length == 0) return [];
+            const removed = [...(<Array<unknown>><unknown>this.shadow_object)];
             this.handleClear();
-            return [];
+            return removed;
         }
-        if (deleteCount == undefined) deleteCount = (<Array<unknown>><unknown>this.shadow_object).length; // default deleteCount: all
-        if (deleteCount && deleteCount < 0) deleteCount = 0;
-        return this.handleSplice(start??0, deleteCount, items) ?? [];
+        return this.handleSplice(start, deleteCount, items) ?? [];
     }
 
     private arraySort(compareFn?: (a: unknown, b: unknown) => number): T{
@@ -4521,17 +4534,17 @@ export class Pointer<T = any> extends ReactiveValue<T> {
 
         const ret = Array.prototype.splice.call(this.shadow_object, start_index, deleteCount, ...replace);
 
-        // default strategy: insert;
-        let dxScript = "#0=?0;#0.(?4..?1) = void; #0.(?2..((count #0) + ?3)) = #0.(?4..(count #0));#0.(?4..?5) = ?6;"
-        let dxParams = [this, end, start-size+replace_length, replace_length, start, start+replace_length, replace];
+        // Splice relative to the receiver's current length (#1): shift the tail from s+d to
+        // s+r (pairwise range assignment, values are read before writing), delete the surplus
+        // at the end (empty range if the array grows), then write the inserted items (tuple).
+        // s = start, d = number of deleted entries, r = number of inserted entries.
+        // (The previous scripts relied on broken range-assignment semantics and computed wrong
+        // target ranges for replacements, e.g. splice(2,1,x) on [a,b,c,d,e] gave [a,b,x,e].)
+        let dxScript = "#0 = ?0; #1 = count #0; #0.((?1 + ?3)..(#1 - ?2 + ?3)) = #0.((?1 + ?2)..#1); #0.((#1 - ?2 + ?3)..#1) = void; #0.(?1..(?1 + ?3)) = ?4;"
+        let dxParams: unknown[] = [this, start, size, replace_length, new Tuple(replace)];
 
-        // only delete
-        if (!replace?.length) {
-            dxScript = "#0 = ?0; #1 = count #0;#0.(?1..?2) = void;#0.(?1..#1) = #0.(?3..#1);"
-            dxParams = [this, start, end, start+size];
-        }
         // exact replace
-        else if (deleteCount == originalLength && start_index == 0) {
+        if (deleteCount == originalLength && start_index == 0) {
             dxScript = "#0=?0; #0 = ?1;"
             dxParams = [this, replace];
         }

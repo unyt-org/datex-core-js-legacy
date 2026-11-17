@@ -184,7 +184,10 @@ export class JSInterface {
     // return if a value has a matching pseudo class configuration
     static hasPseudoClass(value:any):boolean {
         for (const [_class, config] of this.configurations_by_class) {
-            if (value instanceof _class) { // is class instance
+            // some configurations register a prototype object instead of a constructor as
+            // 'class' (e.g. js:AsyncGenerator); 'instanceof' would throw for those
+            const isInstance = typeof _class == "function" ? value instanceof _class : Object.prototype.isPrototypeOf.call(_class, value);
+            if (isInstance) { // is class instance
                 if (config.detect_class instanceof globalThis.Function && !(<globalThis.Function>config.detect_class)(value)) return false; // detect class invalid
                 return true;
             }
