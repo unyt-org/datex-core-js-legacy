@@ -5747,6 +5747,20 @@ export class Compiler {
     }
 
 
+    /**
+     * Reserves internal variables that the script source uses explicitly (#0, #1, ... hex numbered), so that
+     * internal variables created by the compiler (e.g. for duplicate values: `#sub_result = #0 = "..."`) never
+     * reuse their numbers. Otherwise an inserted value with repeated strings overwrote a variable of the
+     * script, e.g. "#0=?0; #0 = ?1;" assigned a string to the pointer instead of the array.
+     */
+    static reserveExplicitInternalVars(index:[number], source:string) {
+        for (const match of source.matchAll(/#([0-9a-fA-F]+)(?![A-Za-z0-9À-ž_])/g)) {
+            const n = parseInt(match[1], 16);
+            if (n < 0x10000 && n >= index[0]) index[0] = n + 1;
+        }
+        return index;
+    }
+
     static createCompilerScope(datex:string|{datex:string}, data:any[] = [], options:compiler_options={}, add_header=true, is_child_scope_block = false, extract_pointers = false, save_precompiled?:PrecompiledDXB, max_block_size?:number, _code_block_type?:0|1|2|42, _current_data_index=0):compiler_scope{
         
         const stack = [Compiler.getBaseStack(options.context_location)];
@@ -5803,7 +5817,7 @@ export class Compiler {
 
             b_index: 0,
 
-            internal_var_index: options.parent_scope?.internal_var_index ?? [0],
+            internal_var_index: Compiler.reserveExplicitInternalVars(options.parent_scope?.internal_var_index ?? [0], typeof datex == "string" ? datex : ""),
             internal_vars: new WeakMap(),
             internal_primitive_vars: new Map(),
 
@@ -5923,7 +5937,7 @@ export class Compiler {
 
             b_index: 0,
 
-            internal_var_index: options.parent_scope?.internal_var_index ?? [0],
+            internal_var_index: Compiler.reserveExplicitInternalVars(options.parent_scope?.internal_var_index ?? [0], typeof datex == "string" ? datex : ""),
             internal_vars: new WeakMap(),
             internal_primitive_vars: new Map(),
 
