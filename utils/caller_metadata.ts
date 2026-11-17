@@ -12,6 +12,7 @@ const is_safari = client_type !== "deno" && (typeof globalThis.webkitConvertPoin
 
 const meta = new Map<number, any>();
 let min_key = 0;
+let synchronous_key: number | undefined;
 
 function createMetaMapping(object:any){
 	while (meta.has(min_key)) {
@@ -28,9 +29,17 @@ function removeMeta(key:number){
 function _callWithMetaData<args extends any[], returns>(key:number, fn:(...args:args)=>returns, args?:args, ctx?:any): any {
     const encoded = '__meta__'+key+'__';
 	const _args = <args> args ?? [];
-	return is_safari ? 
-		new globalThis.Function('f', 'c', 'a', 'return (function '+encoded+'(){return c ? f.apply(c, a) : f(...a)})()')(fn, ctx, args) : 
-		({[encoded]:()=>ctx ? fn.apply(ctx, _args) : fn(..._args)})[encoded]()
+	// This frame ends when the callback returns, even if it returns a promise.
+	const previous_key = synchronous_key;
+	synchronous_key = key;
+	try {
+		return is_safari ?
+			new globalThis.Function('f', 'c', 'a', 'return (function '+encoded+'(){return c ? f.apply(c, a) : f(...a)})()')(fn, ctx, args) :
+			({[encoded]:()=>ctx ? fn.apply(ctx, _args) : fn(..._args)})[encoded]()
+	}
+	finally {
+		synchronous_key = previous_key;
+	}
 }
 
 
@@ -163,6 +172,8 @@ export async function callWithMetadataAsync<args extends any[], returns extends 
  * @returns meta object
  */
 export function getMeta(error?: Error){
+    // Captured errors and calls outside a synchronous frame retain stack lookup.
+    if (error == null && synchronous_key !== undefined) return meta.get(synchronous_key);
     const key = (error??new Error()).stack?.match(extract_meta)?.[1];
     return meta.get(Number(key));
 }
@@ -171,6 +182,7 @@ export function getMeta(error?: Error){
  * clear metadata for further call stack
  */
 export function clearMeta(error?: Error){
-    const key = Number((error??new Error()).stack?.match(extract_meta)?.[1]);
+    const key = error == null && synchronous_key !== undefined ? synchronous_key :
+        Number((error??new Error()).stack?.match(extract_meta)?.[1]);
     if (!isNaN(key)) removeMeta(key);
 }
