@@ -1255,7 +1255,42 @@ type TransformState = {
     returnCache: Map<string, any>;
     getDepsHash: () => string;
     update: () => void;
+    // derived results (live map/filter) created by the last evaluation, see Pointer.derived
+    derivedSlots?: DerivedSlot[];
+    // set while this transform is kept alive to re-target the derived result it returned
+    forwarded?: WeakRef<object>;
 }
+
+/**
+ * Derived results (live map/filter results) created while a transform function runs.
+ * On re-evaluation, each map/filter call is matched to the result it created before (same
+ * source first, otherwise by call position) and that result is re-targeted to the new source
+ * instead of creating a new one. This keeps results returned from a transform stable, e.g.
+ * _$(() => map(obj.items, f)) follows obj.items replacements without rebuilding its list.
+ */
+type DerivedSlot = {kind: string, source: unknown, result: WeakRef<object>};
+type DerivedRun = {previous: DerivedSlot[], used: Set<DerivedSlot>, next: DerivedSlot[]};
+const derivedRunStack: DerivedRun[] = [];
+const derivedRetargeters = new WeakMap<object, (source: unknown) => void>();
+const derivedDisposers = new WeakMap<object, () => void>();
+function beginDerivedRun(previous: DerivedSlot[]|undefined) {
+    const run: DerivedRun = {previous: previous ?? [], used: new Set(), next: []};
+    derivedRunStack.push(run);
+    return run;
+}
+function endDerivedRun(run: DerivedRun) {
+    if (derivedRunStack.at(-1) === run) derivedRunStack.pop();
+    else {const i = derivedRunStack.lastIndexOf(run); if (i >= 0) derivedRunStack.splice(i, 1);}
+    // results not requested again are no longer part of the output: stop updating them
+    for (const slot of run.previous) {
+        if (run.used.has(slot)) continue;
+        const result = slot.result.deref();
+        if (result) derivedDisposers.get(result)?.();
+    }
+    return run.next;
+}
+// deletes a transform kept alive for its derived result once that result is collected
+const derivedForwardCleanup = new FinalizationRegistry<Pointer>(transform => transform.delete());
 
 
 const observableArrayMethods = new Set<string>([
@@ -1844,6 +1879,49 @@ export class Pointer<T = any> extends ReactiveValue<T> {
         // create or get pointer
         else return Pointer.createOrGet(collapsed_value, sealed, allowed_access, anonymous, persistant).val;
     } 
+
+    /**
+     * Returns the derived result (live map/filter result) for this call. Inside a re-evaluated
+     * transform, the result created by the matching previous call is reused and re-targeted
+     * to `source` (match: same kind and source first, otherwise next unused of the same kind).
+     * Outside of a transform evaluation, `create` is simply called.
+     * `create` must register the result with registerDerivedResult.
+     */
+    static derived<R extends object>(kind: string, source: unknown, create: () => R): R {
+        const run = derivedRunStack.at(-1);
+        if (!run) return create();
+        let slot = run.previous.find(s => !run.used.has(s) && s.kind === kind && s.source === source && s.result.deref());
+        // Positional re-targeting only for a single previous result of this kind (e.g.
+        // _$(() => map(obj.items, f)) or cond ? map(a, f) : map(b, f)). With several calls of
+        // the same kind (e.g. groups.map(g => map(g.items, f))) a greedy positional match
+        // would re-target the wrong results when a source is inserted, so only identical
+        // sources are reused there and a changed source gets a new result.
+        if (!slot) {
+            const sameKind = run.previous.filter(s => s.kind === kind);
+            if (sameKind.length == 1 && !run.used.has(sameKind[0]) && sameKind[0].result.deref()) slot = sameKind[0];
+        }
+        if (slot) {
+            const result = slot.result.deref() as R;
+            run.used.add(slot);
+            if (slot.source !== source) derivedRetargeters.get(result)?.(source);
+            run.next.push({kind, source, result: slot.result});
+            return result;
+        }
+        // nested derived calls inside create() belong to the same evaluation
+        const result = create();
+        run.next.push({kind, source, result: new WeakRef(result)});
+        return result;
+    }
+
+    /** registers how a derived result is re-targeted to a new source and disposed */
+    static registerDerivedResult(result: object, retarget: (source: unknown) => void, dispose: () => void) {
+        derivedRetargeters.set(result, retarget);
+        derivedDisposers.set(result, dispose);
+    }
+
+    static isDerivedResult(value: unknown) {
+        return value !== null && typeof value == "object" && derivedRetargeters.has(value as object);
+    }
 
     // create a new pointer or return the existing pointer/pointer property for this value
     static createOrGet<T>(value:RefOrValue<T>, sealed = false, allowed_access?:target_clause, anonymous = false, persistant = false, id?: string):Pointer<T>{
@@ -3154,7 +3232,9 @@ export class Pointer<T = any> extends ReactiveValue<T> {
                 // is a static transform and show a warning
                 if (!state.isLive && !state.isFirst) {
                     state.executingEffect = true;
-                    this.setVal(transform() as T, true, true);
+                    const run = beginDerivedRun(state.derivedSlots);
+                    try {this.setVal(transform() as T, true, true);}
+                    finally {state.derivedSlots = endDerivedRun(run);}
                     state.executingEffect = false;
                 }
                 // get transform value and update dependency observers
@@ -3177,9 +3257,11 @@ export class Pointer<T = any> extends ReactiveValue<T> {
                     if (val === undefined) {
                         ReactiveValue.captureGetters();
         
+                        const run = beginDerivedRun(state.derivedSlots);
                         try {
                             state.executingEffect = true;
-                            val = transform() as T;
+                            try {val = transform() as T;}
+                            finally {state.derivedSlots = endDerivedRun(run);}
                             state.executingEffect = false;
                             // also trigger getter if pointer is returned
                             ReactiveValue.collapseValue(val, true, true); 
@@ -3200,6 +3282,30 @@ export class Pointer<T = any> extends ReactiveValue<T> {
                     // early return the inner transformed pointer
                     const ptr = Pointer.getByValue(val);
                     if (ptr?.isTransform) {
+                        // A derived result (live map/filter) created/re-targeted by this
+                        // evaluation: return it as before, but keep this transform alive and
+                        // observing its own dependencies, so a later change (e.g. a replaced
+                        // source array) re-targets the same result instead of being lost.
+                        if (Pointer.isDerivedResult(val) && state.derivedSlots?.some(s => s.result.deref() === val)) {
+                            const forwarded = state.forwarded?.deref();
+                            if (!forwarded) {
+                                state.forwarded = new WeakRef(val as object);
+                                derivedForwardCleanup.register(val as object, this);
+                            }
+                            else if (forwarded !== val) {
+                                // the evaluation returned a different result than the one that
+                                // is already handed out: cannot be forwarded (unchanged behaviour)
+                                logger.warn("transform returned a different derived result than before; it cannot be forwarded")
+                                return;
+                            }
+                            // observe this evaluation's dependencies (the outer pointer itself never
+                            // takes a value, so liveness cannot be derived from its value type)
+                            state.isLive = true;
+                            this.handleTransformValue(val, capturedGetters, capturedGettersWithKeys, state, true, options);
+                            return forwarded ? undefined : ptr;
+                        }
+                        // a forwarded transform whose evaluation no longer returns its result
+                        if (state.forwarded) return;
                         return ptr;
                     }
 
@@ -3356,6 +3462,13 @@ export class Pointer<T = any> extends ReactiveValue<T> {
          * and the inner transform pointer is returned instead
          */
         if (innerTransformPointer) {
+            // kept alive to re-target the derived result it returned (see update)
+            if (state.forwarded) {
+                // keep observing (dependencies are already observed, no re-evaluation needed)
+                this.setForcedLiveTransform(true, false);
+                logger.debug("forwarding derived result " + innerTransformPointer.idString())
+                return innerTransformPointer;
+            }
             this.delete();
             logger.debug("found inner transform pointer " + innerTransformPointer.idString())
             return innerTransformPointer;
