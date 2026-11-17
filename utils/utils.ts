@@ -107,7 +107,34 @@ export function buffer2hex(buffer:Uint8Array|ArrayBuffer, seperator?:string, pad
     if (buffer instanceof ArrayBuffer) buffer = new Uint8Array(buffer);
 
     // first pad buffer
-    if (pad_size_bytes) buffer = buffer.slice(0, pad_size_bytes);
+    // (slice only truncates and the buffer is never mutated below, so no copy is needed when it is
+    // not longer than pad_size_bytes)
+    if (pad_size_bytes && buffer.length > pad_size_bytes) buffer = buffer.slice(0, pad_size_bytes);
+
+    // Already-sized compact IDs need neither a byte-string array nor padding.
+    if (x_shorthand && buffer instanceof Uint8Array && buffer.length > 0 &&
+        pad_size_bytes === buffer.length &&
+        (seperator === undefined || typeof seperator === "string")) {
+        const digits = "0123456789ABCDEF";
+        let result = "";
+        let index = 0;
+        while (index < buffer.length) {
+            const value = buffer[index++]!;
+            let part: string;
+            if (value === 0) {
+                let count = 1;
+                while (count < 15 && index < buffer.length && buffer[index] === 0) {
+                    count++;
+                    index++;
+                }
+                part = count === 1 ? "00" : "x" + digits.charAt(count);
+            }
+            else part = digits.charAt(value >> 4) + digits.charAt(value & 15);
+            if (result && seperator) result += seperator;
+            result += part;
+        }
+        return result;
+    }
 
     let array:string[] = <string[]> Array.prototype.map.call(buffer, x => ('00' + x.toString(16).toUpperCase()).slice(-2))
     let skipped_bytes = 0;

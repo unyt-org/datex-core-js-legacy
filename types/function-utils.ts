@@ -65,8 +65,25 @@ declare global {
 
 type Flag = 'standalone'|'silent-errors'|'allow-globals'
 
-function getUsedVars(fn: (...args:unknown[])=>unknown) {
+// Parsing results depend only on the function source text. Many callbacks share the same
+// source (one per compiled JSX expression), so parse each source once. Bounded by clearing.
+const SOURCE_CACHE_LIMIT = 10_000;
+const usedVarsCache = new Map<string, {usedVars?: string[], flags?: Flag[]}>();
+const strippedSourceCache = new Map<string, string>();
+
+function getUsedVars(fn: (...args:unknown[])=>unknown): {usedVars?: string[], flags?: Flag[]} {
     const source = fn.toString();
+    let parsed = usedVarsCache.get(source);
+    if (!parsed) {
+        if (usedVarsCache.size >= SOURCE_CACHE_LIMIT) usedVarsCache.clear();
+        parsed = parseUsedVars(source);
+        usedVarsCache.set(source, parsed);
+    }
+    // callers receive their own arrays
+    return parsed.usedVars ? {usedVars: parsed.usedVars.slice(), flags: parsed.flags!.slice()} : {};
+}
+
+function parseUsedVars(source: string): {usedVars?: string[], flags?: Flag[]} {
     const usedVarsSource = source.match(/^(?:(?:[\w\s*])+\(.*?\)\s*{|\(.*?\)\s*=>\s*[{(]?|.*?\s*=>\s*[{(]?)\s*(?:return *)?use\s*\(([\s\S]*?)\)/)?.[1]
     if (!usedVarsSource) return {};
 
@@ -157,7 +174,17 @@ function captureVariables(e: unknown, usedVars: string[], flags: Flag[]) {
 
 
 export function getSourceWithoutUsingDeclaration(fn: (...args:unknown[])=>unknown) {
-    let fnSource = fn.toString();
+    const source = fn.toString();
+    let stripped = strippedSourceCache.get(source);
+    if (stripped === undefined) {
+        if (strippedSourceCache.size >= SOURCE_CACHE_LIMIT) strippedSourceCache.clear();
+        stripped = stripUsingDeclaration(source);
+        strippedSourceCache.set(source, stripped);
+    }
+    return stripped;
+}
+
+function stripUsingDeclaration(fnSource: string) {
 	// object methods check if 'this' context is component context;
 	if (!isNormalFunction(fnSource) && !isArrowFunction(fnSource) && isObjectMethod(fnSource)) {
         if (fnSource.startsWith("async")) fnSource = fnSource.replace("async", "async function") 

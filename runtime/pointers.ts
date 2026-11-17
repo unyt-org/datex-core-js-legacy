@@ -15,6 +15,38 @@ import type { primitive } from "../types/abstract_types.ts";
 import { Function as DatexFunction } from "../types/function.ts";
 import { Quantity } from "../types/quantity.ts";
 import { buffer2hex, hex2buffer } from "../utils/utils.ts";
+
+/**
+ * Deferred pointer identity (see Pointer.deferPointerCreation): value -> function creating exactly
+ * the pointer that would otherwise have been created eagerly.
+ */
+const deferredPointers = new WeakMap<object, () => unknown>();
+function materializeDeferredPointer(value: unknown) {
+    if (value === null || (typeof value != "object" && typeof value != "function")) return;
+    const create = deferredPointers.get(value);
+    if (!create) return;
+    deferredPointers.delete(value);
+    // remove the lazy accessors before the pointer defines its real properties
+    delete (value as any)[DX_PTR];
+    delete (value as any).$;
+    delete (value as any).$$;
+    create();
+}
+const deferredPointerDescriptors = {
+    [DX_PTR]: {
+        get(this: any) { materializeDeferredPointer(this); return this[DX_PTR] },
+        set(this: any, v: unknown) { materializeDeferredPointer(this); Object.defineProperty(this, DX_PTR, {value: v, enumerable: false, writable: true, configurable: true}) },
+        enumerable: false, configurable: true
+    },
+    $: {
+        get(this: any) { materializeDeferredPointer(this); return this.$ },
+        enumerable: false, configurable: true
+    },
+    $$: {
+        get(this: any) { materializeDeferredPointer(this); return this.$$ },
+        enumerable: false, configurable: true
+    }
+} as const;
 import { Conjunction, Disjunction, Logical } from "../types/logic.ts";
 import { ProtocolDataType } from "../compiler/protocol_types.ts";
 import { Scope } from "../types/scope.ts";
@@ -387,7 +419,7 @@ export abstract class ReactiveValue<T = any> extends EventTarget {
      * Returns true if the value has a bound pointer or is a Datex.Ref
      */
     public static isRef(value: unknown) {
-        return (value instanceof ReactiveValue || Pointer.pointer_value_map.has(value));
+        return (value instanceof ReactiveValue || Pointer.pointer_value_map.has(value) || deferredPointers.has(value as object));
     }
 
     // copy the value of a primitive datex value to another primitive value
@@ -1486,13 +1518,12 @@ export class Pointer<T = any> extends ReactiveValue<T> {
     /** total pointer id size: 26 bytes */
     static getUniquePointerID(forPointer?:Pointer): Uint8Array {
         const id = new Uint8Array(this.MAX_POINTER_ID_SIZE);
-        const id_view = new DataView(id.buffer)
         // add custom origin id
         if (forPointer && !forPointer.is_origin) id.set(forPointer.origin.getPointerPrefix());
         // add current endpoint origin id
         else id.set(this.pointer_prefix)
 
-        const timestamp = Math.round((new Date().getTime() - Compiler.BIG_BANG_TIME)/1000);
+        const timestamp = Math.round((Date.now() - Compiler.BIG_BANG_TIME)/1000);
 
         // reset on new timestamp
         if (timestamp !== this.last_t) {
@@ -1508,11 +1539,12 @@ export class Pointer<T = any> extends ReactiveValue<T> {
             this.time_shift ++;
         }
 
-        // add timestamp (in seconds)
-        id_view.setUint32(21,timestamp+this.time_shift, true); // timestamp + time_shift
+        // add timestamp (in seconds), little endian uint32 (same bytes as DataView.setUint32(21, t, true))
+        const t = (timestamp+this.time_shift) >>> 0;
+        id[21] = t & 0xff; id[22] = (t >>> 8) & 0xff; id[23] = (t >>> 16) & 0xff; id[24] = t >>> 24;
 
-        // add unique counter
-        id_view.setUint8(25, this.last_c++)
+        // add unique counter (setUint8 semantics: modulo 256)
+        id[25] = this.last_c++ & 0xff
 
         this.last_t = timestamp; // save actual last time a pointer was created
 
@@ -1821,6 +1853,38 @@ export class Pointer<T = any> extends ReactiveValue<T> {
         else return Pointer.createOrGet(collapsed_value, sealed, allowed_access, anonymous, persistant).val;
     } 
 
+    /**
+     * Defers creating the pointer for an object until it can be observed. `create` must create
+     * exactly the pointer that would otherwise have been created now (e.g. () => $(value)).
+     * It runs on the first read/write of value[DX_PTR], value.$ or value.$$, and before
+     * getByValue/pointerifyValue (via DX_PTR), createOrGet, create, setValue, initializeValue
+     * (adoption by another pointer); isRef reports true. Every observer therefore sees the same
+     * pointer as with eager creation; only the moment of allocation (and with it the pointer id's
+     * timestamp/counter) changes.
+     * Returns false (and creates the pointer immediately) if the value already has or awaits one.
+     */
+    static deferPointerCreation(value: object, create: () => unknown): boolean {
+        if (deferredPointers.has(value) || this.pointer_value_map.has(value) || DX_PTR in value || "$" in value || "$$" in value || !Object.isExtensible(value)) {
+            if (!deferredPointers.has(value)) create();
+            return false;
+        }
+        deferredPointers.set(value, create);
+        // three defineProperty calls are ~3x faster than defineProperties with a symbol-keyed map
+        Object.defineProperty(value, DX_PTR, deferredPointerDescriptors[DX_PTR]);
+        Object.defineProperty(value, "$", deferredPointerDescriptors.$);
+        Object.defineProperty(value, "$$", deferredPointerDescriptors.$$);
+        return true;
+    }
+
+    /** Creates a deferred pointer now (no-op if none is pending). */
+    static materializeDeferred(value: unknown) {
+        materializeDeferredPointer(value);
+    }
+
+    static hasDeferredPointer(value: unknown) {
+        return value !== null && (typeof value == "object" || typeof value == "function") && deferredPointers.has(value as object);
+    }
+
     // create a new pointer or return the existing pointer/pointer property for this value
     static createOrGet<T>(value:RefOrValue<T>, sealed = false, allowed_access?:target_clause, anonymous = false, persistant = false, id?: string):Pointer<T>{
         if (value instanceof LazyPointer) throw new PointerError("Lazy Pointer not supported in this context");
@@ -1878,6 +1942,7 @@ export class Pointer<T = any> extends ReactiveValue<T> {
     // only creates the same pointer once => unique pointers
     // throws error if pointer is already allocated or pointer value is primitive
     static create<T>(id?:string|Uint8Array, value:RefOrValue<T>|typeof NOT_EXISTING=NOT_EXISTING, sealed = false, origin?:Endpoint, persistant=false, anonymous = false, is_placeholder = false, allowed_access?:target_clause, timeout?:number): Pointer<T> {
+        materializeDeferredPointer(value);
         let p:Pointer<T>;
 
         // DatexValue: DatexPointer or DatexPointerProperty not valid as object, get the actual value instead
@@ -2075,9 +2140,22 @@ export class Pointer<T = any> extends ReactiveValue<T> {
             try {id_buffer = hex2buffer(id_buffer, Pointer.MAX_POINTER_ID_SIZE, true);}
             catch {throw new SyntaxError('Invalid pointer id: $' + id_buffer.slice(0, 48));}
         }
+        // Most pointer IDs share the origin prefix of the previous lookup (all locally created
+        // pointers). Reuse that canonical endpoint instead of reconstructing it; the strong
+        // reference keeps the interned instance alive, so identity is unchanged.
+        const last = Pointer.#lastOrigin;
+        if (last && id_buffer.length >= 21) {
+            const prefix = last.prefix;
+            let same = true;
+            for (let i = 0; i < 21; i++) if (prefix[i] !== id_buffer[i]) {same = false; break;}
+            if (same) return last.endpoint;
+        }
         const pointer_type = id_buffer[0];
-        return <Endpoint>Target.get(id_buffer.slice(1,19), id_buffer.slice(19,21), pointer_type);
+        const endpoint = <Endpoint>Target.get(id_buffer.slice(1,19), id_buffer.slice(19,21), pointer_type);
+        if (endpoint instanceof Endpoint && id_buffer.length >= 21) Pointer.#lastOrigin = {prefix: id_buffer.slice(0, 21), endpoint};
+        return endpoint;
     }
+    static #lastOrigin?: {prefix: Uint8Array, endpoint: Endpoint};
     
     // delete pointer again (reset everything) if not needed
     public delete() {
@@ -2602,6 +2680,7 @@ export class Pointer<T = any> extends ReactiveValue<T> {
             Pointer.primitive_pointers.delete(this.id)
             return <any>Pointer.create(this.id, v, this.sealed, this.origin, this.is_persistent, this.is_anonymous, false, this.allowed_access, this.datex_timeout)
         }
+        materializeDeferredPointer(v);
         const existingPtr = Pointer.pointer_value_map.get(v);
 
         // placeholder replacement
@@ -2727,6 +2806,9 @@ export class Pointer<T = any> extends ReactiveValue<T> {
 
         // get transform wrapper
         if (is_transform) val = this.getInitialTransformValue(val)
+
+        // this pointer adopts val: restore eager state first if val has a deferred pointer
+        materializeDeferredPointer(val);
 
         // Get type from initial value, keep as <any> if initial value is null/undefined or indirect reference
         if (val!==undefined && val !== null && 
@@ -2978,7 +3060,7 @@ export class Pointer<T = any> extends ReactiveValue<T> {
         
         // custom timeout from type?
         if (this.type.timeout!=undefined && this.datex_timeout==undefined) this.datex_timeout = this.type.timeout
-        setTimeout(()=>{for (const l of Pointer.pointer_add_listeners) l(this)},0);
+        batchedTimeout(()=>{for (const l of Pointer.pointer_add_listeners) l(this)},0);
         Object.freeze(this);
     }
 
@@ -3155,7 +3237,8 @@ export class Pointer<T = any> extends ReactiveValue<T> {
                     // check if val is already the result of a transform function
                     // happens e.g. with jusix _$(() => map(x, ...))
                     // early return the inner transformed pointer
-                    const ptr = Pointer.getByValue(val);
+                    // (a deferred pointer is always a plain $() pointer, never a transform: no lookup needed)
+                    const ptr = deferredPointers.has(val as object) ? undefined : Pointer.getByValue(val);
                     if (ptr?.isTransform) {
                         return ptr;
                     }
@@ -3345,8 +3428,11 @@ export class Pointer<T = any> extends ReactiveValue<T> {
 
         // remove return value if captured by getters
         // TODO: this this work as intended?
-        capturedGetters?.delete(val instanceof Pointer ? val : Pointer.getByValue(val)!);
-        capturedGettersWithKeys?.delete(val instanceof Pointer ? val : Pointer.getByValue(val)!);
+        // (a deferred pointer does not exist yet, so it cannot have been captured: no lookup needed)
+        if (!deferredPointers.has(val as object)) {
+            capturedGetters?.delete(val instanceof Pointer ? val : Pointer.getByValue(val)!);
+            capturedGettersWithKeys?.delete(val instanceof Pointer ? val : Pointer.getByValue(val)!);
+        }
 
         const hasGetters = capturedGetters||capturedGettersWithKeys;
         const gettersCount = (capturedGetters?.size??0) + (capturedGettersWithKeys?.size??0);
@@ -3488,7 +3574,7 @@ export class Pointer<T = any> extends ReactiveValue<T> {
 
             // add to garbage collection after timeout
             const _keep = this.current_val;
-            setTimeout(()=>{
+            batchedTimeout(()=>{
                 if (!this.garbage_collected && this.value_initialized && !this.is_persistent) {
                     _keep; // prevent garbage collection until timeout finished
                     
@@ -4951,4 +5037,34 @@ globalThis.snapshot = ()=>{
         x +=  ";\n";
     }
     console.log(x)
+}
+
+/**
+ * Coalesces callbacks with the same delay that are scheduled within a few milliseconds into one
+ * host timer. Callbacks run in scheduling order, no earlier than their requested delay (joining is
+ * limited to batches created within 4 ms, the browser's own timer clamping), and each callback is
+ * isolated: an exception is reported and does not stop later callbacks.
+ *
+ * Used for high-volume internal pointer bookkeeping (GC grace registration, pointer-added
+ * notifications) where creating one host timer per pointer dominated construction cost.
+ */
+// var + lazy init: pointers may be created before this module finishes evaluating
+var batches: Map<number, {created: number, callbacks: (() => void)[]}>|undefined;
+
+function batchedTimeout(callback: () => void, delay = 0) {
+    batches ??= new Map();
+    const now = performance.now();
+    let batch = batches.get(delay);
+    if (!batch || now - batch.created > 4) {
+        const current = batch = {created: now, callbacks: [] as (() => void)[]};
+        batches.set(delay, current);
+        setTimeout(() => {
+            if (batches!.get(delay) === current) batches!.delete(delay);
+            for (const fn of current.callbacks) {
+                try { fn() }
+                catch (e) { reportError(e) }
+            }
+        }, delay);
+    }
+    batch.callbacks.push(callback);
 }
