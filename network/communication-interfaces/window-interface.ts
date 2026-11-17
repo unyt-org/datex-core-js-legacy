@@ -10,7 +10,8 @@ export class WindowInterfaceSocket extends CommunicationInterfaceSocket {
     }
 
     handleReceive = (event: MessageEvent) => {
-        if (event.origin == this.windowOrigin) {
+        // origin alone does not identify the peer: several windows/iframes can share an origin
+        if (event.origin == this.windowOrigin && event.source === this.window) {
             if (event.data instanceof ArrayBuffer) this.receive(event.data)
             else if (typeof event.data == "string") this.receive(base64ToArrayBuffer(event.data))
         }
@@ -155,7 +156,8 @@ export class WindowInterface extends CommunicationInterface {
     }
 
     private onReceive = (event: MessageEvent) => {
-        if (event.origin == this.#windowOrigin) {
+        // only messages from the bound window (several windows/iframes can share an origin)
+        if (event.origin == this.#windowOrigin && event.source === this.window) {
             const data = event.data;
             if (data?.type == "INIT") {
                 this.#connectedPromise.resolve(true)
