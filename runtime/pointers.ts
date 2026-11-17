@@ -2150,21 +2150,27 @@ export class Pointer<T = any> extends ReactiveValue<T> {
         Pointer.pointers.delete(this.#id);
         Pointer.primitive_pointers.delete(this.#id)
 
-        // remove disposables
-        for (const disposable of this.#boundDisposables) {
-            console.log("disposing", disposable)
-            disposable[Symbol.dispose]?.()
+        // remove disposables (still reachable ones; collected disposables cleaned up themselves)
+        for (const disposableRef of this.#boundDisposables) {
+            disposableRef.deref()?.[Symbol.dispose]?.()
         }
+        this.#boundDisposables.clear();
 
         // call remove listeners (todo: also for primitive pointers)
         if (!this.is_anonymous) for (const l of Pointer.pointer_remove_listeners) l(this);
     }
 
-    #boundDisposables = new Set<{[Symbol.dispose]: ()=>any}>()
+    // The pointer only holds bound disposables weakly; the value holds them strongly
+    // (Pointer.DISPOSABLES), so they live exactly as long as the value. Previously the pointer
+    // (kept in Pointer.pointers until its value is collected) held them strongly, and a
+    // disposable referencing the value (e.g. map's IterableHandler) kept the value - and with it
+    // e.g. a removed rendered list - alive forever.
+    #boundDisposables = new Set<WeakRef<{[Symbol.dispose]: ()=>any}>>()
 
-    // binds a disposable object to this pointer that gets disposed as soon as the pointer is garbage collected
+    // binds a disposable object to this pointer that gets disposed when the pointer is deleted
+    // (disposables collected together with the value are expected to clean up via weak references)
     public bindDisposable(disposable: {[Symbol.dispose]: ()=>any}) {
-        this.#boundDisposables.add(disposable);
+        this.#boundDisposables.add(new WeakRef(disposable));
         if (!this.is_js_primitive) {
             if (!this.val[Pointer.DISPOSABLES]) this.val[Pointer.DISPOSABLES] = []
             this.val[Pointer.DISPOSABLES].push(disposable);
@@ -4804,8 +4810,14 @@ export class Pointer<T = any> extends ReactiveValue<T> {
 
         this.callScheduledWhenObserving();
 
-        // make sure the ptr is not garbage collected
-        this.is_persistent = true;
+        // Keep observed remote-origin pointers alive: updates can arrive from their origin by id
+        // even if no local code holds the value, and observers must keep receiving them.
+        // Local-origin pointers are only updated through their value (local code) or by
+        // subscribed endpoints (subscribers already make a pointer persistent), so observation
+        // must not make them immortal. Previously every observed pointer was latched persistent
+        // forever (unobserve never reverted it), which e.g. kept every removed rendered map list
+        // (pointer -> elements -> DOM) alive as long as its source data lived.
+        if (!this.is_origin) this.is_persistent = true;
 
         // TODO handle bound_object in pointer observers/unobserve
         // observe all changes
