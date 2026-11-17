@@ -163,6 +163,7 @@ export class JSInterface {
         if (!config.class && !config.prototype && !config.detect_class) throw new Error ("The 'class', or 'prototype' property is required for a type configuration")
 
         config.__type = type; // save type to config for faster type reference
+        JSInterface.invalidateTypeConfigCache();
 
         JSInterface.configurations_by_type.set(type, config);
         if (config.prototype)  JSInterface.configurations_by_prototype.set(config.prototype, config);
@@ -271,22 +272,76 @@ export class JSInterface {
 
 
     // value -> <Type>
+    // Cache of the class/prototype phase of getValueDatexType, keyed by the value's direct
+    // prototype. Both checks only depend on the prototype chain, so the first matching
+    // configuration is the same for all values sharing a direct prototype. Invalidated on
+    // every registry change; disabled when a registered class customises Symbol.hasInstance
+    // or a registry map has a non-default iterator/entries.
+    static #typeConfigCache = new WeakMap<object, {config: js_interface_configuration, key: unknown, map: Map<any, any>}|null>();
+    static #typeConfigCacheUsable?: boolean;
+    // registry state the cache was built against (guards against bypassing the set/delete hooks)
+    static #cachedMaps?: [Map<any, any>, number, Map<any, any>, number];
+    // reverse-ordered snapshot of configurations_by_class for the detect_class pass
+    static #classEntries?: [Class, js_interface_configuration][];
+    static invalidateTypeConfigCache() {
+        this.#typeConfigCache = new WeakMap();
+        this.#typeConfigCacheUsable = undefined;
+        this.#cachedMaps = undefined;
+        this.#classEntries = undefined;
+    }
+    // caching is only used while both maps iterate with the default reverse native iteration
+    static #defaultIteration(map: Map<any, any>) {
+        // descriptor/hasOwn checks never invoke user accessors
+        return Object.getOwnPropertyDescriptor(map, Symbol.iterator)?.value === iterateMapReverse
+            && !Object.hasOwn(map, "entries") && Map.prototype.entries === nativeMapEntries;
+    }
+
+    static #findClassOrPrototypeConfig(value:any): {config: js_interface_configuration, key: unknown, map: Map<any, any>}|null {
+        for (const [_class, config] of this.configurations_by_class) {
+            if (!config.detect_class && value instanceof _class) return {config, key: _class, map: this.configurations_by_class};
+        }
+        for (const [proto, config] of this.configurations_by_prototype) {
+            if (proto.isPrototypeOf(value)) return {config, key: proto, map: this.configurations_by_prototype};
+        }
+        return null;
+    }
+
     static getValueDatexType(value:any):Type {
 
-        for (const [_class, config] of this.configurations_by_class) {
-            if (!config.detect_class && value instanceof _class) {
-                return config.get_type ? config.get_type(value) : config.__type;
+        let match: {config: js_interface_configuration, key: unknown, map: Map<any, any>}|null|undefined;
+        const proto = (value !== null && (typeof value == "object" || typeof value == "function")) ? Object.getPrototypeOf(value) : null;
+        const classes = this.configurations_by_class, prototypes = this.configurations_by_prototype;
+        const maps = this.#cachedMaps;
+        if (maps && (maps[0] !== classes || maps[1] !== classes.size || maps[2] !== prototypes || maps[3] !== prototypes.size)) this.invalidateTypeConfigCache();
+        if (this.#typeConfigCacheUsable && !(this.#defaultIteration(classes) && this.#defaultIteration(prototypes))) this.invalidateTypeConfigCache();
+        if (this.#typeConfigCacheUsable === undefined) {
+            this.#cachedMaps = [classes, classes.size, prototypes, prototypes.size];
+            this.#typeConfigCacheUsable = this.#defaultIteration(classes) && this.#defaultIteration(prototypes);
+            for (const _class of this.configurations_by_class.keys()) {
+                if (Object.prototype.hasOwnProperty.call(_class, Symbol.hasInstance)) {this.#typeConfigCacheUsable = false; break;}
             }
         }
+        if (proto && this.#typeConfigCacheUsable) {
+            match = this.#typeConfigCache.get(proto);
+            // a cached match is only valid while its registry entry is unchanged
+            if (match && match.map.get(match.key) !== match.config) match = undefined;
+            if (match === undefined) {
+                match = this.#findClassOrPrototypeConfig(value);
+                this.#typeConfigCache.set(proto, match);
+            }
+        }
+        // primitives and null-prototype objects never match instanceof (no custom
+        // Symbol.hasInstance registered) or isPrototypeOf, so only detect_class can apply
+        else if (!proto && this.#typeConfigCacheUsable) match = null;
+        else match = this.#findClassOrPrototypeConfig(value);
 
-        for (const [proto, config] of this.configurations_by_prototype) {
-            if (proto.isPrototypeOf(value)) {
-                return config.get_type ? config.get_type(value) : config.__type;
-            }
-        }
+        const config = match?.config;
+        if (config) return config.get_type ? config.get_type(value) : config.__type;
 
         // try afterwards (less likely to happen)
-        for (const [_class, config] of this.configurations_by_class) {
+        let entries: Iterable<[Class, js_interface_configuration]> = this.configurations_by_class;
+        if (this.#typeConfigCacheUsable) entries = this.#classEntries ??= [...this.configurations_by_class];
+        for (const [_class, config] of entries) {
             if (config.detect_class instanceof globalThis.Function && (<globalThis.Function>config.detect_class)(value) ) {
                 return config.get_type ? config.get_type(value) : config.__type;
             }
@@ -355,6 +410,12 @@ const iterateSetReverse = function (this:Set<any>) {
 
 // add reverse map/set iterators to cast values in correct order
 JSInterface.configurations_by_class[Symbol.iterator] = iterateMapReverse;
+for (const map of [JSInterface.configurations_by_class, JSInterface.configurations_by_prototype] as Map<any,any>[]) {
+    const set = map.set, del = map.delete, clear = map.clear;
+    map.set = function (k, v) { JSInterface.invalidateTypeConfigCache(); return set.call(this, k, v) };
+    map.delete = function (k) { JSInterface.invalidateTypeConfigCache(); return del.call(this, k) };
+    map.clear = function () { JSInterface.invalidateTypeConfigCache(); return clear.call(this) };
+}
 JSInterface.configurations_by_type[Symbol.iterator] = iterateSetReverse;
 JSInterface.configurations_by_prototype[Symbol.iterator] = iterateMapReverse;
 

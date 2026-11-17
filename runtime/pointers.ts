@@ -2991,7 +2991,7 @@ export class Pointer<T = any> extends ReactiveValue<T> {
         
         // custom timeout from type?
         if (this.type.timeout!=undefined && this.datex_timeout==undefined) this.datex_timeout = this.type.timeout
-        setTimeout(()=>{for (const l of Pointer.pointer_add_listeners) l(this)},0);
+        batchedTimeout(()=>{for (const l of Pointer.pointer_add_listeners) l(this)},0);
         Object.freeze(this);
     }
 
@@ -3501,7 +3501,7 @@ export class Pointer<T = any> extends ReactiveValue<T> {
 
             // add to garbage collection after timeout
             const _keep = this.current_val;
-            setTimeout(()=>{
+            batchedTimeout(()=>{
                 if (!this.garbage_collected && this.value_initialized && !this.is_persistent) {
                     _keep; // prevent garbage collection until timeout finished
                     
@@ -4964,4 +4964,34 @@ globalThis.snapshot = ()=>{
         x +=  ";\n";
     }
     console.log(x)
+}
+
+/**
+ * Coalesces callbacks with the same delay that are scheduled within a few milliseconds into one
+ * host timer. Callbacks run in scheduling order, no earlier than their requested delay (joining is
+ * limited to batches created within 4 ms, the browser's own timer clamping), and each callback is
+ * isolated: an exception is reported and does not stop later callbacks.
+ *
+ * Used for high-volume internal pointer bookkeeping (GC grace registration, pointer-added
+ * notifications) where creating one host timer per pointer dominated construction cost.
+ */
+// var + lazy init: pointers may be created before this module finishes evaluating
+var batches: Map<number, {created: number, callbacks: (() => void)[]}>|undefined;
+
+function batchedTimeout(callback: () => void, delay = 0) {
+    batches ??= new Map();
+    const now = performance.now();
+    let batch = batches.get(delay);
+    if (!batch || now - batch.created > 4) {
+        const current = batch = {created: now, callbacks: [] as (() => void)[]};
+        batches.set(delay, current);
+        setTimeout(() => {
+            if (batches!.get(delay) === current) batches!.delete(delay);
+            for (const fn of current.callbacks) {
+                try { fn() }
+                catch (e) { reportError(e) }
+            }
+        }, delay);
+    }
+    batch.callbacks.push(callback);
 }
