@@ -7274,12 +7274,28 @@ export class Runtime {
 
                     const {promise: lockedPointerPromise, resolve: lockedPointerResolve, reject: lockedPointerReject} = Promise.withResolvers<Pointer>();
 
+                    // only the pointer origin may initialize a remote pointer: an init block from another endpoint
+                    // could otherwise inject a value for a foreign pointer id. Such blocks are skipped and the
+                    // pointer is loaded from its origin, exactly like a plain reference.
+                    {
+                        const target = Pointer.create(id);
+                        const sender = SCOPE.sender;
+                        const fromOrigin = target.is_origin || !sender || sender === Runtime.endpoint ||
+                            sender.main?.toString() === target.origin?.main?.toString();
+                        if (!fromOrigin) {
+                            SCOPE.current_index += init_block_size; // ignore the init block
+                            const loaded = await Pointer.load(id, SCOPE, false, knows_pointer?true:false);
+                            lockedPointerResolve(loaded as Pointer);
+                            break;
+                        }
+                    }
+
                     // pointer exists
                     try {
                         let pointer = Pointer.create(id);
                         // when remote pointer is initialized by owner endpoint, it does not have to be loaded here from the remote endpoint, because the content is loaded in the initialization
-                        // TODO: currently the initialization block is always used, even if it was not sent by the pointer owner, because SCOPE.sender?.equals(pointer.origin) does not work with ids and aliases of remote endpoints
-                        const only_load_local = true; //pointer.is_origin || SCOPE.sender?.equals(pointer.origin);
+                        // (init blocks from other endpoints are rejected above)
+                        const only_load_local = true;
                         pointer = await Pointer.load(id, SCOPE, only_load_local, knows_pointer?true:false, false, lockedPointerPromise);
                         // console.log("has $" + Pointer.normalizePointerId(id), jmp_index, buffer2hex(SCOPE.buffer_views.uint8.slice(jmp_index), " "));
                         // pointer.is_persistent = true;
