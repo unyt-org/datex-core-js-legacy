@@ -27,6 +27,7 @@ Symbol.prototype.toJSON = function(){return globalThis.String(this)}
 
 /***** imports */
 import { Compiler, compiler_options, PrecompiledDXB, ProtocolDataTypesMap, DatexResponse} from "../compiler/compiler.ts"; // Compiler functions
+import { LazyPointer } from "./lazy-pointer.ts";
 import { Pointer, PointerProperty, RefOrValue, ReactiveValue, ObjectWithDatexValues, JSValueWith$, MinimalJSRef, ObjectRef, RefLike, UpdateScheduler} from "./pointers.ts";
 import { BROADCAST, Endpoint, endpoints, IdEndpoint, LOCAL_ENDPOINT, Target, target_clause, WildcardTarget } from "../types/addressing.ts";
 import { RuntimePerformance } from "./performance_measure.ts";
@@ -1971,6 +1972,23 @@ export class Runtime {
      * @param header_callback callback method returning information for the evaluated header before executing the dxb
      * @returns header information (after executing the dxb)
      */
+    /**
+     * A reference to a pointer that is still being initialized in the same scope (cycle, e.g. a child
+     * referencing its parent) is decoded as a LazyPointer placeholder. Replace the placeholder in the
+     * decoded container as soon as that pointer is initialized; previously it stayed in the value.
+     */
+    static #resolveLazyLater(target: any, key: unknown, value: unknown, isMap = false) {
+        if (!(value instanceof LazyPointer)) return;
+        Promise.resolve(Pointer.load(value.id)).then((pointer) => {
+            if (!(pointer instanceof Pointer)) return;
+            const resolved = pointer.val;
+            if (isMap) {
+                if (target.get(key) === value) target.set(key, resolved);
+            }
+            else if (target[key as any] === value) target[key as any] = resolved;
+        }).catch(() => {});
+    }
+
     private static async handleDatexIn(dxb:ArrayBuffer, full_scope_callback:((sid:number, scope:any, error?:boolean)=>void)|undefined, _:any|undefined, header_callback:((header:dxb_header)=>void)|undefined, socket: CommunicationInterfaceSocket): Promise<dxb_header> {
 
         let header:dxb_header, data_uint8:Uint8Array;
@@ -4733,7 +4751,10 @@ export class Runtime {
 
                 // key insert (integer)
                 else if ('waiting_key' in INNER_SCOPE) {
-                    if (typeof INNER_SCOPE.waiting_key == "bigint") INNER_SCOPE.active_object[Number(INNER_SCOPE.waiting_key)] = el;
+                    if (typeof INNER_SCOPE.waiting_key == "bigint") {
+                        INNER_SCOPE.active_object[Number(INNER_SCOPE.waiting_key)] = el;
+                        Runtime.#resolveLazyLater(INNER_SCOPE.active_object, Number(INNER_SCOPE.waiting_key), el);
+                    }
                     else throw new ValueError("<Array> key must be <integer>");
 
                     // add key permission
@@ -4755,7 +4776,10 @@ export class Runtime {
                 }
 
                 // insert normally into array
-                else INNER_SCOPE.active_object.push(el)
+                else {
+                    INNER_SCOPE.active_object.push(el);
+                    Runtime.#resolveLazyLater(INNER_SCOPE.active_object, INNER_SCOPE.active_object.length - 1, el);
+                }
             }
             
             // inside Tuple
@@ -4773,6 +4797,7 @@ export class Runtime {
                 // key insert
                 else if ('waiting_key' in INNER_SCOPE) {
                     INNER_SCOPE.active_object.set(INNER_SCOPE.waiting_key, el);
+                    Runtime.#resolveLazyLater(INNER_SCOPE.active_object, INNER_SCOPE.waiting_key, el, true);
 
                     // add key permission
                     if (INNER_SCOPE.key_perm) {
@@ -4816,7 +4841,10 @@ export class Runtime {
                 else if ('waiting_key' in INNER_SCOPE) {
                     // SECURITY: setting __proto__ would replace the prototype of the object
                     if (INNER_SCOPE.waiting_key === "__proto__") throw new ValueError("Invalid <Object> key: __proto__");
-                    else if (typeof INNER_SCOPE.waiting_key == "string") INNER_SCOPE.active_object[INNER_SCOPE.waiting_key] = el;
+                    else if (typeof INNER_SCOPE.waiting_key == "string") {
+                        INNER_SCOPE.active_object[INNER_SCOPE.waiting_key] = el;
+                        Runtime.#resolveLazyLater(INNER_SCOPE.active_object, INNER_SCOPE.waiting_key, el);
+                    }
                     else throw new ValueError("<Object> key must be <text>");
 
                     // add key permission
