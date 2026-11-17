@@ -247,6 +247,146 @@ export async function transformAsync<T,V extends TransformFunctionInputs>(depend
 }
 
 
+/**
+ * Updates the reactive array `target` in place to equal `desired` with element-wise splices:
+ * entries present in both keep their position relative to each other and are never removed
+ * and re-inserted (e.g. rendered elements keep focus/state); others are inserted/removed.
+ */
+function reconcileInPlace<T>(target: T[], desired: T[]) {
+    // Without identity-preserving lists, update by index (one SET per changed index, then truncate
+    // or append) as before: list bindings that work by index handle exactly these events.
+    if (!Datex.Runtime.OPTIONS.IDENTITY_PRESERVING_LISTS) {
+        for (let k = 0; k < desired.length; k++) {
+            if (k >= target.length) target.push(desired[k]);
+            else if (target[k] !== desired[k]) target[k] = desired[k];
+        }
+        if (target.length > desired.length) target.splice(desired.length, target.length - desired.length);
+        return;
+    }
+    const desiredSet = new Set(desired);
+    let i = 0, j = 0;
+    while (j < desired.length) {
+        if (i < target.length && target[i] === desired[j]) {i++; j++; continue;}
+        if (i < target.length && !desiredSet.has(target[i])) {target.splice(i, 1); continue;}
+        // desired[j] belongs here: move it from a later position or insert it
+        const later = target.indexOf(desired[j], i + 1);
+        if (later >= 0) target.splice(later, 1);
+        target.splice(i, 0, desired[j]);
+        i++; j++;
+    }
+    if (target.length > i) target.splice(i, target.length - i);
+}
+
+// removes the source observer of a collected observer owner (see observeWeakly)
+const weakObserverCleanup = new FinalizationRegistry<{source: unknown, callback: (...args: any[]) => void}>(
+    ({source, callback}) => {try {Datex.ReactiveValue.unobserve(source, callback);} catch {}}
+);
+/**
+ * Observes all events of `source` while `owner` is alive: the source only holds a weak
+ * reference to the owner, so a long-lived source does not keep the owner (and e.g. a rendered
+ * result) alive. Returns a function that removes the observer.
+ */
+function observeWeakly(source: unknown, owner: {onSourceChange: () => void}) {
+    // the callback reaches the owner (and everything it references) only through the WeakRef
+    const ownerRef = new WeakRef(owner);
+    const callback = () => ownerRef.deref()?.onSourceChange();
+    Datex.ReactiveValue.observe(source, callback);
+    const token = {};
+    weakObserverCleanup.register(owner, {source, callback}, token);
+    return () => {
+        weakObserverCleanup.unregister(token);
+        try {Datex.ReactiveValue.unobserve(source, callback);} catch {}
+    };
+}
+
+function createLiveMappedArray<T, U>(iterable: Iterable<T>, mapFn: (value: MaybeObjectRef<T>, index: number, array: Iterable<T>) => U): U[] {
+    const mapped: U[] = $([]);
+    // A mapping function without an index parameter maps every item independently of its
+    // position, so the entry of an item can be reused when the item moves (no reconstruction of
+    // e.g. a rendered component on reorder/insert/remove). Index-dependent mapping functions keep
+    // index semantics: an entry is only reused while its item stays at the same index.
+    // Only when enabled: consumers that bind list results by index (older UIX list bindings)
+    // expect a moved item to produce a new entry at its new index.
+    const indexIndependent = Datex.Runtime.OPTIONS.IDENTITY_PRESERVING_LISTS && mapFn.length < 2;
+    const state = {
+        source: iterable,
+        // current mapping, aligned with `mapped`
+        items: [] as unknown[],
+        entries: [] as U[],
+        unobserve: undefined as (() => void)|undefined,
+        disposed: false,
+        onSourceChange: () => {}
+    };
+    // disposal is terminal (also when a mapping function disposes the result while mapping)
+    const dispose = () => {
+        state.disposed = true;
+        state.unobserve?.();
+    };
+    const mappedRef = new WeakRef(mapped);
+
+    const sync = () => {
+        const target = mappedRef.deref();
+        if (!target || state.disposed) return;
+        const current = Datex.ReactiveValue.collapseValue(state.source, true, true) as Iterable<T>;
+        const items: unknown[] = [];
+        if (current instanceof Array) {
+            for (let i = 0; i < current.length; i++) {
+                if (i in current) items.push(current[i]); // skip holes of in-progress native array operations
+            }
+        }
+        else for (const item of current) items.push(item);
+        // unchanged (e.g. further per-index events of the same splice): nothing to do
+        if (items.length == state.items.length && items.every((item, i) => item === state.items[i])) return;
+
+        // reusable entries of the previous mapping
+        const pool = new Map<unknown, U[]>();
+        if (indexIndependent) {
+            state.items.forEach((item, i) => {
+                if (!pool.has(item)) pool.set(item, []);
+                pool.get(item)!.push(state.entries[i]);
+            });
+        }
+        const entries = items.map((item, k) => {
+            if (indexIndependent) {
+                const queue = pool.get(item);
+                if (queue?.length) return queue.shift()!;
+            }
+            else if (k < state.items.length && state.items[k] === item) return state.entries[k];
+            return mapFn(item as any, k, state.source);
+        });
+        // a mapping function disposed the result while it was being mapped
+        if (state.disposed) return;
+        state.items = items;
+        state.entries = entries;
+        if (target.length == 0) {
+            if (entries.length) target.push(...entries);
+        }
+        else reconcileInPlace(target, entries);
+    };
+
+    // every event of the source (incl. the final ones of splices/pops) re-syncs; the source only
+    // holds the observer weakly (see observeWeakly)
+    state.onSourceChange = sync;
+    const bind = () => {state.unobserve = observeWeakly(state.source, state);};
+    bind();
+    sync();
+    // the result keeps the observer state alive (and unobserves when deleted)
+    Datex.Pointer.bindDisposable(mapped, {[Symbol.dispose]: dispose, state} as any);
+
+    const retarget = (newSource: unknown) => {
+        if (state.disposed) return;
+        state.unobserve?.();
+        state.source = newSource as Iterable<T>;
+        bind();
+        sync();
+    };
+    Pointer.registerDerivedResult(mapped, retarget, dispose);
+
+    const ptr = Pointer.getByValue(mapped);
+    if (ptr) ptr.isTransform = true;
+    return mapped;
+}
+
 export function map<T, U, O extends 'array'|'map' = 'array'>(iterable: Iterable<T>, mapFn: (value: MaybeObjectRef<T>, index: number, array: Iterable<T>) => U, options?: {outType: O}): O extends "array" ? U[] : Map<number, U> {
     let mapped:U[]|Map<number, U>
     
@@ -271,30 +411,10 @@ export function map<T, U, O extends 'array'|'map' = 'array'>(iterable: Iterable<
             Datex.Pointer.bindDisposable(mapped, iterableHandler)
         }
 
-        // return array
+        // return array (a derived result: re-targeted instead of recreated when a transform
+        // re-evaluates this call with a different source, see Pointer.derived)
         else {
-            mapped = $([])
-
-            // no gaps in a set -> array splice required
-            const spliceArray = iterable instanceof Set; 
-
-            const iterableHandler = new IterableHandler(iterable, {
-                map: (v,k)=>{
-                    return mapFn(v,k,iterable)
-                },
-                onEntryRemoved: (v,k) => {
-                    if (spliceArray) (mapped as U[]).splice(k, 1);
-                    else delete (mapped as U[])[k];
-                },
-                onNewEntry: (v,k) => {
-                    (mapped as U[])[k] = v;
-                },
-                onEmpty: () => {
-                    (mapped as U[]).length = 0
-                }
-            })
-            // reverse transform binding
-            Datex.Pointer.bindDisposable(mapped, iterableHandler)
+            return Pointer.derived("map", iterable, () => createLiveMappedArray(iterable, mapFn)) as any;
         }
 
     }
@@ -325,72 +445,93 @@ export function map<T, U, O extends 'array'|'map' = 'array'>(iterable: Iterable<
 }
 
 
-// TODO: (remove empty entries inbetween)
+// unregisters the observers of a collected live filter result
+const filterCleanup = new FinalizationRegistry<{binding?: {dispose: () => void}}>(state => state.binding?.dispose());
+
+// binds a live filter result to a source; returns the function that removes the binding.
+// Observers only reach the result through `onChange` (which holds it weakly).
+function bindFilterSource<T>(array: Array<T>, test: (value: T, index: number, arr: T[]) => boolean, deps: Datex.RefOrValue<any>[]|undefined, onChange: () => void) {
+    const current = () => Datex.ReactiveValue.collapseValue(array, true, true) as T[];
+    // tracks all predicate dependencies (entry fields, deps) and the array structure
+    const signature = always(() => {
+        if (deps) for (const dep of deps) Datex.ReactiveValue.collapseValue(dep, true, true);
+        const arr = current();
+        let sig = String(arr.length) + ":";
+        for (let i = 0; i < arr.length; i++) sig += (i in arr && test(arr[i], i, arr)) ? "1" : "0";
+        return sig;
+    });
+    const onSignature = () => onChange();
+    const onArray = () => onChange();
+    ReactiveValue.observe(signature, onSignature);
+    // structural changes that keep the signature (e.g. reorders) are observed directly
+    ReactiveValue.observe(array, onArray);
+    let disposed = false;
+    return {
+        signature,
+        dispose: () => {
+            if (disposed) return;
+            disposed = true;
+            ReactiveValue.unobserve(signature, onSignature);
+            ReactiveValue.unobserve(array, onArray);
+        }
+    };
+}
+
+function createLiveFilteredArray<T>(array: Array<T>, predicate: (value: T, index: number, array: T[]) => boolean, deps?: Datex.RefOrValue<any>[]): T[] {
+    const filtered: T[] = $([]);
+    // no closure in this function references `filtered` directly (only via the WeakRef), so
+    // the cleanup registration below cannot keep it alive
+    const filteredRef = new WeakRef(filtered);
+    const test = (value: T, index: number, arr: T[]) => !!Datex.ReactiveValue.collapseValue(predicate(value, index, arr), true, true);
+    const state = {source: array, binding: undefined as ReturnType<typeof bindFilterSource<T>>|undefined};
+    const reconcile = () => {
+        const target = filteredRef.deref();
+        if (!target) return;
+        const arr = Datex.ReactiveValue.collapseValue(state.source, true, true) as T[];
+        const desired: T[] = [];
+        for (let i = 0; i < arr.length; i++) {
+            if (!(i in arr)) continue; // hole during an in-progress native array operation
+            if (test(arr[i], i, arr)) desired.push(arr[i]);
+        }
+        reconcileInPlace(target, desired);
+    };
+    state.binding = bindFilterSource(array, test, deps, reconcile);
+    reconcile();
+    const dispose = () => state.binding?.dispose();
+    const retarget = (newSource: unknown) => {
+        state.binding?.dispose();
+        state.source = newSource as Array<T>;
+        state.binding = bindFilterSource(state.source, test, deps, reconcile);
+        reconcile();
+    };
+    filterCleanup.register(filtered, state);
+    // keeps the binding (and its predicate transform) alive as long as the result lives
+    Datex.Pointer.bindDisposable(filtered, {[Symbol.dispose]: dispose, state} as any);
+    Pointer.registerDerivedResult(filtered, retarget, dispose);
+    const ptr = Pointer.getByValue(filtered);
+    if (ptr) ptr.isTransform = true;
+    return filtered;
+}
+
+/**
+ * Live filter: returns a reactive array containing the entries of `array` for which `predicate`
+ * is truthy, in source order. It stays correct for every kind of change of the source array
+ * (set/push/splice/pop/shift/unshift/sort/reverse/length changes/clear) and for changes of any
+ * reactive value the predicate reads (e.g. a field of an entry, or `deps`).
+ *
+ * Implementation: one transform evaluates the predicate for all entries (so all dependencies
+ * are tracked), and every change reconciles the result array with a minimal splice (common
+ * prefix and suffix are kept), so observers of the result receive ordinary small updates.
+ * (The previous incremental IterableHandler key mapping produced duplicate/stale entries after
+ * removals and reorders.)
+ */
 export function filter<T, U>(array: Array<T>, predicate: (value: T, index: number, array: T[]) => boolean, deps?: Datex.RefOrValue<any>[]): T[] {
-    // live map
+    // live filter (a derived result, see Pointer.derived)
     if (Datex.ReactiveValue.isRef(array)) {
-
-        const filtered: U[] = $([])
-        const spliceArray = true;
-
-        const observers = new Map<number, [Ref<boolean>, ()=>void]>();
-        const removeObserver = (key: number) => {
-            const observer = observers.get(key);
-            if (observer) {
-                unobserve(observer[0], observer[1]);
-                // explicitly delete ref
-                observer[0].delete();
-            }
-        }
-
-        const handler = new IterableHandler<T,U>(array, {
-            filter: (v,k):v is T&U => {
-                // remove previous observer if it exists
-                removeObserver(k);
-                // make filter function reactive, re-evaluate when dependencies changes
-                const filtered = always(() => predicate(array[k],k,array));
-                const observer = () => {
-                    handler.handleNewEntry(array[k],k,filtered.val);
-                }
-                observers.set(k, [filtered, observer])
-                observe(filtered, observer);
-                return filtered.val;              
-            },
-            onEntryRemoved: (v,k) => {
-                if (spliceArray) filtered.splice(k, 1);
-                else delete filtered[k];
-            },
-            onNewEntry: (v,k) => {
-                filtered[k] = v
-            },
-            onSplice: (start, deleteCount, ...items) => {
-                filtered.splice(start, deleteCount, ...items)
-            },
-            onEmpty: () => {
-                filtered.length = 0
-            }
-        });
-
-        if (deps) {
-            // TODO cleanup gargabe
-            const _deps = $(deps);
-            const originalRef = Datex.Pointer.getByValue(array);
-            const filteredRef = Datex.Pointer.getByValue(filtered);
-            if (originalRef)
-                observe(_deps, () => {
-                    // Trigger event for iterable handler
-                    originalRef.triggerValueInitEvent(false);
-                    // Trigger event on always value of filtered array
-                    filteredRef?.triggerValueInitEvent(false);
-                    // filteredRef?.triggerValueEvent(ReactiveValue.UPDATE_TYPE.UPDATE, false);
-                });
-        }
-
-        return filtered as unknown as T[];
-
+        return Pointer.derived("filter", array, () => createLiveFilteredArray(array, predicate, deps)) as T[];
     }
 
-    // static map
+    // static filter
     else return array.filter(predicate)
 }
 

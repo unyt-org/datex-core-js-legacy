@@ -3,6 +3,11 @@ import { ValueError } from "../datex_all.ts";
 import { weakAction } from "./weak-action.ts";
 
 
+// removes the source observer of a collected IterableHandler (see IterableHandler.observe)
+const sourceObserverCleanup = new FinalizationRegistry<{reference: Datex.ReactiveValue, callback: (v:any, k:any, t:any)=>void}>(
+	({reference, callback}) => reference.unobserve(callback)
+);
+
 export class IterableHandler<T, U = T> {
 	private map: ((value: T, index: number, array: Iterable<T>) => U) | undefined
 	private filter: ((value: T, index: number, array: Iterable<T>) => value is T&U) | undefined
@@ -11,6 +16,8 @@ export class IterableHandler<T, U = T> {
 	private onEntryRemoved: (entry:U, key:number,) => void
 	private onEmpty?: () => void
 	private onSplice?: (start: number, deleteCount: number, ...items: U[]) => void
+	#observers = new Map<(v:any, k:any, t:any)=>void, Datex.ReactiveValue>();
+	#disposed = false;
 
 	
 	constructor(private iterable: Datex.RefOrValue<Iterable<T>>, callbacks: {
@@ -20,7 +27,10 @@ export class IterableHandler<T, U = T> {
 		onNewEntry: (this: IterableHandler<T, U>, entry:U, key:number) => void
 		onEntryRemoved: (entry: U, key:number) => void,
 		onEmpty?: () => void,
-		onSplice?: (start: number, deleteCount: number, ...items: U[]) => void
+		onSplice?: (start: number, deleteCount: number, ...items: U[]) => void,
+		// entries that already represent the current iterable (used when re-targeting a
+		// result to a new source): the handler observes without an initial INIT pass
+		initialEntries?: U[]
 	}) {
 		this.map = callbacks.map;
 		this.filter = callbacks.filter;
@@ -29,19 +39,47 @@ export class IterableHandler<T, U = T> {
 		this.onEmpty = callbacks.onEmpty;
 		this.onSplice = callbacks.onSplice;
 
-		this.checkEmpty();
-		this.observe()
-	}
-
-	observe() {
-		const callback = (v:any, k:any, t:any) => {
-			this.onValueChanged(v, k, t)
+		if (callbacks.initialEntries) {
+			callbacks.initialEntries.forEach((entry, k) => this.entries.set(k, entry));
+			this.observe(false);
 		}
-		Datex.ReactiveValue.observeAndInit(this.iterable, callback);
+		else {
+			this.checkEmpty();
+			this.observe()
+		}
 	}
 
+	observe(init = true) {
+		if (this.#disposed) return;
+		// The source only holds this handler weakly: a long-lived source (e.g. shared data)
+		// must not keep a handler, its output (map result, rendered list) and the DOM alive
+		// after the owner is gone. Owners keep the handler alive (map: bound to its result,
+		// UIX: stored on the parent element). Once the handler is collected, the observer
+		// is removed from the source.
+		const weakSelf = new WeakRef(this);
+		const callback = (v:any, k:any, t:any) => weakSelf.deref()?.onValueChanged(v, k, t);
+		const reference = Datex.Pointer.pointerifyValue(this.iterable);
+		if (reference instanceof Datex.ReactiveValue) {
+			this.#observers.set(callback, reference);
+			sourceObserverCleanup.register(this, {reference, callback}, this);
+		}
+		try {
+			if (init) Datex.ReactiveValue.observeAndInit(this.iterable, callback);
+			else Datex.ReactiveValue.observe(this.iterable, callback);
+		}
+		catch (error) {
+			this[Symbol.dispose]();
+			throw error;
+		}
+	}
+
+	// Disposal is terminal; retain the last entries without emitting removal callbacks.
 	[Symbol.dispose]() {
-		// TODO: unobserve
+		if (this.#disposed) return;
+		this.#disposed = true;
+		for (const [callback, reference] of this.#observers) reference.unobserve(callback);
+		this.#observers.clear();
+		sourceObserverCleanup.unregister(this);
 	}
 
 	/**
@@ -92,6 +130,7 @@ export class IterableHandler<T, U = T> {
 
 		// shift all following keys to the left in filterKeyMap
 		for (const [k, v] of this.#filterKeyMap) {
+			if (this.#disposed) return;
 			if (v > mappedKey) {
 				this.#filterKeyMap.set(k, v - 1);
 				const entryKey = v-1;
@@ -187,6 +226,7 @@ export class IterableHandler<T, U = T> {
 	}
 
 	protected onValueChanged(value: Iterable<T>|T, key: number|undefined, type:Datex.ReactiveValue.UPDATE_TYPE) {
+		if (this.#disposed) return;
 		if (type == Datex.ReactiveValue.UPDATE_TYPE.DELETE) return; // ignore DELETE event, only use BEFORE_DELETE event
 		if (type == Datex.ReactiveValue.UPDATE_TYPE.REMOVE) return; // ignore REMOVE event, only use BEFORE_REMOVE event
 
@@ -259,13 +299,17 @@ export class IterableHandler<T, U = T> {
 
 	// call valueToEntry and save entry in this.#entries
 	handleNewEntry(value:T, key:number, filterResult?:boolean) {
+		if (this.#disposed) return;
 		key = Number(key);
 		const entry = this.valueToEntry(value, key)
+		// A mapper can dispose its output while this event is being delivered.
+		if (this.#disposed) return;
 
 		if (this.filter || filterResult != undefined) {
 			const filteredOut = ! (
 				filterResult != undefined ? filterResult : this.filter!(value, key, val(this.iterable))
 			);
+			if (this.#disposed) return;
 			// is filtered out
 			if (filteredOut) {
 				this.deleteFilterKey(key);
@@ -275,6 +319,7 @@ export class IterableHandler<T, U = T> {
 			// get mapped filter key
 			else {
 				key = this.setEntryWithMappedFilterKey(key, value);
+				if (this.#disposed) return;
 				// update already handled, continue
 				if (key == -1) return;
 			}
@@ -293,6 +338,7 @@ export class IterableHandler<T, U = T> {
 	}
 
 	private handleRemoveEntry(key:number) {
+		if (this.#disposed) return;
 		key = Number(key)
 		const entry = this.entries.get(key)!;
 		this.deleteEntry(key);
@@ -303,6 +349,7 @@ export class IterableHandler<T, U = T> {
 	}
 
 	private checkEmpty() {
+		if (this.#disposed) return;
 		if (this.onEmpty && this.#entries?.size == 0) {
 			// clear filterKeyMap
 			this.#filterKeyMap.clear();

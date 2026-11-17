@@ -226,6 +226,7 @@ export class Runtime {
     // can be changed
     public static OPTIONS = {
         PROTECT_POINTERS: true, // explicit permissions are required for remote endpoints to read/write pointers (default: true)
+        IDENTITY_PRESERVING_LISTS: false, // live map results reuse entries of moved items and change by splices (requires an identity-based list binding, e.g. UIX's ListBindingView)
         INDIRECT_REFERENCES: false, // enable support for indirect references to pointers from other pointers
         DEFAULT_REQUEST_TIMEOUT: 5000, // default timeout for DATEX requests in ms
         GARBAGE_COLLECTION_TIMEOUT: 1000, // time after which a value can get garbage collected
@@ -3648,6 +3649,9 @@ export class Runtime {
 
             // collapse iterator key to tuple
             if (key instanceof Iterator) key = await key.collapse();
+            // collapse iterator value (e.g. a range read #0.(a..b)) to a tuple before any write,
+            // so ranges of the same value can overlap (values are read before they are replaced)
+            if (value instanceof Iterator) value = await value.collapse();
 
             // set value
             if (action_type == -1) {
@@ -3947,16 +3951,29 @@ export class Runtime {
 
             // key is <Tuple> - set multiple properties (recursive)
             else if (key instanceof Tuple) {
-                // distribute values over keys (tuple)
+                const keys = key.toArray();
+                // distribute values over keys (tuple): the i-th indexed value is assigned to the
+                // i-th key; keys without a value are deleted (void); named values are assigned by
+                // name. (Previously Object.entries(value) iterated the Tuple's internal fields.)
                 if (value instanceof Tuple) {
-                    for (let [k, v] of Object.entries(value)) {
-                        Runtime.runtime_actions.setProperty(SCOPE, parent, k, v)
+                    const values = value.indexed;
+                    for (let i = 0; i < keys.length && i < values.length; i++) {
+                        Runtime.runtime_actions.setProperty(SCOPE, parent, keys[i], values[i])
+                    }
+                    // delete surplus keys from the last to the first, so trailing <Array> entries
+                    // are removed instead of leaving holes
+                    for (let i = keys.length - 1; i >= values.length; i--) {
+                        Runtime.runtime_actions.setProperty(SCOPE, parent, keys[i], VOID)
+                    }
+                    for (const [name, v] of value.named) {
+                        Runtime.runtime_actions.setProperty(SCOPE, parent, name, v)
                     }
                 }
 
-                // set same value for all keys
+                // set same value for all keys (void: delete from the last to the first key, see above)
                 else {
-                    for (let k of key.toArray()) Runtime.runtime_actions.setProperty(SCOPE, parent, k, value)
+                    const ordered = value === VOID ? [...keys].reverse() : keys;
+                    for (const k of ordered) Runtime.runtime_actions.setProperty(SCOPE, parent, k, value)
                 }
                 return;
             }

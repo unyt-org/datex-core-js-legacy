@@ -422,8 +422,32 @@ export abstract class ReactiveValue<T = any> extends EventTarget {
      * pops the last captured getters and returns them
      */
     protected static getCapturedGetters() {
-        this.isCapturing = false;
-        return {capturedGetters: this.capturedGetters.pop(), capturedGettersWithKeys: this.capturedGettersWithKeys.pop()};
+        const captured = {capturedGetters: this.capturedGetters.pop(), capturedGettersWithKeys: this.capturedGettersWithKeys.pop()};
+        // an enclosing transform evaluation is still capturing (nested transform finished):
+        // keep capturing for it. Previously capturing was switched off entirely, so every
+        // dependency read after a nested transform inside a transform was silently lost.
+        this.isCapturing = this.capturedGetters.length > 0;
+        return captured;
+    }
+
+    /**
+     * Runs `callback` without letting the enclosing transform evaluation capture the values it
+     * reads (nesting-safe: reads go into a discarded capture frame; transforms created inside
+     * still capture their own dependencies). Used e.g. by UIX for element/component
+     * construction: an element sets up its own fine-grained bindings, so an enclosing
+     * transform must not depend on values read while building it.
+     */
+    public static untracked<T>(callback:()=>T): T {
+        if (!this.isCapturing) return callback();
+        const freeze = this.freezeCapturing;
+        this.captureGetters();
+        try {
+            return callback();
+        }
+        finally {
+            this.getCapturedGetters();
+            this.freezeCapturing = freeze;
+        }
     }
 
     /**
@@ -1231,7 +1255,42 @@ type TransformState = {
     returnCache: Map<string, any>;
     getDepsHash: () => string;
     update: () => void;
+    // derived results (live map/filter) created by the last evaluation, see Pointer.derived
+    derivedSlots?: DerivedSlot[];
+    // set while this transform is kept alive to re-target the derived result it returned
+    forwarded?: WeakRef<object>;
 }
+
+/**
+ * Derived results (live map/filter results) created while a transform function runs.
+ * On re-evaluation, each map/filter call is matched to the result it created before (same
+ * source first, otherwise by call position) and that result is re-targeted to the new source
+ * instead of creating a new one. This keeps results returned from a transform stable, e.g.
+ * _$(() => map(obj.items, f)) follows obj.items replacements without rebuilding its list.
+ */
+type DerivedSlot = {kind: string, source: unknown, result: WeakRef<object>};
+type DerivedRun = {previous: DerivedSlot[], used: Set<DerivedSlot>, next: DerivedSlot[]};
+const derivedRunStack: DerivedRun[] = [];
+const derivedRetargeters = new WeakMap<object, (source: unknown) => void>();
+const derivedDisposers = new WeakMap<object, () => void>();
+function beginDerivedRun(previous: DerivedSlot[]|undefined) {
+    const run: DerivedRun = {previous: previous ?? [], used: new Set(), next: []};
+    derivedRunStack.push(run);
+    return run;
+}
+function endDerivedRun(run: DerivedRun) {
+    if (derivedRunStack.at(-1) === run) derivedRunStack.pop();
+    else {const i = derivedRunStack.lastIndexOf(run); if (i >= 0) derivedRunStack.splice(i, 1);}
+    // results not requested again are no longer part of the output: stop updating them
+    for (const slot of run.previous) {
+        if (run.used.has(slot)) continue;
+        const result = slot.result.deref();
+        if (result) derivedDisposers.get(result)?.();
+    }
+    return run.next;
+}
+// deletes a transform kept alive for its derived result once that result is collected
+const derivedForwardCleanup = new FinalizationRegistry<Pointer>(transform => transform.delete());
 
 
 const observableArrayMethods = new Set<string>([
@@ -1821,6 +1880,49 @@ export class Pointer<T = any> extends ReactiveValue<T> {
         else return Pointer.createOrGet(collapsed_value, sealed, allowed_access, anonymous, persistant).val;
     } 
 
+    /**
+     * Returns the derived result (live map/filter result) for this call. Inside a re-evaluated
+     * transform, the result created by the matching previous call is reused and re-targeted
+     * to `source` (match: same kind and source first, otherwise next unused of the same kind).
+     * Outside of a transform evaluation, `create` is simply called.
+     * `create` must register the result with registerDerivedResult.
+     */
+    static derived<R extends object>(kind: string, source: unknown, create: () => R): R {
+        const run = derivedRunStack.at(-1);
+        if (!run) return create();
+        let slot = run.previous.find(s => !run.used.has(s) && s.kind === kind && s.source === source && s.result.deref());
+        // Positional re-targeting only for a single previous result of this kind (e.g.
+        // _$(() => map(obj.items, f)) or cond ? map(a, f) : map(b, f)). With several calls of
+        // the same kind (e.g. groups.map(g => map(g.items, f))) a greedy positional match
+        // would re-target the wrong results when a source is inserted, so only identical
+        // sources are reused there and a changed source gets a new result.
+        if (!slot) {
+            const sameKind = run.previous.filter(s => s.kind === kind);
+            if (sameKind.length == 1 && !run.used.has(sameKind[0]) && sameKind[0].result.deref()) slot = sameKind[0];
+        }
+        if (slot) {
+            const result = slot.result.deref() as R;
+            run.used.add(slot);
+            if (slot.source !== source) derivedRetargeters.get(result)?.(source);
+            run.next.push({kind, source, result: slot.result});
+            return result;
+        }
+        // nested derived calls inside create() belong to the same evaluation
+        const result = create();
+        run.next.push({kind, source, result: new WeakRef(result)});
+        return result;
+    }
+
+    /** registers how a derived result is re-targeted to a new source and disposed */
+    static registerDerivedResult(result: object, retarget: (source: unknown) => void, dispose: () => void) {
+        derivedRetargeters.set(result, retarget);
+        derivedDisposers.set(result, dispose);
+    }
+
+    static isDerivedResult(value: unknown) {
+        return value !== null && typeof value == "object" && derivedRetargeters.has(value as object);
+    }
+
     // create a new pointer or return the existing pointer/pointer property for this value
     static createOrGet<T>(value:RefOrValue<T>, sealed = false, allowed_access?:target_clause, anonymous = false, persistant = false, id?: string):Pointer<T>{
         if (value instanceof LazyPointer) throw new PointerError("Lazy Pointer not supported in this context");
@@ -1988,15 +2090,28 @@ export class Pointer<T = any> extends ReactiveValue<T> {
 
 
     // custom datex pointer array splice function
-    private arraySplice(start?: number, deleteCount?: number, ...items: unknown[]): unknown[] {
+    private arraySplice(...args: unknown[]): unknown[] {
+        // Normalize start/deleteCount exactly like Array.prototype.splice (ECMA-262 23.1.3.31):
+        // negative start counts from the end, values are clamped to the array bounds, a missing
+        // deleteCount removes everything from start, and no arguments remove nothing.
+        // (handleSplice, its observer events and the propagated DATEX update require normalized
+        // indices; e.g. splice(-1, 1) previously notified observers for index -1.)
+        const length = (<Array<unknown>><unknown>this.shadow_object).length;
+        const toInteger = (v: unknown) => {const n = Math.trunc(Number(v)); return Number.isNaN(n) ? 0 : n;};
+        const relativeStart = toInteger(args[0]);
+        const start = relativeStart < 0 ? Math.max(length + relativeStart, 0) : Math.min(relativeStart, length);
+        const deleteCount = args.length == 0 ? 0 :
+            args.length == 1 ? length - start :
+            Math.min(Math.max(toInteger(args[1]), 0), length - start);
+        const items = args.slice(2);
         // is clear?
-        if (start == 0 && deleteCount == (<Array<unknown>><unknown>this.shadow_object).length && items.length == 0) {
+        if (start == 0 && deleteCount == length && items.length == 0) {
+            if (length == 0) return [];
+            const removed = [...(<Array<unknown>><unknown>this.shadow_object)];
             this.handleClear();
-            return [];
+            return removed;
         }
-        if (deleteCount == undefined) deleteCount = (<Array<unknown>><unknown>this.shadow_object).length; // default deleteCount: all
-        if (deleteCount && deleteCount < 0) deleteCount = 0;
-        return this.handleSplice(start??0, deleteCount, items) ?? [];
+        return this.handleSplice(start, deleteCount, items) ?? [];
     }
 
     private arraySort(compareFn?: (a: unknown, b: unknown) => number): T{
@@ -2113,21 +2228,27 @@ export class Pointer<T = any> extends ReactiveValue<T> {
         Pointer.pointers.delete(this.#id);
         Pointer.primitive_pointers.delete(this.#id)
 
-        // remove disposables
-        for (const disposable of this.#boundDisposables) {
-            console.log("disposing", disposable)
-            disposable[Symbol.dispose]?.()
+        // remove disposables (still reachable ones; collected disposables cleaned up themselves)
+        for (const disposableRef of this.#boundDisposables) {
+            disposableRef.deref()?.[Symbol.dispose]?.()
         }
+        this.#boundDisposables.clear();
 
         // call remove listeners (todo: also for primitive pointers)
         if (!this.is_anonymous) for (const l of Pointer.pointer_remove_listeners) l(this);
     }
 
-    #boundDisposables = new Set<{[Symbol.dispose]: ()=>any}>()
+    // The pointer only holds bound disposables weakly; the value holds them strongly
+    // (Pointer.DISPOSABLES), so they live exactly as long as the value. Previously the pointer
+    // (kept in Pointer.pointers until its value is collected) held them strongly, and a
+    // disposable referencing the value (e.g. map's IterableHandler) kept the value - and with it
+    // e.g. a removed rendered list - alive forever.
+    #boundDisposables = new Set<WeakRef<{[Symbol.dispose]: ()=>any}>>()
 
-    // binds a disposable object to this pointer that gets disposed as soon as the pointer is garbage collected
+    // binds a disposable object to this pointer that gets disposed when the pointer is deleted
+    // (disposables collected together with the value are expected to clean up via weak references)
     public bindDisposable(disposable: {[Symbol.dispose]: ()=>any}) {
-        this.#boundDisposables.add(disposable);
+        this.#boundDisposables.add(new WeakRef(disposable));
         if (!this.is_js_primitive) {
             if (!this.val[Pointer.DISPOSABLES]) this.val[Pointer.DISPOSABLES] = []
             this.val[Pointer.DISPOSABLES].push(disposable);
@@ -3111,7 +3232,9 @@ export class Pointer<T = any> extends ReactiveValue<T> {
                 // is a static transform and show a warning
                 if (!state.isLive && !state.isFirst) {
                     state.executingEffect = true;
-                    this.setVal(transform() as T, true, true);
+                    const run = beginDerivedRun(state.derivedSlots);
+                    try {this.setVal(transform() as T, true, true);}
+                    finally {state.derivedSlots = endDerivedRun(run);}
                     state.executingEffect = false;
                 }
                 // get transform value and update dependency observers
@@ -3134,9 +3257,11 @@ export class Pointer<T = any> extends ReactiveValue<T> {
                     if (val === undefined) {
                         ReactiveValue.captureGetters();
         
+                        const run = beginDerivedRun(state.derivedSlots);
                         try {
                             state.executingEffect = true;
-                            val = transform() as T;
+                            try {val = transform() as T;}
+                            finally {state.derivedSlots = endDerivedRun(run);}
                             state.executingEffect = false;
                             // also trigger getter if pointer is returned
                             ReactiveValue.collapseValue(val, true, true); 
@@ -3157,6 +3282,30 @@ export class Pointer<T = any> extends ReactiveValue<T> {
                     // early return the inner transformed pointer
                     const ptr = Pointer.getByValue(val);
                     if (ptr?.isTransform) {
+                        // A derived result (live map/filter) created/re-targeted by this
+                        // evaluation: return it as before, but keep this transform alive and
+                        // observing its own dependencies, so a later change (e.g. a replaced
+                        // source array) re-targets the same result instead of being lost.
+                        if (Pointer.isDerivedResult(val) && state.derivedSlots?.some(s => s.result.deref() === val)) {
+                            const forwarded = state.forwarded?.deref();
+                            if (!forwarded) {
+                                state.forwarded = new WeakRef(val as object);
+                                derivedForwardCleanup.register(val as object, this);
+                            }
+                            else if (forwarded !== val) {
+                                // the evaluation returned a different result than the one that
+                                // is already handed out: cannot be forwarded (unchanged behaviour)
+                                logger.warn("transform returned a different derived result than before; it cannot be forwarded")
+                                return;
+                            }
+                            // observe this evaluation's dependencies (the outer pointer itself never
+                            // takes a value, so liveness cannot be derived from its value type)
+                            state.isLive = true;
+                            this.handleTransformValue(val, capturedGetters, capturedGettersWithKeys, state, true, options);
+                            return forwarded ? undefined : ptr;
+                        }
+                        // a forwarded transform whose evaluation no longer returns its result
+                        if (state.forwarded) return;
                         return ptr;
                     }
 
@@ -3313,6 +3462,13 @@ export class Pointer<T = any> extends ReactiveValue<T> {
          * and the inner transform pointer is returned instead
          */
         if (innerTransformPointer) {
+            // kept alive to re-target the derived result it returned (see update)
+            if (state.forwarded) {
+                // keep observing (dependencies are already observed, no re-evaluation needed)
+                this.setForcedLiveTransform(true, false);
+                logger.debug("forwarding derived result " + innerTransformPointer.idString())
+                return innerTransformPointer;
+            }
             this.delete();
             logger.debug("found inner transform pointer " + innerTransformPointer.idString())
             return innerTransformPointer;
@@ -4521,17 +4677,17 @@ export class Pointer<T = any> extends ReactiveValue<T> {
 
         const ret = Array.prototype.splice.call(this.shadow_object, start_index, deleteCount, ...replace);
 
-        // default strategy: insert;
-        let dxScript = "#0=?0;#0.(?4..?1) = void; #0.(?2..((count #0) + ?3)) = #0.(?4..(count #0));#0.(?4..?5) = ?6;"
-        let dxParams = [this, end, start-size+replace_length, replace_length, start, start+replace_length, replace];
+        // Splice relative to the receiver's current length (#1): shift the tail from s+d to
+        // s+r (pairwise range assignment, values are read before writing), delete the surplus
+        // at the end (empty range if the array grows), then write the inserted items (tuple).
+        // s = start, d = number of deleted entries, r = number of inserted entries.
+        // (The previous scripts relied on broken range-assignment semantics and computed wrong
+        // target ranges for replacements, e.g. splice(2,1,x) on [a,b,c,d,e] gave [a,b,x,e].)
+        let dxScript = "#0 = ?0; #1 = count #0; #0.((?1 + ?3)..(#1 - ?2 + ?3)) = #0.((?1 + ?2)..#1); #0.((#1 - ?2 + ?3)..#1) = void; #0.(?1..(?1 + ?3)) = ?4;"
+        let dxParams: unknown[] = [this, start, size, replace_length, new Tuple(replace)];
 
-        // only delete
-        if (!replace?.length) {
-            dxScript = "#0 = ?0; #1 = count #0;#0.(?1..?2) = void;#0.(?1..#1) = #0.(?3..#1);"
-            dxParams = [this, start, end, start+size];
-        }
         // exact replace
-        else if (deleteCount == originalLength && start_index == 0) {
+        if (deleteCount == originalLength && start_index == 0) {
             dxScript = "#0=?0; #0 = ?1;"
             dxParams = [this, replace];
         }
@@ -4767,8 +4923,14 @@ export class Pointer<T = any> extends ReactiveValue<T> {
 
         this.callScheduledWhenObserving();
 
-        // make sure the ptr is not garbage collected
-        this.is_persistent = true;
+        // Keep observed remote-origin pointers alive: updates can arrive from their origin by id
+        // even if no local code holds the value, and observers must keep receiving them.
+        // Local-origin pointers are only updated through their value (local code) or by
+        // subscribed endpoints (subscribers already make a pointer persistent), so observation
+        // must not make them immortal. Previously every observed pointer was latched persistent
+        // forever (unobserve never reverted it), which e.g. kept every removed rendered map list
+        // (pointer -> elements -> DOM) alive as long as its source data lived.
+        if (!this.is_origin) this.is_persistent = true;
 
         // TODO handle bound_object in pointer observers/unobserve
         // observe all changes
