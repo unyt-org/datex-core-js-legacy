@@ -15,6 +15,38 @@ import type { primitive } from "../types/abstract_types.ts";
 import { Function as DatexFunction } from "../types/function.ts";
 import { Quantity } from "../types/quantity.ts";
 import { buffer2hex, hex2buffer } from "../utils/utils.ts";
+
+/**
+ * Deferred pointer identity (see Pointer.deferPointerCreation): value -> function creating exactly
+ * the pointer that would otherwise have been created eagerly.
+ */
+const deferredPointers = new WeakMap<object, () => unknown>();
+function materializeDeferredPointer(value: unknown) {
+    if (value === null || (typeof value != "object" && typeof value != "function")) return;
+    const create = deferredPointers.get(value);
+    if (!create) return;
+    deferredPointers.delete(value);
+    // remove the lazy accessors before the pointer defines its real properties
+    delete (value as any)[DX_PTR];
+    delete (value as any).$;
+    delete (value as any).$$;
+    create();
+}
+const deferredPointerDescriptors = {
+    [DX_PTR]: {
+        get(this: any) { materializeDeferredPointer(this); return this[DX_PTR] },
+        set(this: any, v: unknown) { materializeDeferredPointer(this); Object.defineProperty(this, DX_PTR, {value: v, enumerable: false, writable: true, configurable: true}) },
+        enumerable: false, configurable: true
+    },
+    $: {
+        get(this: any) { materializeDeferredPointer(this); return this.$ },
+        enumerable: false, configurable: true
+    },
+    $$: {
+        get(this: any) { materializeDeferredPointer(this); return this.$$ },
+        enumerable: false, configurable: true
+    }
+} as const;
 import { Conjunction, Disjunction, Logical } from "../types/logic.ts";
 import { ProtocolDataType } from "../compiler/protocol_types.ts";
 import { Scope } from "../types/scope.ts";
@@ -387,7 +419,7 @@ export abstract class ReactiveValue<T = any> extends EventTarget {
      * Returns true if the value has a bound pointer or is a Datex.Ref
      */
     public static isRef(value: unknown) {
-        return (value instanceof ReactiveValue || Pointer.pointer_value_map.has(value));
+        return (value instanceof ReactiveValue || Pointer.pointer_value_map.has(value) || deferredPointers.has(value as object));
     }
 
     // copy the value of a primitive datex value to another primitive value
@@ -1821,6 +1853,38 @@ export class Pointer<T = any> extends ReactiveValue<T> {
         else return Pointer.createOrGet(collapsed_value, sealed, allowed_access, anonymous, persistant).val;
     } 
 
+    /**
+     * Defers creating the pointer for an object until it can be observed. `create` must create
+     * exactly the pointer that would otherwise have been created now (e.g. () => $(value)).
+     * It runs on the first read/write of value[DX_PTR], value.$ or value.$$, and before
+     * getByValue/pointerifyValue (via DX_PTR), createOrGet, create, setValue, initializeValue
+     * (adoption by another pointer); isRef reports true. Every observer therefore sees the same
+     * pointer as with eager creation; only the moment of allocation (and with it the pointer id's
+     * timestamp/counter) changes.
+     * Returns false (and creates the pointer immediately) if the value already has or awaits one.
+     */
+    static deferPointerCreation(value: object, create: () => unknown): boolean {
+        if (deferredPointers.has(value) || this.pointer_value_map.has(value) || DX_PTR in value || "$" in value || "$$" in value || !Object.isExtensible(value)) {
+            if (!deferredPointers.has(value)) create();
+            return false;
+        }
+        deferredPointers.set(value, create);
+        // three defineProperty calls are ~3x faster than defineProperties with a symbol-keyed map
+        Object.defineProperty(value, DX_PTR, deferredPointerDescriptors[DX_PTR]);
+        Object.defineProperty(value, "$", deferredPointerDescriptors.$);
+        Object.defineProperty(value, "$$", deferredPointerDescriptors.$$);
+        return true;
+    }
+
+    /** Creates a deferred pointer now (no-op if none is pending). */
+    static materializeDeferred(value: unknown) {
+        materializeDeferredPointer(value);
+    }
+
+    static hasDeferredPointer(value: unknown) {
+        return value !== null && (typeof value == "object" || typeof value == "function") && deferredPointers.has(value as object);
+    }
+
     // create a new pointer or return the existing pointer/pointer property for this value
     static createOrGet<T>(value:RefOrValue<T>, sealed = false, allowed_access?:target_clause, anonymous = false, persistant = false, id?: string):Pointer<T>{
         if (value instanceof LazyPointer) throw new PointerError("Lazy Pointer not supported in this context");
@@ -1878,6 +1942,7 @@ export class Pointer<T = any> extends ReactiveValue<T> {
     // only creates the same pointer once => unique pointers
     // throws error if pointer is already allocated or pointer value is primitive
     static create<T>(id?:string|Uint8Array, value:RefOrValue<T>|typeof NOT_EXISTING=NOT_EXISTING, sealed = false, origin?:Endpoint, persistant=false, anonymous = false, is_placeholder = false, allowed_access?:target_clause, timeout?:number): Pointer<T> {
+        materializeDeferredPointer(value);
         let p:Pointer<T>;
 
         // DatexValue: DatexPointer or DatexPointerProperty not valid as object, get the actual value instead
@@ -2615,6 +2680,7 @@ export class Pointer<T = any> extends ReactiveValue<T> {
             Pointer.primitive_pointers.delete(this.id)
             return <any>Pointer.create(this.id, v, this.sealed, this.origin, this.is_persistent, this.is_anonymous, false, this.allowed_access, this.datex_timeout)
         }
+        materializeDeferredPointer(v);
         const existingPtr = Pointer.pointer_value_map.get(v);
 
         // placeholder replacement
@@ -2740,6 +2806,9 @@ export class Pointer<T = any> extends ReactiveValue<T> {
 
         // get transform wrapper
         if (is_transform) val = this.getInitialTransformValue(val)
+
+        // this pointer adopts val: restore eager state first if val has a deferred pointer
+        materializeDeferredPointer(val);
 
         // Get type from initial value, keep as <any> if initial value is null/undefined or indirect reference
         if (val!==undefined && val !== null && 
@@ -3168,7 +3237,8 @@ export class Pointer<T = any> extends ReactiveValue<T> {
                     // check if val is already the result of a transform function
                     // happens e.g. with jusix _$(() => map(x, ...))
                     // early return the inner transformed pointer
-                    const ptr = Pointer.getByValue(val);
+                    // (a deferred pointer is always a plain $() pointer, never a transform: no lookup needed)
+                    const ptr = deferredPointers.has(val as object) ? undefined : Pointer.getByValue(val);
                     if (ptr?.isTransform) {
                         return ptr;
                     }
@@ -3358,8 +3428,11 @@ export class Pointer<T = any> extends ReactiveValue<T> {
 
         // remove return value if captured by getters
         // TODO: this this work as intended?
-        capturedGetters?.delete(val instanceof Pointer ? val : Pointer.getByValue(val)!);
-        capturedGettersWithKeys?.delete(val instanceof Pointer ? val : Pointer.getByValue(val)!);
+        // (a deferred pointer does not exist yet, so it cannot have been captured: no lookup needed)
+        if (!deferredPointers.has(val as object)) {
+            capturedGetters?.delete(val instanceof Pointer ? val : Pointer.getByValue(val)!);
+            capturedGettersWithKeys?.delete(val instanceof Pointer ? val : Pointer.getByValue(val)!);
+        }
 
         const hasGetters = capturedGetters||capturedGettersWithKeys;
         const gettersCount = (capturedGetters?.size??0) + (capturedGettersWithKeys?.size??0);

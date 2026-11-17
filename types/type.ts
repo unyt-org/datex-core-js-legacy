@@ -876,7 +876,9 @@ export class Type<T = any> extends ExtensibleFunction {
 
         // get type from pointer
         let type:Type|undefined
-        if ((type = Pointer.getByValue(value)?.current_type)) return type;
+        // A deferred pointer's type is determined by the JS interface lookup below (exactly as at its
+        // creation), so the type can be returned without creating the pointer.
+        if (!Pointer.hasDeferredPointer(value) && (type = Pointer.getByValue(value)?.current_type)) return type;
 
         // get custom type
         const custom_type = JSInterface.getValueDatexType(value);
