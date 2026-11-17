@@ -226,6 +226,7 @@ export class Runtime {
     // can be changed
     public static OPTIONS = {
         PROTECT_POINTERS: true, // explicit permissions are required for remote endpoints to read/write pointers (default: true)
+        PREEMPTIVE_RESPONSE_POINTERS: true, // responses include the values of own pointers the receiver may read (saves one subscription round trip per pointer)
         INDIRECT_REFERENCES: false, // enable support for indirect references to pointers from other pointers
         DEFAULT_REQUEST_TIMEOUT: 5000, // default timeout for DATEX requests in ms
         GARBAGE_COLLECTION_TIMEOUT: 1000, // time after which a value can get garbage collected
@@ -2361,7 +2362,8 @@ export class Runtime {
         
         // return global result to sender (if request)
         if (header.type == ProtocolDataType.REQUEST) {
-            this.datexOut(["?", [return_value], {type:ProtocolDataType.RESPONSE, to:header.sender, return_index:header.return_index, encrypt:header.encrypted, sign:header.signed}], header.sender, header.sid, false);
+            const preemptive = Runtime.OPTIONS.PREEMPTIVE_RESPONSE_POINTERS;
+            this.datexOut(["?", [return_value], {type:ProtocolDataType.RESPONSE, to:header.sender, return_index:header.return_index, encrypt:header.encrypted, sign:header.signed, preemptive_pointer_init: preemptive, preemptive_pointer_permissions: preemptive}], header.sender, header.sid, false);
         }
 
         // handle response
@@ -4981,7 +4983,10 @@ export class Runtime {
                     pointer.addSubscriber(SCOPE.sender);
                     // workaround to make sure the compiler compiles the full pointer value, not the collapsed id
                     // alternative would be a full clone, which is inefficient and can lead to loss of information
-                    if (!silent) INNER_SCOPE.active_value = {[DX_RETURN_POINTER_VALUE]: pointer};
+                    if (!silent) {
+                        INNER_SCOPE.active_value = {[DX_RETURN_POINTER_VALUE]: pointer};
+                        pointer.markValueSentTo(SCOPE.sender);
+                    }
 
                     // }
                     // // redirect to actual parent

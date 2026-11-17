@@ -273,6 +273,7 @@ export type compiler_options = {
     no_duplicate_value_optimization?: boolean, // dont collapse multiple identical primitive ´´ values to a single reference (only relevant for rendering as datex script, mostly for strings)
 
     preemptive_pointer_init?: boolean, // directly sent the pointer values for owned pointers
+    preemptive_pointer_permissions?: boolean, // only inline pointers the receiver may read (same check as a subscription), never MediaStreams
     init_scope?: boolean, // is not a real subscope, only a init block
     context_location?: URL, // location of the dx file
 
@@ -2203,13 +2204,61 @@ export class Compiler {
                 action_type == ACTION_TYPE.GET && // is get
                 Runtime.endpoint.equals(pointer_origin) &&  // is own pointer
                 SCOPE.options.to != Runtime.endpoint && // not sending to self
-                !(singleReceiver && Pointer.get(id)?.subscribers?.has(singleReceiver)) // receiver is subscribed to pointer - assume it already has the current pointer value
+                !(singleReceiver && Pointer.get(id)?.subscribers?.has(singleReceiver) && (!Compiler.builder.isPermissionCheckedPreemptive(SCOPE) || Pointer.get(id)?.hasSentValueTo(singleReceiver))) && // receiver is subscribed and (responses only) already received the value
+                Compiler.builder.preemptivePermitted(SCOPE, id) // permission-checked mode (responses): receiver must be allowed to subscribe
             ) {
                 return Compiler.builder.addPreemptivePointer(SCOPE, id)
             }
 
             // normal insert
             return Compiler.builder.addPointerNormal(SCOPE, id, action_type, action_specifier, init_brackets, value);
+        },
+
+        /**
+         * Permission gate for preemptive pointer inits in permission-checked mode (enabled for responses).
+         * Without the gate, the receiver would get the value and be registered as subscriber without the
+         * read check a normal subscription (`#origin <== $ptr`) performs (see TODO in Pointer.addSubscriber).
+         * Inlining is only allowed if the same subscription would be accepted:
+         *  - exactly one receiver endpoint
+         *  - pointer.assertEndpointCanRead(receiver) passes (PROTECT_POINTERS, allowed_access, trusted endpoints)
+         *  - not a MediaStream (receivers resolve these through the WebRTC path on subscription)
+         *  - the value is not bound to another pointer (transform returning a pointer)
+         * Otherwise the pointer is sent as a normal reference and the receiver subscribes as before.
+         */
+        isPermissionCheckedPreemptive: (SCOPE:compiler_scope|extract_var_scope): boolean => {
+            let options:compiler_options|undefined = SCOPE.options;
+            while (options) {
+                if (options.preemptive_pointer_permissions) return true;
+                options = options.parent_scope?.options;
+            }
+            return false;
+        },
+
+        preemptivePermitted: (SCOPE:compiler_scope|extract_var_scope, id:string|Uint8Array): boolean => {
+            if (!Compiler.builder.isPermissionCheckedPreemptive(SCOPE)) return true; // unchanged behaviour (e.g. pointer updates to subscribers)
+            const receiver = Compiler.builder.getScopeReceiver(SCOPE as compiler_scope);
+            const endpoint = receiver instanceof Endpoint ? receiver :
+                (receiver instanceof Disjunction && receiver.size == 1 && [...receiver][0] instanceof Endpoint) ? [...receiver][0] as Endpoint : null;
+            if (!endpoint || endpoint === LOCAL_ENDPOINT || Runtime.endpoint.equals(endpoint)) return false;
+            const ptr = Pointer.get(id);
+            if (!ptr || !ptr.is_origin || ptr.is_anonymous || !ptr.value_initialized) return false;
+            try {
+                ptr.assertEndpointCanRead(endpoint);
+            }
+            catch {
+                return false;
+            }
+            if (globalThis.MediaStream && ptr.val instanceof globalThis.MediaStream) return false;
+            // value belongs to another pointer (e.g. a getter/always transform returning a pointer): a subscription
+            // returns a reference to that pointer, an init block would copy its content and lose its updates
+            try {
+                const valuePointer = Pointer.getByValue(ptr.val);
+                if (valuePointer && valuePointer !== ptr) return false;
+            }
+            catch {
+                return false;
+            }
+            return true;
         },
 
         // just $aabbcc = 
@@ -2263,18 +2312,11 @@ export class Compiler {
             if (ptr?.value_initialized && !alreadyInitializing) {
 
                 parentScope.preemptive_pointers.set(normalized_id, SCOPE);
-                Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+1, SCOPE);
-                SCOPE.uint8[SCOPE.b_index++] = BinaryCode.SUBSCOPE_START;
-                Compiler.builder.addPointerNormal(SCOPE, id, ACTION_TYPE.INIT, undefined, true, ptr, (ptr.force_local_transform && ptr.transform_scope) ? ptr.transform_scope : undefined); // sync
-                Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+1, SCOPE);
-                SCOPE.uint8[SCOPE.b_index++] = BinaryCode.CLOSE_AND_STORE;
-                Compiler.builder.addPointerNormal(SCOPE, id, ACTION_TYPE.GET, undefined, undefined, ptr.val); // sync
-                Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+1, SCOPE);
-                SCOPE.uint8[SCOPE.b_index++] = BinaryCode.SUBSCOPE_END;
 
                 // auto add receivers as subscribers for preemptively loaded pointers
                 // they don't have to explicitly subscribe to the pointer after it was loaded
-                if (ptr.is_origin && SCOPE.options.to) {
+                const autoSubscribe = (mark: boolean) => {
+                    if (!(ptr.is_origin && SCOPE.options.to)) return;
                     for (const endpoint of Logical.collapse(SCOPE.options.to, Target)) {
                         // should not happen
                         if (!(endpoint instanceof Endpoint)) {
@@ -2284,10 +2326,29 @@ export class Compiler {
                         // subscribing to own pointers is not allowed
                         // should not happen because pointers are not sent with preemptive loading to own endpoint anyway
                         if (Runtime.endpoint.equals(endpoint) || endpoint.equals(LOCAL_ENDPOINT)) continue;
-                        logger.debug("auto subscribing " + endpoint + " to " + ptr.idString());
-                        ptr.addSubscriber(endpoint);
+                        if (!mark) {
+                            logger.debug("auto subscribing " + endpoint + " to " + ptr.idString());
+                            ptr.addSubscriber(endpoint);
+                        }
+                        else ptr.markValueSentTo(endpoint);
                     }
                 }
+                // responses: same order as a subscription (`#origin <== $ptr`): register the subscriber first
+                // (starts live transforms), then serialize the current value
+                const responseMode = Compiler.builder.isPermissionCheckedPreemptive(SCOPE);
+                if (responseMode) autoSubscribe(false);
+
+                Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+1, SCOPE);
+                SCOPE.uint8[SCOPE.b_index++] = BinaryCode.SUBSCOPE_START;
+                Compiler.builder.addPointerNormal(SCOPE, id, ACTION_TYPE.INIT, undefined, true, ptr, (ptr.force_local_transform && ptr.transform_scope) ? ptr.transform_scope : undefined); // sync
+                Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+1, SCOPE);
+                SCOPE.uint8[SCOPE.b_index++] = BinaryCode.CLOSE_AND_STORE;
+                Compiler.builder.addPointerNormal(SCOPE, id, ACTION_TYPE.GET, undefined, undefined, ptr.val); // sync
+                Compiler.builder.handleRequiredBufferSize(SCOPE.b_index+1, SCOPE);
+                SCOPE.uint8[SCOPE.b_index++] = BinaryCode.SUBSCOPE_END;
+
+                if (!responseMode) autoSubscribe(false); // updates: unchanged order
+                autoSubscribe(true);
 
             }
             // just add normal pointer

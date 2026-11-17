@@ -3670,10 +3670,28 @@ export class Pointer<T = any> extends ReactiveValue<T> {
         Pointer.#endpoint_subscriptions.getAuto(subscriber).add(this)
     }
 
+    /**
+     * Subscribers that received the pointer value from this endpoint (subscription response or preemptive init).
+     * A subscriber can also be registered without having received the value, e.g. via addSubscriber from
+     * application code or restored subscriber caches. The compiler only omits the value of an owned pointer
+     * for a subscribed receiver if the value was actually delivered to it.
+     */
+    #value_sent_to?: Set<Endpoint>
+
+    public markValueSentTo(subscriber: Endpoint) {
+        if (!this.subscribers.has(subscriber)) return;
+        (this.#value_sent_to ??= new Set()).add(subscriber);
+    }
+
+    public hasSentValueTo(subscriber: Endpoint) {
+        return !!this.#value_sent_to?.has(subscriber);
+    }
+
     public removeSubscriber(subscriber: Endpoint) {
         logger.debug("removed subscriber " + subscriber + " for " + this.idString());
 
         this.subscribers.delete(subscriber);
+        this.#value_sent_to?.delete(subscriber);
 
         // also remove from subscriber cache
         if (this.#subscriberCache) this.#subscriberCache.delete(subscriber)
