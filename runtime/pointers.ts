@@ -3493,7 +3493,8 @@ export class Pointer<T = any> extends ReactiveValue<T> {
             // add to garbage collection after timeout
             const _keep = this.current_val;
             setTimeout(()=>{
-                if (!this.garbage_collected && this.value_initialized && !this.is_persistent) {
+                // Earlier pending timers may already have registered this pointer.
+                if (!this.#registeredForGC && !this.garbage_collected && this.value_initialized && !this.is_persistent) {
                     _keep; // prevent garbage collection until timeout finished
                     
                     // make sure persistent state is up to date
