@@ -296,6 +296,23 @@ export const INSERT_MARK = '\u0001\udddd\uaaaa\ueeee\u0001'
 
 export class Compiler {
 
+    /**
+     * SECURITY: Returns true if the script is compiled on behalf of an external sender (options.from is a remote endpoint).
+     * Compile-time execution ('compile', 'insert', URL/Blob inserts) runs with the permissions of the local endpoint
+     * and loads URL content (fetch / import() / file read), so it must never be allowed for external sources.
+     */
+    static isExternalSource(SCOPE: compiler_scope) {
+        const from = SCOPE?.options?.from;
+        if (!from || from === LOCAL_ENDPOINT) return false;
+        const local = Runtime.endpoint;
+        if (local && (local === from || local.equals?.(from) || (local.main && from.main && local.main.equals?.(from.main)))) return false;
+        return true;
+    }
+
+    static assertNoCompileTimeExecution(SCOPE: compiler_scope, what: string) {
+        if (Compiler.isExternalSource(SCOPE)) throw new CompilerError(`No permission for compile-time execution (${what}) in a script from ${SCOPE.options.from}`);
+    }
+
     static readonly VERSION_NUMBER = 1;
 
     static SIGN_DEFAULT = true; // can be changed
@@ -1019,6 +1036,7 @@ export class Compiler {
 
         // insert during compile time
         compilerInsert: async (SCOPE:compiler_scope, value:URL|Blob|DatexResponse<unknown>) => {
+            Compiler.assertNoCompileTimeExecution(SCOPE, "insert");
 
             let compiled_script:ArrayBuffer;
             let cache_var: string;
@@ -3203,6 +3221,7 @@ export class Compiler {
          */
 
         else if (m = SCOPE.datex.match(Regex.INSERT_COMMAND)) {
+            Compiler.assertNoCompileTimeExecution(SCOPE, "insert");
             SCOPE.datex = SCOPE.datex.substring(m[0].length);  // pop datex
             
             // COMPILE:
@@ -3250,6 +3269,7 @@ export class Compiler {
         // run at compile time
         // insert values literally, but collapse pointer references
         else if (m = SCOPE.datex.match(Regex.COMPILE)) {
+            Compiler.assertNoCompileTimeExecution(SCOPE, "compile");
             SCOPE.datex = SCOPE.datex.substring(m[0].length);  // pop datex
 
 
