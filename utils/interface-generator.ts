@@ -62,6 +62,12 @@ export async function generateTSModuleForRemoteAccess(module_path_or_datex_get:U
 const implicitly_converted_primitives = new Map<string, Set<string>>().setAutoDefault(Set);
 const implicitly_converted = new Map<string, Set<string>>().setAutoDefault(Set);
 
+// DATEX Function wrappers for exported JS functions, reused when the interface of a module is generated
+// again (e.g. when another frontend module imports different exports from the same backend module).
+// Without reusing, a new wrapper would be assigned to the existing pointer id of the export, which fails
+// for functions ("Cannot update value of type <Function>").
+const exportedFunctionWrappers = new WeakMap<Function, unknown>();
+
 
 async function getModuleExports(path_or_specifier:URL|string, caller:string|undefined, exports:Set<string>, ignoreFailure:Set<string>|boolean = false) {
 	const values:[string, unknown, boolean, boolean][] = [];
@@ -176,7 +182,9 @@ async function getValueTSCode(module_name:string, name:string, value: any, no_po
 			// convert Function to DATEX Function
 			else if (value instanceof Function) {
 				value[BACKEND_EXPORT] = true;
-				value = Datex.Function.createFromJSFunction(value);
+				const original = value;
+				value = exportedFunctionWrappers.get(original) ?? Datex.Function.createFromJSFunction(original);
+				exportedFunctionWrappers.set(original, value);
 			}
 
 			// log warning for non-pointer arrays and object (ignore defaults aka 'no_pointer')
