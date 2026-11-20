@@ -312,6 +312,36 @@ export class Runtime {
     }
 
     /**
+     * SECURITY: returns the endpoint that accesses values in a scope (for permission checks):
+     * the sender, undefined for local/internal scopes, or null for external scopes without sender (anonymous)
+     */
+    public static getScopeAccessEndpoint(SCOPE?: datex_scope): Endpoint|null|undefined {
+        if (!SCOPE) return undefined;
+        if (SCOPE.sender) return SCOPE.sender;
+        if (SCOPE.local_execution || !SCOPE.header) return undefined;
+        return null;
+    }
+
+    /**
+     * SECURITY: returns true if the scope may create executable code (DATEX function bodies, transforms / always)
+     * that is executed later with the permissions of this endpoint.
+     * Only local scopes and signed scopes from endpoints with "remote-js-execution" permission (e.g. the backend
+     * of a frontend) are allowed - otherwise any remote endpoint could execute code with local permissions.
+     */
+    public static canScopeCreateExecutableCode(SCOPE: datex_scope) {
+        if (SCOPE.local_execution) return true;
+        const header = SCOPE.header;
+        // internal scope without header
+        if (!header) return true;
+        const sender = header.sender;
+        if (!sender) return false;
+        // unsigned external messages claiming to be from the local endpoint are rejected in handleDatexIn
+        if (Runtime.endpoint?.equals(sender)) return true;
+        if (!header.signed) return false;
+        return Runtime.canExecuteRemoteJS(sender);
+    }
+
+    /**
      * Returns true if a remote scope is allowed to resolve URL content (get url),
      * which can import JS modules: only signed scopes from endpoints with "remote-js-execution" permission
      */
@@ -2757,6 +2787,10 @@ export class Runtime {
                             }
                             // datex
                             else {
+                                // SECURITY: DATEX function bodies are executed with the permissions of this endpoint
+                                if (!originVerified || !Runtime.canExecuteRemoteJS(origin)) {
+                                    throw new PermissionError("Cannot create <Function> from DATEX source, origin " + origin + " has no permission to execute code on this endpoint");
+                                }
                                 new_value = DatexFunction.createFromDatexScope(old_value.get('body'), old_value.get('context'), old_value.get('location'), undefined, false, type.parameters?.[0]);
                                 DatexObject.setType(new_value, type);
                             }
@@ -3462,13 +3496,16 @@ export class Runtime {
 
             // make sure endpoint has access (TODO: INNER_SCOPE.active_value should never be set if no access)
             const ptr = Pointer.pointerifyValue(el);
-            if (ptr instanceof Pointer) ptr.assertEndpointCanRead(SCOPE?.sender)
+            if (ptr instanceof Pointer) ptr.assertEndpointCanRead(Runtime.getScopeAccessEndpoint(SCOPE))
 
             // ptrs
             if (INNER_SCOPE.waiting_ptrs?.size) {
                 for (const p of INNER_SCOPE.waiting_ptrs) {
                     const isSet = p[1] == undefined;
                     const isInit = typeof p[1] == "object";
+
+                    // SECURITY: assigning a new value to an existing pointer requires write permission
+                    if (isSet || (isInit && p[0].value_initialized)) p[0].assertEndpointCanWrite(Runtime.getScopeAccessEndpoint(SCOPE));
 
                     try {
                         if (SCOPE.header.type==ProtocolDataType.UPDATE) p[0].excludeEndpointFromUpdates(SCOPE.sender); 
@@ -3691,6 +3728,8 @@ export class Runtime {
             const pointer = Pointer.pointerifyValue(parent) // make sure the parent is proxified
             if (pointer instanceof Pointer && !pointer.canUpdateProperty(key))
                 throw new PermissionError("Cannot update pointer property "+Runtime.valueToDatexString(key)+"");        
+            // SECURITY: read access does not imply write access (stored / remote_readonly pointers)
+            if (pointer instanceof Pointer) pointer.assertEndpointCanWrite(Runtime.getScopeAccessEndpoint(SCOPE));
         },
 
         // get count (length) of value
@@ -3761,7 +3800,7 @@ export class Runtime {
         getReferencedProperty(SCOPE: datex_scope, parent:any, key:any){
             const pointer = Pointer.createOrGetLazy(parent);
             if (pointer) {
-                if (pointer instanceof Pointer) pointer.assertEndpointCanRead(SCOPE?.sender)
+                if (pointer instanceof Pointer) pointer.assertEndpointCanRead(Runtime.getScopeAccessEndpoint(SCOPE))
                 return PointerProperty.get(pointer, key);
             }
             else throw new RuntimeError("Could not get a child reference");
@@ -3775,7 +3814,7 @@ export class Runtime {
             if (parent === undefined) throw new ValueError("void has no properties (trying to read property "+key+")");
 
             const o_parent:Pointer = Pointer.pointerifyValue(parent);
-            if (o_parent instanceof Pointer) o_parent.assertEndpointCanRead(SCOPE?.sender)
+            if (o_parent instanceof Pointer) o_parent.assertEndpointCanRead(Runtime.getScopeAccessEndpoint(SCOPE))
 
 
             key = Ref.collapseValue(key,true,true);
@@ -3885,7 +3924,7 @@ export class Runtime {
 
             let o_parent:Pointer = Pointer.pointerifyValue(parent);
             if (!(o_parent instanceof Pointer)) o_parent = null;
-            else o_parent.assertEndpointCanRead(SCOPE?.sender)
+            else o_parent.assertEndpointCanRead(Runtime.getScopeAccessEndpoint(SCOPE))
 
             key = Ref.collapseValue(key,true,true);
             
@@ -4052,7 +4091,7 @@ export class Runtime {
 
             let o_parent:Pointer = Pointer.pointerifyValue(current_val);
             if (!(o_parent instanceof Pointer)) o_parent = null;
-            else o_parent.assertEndpointCanRead(SCOPE?.sender)
+            else o_parent.assertEndpointCanRead(Runtime.getScopeAccessEndpoint(SCOPE))
 
             key = Ref.collapseValue(key,true,true);
 
@@ -4488,7 +4527,7 @@ export class Runtime {
 
             // check pointer access permission
             const pointer = el instanceof Pointer ? el : Pointer.getByValue(el);
-            if (pointer instanceof Pointer) pointer.assertEndpointCanRead(SCOPE?.sender)
+            if (pointer instanceof Pointer) pointer.assertEndpointCanRead(Runtime.getScopeAccessEndpoint(SCOPE))
             
             // make sure promise wrappers are collapsed
             el = Runtime.collapseValueCast(el)
@@ -6251,6 +6290,10 @@ export class Runtime {
 
                     // TRANSFORM (always)
                     if (INNER_SCOPE.scope_block_for == BinaryCode.TRANSFORM) {
+                        // SECURITY: transforms are executed with the permissions of this endpoint
+                        if (!Runtime.canScopeCreateExecutableCode(SCOPE)) {
+                            throw new PermissionError("No permission to create transforms on this endpoint", SCOPE);
+                        }
                         INNER_SCOPE.scope_block_for = null;
                         const waiting = [...SCOPE.inner_scope.waiting_ptrs??[]].at(-1);
                         // assign always() to init ($xxx := always(...))
@@ -6333,6 +6376,10 @@ export class Runtime {
                         const args = INNER_SCOPE.active_value ?? new Tuple();
                         delete INNER_SCOPE.active_value;
 
+                        // SECURITY: DATEX function bodies are executed with the permissions of this endpoint when called
+                        if (!Runtime.canScopeCreateExecutableCode(SCOPE)) {
+                            throw new PermissionError("No permission to create functions on this endpoint", SCOPE);
+                        }
                         await this.runtime_actions.insertToScope(SCOPE, DatexFunction.createFromDatexScope(code_block, SCOPE.context, undefined, undefined, undefined, args));
                     }
 

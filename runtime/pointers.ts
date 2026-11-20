@@ -1487,7 +1487,7 @@ export class Pointer<T = any> extends Ref<T> {
         const existing_pointer = Pointer.get(id);
         if (existing_pointer?.value_initialized) {
             // check read permissions
-            existing_pointer.assertEndpointCanRead(SCOPE?.sender)
+            existing_pointer.assertEndpointCanRead(Runtime.getScopeAccessEndpoint(SCOPE))
             return existing_pointer;
         }
 
@@ -1691,7 +1691,7 @@ export class Pointer<T = any> extends Ref<T> {
         this.loading_pointers.delete(id_string);
 
         // check read permissions
-        pointer.assertEndpointCanRead(SCOPE?.sender)
+        pointer.assertEndpointCanRead(Runtime.getScopeAccessEndpoint(SCOPE))
 
 
         return pointer;
@@ -2145,7 +2145,17 @@ export class Pointer<T = any> extends Ref<T> {
      * @param endpoint 
      * @returns 
      */
-    public assertEndpointCanRead(endpoint?: Endpoint) {
+    /**
+     * @param endpoint the reading endpoint, undefined for local access, null for an anonymous remote sender
+     */
+    public assertEndpointCanRead(endpoint?: Endpoint|null) {
+        // SECURITY: anonymous remote senders never have access to protected pointers (fail closed)
+        if (endpoint === null) {
+            if (Runtime.OPTIONS.PROTECT_POINTERS && this.is_origin) {
+                throw new PermissionError("Anonymous endpoint has no read permissions for pointer "+this.idString()+" (origin: "+this.origin+")");
+            }
+            return;
+        }
         // always use main endpoint (TODO: change?)
         endpoint = endpoint?.main;
         if (
@@ -3403,6 +3413,31 @@ export class Pointer<T = any> extends Ref<T> {
     }
     
     // returns if a property of a @sync class can be updated, returns true if not a @sync class
+    #remote_readonly = false;
+    /**
+     * SECURITY: if true, other endpoints can not modify this pointer via DATEX (e.g. exposed backend exports),
+     * even if they have read access
+     */
+    get remote_readonly() {return this.#remote_readonly}
+    set remote_readonly(remote_readonly: boolean) {this.#remote_readonly = remote_readonly}
+
+    /**
+     * SECURITY: read access does not imply write access.
+     * Throws if a remote endpoint tries to modify a pointer owned by this endpoint that
+     * - is persistently stored (e.g. users, internal data, settings - must only be changed by backend code), or
+     * - is marked as remote_readonly.
+     * Only local scopes and the local endpoint itself (exact match, not just the same main endpoint) count as local.
+     */
+    public assertEndpointCanWrite(endpoint?: Endpoint|null) {
+        if (!this.is_origin) return;
+        // undefined: local / internal scope (see Runtime.getScopeAccessEndpoint), null: anonymous remote sender
+        if (endpoint === undefined) return;
+        if (endpoint && Runtime.endpoint?.equals(endpoint)) return;
+        if (this.#remote_readonly || this.isStored) {
+            throw new PermissionError("Endpoint " + (endpoint?.toString() ?? "unknown") + " has no write permission for " + this.idString());
+        }
+    }
+
     public canUpdateProperty(property_name:string):boolean {
         return this.canReadProperty(property_name) && (!this.sealed_properties || !this.sealed_properties.has(property_name));
     }
