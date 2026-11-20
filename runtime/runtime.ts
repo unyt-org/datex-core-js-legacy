@@ -303,6 +303,9 @@ export class Runtime {
         const header = SCOPE.header;
         // internal scope without header
         if (!header) return true;
+        // internal scope: not received from a communication interface and no (overridden) sender,
+        // e.g. values decoded from storage
+        if (!SCOPE.socket && !header.sender) return true;
         if (!header.sender) return false;
         // signed messages or messages from the local endpoint (unsigned external messages claiming to be
         // from the local endpoint are rejected in handleDatexIn)
@@ -311,13 +314,16 @@ export class Runtime {
 
     /**
      * SECURITY: returns the endpoint that accesses values in a scope (for permission checks):
-     * the sender, undefined for local/internal scopes, or null for external scopes without sender (anonymous)
+     * the sender, null for messages without sender that were received from an external communication
+     * interface (anonymous remote endpoint), or undefined for local/internal scopes
+     * (e.g. values decoded from storage, which also have a header without sender, but no socket)
      */
     public static getScopeAccessEndpoint(SCOPE?: datex_scope): Endpoint|null|undefined {
         if (!SCOPE) return undefined;
         if (SCOPE.sender) return SCOPE.sender;
-        if (SCOPE.local_execution || !SCOPE.header) return undefined;
-        return null;
+        if (SCOPE.local_execution) return undefined;
+        const isExternalSocket = !!SCOPE.socket && SCOPE.socket.interfaceProperties?.type !== "local";
+        return isExternalSocket ? null : undefined;
     }
 
     /**
@@ -331,6 +337,9 @@ export class Runtime {
         const header = SCOPE.header;
         // internal scope without header
         if (!header) return true;
+        // internal scope: not received from a communication interface and no (overridden) sender,
+        // e.g. values decoded from storage
+        if (!SCOPE.socket && !header.sender) return true;
         const sender = header.sender;
         if (!sender) return false;
         // unsigned external messages claiming to be from the local endpoint are rejected in handleDatexIn
