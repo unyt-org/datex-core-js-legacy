@@ -226,6 +226,7 @@ export class Runtime {
     // can be changed
     public static OPTIONS = {
         PROTECT_POINTERS: true, // explicit permissions are required for remote endpoints to read/write pointers (default: true)
+        PREEMPTIVE_RESPONSE_POINTERS: true, // responses include the values of own pointers the receiver may read (saves one subscription round trip per pointer)
         INDIRECT_REFERENCES: false, // enable support for indirect references to pointers from other pointers
         DEFAULT_REQUEST_TIMEOUT: 5000, // default timeout for DATEX requests in ms
         GARBAGE_COLLECTION_TIMEOUT: 1000, // time after which a value can get garbage collected
@@ -1108,9 +1109,36 @@ export class Runtime {
      * @param timeout response timeout
      * @returns evaluated response value
      */
+    /**
+     * Per-receiver hand-off order: messages to one endpoint are passed to the network in the order in
+     * which datexOut was called, while compiling still runs concurrently. Without this, a small message
+     * (e.g. a pointer update) created after a large response could overtake it, and the receiver would
+     * get an update for a pointer that the response initializes afterwards with the older value.
+     * Only the hand-off is ordered (never the delivery), so a broken socket cannot block later messages.
+     */
+    static #handoffTail = new Map<string, Promise<void>>();
+
+    static #takeHandoffTurn(to: target_clause|undefined) {
+        const receiver = to instanceof Endpoint ? to : (to instanceof Disjunction && to.size == 1 && [...to][0] instanceof Endpoint) ? [...to][0] as Endpoint : null;
+        if (!receiver || receiver === Runtime.endpoint || receiver === LOCAL_ENDPOINT) return null;
+        const key = receiver.toString();
+        const previous = this.#handoffTail.get(key);
+        const {promise, resolve} = Promise.withResolvers<void>();
+        this.#handoffTail.set(key, promise);
+        let done = false;
+        const release = () => {
+            if (done) return;
+            done = true;
+            resolve();
+            if (this.#handoffTail.get(key) === promise) this.#handoffTail.delete(key);
+        };
+        return {previous, release};
+    }
+
     public static async datexOut(data:ArrayBuffer|compile_info, to:target_clause=Runtime.endpoint, sid?:number, wait_for_result=true, encrypt=false, detailed_result_callback?:(scope:datex_scope, header:dxb_header, error:Error)=>void, flood = false, timeout?:number, socket?:CommunicationInterfaceSocket):Promise<any>{
 
         const finish = this.createPrepocessingTask();
+        const handoff = (data instanceof Array && !flood && !socket) ? this.#takeHandoffTurn(data[2]?.to ?? to) : null;
 
         try {
             // external request, but datex out not yet initialized, wait for initialization
@@ -1145,8 +1173,11 @@ export class Runtime {
             const unique_sid = sid+"-"+(data[2]?.return_index??0); // sid + block index;
             const evaluated_receivers = to ? <Disjunction<Endpoint>> Logical.collapse(to, Target) : null;
 
+            if (handoff?.previous) await handoff.previous;
+
             // single block
             if (dxb instanceof ArrayBuffer) {
+                handoff?.release();
                 return this.datexOutSingleBlock(dxb, evaluated_receivers, sid, unique_sid, <compile_info>data, wait_for_result, encrypt, detailed_result_callback, flood, timeout, socket);
             }
 
@@ -1173,6 +1204,7 @@ export class Runtime {
         }
 
         finally {
+            handoff?.release();
             finish();
         }
         
@@ -2010,7 +2042,45 @@ export class Runtime {
      * @param header_callback callback method returning information for the evaluated header before executing the dxb
      * @returns header information (after executing the dxb)
      */
+    /**
+     * Receive order per socket: pointer UPDATE messages are executed after all earlier RESPONSE and
+     * UPDATE messages from the same socket have finished executing (arrival order). Verification and
+     * execution are otherwise concurrent, so a small update could run before a larger, earlier
+     * response that initializes the same pointer (or before an earlier update of the same pointer).
+     * Requests and other messages never wait and release their turn immediately; waits are capped.
+     */
+    static #receiveTail = new WeakMap<object, Promise<void>>();
+
+    static #takeReceiveTurn(socket: object) {
+        const previous = this.#receiveTail.get(socket);
+        const {promise: own, resolve} = Promise.withResolvers<void>();
+        const done = previous ? Promise.all([previous, own]).then(() => {}) : own;
+        this.#receiveTail.set(socket, done);
+        let finished = false;
+        return {
+            waitPrevious: () => previous ? Promise.race([previous, new Promise<void>(r => setTimeout(r, 3000))]) : undefined,
+            finish: () => {
+                if (finished) return;
+                finished = true;
+                resolve();
+                if (this.#receiveTail.get(socket) === done) done.then(() => {
+                    if (this.#receiveTail.get(socket) === done) this.#receiveTail.delete(socket);
+                });
+            }
+        };
+    }
+
     private static async handleDatexIn(dxb:ArrayBuffer, full_scope_callback:((sid:number, scope:any, error?:boolean)=>void)|undefined, _:any|undefined, header_callback:((header:dxb_header)=>void)|undefined, socket: CommunicationInterfaceSocket): Promise<dxb_header> {
+        const turn = socket ? this.#takeReceiveTurn(socket) : undefined;
+        try {
+            return await this.#handleDatexIn(dxb, full_scope_callback, _, header_callback, socket, turn);
+        }
+        finally {
+            turn?.finish();
+        }
+    }
+
+    static async #handleDatexIn(dxb:ArrayBuffer, full_scope_callback:((sid:number, scope:any, error?:boolean)=>void)|undefined, _:any|undefined, header_callback:((header:dxb_header)=>void)|undefined, socket: CommunicationInterfaceSocket, turn?: {waitPrevious: () => Promise<unknown>|undefined, finish: () => void}): Promise<dxb_header> {
 
         let header:dxb_header, data_uint8:Uint8Array;
 
@@ -2131,6 +2201,11 @@ export class Runtime {
         //     debugger;
         //     console.warn("TRACE_BACK from " + header.sender);
         // }
+
+        if (turn) {
+            if (header.type == ProtocolDataType.UPDATE) await turn.waitPrevious();
+            else if (header.type != ProtocolDataType.RESPONSE) turn.finish();
+        }
 
         const data = data_uint8.buffer; // get array buffer
 
@@ -2326,7 +2401,8 @@ export class Runtime {
         
         // return global result to sender (if request)
         if (header.type == ProtocolDataType.REQUEST) {
-            this.datexOut(["?", [return_value], {type:ProtocolDataType.RESPONSE, to:header.sender, return_index:header.return_index, encrypt:header.encrypted, sign:header.signed}], header.sender, header.sid, false);
+            const preemptive = Runtime.OPTIONS.PREEMPTIVE_RESPONSE_POINTERS;
+            this.datexOut(["?", [return_value], {type:ProtocolDataType.RESPONSE, to:header.sender, return_index:header.return_index, encrypt:header.encrypted, sign:header.signed, preemptive_pointer_init: preemptive, preemptive_pointer_permissions: preemptive}], header.sender, header.sid, false);
         }
 
         // handle response
@@ -4955,7 +5031,10 @@ export class Runtime {
                     pointer.addSubscriber(SCOPE.sender);
                     // workaround to make sure the compiler compiles the full pointer value, not the collapsed id
                     // alternative would be a full clone, which is inefficient and can lead to loss of information
-                    if (!silent) INNER_SCOPE.active_value = {[DX_RETURN_POINTER_VALUE]: pointer};
+                    if (!silent) {
+                        INNER_SCOPE.active_value = {[DX_RETURN_POINTER_VALUE]: pointer};
+                        pointer.markValueSentTo(SCOPE.sender);
+                    }
 
                     // }
                     // // redirect to actual parent
