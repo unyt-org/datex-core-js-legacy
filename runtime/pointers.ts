@@ -1203,7 +1203,9 @@ export class UpdateScheduler {
 export type pointer_type = number;
 
 // mock pointer used for garbage collection
-type MockPointer = {id: string, origin: Endpoint, subscribed?: Endpoint|false, is_origin: boolean} 
+// pointer: weak reference to the pointer instance that registered the value, to detect if the
+// pointer id was reused by a newer pointer instance before the finalization callback was called
+type MockPointer = {id: string, origin: Endpoint, subscribed?: Endpoint|false, is_origin: boolean, pointer?: WeakRef<Pointer>} 
 
 export type SmartTransformOptions<T=unknown> = {
     initial?: T,
@@ -1595,7 +1597,7 @@ export class Pointer<T = any> extends ReactiveValue<T> {
         const existing_pointer = Pointer.get(id);
         if (existing_pointer?.value_initialized) {
             // check read permissions
-            existing_pointer.assertEndpointCanRead(SCOPE?.sender)
+            existing_pointer.assertEndpointCanRead(Runtime.getScopeAccessEndpoint(SCOPE))
             return existing_pointer;
         }
 
@@ -1799,7 +1801,7 @@ export class Pointer<T = any> extends ReactiveValue<T> {
         this.loading_pointers.delete(id_string);
 
         // check read permissions
-        pointer.assertEndpointCanRead(SCOPE?.sender)
+        pointer.assertEndpointCanRead(Runtime.getScopeAccessEndpoint(SCOPE))
 
 
         return pointer;
@@ -1969,9 +1971,17 @@ export class Pointer<T = any> extends ReactiveValue<T> {
 
         // cleanup for complex pointer that still has an instance
         const pointer = Pointer.get(mockPtr.id);
-        if (pointer) {
+        // the pointer instance whose value was garbage collected
+        const collectedPointer = mockPtr instanceof Pointer ? mockPtr : mockPtr.pointer?.deref();
+        if (pointer && pointer === collectedPointer) {
             pointer.#garbage_collected = true;
             pointer.delete()
+        }
+        // The id is used by a newer pointer instance (the value was loaded again, e.g. from storage,
+        // before the finalization callback was called). The newer instance has its own live value and
+        // must not be marked as garbage collected, otherwise it stays unusable ("was garbage collected").
+        else if (pointer) {
+            logger.debug("$" + mockPtr.id + " was reloaded before garbage collection cleanup, keeping the new pointer instance");
         }
         else {
             this.cleanup(mockPtr)
@@ -2249,7 +2259,17 @@ export class Pointer<T = any> extends ReactiveValue<T> {
      * @param endpoint 
      * @returns 
      */
-    public assertEndpointCanRead(endpoint?: Endpoint) {
+    /**
+     * @param endpoint the reading endpoint, undefined for local access, null for an anonymous remote sender
+     */
+    public assertEndpointCanRead(endpoint?: Endpoint|null) {
+        // SECURITY: anonymous remote senders never have access to protected pointers (fail closed)
+        if (endpoint === null) {
+            if (Runtime.OPTIONS.PROTECT_POINTERS && this.is_origin) {
+                throw new PermissionError("Anonymous endpoint has no read permissions for pointer "+this.idString()+" (origin: "+this.origin+")");
+            }
+            return;
+        }
         // always use main endpoint (TODO: change?)
         endpoint = endpoint?.main;
         if (
@@ -3498,7 +3518,7 @@ export class Pointer<T = any> extends ReactiveValue<T> {
                     this.#garbage_collectable = true;
                     try {
                         // TODO: update #subscribed of mockPointer when changed
-                        const mockPointer = {id: this.id, origin: this.origin, is_origin: this.is_origin, subscribed: this.#subscribed};
+                        const mockPointer: MockPointer = {id: this.id, origin: this.origin, is_origin: this.is_origin, subscribed: this.#subscribed, pointer: new WeakRef(this)};
                         this.#registeredForGC = true;
                         Pointer.garbage_registry.register(<object><unknown>(this.is_js_primitive ? this : this.current_val), mockPointer, this)
                     }
@@ -3612,6 +3632,31 @@ export class Pointer<T = any> extends ReactiveValue<T> {
     }
     
     // returns if a property of a @sync class can be updated, returns true if not a @sync class
+    #remote_readonly = false;
+    /**
+     * SECURITY: if true, other endpoints can not modify this pointer via DATEX (e.g. exposed backend exports),
+     * even if they have read access
+     */
+    get remote_readonly() {return this.#remote_readonly}
+    set remote_readonly(remote_readonly: boolean) {this.#remote_readonly = remote_readonly}
+
+    /**
+     * SECURITY: read access does not imply write access.
+     * Throws if a remote endpoint tries to modify a pointer owned by this endpoint that
+     * - is persistently stored (e.g. users, internal data, settings - must only be changed by backend code), or
+     * - is marked as remote_readonly.
+     * Only local scopes and the local endpoint itself (exact match, not just the same main endpoint) count as local.
+     */
+    public assertEndpointCanWrite(endpoint?: Endpoint|null) {
+        if (!this.is_origin) return;
+        // undefined: local / internal scope (see Runtime.getScopeAccessEndpoint), null: anonymous remote sender
+        if (endpoint === undefined) return;
+        if (endpoint && Runtime.endpoint?.equals(endpoint)) return;
+        if (this.#remote_readonly || this.isStored) {
+            throw new PermissionError("Endpoint " + (endpoint?.toString() ?? "unknown") + " has no write permission for " + this.idString());
+        }
+    }
+
     public canUpdateProperty(property_name:string):boolean {
         return this.canReadProperty(property_name) && (!this.sealed_properties || !this.sealed_properties.has(property_name));
     }

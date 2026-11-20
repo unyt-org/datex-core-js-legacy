@@ -199,7 +199,11 @@ async function getValueTSCode(module_name:string, name:string, value: any, no_po
 
 		// add public permission
 		const ptr = Datex.Pointer.pointerifyValue(value);
-		if (ptr instanceof Datex.Pointer) ptr.grantPublicAccess(true)
+		if (ptr instanceof Datex.Pointer) {
+			ptr.grantPublicAccess(true)
+			// SECURITY: exported backend values can be read, but never be modified by other endpoints
+			ptr.remote_readonly = true;
+		}
 	}
 
 	// disable garbage collection
