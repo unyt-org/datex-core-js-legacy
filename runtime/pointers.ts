@@ -1097,7 +1097,9 @@ export class UpdateScheduler {
 export type pointer_type = number;
 
 // mock pointer used for garbage collection
-type MockPointer = {id: string, origin: Endpoint, subscribed?: Endpoint|false, is_origin: boolean} 
+// pointer: weak reference to the pointer instance that registered the value, to detect if the
+// pointer id was reused by a newer pointer instance before the finalization callback was called
+type MockPointer = {id: string, origin: Endpoint, subscribed?: Endpoint|false, is_origin: boolean, pointer?: WeakRef<Pointer>} 
 
 export type SmartTransformOptions<T=unknown> = {
     initial?: T,
@@ -1855,9 +1857,17 @@ export class Pointer<T = any> extends Ref<T> {
         //console.log("$" + mockPtr.id + " was garbage collected");
         // cleanup for complex pointer that still has an instance
         const pointer = Pointer.get(mockPtr.id);
-        if (pointer) {
+        // the pointer instance whose value was garbage collected
+        const collectedPointer = mockPtr instanceof Pointer ? mockPtr : mockPtr.pointer?.deref();
+        if (pointer && pointer === collectedPointer) {
             pointer.#garbage_collected = true;
             pointer.delete()
+        }
+        // The id is used by a newer pointer instance (the value was loaded again, e.g. from storage,
+        // before the finalization callback was called). The newer instance has its own live value and
+        // must not be marked as garbage collected, otherwise it stays unusable ("was garbage collected").
+        else if (pointer) {
+            logger.debug("$" + mockPtr.id + " was reloaded before garbage collection cleanup, keeping the new pointer instance");
         }
         else {
             this.cleanup(mockPtr)
@@ -3300,7 +3310,7 @@ export class Pointer<T = any> extends Ref<T> {
                     this.#garbage_collectable = true;
                     try {
                         // TODO: update #subscribed of mockPointer when changed
-                        const mockPointer = {id: this.id, origin: this.origin, is_origin: this.is_origin, subscribed: this.#subscribed};
+                        const mockPointer: MockPointer = {id: this.id, origin: this.origin, is_origin: this.is_origin, subscribed: this.#subscribed, pointer: new WeakRef(this)};
                         this.#registeredForGC = true;
                         Pointer.garbage_registry.register(<object><unknown>(this.is_js_primitive ? this : this.current_val), mockPointer, this)
                     }
