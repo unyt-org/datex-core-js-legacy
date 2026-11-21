@@ -1382,8 +1382,12 @@ export class Runtime {
             const currentEndpointName = getCookie("datex-endpoint");
             // only update if endpoint not already set in cookie
             if (currentEndpointName != endpointName || !getCookie("datex-endpoint-validation")) {
+                // The nonce is the backend's signature of the cookie endpoint's id (without
+                // instance). Signed with this endpoint's key it proves the endpoint to the backend,
+                // so keep it when it was issued for this endpoint; drop only a foreign nonce.
+                const nonceIsForThisEndpoint = !!Endpoint.getFromCookie()?.main.equals(endpoint.main);
                 deleteCookie("datex-endpoint-validation");
-                deleteCookie("datex-endpoint-nonce");
+                if (!nonceIsForThisEndpoint) deleteCookie("datex-endpoint-nonce");
                 setCookie("datex-endpoint", endpointName, endpoint_config.temporary ? 0 : undefined);
                 (async() => {
                     const nonceBase64 = getCookie("datex-endpoint-nonce");
